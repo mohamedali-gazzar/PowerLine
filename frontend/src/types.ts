@@ -31,6 +31,8 @@ export interface RmuConfigInput {
 export interface OfferInput {
   offerNumber?: string;
   category: ProductCategory;
+  salesNumber?: string | null;
+  orderNumber?: string | null;
   projectName: string;
   customer: string;
   location?: string | null;
@@ -153,6 +155,8 @@ export interface Offer {
   id: string;
   offerNumber: string;
   category: ProductCategory;
+  salesNumber?: string | null;
+  orderNumber?: string | null;
   projectName: string;
   customer: string;
   location?: string | null;

@@ -42,4 +42,5 @@ export const api = {
     }),
   pdfUrl: (id: string) => `${BASE}/offers/${id}/pdf`,
   commercialPdfUrl: (id: string) => `${BASE}/offers/${id}/commercial-pdf`,
+  sldPdfUrl: (id: string) => `${BASE}/offers/${id}/sld-pdf`,
 };

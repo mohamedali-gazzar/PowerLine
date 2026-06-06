@@ -45,6 +45,8 @@ export const PRODUCT_CATEGORIES = ["RMU", "KIOSK", "LV"] as const;
 export const createOfferSchema = z.object({
   offerNumber: z.string().trim().min(1).max(60).optional(),
   category: z.enum(PRODUCT_CATEGORIES).default("RMU"),
+  salesNumber: z.string().trim().max(60).optional().nullable(),
+  orderNumber: z.string().trim().max(60).optional().nullable(),
   projectName: z.string().trim().min(1).max(160),
   customer: z.string().trim().min(1).max(160),
   location: z.string().trim().max(160).optional().nullable(),

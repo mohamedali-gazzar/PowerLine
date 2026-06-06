@@ -27,6 +27,10 @@ model Offer {
   // Lifecycle: DRAFT | SENT | WON | LOST
   status      String @default("DRAFT")
 
+  // SLD / drawing cover fields
+  salesNumber String?
+  orderNumber String?
+
   // Commercial (optional at this stage — technical offer is the focus)
   currency       String  @default("USD")
   unitPrice      Float   @default(0)

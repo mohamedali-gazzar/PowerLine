@@ -31,6 +31,16 @@ const initialRmu: RmuConfigInput = {
   meteringWithFuse: false,
 };
 
+/** Trigger a browser download of a same-origin file with a chosen filename. */
+function downloadFile(url: string, filename: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 export default function NewOfferPage() {
   const navigate = useNavigate();
 
@@ -52,6 +62,12 @@ export default function NewOfferPage() {
 
   // What to generate
   const [wantCommercial, setWantCommercial] = useState(false);
+  const [wantSld, setWantSld] = useState(false);
+
+  // SLD cover fields
+  const [salesNumber, setSalesNumber] = useState("");
+  const [orderNumber, setOrderNumber] = useState("");
+  const [notes, setNotes] = useState("");
 
   // Murge LBS only applies to PSEC — reset to ABB when switching to PRAL.
   useEffect(() => {
@@ -60,10 +76,16 @@ export default function NewOfferPage() {
     }
   }, [rmu.productType, rmu.lbsBrand]);
 
+  // SLD is available for PSEC only (for now) — turn it off for PRAL.
+  useEffect(() => {
+    if (rmu.productType !== "PSEC" && wantSld) setWantSld(false);
+  }, [rmu.productType, wantSld]);
+
   const [preview, setPreview] = useState<GeneratedOffer | null>(null);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<{ id: string; offerNumber: string; items: string[] } | null>(null);
 
   const code = useMemo(
     () =>
@@ -116,13 +138,17 @@ export default function NewOfferPage() {
     }
     setSubmitting(true);
     setError(null);
+    setDone(null);
     try {
       const payload: OfferInput = {
         category: "RMU",
+        salesNumber: salesNumber || null,
+        orderNumber: orderNumber || null,
         projectName,
         customer,
         location: location || null,
         status: "DRAFT",
+        notes: notes || null,
         currency,
         unitPrice,
         quantity,
@@ -134,7 +160,19 @@ export default function NewOfferPage() {
         rmu,
       };
       const created = await api.createOffer(payload);
-      navigate(`/offers/${created.id}`);
+      // Directly download the selected outputs (Technical always; Commercial / SLD if chosen).
+      const num = created.offerNumber;
+      const jobs: { url: string; name: string; label: string }[] = [
+        { url: `${api.pdfUrl(created.id)}?dl=1`, name: `${num}-Technical.pdf`, label: "Technical" },
+      ];
+      if (wantCommercial)
+        jobs.push({ url: `${api.commercialPdfUrl(created.id)}?dl=1`, name: `${num}-Commercial.pdf`, label: "Commercial" });
+      if (wantSld)
+        jobs.push({ url: `${api.sldPdfUrl(created.id)}?dl=1`, name: `${num}-SLD.pdf`, label: "SLD" });
+      // stagger so the browser doesn't block multiple simultaneous downloads
+      jobs.forEach((j, i) => setTimeout(() => downloadFile(j.url, j.name), i * 700));
+      setDone({ id: created.id, offerNumber: num, items: jobs.map((j) => j.label) });
+      window.scrollTo({ top: 0 });
     } catch (err) {
       setError((err as Error).message);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -151,7 +189,7 @@ export default function NewOfferPage() {
           <p className="text-sm text-muted">Configure the code — the offer builds itself.</p>
         </div>
         <button type="submit" className="btn-primary" disabled={submitting}>
-          {submitting ? "Saving…" : "Generate Offer →"}
+          {submitting ? "Generating…" : "Generate & Download →"}
         </button>
       </div>
 
@@ -168,9 +206,36 @@ export default function NewOfferPage() {
             label="Commercial Offer"
             desc="Pricing, VAT & terms"
           />
-          <OutputCard disabled label="Single-line Diagram" desc="Coming soon" />
+          <OutputCard
+            active={wantSld}
+            disabled={rmu.productType !== "PSEC"}
+            onClick={() => setWantSld((v) => !v)}
+            label="Single-line Diagram"
+            desc={rmu.productType === "PSEC" ? "SLD drawing set (PSEC)" : "PSEC only"}
+          />
         </div>
       </div>
+
+      {done && (
+        <div className="card mb-4 border-green-300 bg-green-50 p-4 animate-fade-in">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-bold text-green-800">✓ Offer {done.offerNumber} generated</p>
+              <p className="text-sm text-green-700">
+                Downloading {done.items.join(" · ")} PDF{done.items.length > 1 ? "s" : ""} — check your Downloads folder.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" className="btn-ghost" onClick={() => setDone(null)}>
+                Create another
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => navigate(`/offers/${done.id}`)}>
+                View offer →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="card mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-700 animate-fade-in">
@@ -410,6 +475,33 @@ export default function NewOfferPage() {
             </div>
           </section>
           )}
+
+          {wantSld && (
+          <section className="card p-5 animate-fade-up" style={{ animationDelay: "0.18s" }}>
+            <h2 className="sec-head">Single-line Diagram — Cover</h2>
+            <p className="mb-3 text-xs text-muted">
+              Item number on the drawings = panel code <b>{panelCode}</b>. Project, customer &amp; QTY come from above.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Sales Number">
+                <TextInput value={salesNumber} onChange={setSalesNumber} placeholder="e.g. SO-2026-123" />
+              </Field>
+              <Field label="Order Number">
+                <TextInput value={orderNumber} onChange={setOrderNumber} placeholder="e.g. PO-456" />
+              </Field>
+              <div className="sm:col-span-2">
+                <Field label="Notes (cover)">
+                  <textarea
+                    className="input h-20"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Optional notes shown on the SLD cover page"
+                  />
+                </Field>
+              </div>
+            </div>
+          </section>
+          )}
         </div>
 
         {/* RIGHT: live preview */}
@@ -441,7 +533,7 @@ export default function NewOfferPage() {
           Cancel
         </button>
         <button type="submit" className="btn-primary" disabled={submitting}>
-          {submitting ? "Saving…" : "Generate Offer →"}
+          {submitting ? "Generating…" : "Generate & Download →"}
         </button>
       </div>
     </form>

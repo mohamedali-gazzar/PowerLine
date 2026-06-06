@@ -17,6 +17,7 @@ import { priceForConfig } from "../domain/priceList";
 import { generateOfferPdf } from "../services/pdf.service";
 import { buildCommercial } from "../services/commercial.service";
 import { generateCommercialPdf } from "../services/pdf-commercial.service";
+import { generateSldPdf } from "../services/pdf-sld.service";
 
 export async function postOffer(req: Request, res: Response) {
   try {
@@ -69,7 +70,7 @@ export async function getOfferPdf(req: Request, res: Response) {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
-    `inline; filename="${offer.offerNumber}-${generated.panelCode}-technical.pdf"`
+    `${req.query.dl ? "attachment" : "inline"}; filename="${offer.offerNumber}-${generated.panelCode}-technical.pdf"`
   );
   res.send(pdf);
 }
@@ -86,7 +87,20 @@ export async function getCommercialPdf(req: Request, res: Response) {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
-    `inline; filename="${offer.offerNumber}-commercial.pdf"`
+    `${req.query.dl ? "attachment" : "inline"}; filename="${offer.offerNumber}-commercial.pdf"`
+  );
+  res.send(pdf);
+}
+
+export async function getSldPdf(req: Request, res: Response) {
+  const offer = await getOfferRaw(req.params.id);
+  if (!offer || !offer.rmu) return res.status(404).json({ error: "Offer not found" });
+  const generated = assembleOffer(toConfigInput(offer.rmu));
+  const pdf = await generateSldPdf(offer, generated);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `${req.query.dl ? "attachment" : "inline"}; filename="${offer.offerNumber}-${generated.panelCode}-SLD.pdf"`
   );
   res.send(pdf);
 }

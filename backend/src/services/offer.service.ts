@@ -57,10 +57,20 @@ export function toConfigInput(rmu: StoredRmu): RmuConfigInput {
 }
 
 /** Generate a sequential offer number like PL-2026-0007. */
+/** Next offer number = highest existing PL-{year}-#### + 1 (survives deletions). */
 async function nextOfferNumber(): Promise<string> {
   const year = new Date().getFullYear();
-  const count = await prisma.offer.count();
-  return `PL-${year}-${String(count + 1).padStart(4, "0")}`;
+  const prefix = `PL-${year}-`;
+  const existing = await prisma.offer.findMany({
+    where: { offerNumber: { startsWith: prefix } },
+    select: { offerNumber: true },
+  });
+  let max = 0;
+  for (const o of existing) {
+    const n = parseInt(o.offerNumber.slice(prefix.length), 10);
+    if (!Number.isNaN(n) && n > max) max = n;
+  }
+  return `${prefix}${String(max + 1).padStart(4, "0")}`;
 }
 
 export async function createOffer(input: CreateOfferInput) {
@@ -71,6 +81,8 @@ export async function createOffer(input: CreateOfferInput) {
     data: {
       offerNumber,
       category: input.category,
+      salesNumber: input.salesNumber ?? null,
+      orderNumber: input.orderNumber ?? null,
       projectName: input.projectName,
       customer: input.customer,
       location: input.location ?? null,

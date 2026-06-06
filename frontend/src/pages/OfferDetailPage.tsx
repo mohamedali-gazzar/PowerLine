@@ -47,8 +47,13 @@ export default function OfferDetailPage() {
             {offer.location ? ` · ${offer.location}` : ""}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link to="/offers/new" className="btn-ghost">+ New</Link>
+          {offer.rmu.productType === "PSEC" && (
+            <a href={api.sldPdfUrl(offer.id)} target="_blank" rel="noreferrer" className="btn-ghost">
+              ⬇ SLD PDF
+            </a>
+          )}
           <a href={pdfHref} target="_blank" rel="noreferrer" className="btn-primary">
             ⬇ {tab === "technical" ? "Technical" : "Commercial"} PDF
           </a>
