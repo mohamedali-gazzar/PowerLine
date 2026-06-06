@@ -8,5 +8,13 @@ if (!process.env.VERCEL) {
   process.exit(0);
 }
 
+if (!process.env.DATABASE_URL) {
+  console.warn(
+    "[db-push] DATABASE_URL not set — skipping schema sync. " +
+      "Add DATABASE_URL + DIRECT_URL in the Vercel project and redeploy to create the tables."
+  );
+  process.exit(0);
+}
+
 console.log("[db-push] Vercel build — syncing schema to Neon (prisma db push)...");
 execSync("npx prisma db push --skip-generate", { stdio: "inherit" });
