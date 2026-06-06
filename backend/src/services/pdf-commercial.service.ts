@@ -42,6 +42,7 @@ function asset(name: string): string {
     path.join(__dirname, "..", "assets", name),
     path.join(__dirname, "..", "..", "src", "assets", name),
     path.join(process.cwd(), "src", "assets", name),
+    path.join(process.cwd(), "backend", "src", "assets", name), // Vercel bundle root
   ];
   return candidates.find((c) => fs.existsSync(c)) ?? candidates[0];
 }
@@ -59,9 +60,23 @@ function setupFonts(doc: PDFKit.PDFDocument) {
       BOLD = "bold";
       ITALIC = "italic";
       AR = "body";
+      return;
     } catch {
-      /* keep Helvetica */
+      /* fall through to bundled fonts */
     }
+  }
+  // No Windows Arial (e.g. Vercel/Linux): use bundled Amiri (OFL) so Arabic
+  // glyphs render. Latin stays on Helvetica (clean + always available).
+  try {
+    const arReg = asset("fonts/Amiri-Regular.ttf");
+    const arBold = asset("fonts/Amiri-Bold.ttf");
+    if (fs.existsSync(arReg)) {
+      doc.registerFont("ar", arReg);
+      doc.registerFont("ar-bold", fs.existsSync(arBold) ? arBold : arReg);
+      AR = "ar";
+    }
+  } catch {
+    /* keep Helvetica — Arabic may be missing, but Latin still renders */
   }
 }
 

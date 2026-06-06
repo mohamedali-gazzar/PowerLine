@@ -5,12 +5,17 @@
 // are stored as String and validated in the API layer (Zod) instead.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // native = local dev; rhel-openssl-3.0.x = Vercel serverless (Node 20 / AWS Lambda).
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
+  // Pooled connection (Neon -pooler host) for the serverless runtime.
   url      = env("DATABASE_URL")
+  // Direct connection (Neon non-pooled host) used by `prisma db push` / migrate.
+  directUrl = env("DIRECT_URL")
 }
 
 /// A complete offer for a customer. Today it carries one RMU configuration

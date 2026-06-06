@@ -25,6 +25,7 @@ function asset(name: string): string {
     path.join(__dirname, "..", "assets", name),
     path.join(__dirname, "..", "..", "src", "assets", name),
     path.join(process.cwd(), "src", "assets", name),
+    path.join(process.cwd(), "backend", "src", "assets", name), // Vercel bundle root
   ];
   return candidates.find((c) => fs.existsSync(c)) ?? candidates[0];
 }
