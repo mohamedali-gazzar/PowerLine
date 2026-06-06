@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface text-ink antialiased;
+  }
+  /* Custom scrollbars in the warm palette */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #e6d9d1 transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: #e6d9d1;
+    border-radius: 9px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: #d8c6bb;
+  }
+}
+
+@layer components {
+  .label {
+    @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-muted;
+  }
+  .input {
+    @apply w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink
+      shadow-sm transition-all duration-150 outline-none
+      placeholder:text-muted/60
+      focus:border-brand focus:ring-4 focus:ring-brand/15 hover:border-accent/60;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2
+      text-sm font-semibold transition-all duration-150 active:scale-[.97]
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-brand text-white shadow-soft
+      hover:bg-brand-dark hover:shadow-lift;
+  }
+  .btn-ghost {
+    @apply btn border border-line bg-white text-ink hover:border-brand/40 hover:bg-brand-tint;
+  }
+  .card {
+    @apply rounded-xl2 border border-line bg-white shadow-soft;
+  }
+  .section-title {
+    @apply text-sm font-bold uppercase tracking-wide text-brand-dark;
+  }
+  /* Section heading with an animated underline bar */
+  .sec-head {
+    @apply relative mb-3 pb-2 text-base font-bold text-ink;
+  }
+  .sec-head::after {
+    content: "";
+    @apply absolute bottom-0 left-0 h-[3px] w-12 origin-left rounded-full bg-brand;
+    animation: bar-grow 0.5s ease both;
+  }
+  .chip {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+  .code-chip {
+    @apply inline-flex items-center rounded-lg bg-brand
+      px-3 py-1 font-mono text-sm font-bold tracking-tight text-white shadow-soft;
+  }
+  /* sidebar nav item */
+  .nav-item {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold text-white/70
+      transition-colors hover:bg-white/10 hover:text-white;
+  }
+  .nav-item-active {
+    @apply bg-brand text-white hover:bg-brand hover:text-white;
+  }
+}
+
+@layer utilities {
+  .skeleton {
+    background: linear-gradient(90deg, #f0e9e4 25%, #f7f2ee 37%, #f0e9e4 63%);
+    background-size: 800px 100%;
+    @apply animate-shimmer rounded;
+  }
+}

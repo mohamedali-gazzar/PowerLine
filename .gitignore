@@ -1,0 +1,12 @@
+# Root ignores (each app also has its own .gitignore)
+# Extracted source-standard text (derived from the Word offers) — keep local only
+tools/extracted/
+node_modules/
+dist/
+build/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db

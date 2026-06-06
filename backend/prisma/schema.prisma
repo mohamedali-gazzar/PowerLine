@@ -1,0 +1,75 @@
+// PowerLine data model.
+// SQLite for local dev (zero-config). To move to PostgreSQL in production,
+// change `provider` to "postgresql" and update DATABASE_URL — the models below
+// are written to port cleanly. SQLite has no native enums, so enum-like fields
+// are stored as String and validated in the API layer (Zod) instead.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// A complete offer for a customer. Today it carries one RMU configuration
+/// expressed in the Powerline coding system (PRAL/PSEC). LV panels and kiosks
+/// will be added as sibling relations later.
+model Offer {
+  id          String @id @default(cuid())
+  offerNumber String @unique
+  // Product family: RMU | KIOSK | LV (only RMU is configurable today)
+  category    String @default("RMU")
+  projectName String
+  customer    String
+  location    String?
+  // Lifecycle: DRAFT | SENT | WON | LOST
+  status      String @default("DRAFT")
+
+  // Commercial (optional at this stage — technical offer is the focus)
+  currency       String  @default("USD")
+  unitPrice      Float   @default(0)
+  quantity       Int     @default(1)
+  discountPct    Float   @default(0)
+  validityDays   Int     @default(30)
+  deliveryWeeks  Int?
+  paymentTerms   String?
+  warrantyMonths Int?
+  notes          String?
+
+  rmu RmuConfig?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// RMU configuration in the Powerline coding system, e.g. PRAL12(2+1+M).
+/// The full technical content (general/electrical data + cubicle lineup) is
+/// derived from this by the assembly engine — only the inputs are stored.
+model RmuConfig {
+  id      String @id @default(cuid())
+  offer   Offer  @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  offerId String @unique
+
+  productType    String // PRAL (air) | PSEC (SF6/GIS)
+  lbsBrand       String  @default("ABB") // PSEC only: ABB | MURGE
+  voltageKv      Int // 12 | 24
+  nalCount       Int     @default(2) // LBS without fuse (NAL)
+  nalfCount      Int     @default(1) // LBS with fuse (NALF)
+  hasMetering    Boolean @default(false) // adds metering cubicle (M)
+  rtuType        String  @default("NONE") // NONE | TYPE1 | TYPE2
+  installation   String  @default("INDOOR") // INDOOR | OUTDOOR
+  busbarCurrentA Int     @default(630)
+  fuseRatingA    Int? // override; null → standard for the voltage
+
+  // Metering options (used when hasMetering)
+  meteringCtPrimaryA Int? // CT primary current (X in "X/5"); null → keep "X"
+  vtCores            Int  @default(1) // VT secondary cores: 1 or 2
+  vtBurdenVa         String? // VT burden, default "50-100"
+  vtClass            String? // VT accuracy class, default "0.5"
+  meteringWithFuse   Boolean @default(false) // VT-Type: with fuse vs without
+
+  // Cached human-readable code for quick listing/search, e.g. "PRAL12(2+1+M)".
+  configCode String
+}

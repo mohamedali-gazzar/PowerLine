@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/options.ts","./src/types.ts","./src/vite-env.d.ts","./src/components/commercialview.tsx","./src/components/offerview.tsx","./src/components/fields.tsx","./src/pages/comingsoonpage.tsx","./src/pages/newofferpage.tsx","./src/pages/offerdetailpage.tsx","./src/pages/offerslistpage.tsx"],"version":"5.9.3"}
