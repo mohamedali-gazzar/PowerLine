@@ -10,12 +10,14 @@ generator client {
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
+// The datasource block below is swapped automatically by scripts/db-setup.js
+// (runs on `postinstall`):
+//   local dev   -> sqlite (offline, prisma/dev.db)   <-- committed default
+//   Vercel/prod -> postgresql (Neon)
+// You normally never edit this block by hand.
 datasource db {
-  provider = "postgresql"
-  // Pooled connection (Neon -pooler host) for the serverless runtime.
+  provider = "sqlite"
   url      = env("DATABASE_URL")
-  // Direct connection (Neon non-pooled host) used by `prisma db push` / migrate.
-  directUrl = env("DIRECT_URL")
 }
 
 /// A complete offer for a customer. Today it carries one RMU configuration

@@ -4,7 +4,7 @@
   "description": "PowerLine - backend API for electrical panel (RMU/LV/Kiosk) technical & commercial offers",
   "main": "dist/index.js",
   "scripts": {
-    "postinstall": "prisma generate",
+    "postinstall": "node scripts/db-setup.js && prisma generate && node scripts/db-push-vercel.js",
     "dev": "nodemon",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
