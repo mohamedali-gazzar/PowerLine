@@ -519,8 +519,9 @@ function switchDisc(doc: PDFKit.PDFDocument, condX: number, labX: number, labW: 
       doc.fillColor("#c0392b").fontSize(7.5).text("Waiting for\ncustomer", condX - 64, yb + 40, { width: 50, align: "right" });
     yb += 42;
   }
-  // brand follows the offer's LBS selection (ABB / Murge) — kept in sync with the tech offer
-  const brand = rmu.lbsBrand === "MURGE" ? "Murge" : "ABB";
+  // brand follows the offer's LBS selection — kept in sync with the tech offer
+  const BW: Record<string, string> = { ABB: "ABB", MURGE: "Murge", SCHNEIDER: "Schneider", JGGY: "JGGY", GRL: "GRL" };
+  const brand = BW[rmu.lbsBrand ?? "ABB"] ?? "ABB";
   const typeCode = brand === "ABB"
     ? (fused ? `GSEC/T2F-${r.ratedVoltageKv}` : `GSEC/T1-${r.ratedVoltageKv}`)
     : (fused ? `T2F-${r.ratedVoltageKv}` : `T1-${r.ratedVoltageKv}`);

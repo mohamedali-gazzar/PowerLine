@@ -10,12 +10,19 @@ import {
   Toggle,
 } from "../components/fields";
 import OfferView from "../components/OfferView";
-import { RTU_TYPES } from "../options";
-import type { GeneratedOffer, OfferInput, RmuConfigInput } from "../types";
+import {
+  RTU_TYPES,
+  BRANDS_BY_FAMILY,
+  AVAILABLE_BRANDS_BY_FAMILY,
+  CLIENT_SPECS,
+  AVAILABLE_CLIENT_SPECS,
+} from "../options";
+import type { GeneratedOffer, OfferInput, RmuConfigInput, LbsBrand } from "../types";
 
 const initialRmu: RmuConfigInput = {
   productType: "PRAL",
   lbsBrand: "ABB",
+  clientSpec: "EECH",
   voltageKv: 12,
   nalCount: 2,
   nalfCount: 1,
@@ -69,12 +76,21 @@ export default function NewOfferPage() {
   const [orderNumber, setOrderNumber] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Murge LBS only applies to PSEC — reset to ABB when switching to PRAL.
+  // Keep the brand to one we actually have data for (PSEC: ABB/Murge, PRAL: ABB)
+  // — reset to ABB if the current brand isn't available for the family.
   useEffect(() => {
-    if (rmu.productType !== "PSEC" && rmu.lbsBrand === "MURGE") {
+    const available = AVAILABLE_BRANDS_BY_FAMILY[rmu.productType];
+    if (rmu.lbsBrand && !available.includes(rmu.lbsBrand)) {
       setRmu((c) => ({ ...c, lbsBrand: "ABB" }));
     }
   }, [rmu.productType, rmu.lbsBrand]);
+
+  // Client spec: only EECH has data — reset to EECH if KAHRABA somehow set.
+  useEffect(() => {
+    if (rmu.clientSpec && !AVAILABLE_CLIENT_SPECS.includes(rmu.clientSpec)) {
+      setRmu((c) => ({ ...c, clientSpec: "EECH" }));
+    }
+  }, [rmu.clientSpec]);
 
   // SLD is available for PSEC only (for now) — turn it off for PRAL.
   useEffect(() => {
@@ -280,16 +296,38 @@ export default function NewOfferPage() {
                 />
               </Field>
 
-              {rmu.productType === "PSEC" && (
-                <Field label="LBS brand" hint="Murge changes the code (P-SEC.M) & price">
-                  <Segmented
-                    value={rmu.lbsBrand ?? "ABB"}
-                    onChange={(v) => setR("lbsBrand", v)}
-                    options={["ABB", "MURGE"] as const}
-                    renderLabel={(v) => (v === "ABB" ? "ABB" : "Murge")}
-                  />
-                </Field>
-              )}
+              <Field
+                label="LBS brand / type"
+                hint={
+                  rmu.productType === "PSEC"
+                    ? "ABB · Murge available · Schneider locked (no data)"
+                    : "ABB available · JGGY · GRL locked (no data)"
+                }
+              >
+                <Segmented
+                  value={(rmu.lbsBrand ?? "ABB") as LbsBrand}
+                  onChange={(v) => setR("lbsBrand", v)}
+                  options={BRANDS_BY_FAMILY[rmu.productType] as readonly LbsBrand[]}
+                  disabledOptions={
+                    BRANDS_BY_FAMILY[rmu.productType].filter(
+                      (b) => !AVAILABLE_BRANDS_BY_FAMILY[rmu.productType].includes(b)
+                    ) as readonly LbsBrand[]
+                  }
+                />
+              </Field>
+
+              <Field label="Client specification" hint="EECH available · KAHRABA locked (no technical offer)">
+                <Segmented
+                  value={rmu.clientSpec ?? "EECH"}
+                  onChange={(v) => setR("clientSpec", v)}
+                  options={CLIENT_SPECS}
+                  disabledOptions={
+                    CLIENT_SPECS.filter(
+                      (s) => !AVAILABLE_CLIENT_SPECS.includes(s)
+                    ) as readonly ("EECH" | "KAHRABA")[]
+                  }
+                />
+              </Field>
 
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Rated voltage">
@@ -311,10 +349,10 @@ export default function NewOfferPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <Field label="NAL — LBS w/o fuse" hint="First number in code">
-                  <NumberInput value={rmu.nalCount} min={0} onChange={(v) => setR("nalCount", v)} />
+                <Field label="Ring feeders (R)" hint="NAL — R2 to R5">
+                  <NumberInput value={rmu.nalCount} min={2} onChange={(v) => setR("nalCount", v)} />
                 </Field>
-                <Field label="NALF — LBS with fuse" hint="Second number in code">
+                <Field label="Transformer feeders (T)" hint="NALF — T0 to T2">
                   <NumberInput value={rmu.nalfCount} min={0} onChange={(v) => setR("nalfCount", v)} />
                 </Field>
               </div>
@@ -333,7 +371,7 @@ export default function NewOfferPage() {
                 </Field>
               </div>
 
-              <Field label="RTU / SCADA">
+              <Field label="RTU / SCADA" hint="Any RTU ⇒ Smart RMU (spec ·9); None ⇒ Standard (·0)">
                 <Select value={rmu.rtuType} onChange={(v) => setR("rtuType", v)} options={RTU_TYPES} />
               </Field>
             </div>

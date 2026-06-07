@@ -13,12 +13,72 @@ import {
   type Installation,
 } from "./standards";
 
-export type LbsBrand = "ABB" | "MURGE";
+export type LbsBrand = "ABB" | "MURGE" | "SCHNEIDER" | "JGGY" | "GRL";
+export type ClientSpec = "EECH" | "KAHRABA";
+
+/** Two-letter brand code used in the product code (coding-system Variable 3). */
+export const BRAND_CODE: Record<LbsBrand, string> = {
+  ABB: "AB",
+  MURGE: "MG",
+  SCHNEIDER: "SH",
+  JGGY: "GY",
+  GRL: "GL",
+};
+
+/** Human brand word for BOM / commercial text. */
+const BRAND_WORD: Record<LbsBrand, string> = {
+  ABB: "ABB",
+  MURGE: "Murge",
+  SCHNEIDER: "Schneider",
+  JGGY: "JGGY",
+  GRL: "GRL",
+};
+
+/** Brands the coding system DEFINES per family: PSEC=SF6 (ABB/Murge/Schneider),
+ *  PRAL=Air (ABB/JGGY/GRL). Used for code parsing/display only. */
+export const BRANDS_BY_FAMILY: Record<ProductType, LbsBrand[]> = {
+  PSEC: ["ABB", "MURGE", "SCHNEIDER"],
+  PRAL: ["ABB", "JGGY", "GRL"],
+};
+
+/**
+ * Brands we actually HAVE data for (verified technical BOM + price list entry),
+ * so we can produce a real offer. The price list only covers ABB (P-SEC / P-RAL)
+ * and Murge (P-SEC.M) — every other brand is LOCKED until its technical offer
+ * and pricing are added. Generating those from ABB's data would be fabrication.
+ */
+export const AVAILABLE_BRANDS_BY_FAMILY: Record<ProductType, LbsBrand[]> = {
+  PSEC: ["ABB", "MURGE"],
+  PRAL: ["ABB"],
+};
+
+/** True when we have the data to build a real offer for this brand + family. */
+export function isBrandAvailable(c: {
+  productType: ProductType;
+  lbsBrand?: LbsBrand | null;
+}): boolean {
+  return AVAILABLE_BRANDS_BY_FAMILY[c.productType].includes(
+    (c.lbsBrand ?? "ABB") as LbsBrand
+  );
+}
+
+/**
+ * Client specs we have a technical offer for. Only EECH today — KAHRABA is
+ * LOCKED until its technical offer exists (the reference offers are all EECH).
+ * The price list and SLD are EECH-based too, so the three stay in sync.
+ */
+export const AVAILABLE_CLIENT_SPECS: ClientSpec[] = ["EECH"];
+
+/** True when we have data for this client specification. */
+export function isClientSpecAvailable(spec?: ClientSpec | null): boolean {
+  return AVAILABLE_CLIENT_SPECS.includes((spec ?? "EECH") as ClientSpec);
+}
 
 export interface RmuConfigInput {
   productType: ProductType;
   voltageKv: VoltageKv;
-  lbsBrand?: LbsBrand | null; // PSEC only: ABB (default) or Murge LBS
+  lbsBrand?: LbsBrand | null; // LBS brand (see BRANDS_BY_FAMILY); default ABB
+  clientSpec?: ClientSpec | null; // client specification: EECH (default) or KAHRABA
   nalCount: number; // LBS without fuse (NAL)
   nalfCount: number; // LBS with fuse (NALF)
   hasMetering: boolean;
@@ -66,6 +126,8 @@ export interface GeneratedOffer {
   summary: {
     productType: ProductType;
     lbsBrand: LbsBrand;
+    clientSpec: ClientSpec;
+    smart: boolean;
     insulation: string;
     voltageKv: number;
     nalCount: number;
@@ -94,9 +156,9 @@ export function isMurge(c: RmuConfigInput): boolean {
   return c.productType === "PSEC" && c.lbsBrand === "MURGE";
 }
 
-/** LBS brand word for BOM / commercial text. */
+/** LBS brand word for BOM / commercial text (ABB / Murge / Schneider / JGGY / GRL). */
 export function brandWord(c: RmuConfigInput): string {
-  return isMurge(c) ? "Murge" : "ABB";
+  return BRAND_WORD[(c.lbsBrand ?? "ABB") as LbsBrand];
 }
 
 /** Catalogue family prefix: P-RAL / P-SEC / P-SEC.M (Murge). */
@@ -106,12 +168,37 @@ function famPrefix(c: RmuConfigInput): string {
 }
 
 /**
- * Catalogue panel code, e.g. P-RAL12N3F1M1 or P-SEC.M24N2F1.
+ * Legacy catalogue panel code, e.g. P-RAL12N3F1M1 or P-SEC.M24N2F1.
  * {prefix}{kv}N{nal}F{nalf}[M1]
+ * Retained ONLY as the price-list lookup key (see priceList.ts / buildPriceKey).
  */
 export function buildPanelCode(c: RmuConfigInput): string {
   const m = c.hasMetering ? "M1" : "";
   return `${famPrefix(c)}${c.voltageKv}N${c.nalCount}F${c.nalfCount}${m}`;
+}
+
+/**
+ * Product code per the RMU Coding System, e.g. PSEC10AB12R3T1M.
+ * Layout: {family}{spec}{brand}{kv}R{ring}T{transformer}{M|W}
+ *   family      = PSEC (SF6) | PRAL (Air)
+ *   spec (##)   = client(EECH=1, KAHRABA=2) + type(Standard=0, Smart=9) → 10/19/20/29
+ *   brand (LL)  = AB/MG/SH/GY/GL  (see BRAND_CODE)
+ *   kv          = 12 | 24
+ *   ring  (R#)  = NAL count, 2–5
+ *   trans (T#)  = NALF count, 0–2
+ *   measuring   = M (with) | W (without)
+ */
+export function buildProductCode(c: RmuConfigInput): string {
+  const client = (c.clientSpec ?? "EECH") === "KAHRABA" ? "2" : "1";
+  const type = c.rtuType !== "NONE" ? "9" : "0"; // Smart (has RTU) vs Standard
+  const brand = BRAND_CODE[(c.lbsBrand ?? "ABB") as LbsBrand];
+  const meas = c.hasMetering ? "M" : "W";
+  return `${c.productType}${client}${type}${brand}${c.voltageKv}R${c.nalCount}T${c.nalfCount}${meas}`;
+}
+
+/** True when this configuration is a "Smart" RMU (has RTU/communication). */
+export function isSmart(c: RmuConfigInput): boolean {
+  return c.rtuType !== "NONE";
 }
 
 /** Price-list key: the panel code plus the "-With Fuse" VT variant suffix. */
@@ -253,7 +340,7 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
 
   return {
     configCode: buildCode(c),
-    panelCode: buildPanelCode(c),
+    panelCode: buildProductCode(c),
     priceKey: buildPriceKey(c),
     commercialDescription: commercialDescription(c),
     titleProduct,
@@ -270,7 +357,9 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
     communication,
     summary: {
       productType: c.productType,
-      lbsBrand: isMurge(c) ? "MURGE" : "ABB",
+      lbsBrand: (c.lbsBrand ?? "ABB") as LbsBrand,
+      clientSpec: (c.clientSpec ?? "EECH") as ClientSpec,
+      smart: isSmart(c),
       insulation: p.insulation,
       voltageKv: c.voltageKv,
       nalCount: c.nalCount,

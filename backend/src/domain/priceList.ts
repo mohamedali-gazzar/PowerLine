@@ -3,7 +3,7 @@
 // "Minimum unit price" — the floor; the selling price is set per offer.
 
 import {
-  buildPanelCode,
+  buildProductCode,
   buildPriceKey,
   type RmuConfigInput,
 } from "./assembly";
@@ -82,11 +82,19 @@ export interface ConfigPricing {
   found: boolean;
 }
 
+/** The price list only covers ABB/Murge (PSEC) and ABB (PRAL). Other brands
+ *  (Schneider/JGGY/GRL) have no list price → quoted on application. */
+function priceEligible(c: RmuConfigInput): boolean {
+  const brand = c.lbsBrand ?? "ABB";
+  if (c.productType === "PSEC") return brand === "ABB" || brand === "MURGE";
+  return brand === "ABB"; // PRAL list = ABB air only
+}
+
 /** Look up the minimum list price for a configuration, plus applicable add-ons. */
 export function priceForConfig(c: RmuConfigInput): ConfigPricing {
-  const panelCode = buildPanelCode(c);
+  const panelCode = buildProductCode(c);
   const priceKey = buildPriceKey(c);
-  const basePrice = PRICE_LIST[priceKey] ?? null;
+  const basePrice = priceEligible(c) ? PRICE_LIST[priceKey] ?? null : null;
 
   const addOns: { name: string; price: number }[] = [];
   if (c.installation === "OUTDOOR") addOns.push({ ...ADD_ONS.outdoorEnclosure });

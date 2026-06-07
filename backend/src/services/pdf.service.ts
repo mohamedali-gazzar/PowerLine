@@ -143,8 +143,10 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, g: GeneratedOffe
     .text(g.titleProduct, MARGIN + 18, cardY + 12);
   doc.font(BODY).fontSize(12).fillColor("white")
     .text(g.titleFamily, MARGIN + 18, cardY + 38);
-  doc.font(BOLD).fontSize(13)
-    .text(g.configCode, MARGIN, cardY + 22, { width: CONTENT_W - 18, align: "right" });
+  doc.font(BOLD).fontSize(15)
+    .text(g.panelCode, MARGIN, cardY + 16, { width: CONTENT_W - 18, align: "right" });
+  doc.font(BODY).fontSize(10).fillColor("white")
+    .text(g.configCode, MARGIN, cardY + 40, { width: CONTENT_W - 18, align: "right" });
 
   // Subtitle line
   cardY += 84;

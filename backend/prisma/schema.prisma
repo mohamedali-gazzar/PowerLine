@@ -64,7 +64,8 @@ model RmuConfig {
   offerId String @unique
 
   productType    String // PRAL (air) | PSEC (SF6/GIS)
-  lbsBrand       String  @default("ABB") // PSEC only: ABB | MURGE
+  lbsBrand       String  @default("ABB") // ABB | MURGE | SCHNEIDER | JGGY | GRL
+  clientSpec     String  @default("EECH") // EECH | KAHRABA (coding-system Variable 2)
   voltageKv      Int // 12 | 24
   nalCount       Int     @default(2) // LBS without fuse (NAL)
   nalfCount      Int     @default(1) // LBS with fuse (NALF)

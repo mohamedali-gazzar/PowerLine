@@ -7,6 +7,8 @@ import {
   assembleOffer,
   buildCode,
   type RmuConfigInput,
+  type LbsBrand,
+  type ClientSpec,
 } from "../domain/assembly";
 import type {
   ProductType,
@@ -20,6 +22,7 @@ const includeRmu = { rmu: true } as const;
 type StoredRmu = {
   productType: string;
   lbsBrand: string;
+  clientSpec: string;
   voltageKv: number;
   nalCount: number;
   nalfCount: number;
@@ -39,7 +42,8 @@ type StoredRmu = {
 export function toConfigInput(rmu: StoredRmu): RmuConfigInput {
   return {
     productType: rmu.productType as ProductType,
-    lbsBrand: (rmu.lbsBrand as "ABB" | "MURGE") ?? "ABB",
+    lbsBrand: (rmu.lbsBrand as LbsBrand) ?? "ABB",
+    clientSpec: (rmu.clientSpec as ClientSpec) ?? "EECH",
     voltageKv: rmu.voltageKv as VoltageKv,
     nalCount: rmu.nalCount,
     nalfCount: rmu.nalfCount,
@@ -100,6 +104,7 @@ export async function createOffer(input: CreateOfferInput) {
         create: {
           productType: input.rmu.productType,
           lbsBrand: input.rmu.lbsBrand ?? "ABB",
+          clientSpec: input.rmu.clientSpec ?? "EECH",
           voltageKv: input.rmu.voltageKv,
           nalCount: input.rmu.nalCount,
           nalfCount: input.rmu.nalfCount,

@@ -80,49 +80,65 @@ export function Select<T extends string>({
   value,
   onChange,
   options,
+  disabledOptions,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: readonly T[];
+  /** Options shown but not selectable (e.g. brands with no data yet). */
+  disabledOptions?: readonly T[];
 }) {
   return (
     <select className="input cursor-pointer" value={value} onChange={(e) => onChange(e.target.value as T)}>
-      {options.map((o) => (
-        <option key={o} value={o}>
-          {toLabel(o)}
-        </option>
-      ))}
+      {options.map((o) => {
+        const locked = disabledOptions?.includes(o);
+        return (
+          <option key={o} value={o} disabled={locked}>
+            {toLabel(o)}
+            {locked ? " — no data yet 🔒" : ""}
+          </option>
+        );
+      })}
     </select>
   );
 }
 
-/** Segmented control — nicer than a dropdown for 2–3 mutually-exclusive choices. */
+/** Segmented control — nicer than a dropdown for 2–4 mutually-exclusive choices.
+ *  Options in `disabledOptions` are shown greyed with a 🔒 and aren't selectable. */
 export function Segmented<T extends string>({
   value,
   onChange,
   options,
   renderLabel,
+  disabledOptions,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: readonly T[];
   renderLabel?: (v: T) => ReactNode;
+  disabledOptions?: readonly T[];
 }) {
   return (
     <div className="inline-flex w-full rounded-lg border border-line bg-surface p-1">
       {options.map((o) => {
         const active = o === value;
+        const locked = disabledOptions?.includes(o);
         return (
           <button
             key={o}
             type="button"
-            onClick={() => onChange(o)}
+            disabled={locked}
+            title={locked ? "No data yet — locked" : undefined}
+            onClick={() => !locked && onChange(o)}
             className={`flex-1 rounded-md px-3 py-1.5 text-sm font-semibold transition-all duration-150 ${
-              active
+              locked
+                ? "cursor-not-allowed text-muted/40"
+                : active
                 ? "bg-brand text-white shadow-soft"
                 : "text-muted hover:text-brand-dark"
             }`}
           >
+            {locked && <span className="mr-1">🔒</span>}
             {renderLabel ? renderLabel(o) : toLabel(o)}
           </button>
         );

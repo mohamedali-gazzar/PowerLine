@@ -7,12 +7,14 @@ export type Installation = "INDOOR" | "OUTDOOR";
 export type OfferStatus = "DRAFT" | "SENT" | "WON" | "LOST";
 export type ProductCategory = "RMU" | "KIOSK" | "LV";
 
-// The RMU "code": PRAL/PSEC + voltage + how many NAL/NALF/metering/RTU.
-export type LbsBrand = "ABB" | "MURGE";
+// The RMU "code", e.g. PSEC10AB12R3T1M (see RMU Coding System).
+export type LbsBrand = "ABB" | "MURGE" | "SCHNEIDER" | "JGGY" | "GRL";
+export type ClientSpec = "EECH" | "KAHRABA";
 
 export interface RmuConfigInput {
   productType: ProductType;
   lbsBrand?: LbsBrand;
+  clientSpec?: ClientSpec;
   voltageKv: VoltageKv;
   nalCount: number;
   nalfCount: number;
@@ -123,6 +125,8 @@ export interface GeneratedOffer {
   summary: {
     productType: ProductType;
     lbsBrand: LbsBrand;
+    clientSpec: ClientSpec;
+    smart: boolean;
     insulation: string;
     voltageKv: number;
     nalCount: number;

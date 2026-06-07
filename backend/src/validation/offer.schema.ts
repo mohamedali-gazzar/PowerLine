@@ -11,15 +11,16 @@ const OFFER_STATUS = ["DRAFT", "SENT", "WON", "LOST"] as const;
 // The RMU "code": PRAL/PSEC, voltage, and how many NAL/NALF/metering/RTU.
 export const rmuConfigSchema = z.object({
   productType: z.enum(PRODUCT_TYPES as [string, ...string[]]),
-  lbsBrand: z.enum(["ABB", "MURGE"]).default("ABB"),
+  lbsBrand: z.enum(["ABB", "MURGE", "SCHNEIDER", "JGGY", "GRL"]).default("ABB"),
+  clientSpec: z.enum(["EECH", "KAHRABA"]).default("EECH"),
   voltageKv: z
     .number()
     .int()
     .refine((v) => (VOLTAGES as number[]).includes(v), {
       message: "Voltage must be 12 or 24 kV",
     }),
-  nalCount: z.number().int().min(0).max(12),
-  nalfCount: z.number().int().min(0).max(12),
+  nalCount: z.number().int().min(2).max(5), // Ring feeders R2–R5
+  nalfCount: z.number().int().min(0).max(2), // Transformer feeders T0–T2
   hasMetering: z.boolean().default(false),
   rtuType: z.enum(RTU_TYPES as [string, ...string[]]).default("NONE"),
   installation: z.enum(INSTALLATIONS as [string, ...string[]]).default("INDOOR"),
@@ -38,6 +39,24 @@ export const rmuConfigSchema = z.object({
   .refine((c) => c.nalCount + c.nalfCount > 0, {
     message: "At least one NAL or NALF cubicle is required",
     path: ["nalCount"],
+  })
+  .refine(
+    (c) => {
+      // Only brands we have real data for (technical BOM + price). Others are
+      // locked until their data is added — we don't fabricate from ABB's data.
+      const available = c.productType === "PSEC" ? ["ABB", "MURGE"] : ["ABB"];
+      return available.includes(c.lbsBrand);
+    },
+    {
+      message:
+        "No technical/price data for this brand yet — it's locked. Available: PSEC → ABB or Murge; PRAL → ABB.",
+      path: ["lbsBrand"],
+    }
+  )
+  .refine((c) => c.clientSpec === "EECH", {
+    // We only have EECH technical offers; KAHRABA is locked until its data exists.
+    message: "No technical offer for KAHRABA yet — locked. Only EECH is available.",
+    path: ["clientSpec"],
   });
 
 export const PRODUCT_CATEGORIES = ["RMU", "KIOSK", "LV"] as const;
