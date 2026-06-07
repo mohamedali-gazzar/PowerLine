@@ -36,6 +36,7 @@ let BODY = "Helvetica";
 let BOLD = "Helvetica-Bold";
 let ITALIC = "Helvetica-Oblique";
 let AR = "Helvetica"; // replaced with Arial when available (has Arabic glyphs)
+let AR_BOLD = "Helvetica-Bold"; // Arabic bold: Arial Bold locally, Amiri Bold on Vercel
 
 function asset(name: string): string {
   const candidates = [
@@ -60,6 +61,7 @@ function setupFonts(doc: PDFKit.PDFDocument) {
       BOLD = "bold";
       ITALIC = "italic";
       AR = "body";
+      AR_BOLD = "bold";
       return;
     } catch {
       /* fall through to bundled fonts */
@@ -74,6 +76,7 @@ function setupFonts(doc: PDFKit.PDFDocument) {
       doc.registerFont("ar", arReg);
       doc.registerFont("ar-bold", fs.existsSync(arBold) ? arBold : arReg);
       AR = "ar";
+      AR_BOLD = "ar-bold";
     }
   } catch {
     /* keep Helvetica — Arabic may be missing, but Latin still renders */
@@ -331,7 +334,7 @@ function colHeight(
   w: number,
   ar: boolean
 ): number {
-  let h = doc.font(BOLD).fontSize(10.5).heightOfString(ar ? shapeAr(heading) : heading, { width: w }) + 6;
+  let h = doc.font(ar ? AR_BOLD : BOLD).fontSize(10.5).heightOfString(ar ? shapeAr(heading) : heading, { width: w }) + 6;
   for (const b of bullets) {
     h += doc.font(ar ? AR : BODY).fontSize(9.5)
       .heightOfString(ar ? shapeAr(b) : b, { width: w - 14, lineGap: 1 }) + 6;
@@ -350,7 +353,7 @@ function renderCol(
 ) {
   // heading
   if (ar) {
-    arText(doc, heading, x, top, w, BOLD, 10.5);
+    arText(doc, heading, x, top, w, AR_BOLD, 10.5);
   } else {
     doc.font(BOLD).fontSize(10.5).fillColor(ORANGE_DK).text(heading, x, top, { width: w });
   }
