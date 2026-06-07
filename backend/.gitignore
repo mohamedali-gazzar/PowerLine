@@ -14,3 +14,7 @@ prisma/*.db
 
 # Generated PDFs / temp
 tmp/
+
+# Local render/scratch artifacts (render-pdf.mjs outputs, etc.)
+_*.pdf
+_*.png
