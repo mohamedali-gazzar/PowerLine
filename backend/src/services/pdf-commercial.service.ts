@@ -190,7 +190,7 @@ function coverPage(doc: PDFKit.PDFDocument, d: CommercialData) {
   for (const [k, v] of rows) {
     doc.font(BOLD).fontSize(9).fillColor(GREY).text(k.toUpperCase(), MARGIN + 18, ry, { width: 165 });
     if (hasArabic(v)) {
-      arText(doc, v, MARGIN + 188, ry, CONTENT_W - 205, BODY, 10);
+      arText(doc, v, MARGIN + 188, ry, CONTENT_W - 205, AR, 10);
     } else {
       doc.font(BODY).fontSize(9.5).fillColor(INK).text(v, MARGIN + 188, ry, { width: CONTENT_W - 205 });
     }
@@ -270,7 +270,7 @@ function mainOffer(doc: PDFKit.PDFDocument, d: CommercialData) {
   doc.font(BOLD).fontSize(10).fillColor(ORANGE_DK).text("Note:", MARGIN, doc.y);
   const ny = doc.y + 2;
   doc.font(BODY).fontSize(9).fillColor(INK).text(`• ${PRICE_NOTE_EN}`, MARGIN + 6, ny, { width: CONTENT_W - 12 });
-  arText(doc, PRICE_NOTE_AR, MARGIN, doc.y + 4, CONTENT_W, BODY, 9.5);
+  arText(doc, PRICE_NOTE_AR, MARGIN, doc.y + 4, CONTENT_W, AR, 9.5);
 }
 
 function totalRow(doc: PDFKit.PDFDocument, label: string, value: string, strong: boolean) {
