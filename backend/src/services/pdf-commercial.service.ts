@@ -68,8 +68,8 @@ function setupFonts(doc: PDFKit.PDFDocument) {
   // No Windows Arial (e.g. Vercel/Linux): use bundled Amiri (OFL) so Arabic
   // glyphs render. Latin stays on Helvetica (clean + always available).
   try {
-    const arReg = asset("fonts/Amiri-Regular.ttf");
-    const arBold = asset("fonts/Amiri-Bold.ttf");
+    const arReg = asset("Amiri-Regular.ttf");
+    const arBold = asset("Amiri-Bold.ttf");
     if (fs.existsSync(arReg)) {
       doc.registerFont("ar", arReg);
       doc.registerFont("ar-bold", fs.existsSync(arBold) ? arBold : arReg);
