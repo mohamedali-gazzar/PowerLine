@@ -301,7 +301,7 @@ function bilingualTerms(doc: PDFKit.PDFDocument, titleEn: string, titleAr: strin
   // Bilingual section title
   ensure(doc, 40);
   doc.font(BOLD).fontSize(14).fillColor(ORANGE_DK).text(titleEn, MARGIN, doc.y, { width: CONTENT_W / 2 });
-  arText(doc, titleAr, MARGIN + CONTENT_W / 2, doc.y - 18, CONTENT_W / 2, BOLD, 14);
+  arText(doc, titleAr, MARGIN + CONTENT_W / 2, doc.y - 18, CONTENT_W / 2, AR_BOLD, 14);
   doc.moveTo(MARGIN, doc.y + 2).lineTo(PAGE_W - MARGIN, doc.y + 2).lineWidth(2).strokeColor(ORANGE).stroke();
   doc.fillColor(INK).moveDown(0.6);
 
