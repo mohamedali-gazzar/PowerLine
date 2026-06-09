@@ -3,7 +3,7 @@
 
 export const PRODUCT_CATEGORIES = [
   { key: "RMU", label: "RMU", ready: true, blurb: "Ring Main Units (PRAL air & PSEC SF6)" },
-  { key: "KIOSK", label: "Kiosks", ready: false, blurb: "Packaged substation kiosks" },
+  { key: "KIOSK", label: "Kiosks", ready: true, blurb: "PCSS packaged substation design selector" },
   { key: "LV", label: "LV", ready: false, blurb: "Low-voltage distribution panels" },
 ] as const;
 

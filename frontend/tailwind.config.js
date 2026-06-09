@@ -57,6 +57,10 @@ export default {
           "0%": { backgroundPosition: "-400px 0" },
           "100%": { backgroundPosition: "400px 0" },
         },
+        blink: {
+          "0%, 49%": { opacity: "1" },
+          "50%, 100%": { opacity: "0" },
+        },
       },
       animation: {
         "fade-up": "fade-up .45s cubic-bezier(.2,.7,.3,1) both",
@@ -65,6 +69,7 @@ export default {
         pop: "pop .18s ease",
         "bar-grow": "bar-grow .5s ease both",
         shimmer: "shimmer 1.4s linear infinite",
+        blink: "blink 1.1s linear infinite",
       },
     },
   },
