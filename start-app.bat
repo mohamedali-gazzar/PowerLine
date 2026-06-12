@@ -2,6 +2,10 @@
 title PowerLine launcher
 cd /d "%~dp0"
 
+REM Ensure Node is on PATH (a shell/Explorer opened before Node was installed
+REM won't have it). Adjust the path if Node is installed elsewhere.
+if exist "%ProgramFiles%\nodejs\node.exe" set "PATH=%ProgramFiles%\nodejs;%PATH%"
+
 echo ============================================
 echo   PowerLine - starting locally
 echo ============================================
