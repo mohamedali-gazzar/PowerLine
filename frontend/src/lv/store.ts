@@ -44,7 +44,7 @@ export interface PanelComponent {
   group?: string;   // combination tag (e.g. "ATS 1 Out of 2")
 }
 
-export type SizingMode = "panels" | "cells";
+export type SizingMode = "none" | "panels" | "cells";
 export interface PanelsSizing {
   layout: "Single" | "Double";
   family: string;
@@ -136,7 +136,7 @@ export function newPanel(n: number): LvPanel {
     sections: [...DEFAULT_SECTIONS],
     activeSection: DEFAULT_SECTIONS[0],
     components: [],
-    sizingMode: "panels",
+    sizingMode: "none",
     panelsSizing: { layout: "Single", family: "SR-Basic", sizing1: "", sizing2: "" },
     panelItems: [],
     cellConfig: defaultCellConfig(),

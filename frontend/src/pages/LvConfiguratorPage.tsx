@@ -991,7 +991,7 @@ function SizingCard({ p, u, factors }: {
 }) {
   const panelsLocked = p.ratingA > PANELS_MAX_INCOMER_A;
   useEffect(() => {
-    if (panelsLocked && p.sizingMode === "panels") u({ sizingMode: "cells" });
+    if (panelsLocked && p.sizingMode === "panels") u({ sizingMode: "cells", panelItems: [] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelsLocked]);
 
@@ -1026,30 +1026,52 @@ function SizingCard({ p, u, factors }: {
   return (
     <div className="card p-5">
       <h2 className="sec-head">Panel type</h2>
-      <div className="mb-3 flex gap-1.5">
-        <button disabled={panelsLocked}
-          onClick={() => u({ sizingMode: "panels" })}
-          title={panelsLocked ? `Incomer > ${PANELS_MAX_INCOMER_A} A — cells only (RPT-01)` : undefined}
-          className={`rounded-full border px-3.5 py-1.5 text-xs font-bold ${
-            p.sizingMode === "panels" ? "border-brand bg-brand text-white"
-            : panelsLocked ? "cursor-not-allowed border-line bg-surface text-muted/40" : "border-line bg-white text-muted"
-          }`}>
-          {panelsLocked && "🔒 "}Panels
-        </button>
-        <button onClick={() => u({ sizingMode: "cells" })}
-          className={`rounded-full border px-3.5 py-1.5 text-xs font-bold ${
-            p.sizingMode === "cells" ? "border-brand bg-brand text-white" : "border-line bg-white text-muted"
-          }`}>
-          Cells
-        </button>
+      {/* Step 1 — choose what this panel is built from. Only the chosen section
+          renders below; switching modes clears the other one's selection. */}
+      <div className="mb-4">
+        <L>Panels or Cells?</L>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            disabled={panelsLocked}
+            onClick={() => { if (p.sizingMode !== "panels") u({ sizingMode: "panels", cellConfig: defaultCellConfig() }); }}
+            title={panelsLocked ? `Incomer > ${PANELS_MAX_INCOMER_A} A — cells only (RPT-01)` : undefined}
+            className={`rounded-xl border-2 px-4 py-3 text-left transition ${
+              p.sizingMode === "panels"
+                ? "border-brand bg-brand-tint shadow-soft"
+                : panelsLocked
+                ? "cursor-not-allowed border-line bg-surface opacity-50"
+                : "border-line bg-white hover:border-brand/50 hover:bg-brand-tint/40"
+            }`}
+          >
+            <div className={`text-sm font-bold ${p.sizingMode === "panels" ? "text-brand-dark" : "text-ink"}`}>
+              {panelsLocked && "🔒 "}Panels
+            </div>
+            <div className="mt-0.5 text-[11px] text-muted">Standard enclosures · Single / Double</div>
+          </button>
+          <button
+            onClick={() => { if (p.sizingMode !== "cells") u({ sizingMode: "cells", panelItems: [] }); }}
+            className={`rounded-xl border-2 px-4 py-3 text-left transition ${
+              p.sizingMode === "cells"
+                ? "border-brand bg-brand-tint shadow-soft"
+                : "border-line bg-white hover:border-brand/50 hover:bg-brand-tint/40"
+            }`}
+          >
+            <div className={`text-sm font-bold ${p.sizingMode === "cells" ? "text-brand-dark" : "text-ink"}`}>Cells</div>
+            <div className="mt-0.5 text-[11px] text-muted">Pro-E / IS2 / PLP cell systems</div>
+          </button>
+        </div>
         {panelsLocked && (
-          <span className="self-center text-[11px] font-semibold text-amber-700">
-            Incoming C.B &gt; {PANELS_MAX_INCOMER_A} A → Panels disabled
-          </span>
+          <p className="mt-1.5 text-[11px] font-semibold text-amber-700">
+            Incoming C.B &gt; {PANELS_MAX_INCOMER_A} A → Panels disabled (cells only)
+          </p>
         )}
       </div>
 
-      {p.sizingMode === "panels" ? (
+      {p.sizingMode === "none" ? (
+        <p className="rounded-lg border border-dashed border-line p-5 text-center text-sm text-muted">
+          Choose <b className="text-ink">Panels</b> or <b className="text-ink">Cells</b> above to configure this panel.
+        </p>
+      ) : p.sizingMode === "panels" ? (
         <div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
