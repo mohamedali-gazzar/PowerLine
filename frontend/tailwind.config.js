@@ -4,31 +4,40 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Segoe UI", "Roboto", "system-ui", "Arial", "sans-serif"],
+        // Body / UI — Poppins (brand body typeface). Self-hosted via @fontsource.
+        sans: ["Poppins", "system-ui", "Segoe UI", "Roboto", "Arial", "sans-serif"],
+        // Headlines / titles / display — Nexa (brand headline typeface).
+        // Nexa is a commercial font (no files shipped in the brand kit), so it
+        // falls back to Montserrat, a close free geometric sans, until the real
+        // Nexa woff2 files are dropped in (see the @font-face note in index.css).
+        display: ["Nexa", "Montserrat", "Poppins", "system-ui", "sans-serif"],
       },
       colors: {
-        // Powerline brand palette (from the technical-offer documents)
+        // ---- Powerline brand palette (from PL brand guidelines 2026) ----
+        // Primary: Powerline Orange  #F16722  (RGB 241·103·34, Pantone 158 C)
         brand: {
-          DEFAULT: "#ff6600", // primary orange (user-specified)
-          dark: "#d95500",
-          darker: "#a64200",
-          light: "#ffe2d1", // light tint for fills
-          tint: "#fff4ec", // very light wash for backgrounds
+          DEFAULT: "#F16722", // primary brand orange
+          dark: "#D9591C", // hover
+          darker: "#B5470F", // active / dark-orange text
+          light: "#FBDCCB", // light tint fill
+          tint: "#FEF3ED", // very light wash background
         },
         accent: {
-          DEFAULT: "#ff8a3d", // secondary orange
-          soft: "#ffab73",
+          DEFAULT: "#F4824A", // lighter secondary orange
+          soft: "#F8A878",
         },
-        ink: "#2b2421", // warm near-black text
-        muted: "#7a716b", // warm grey (docx 767070)
-        line: "#ece5e0", // warm border
-        surface: "#faf7f5", // warm off-white background
-        sidebar: "#241c18", // solid warm-dark sidebar
+        // Secondary: Charcoal Grey  #585859  (RGB 88·88·89, Pantone Cool Gray 10 C)
+        charcoal: "#585859", // exact brand charcoal (wordmark "POWER", accents)
+        ink: "#26262A", // near-black neutral — headings & primary text
+        muted: "#6B6B72", // neutral grey — secondary text / labels
+        line: "#E7E7EB", // neutral border
+        surface: "#F4F4F6", // neutral off-white app background
+        sidebar: "#2A2A2E", // deep charcoal sidebar
       },
       boxShadow: {
-        soft: "0 1px 3px rgba(80,40,20,.07), 0 6px 18px rgba(80,40,20,.06)",
-        lift: "0 8px 28px rgba(80,40,20,.12)",
-        glow: "0 0 0 3px rgba(225,85,35,.18)",
+        soft: "0 1px 3px rgba(20,20,28,.06), 0 6px 18px rgba(20,20,28,.06)",
+        lift: "0 8px 28px rgba(20,20,28,.12)",
+        glow: "0 0 0 3px rgba(241,103,34,.18)",
       },
       borderRadius: { xl2: "14px" },
       keyframes: {

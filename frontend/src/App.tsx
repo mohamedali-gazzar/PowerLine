@@ -29,16 +29,15 @@ export default function App() {
     <div className="flex min-h-screen">
       {/* Left sidebar */}
       <aside className="sticky top-0 flex h-screen w-16 flex-col bg-sidebar lg:w-60">
-        <Link to="/" className="flex items-center gap-3 px-3 py-5 lg:px-5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
-              <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" />
-            </svg>
-          </span>
-          <span className="hidden leading-tight lg:block">
-            <span className="block text-lg font-extrabold tracking-tight text-white">PowerLine</span>
-            <span className="block text-[11px] text-white/50">Offer Configurator</span>
-          </span>
+        <Link
+          to="/"
+          className="flex items-center px-3 py-5 lg:px-5"
+          title="PowerLine — Offer Configurator"
+        >
+          {/* Official brand logo — reversed (white) variant for the dark sidebar.
+              Full lockup when expanded, P-mark when collapsed. */}
+          <img src="/brand/logo-white.png" alt="PowerLine" className="hidden h-10 w-auto lg:block" />
+          <img src="/brand/mark-white.png" alt="PowerLine" className="mx-auto h-9 w-auto lg:hidden" />
         </Link>
 
         <nav className="mt-2 flex flex-1 flex-col gap-1 px-2 lg:px-3">
@@ -63,7 +62,7 @@ export default function App() {
                 </span>
               )}
               {(c.key === "KIOSK" || c.key === "LV") && (
-                <span className="ml-auto hidden animate-blink rounded bg-amber-400 px-1.5 text-[9px] font-bold uppercase tracking-wide text-amber-950 lg:inline">
+                <span className="ml-auto hidden animate-blink rounded bg-white px-1.5 text-[9px] font-bold uppercase tracking-wide text-brand-darker lg:inline">
                   new
                 </span>
               )}

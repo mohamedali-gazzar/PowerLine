@@ -8,6 +8,14 @@ import OfferDetailPage from "./pages/OfferDetailPage";
 import KioskSelectorPage from "./pages/KioskSelectorPage";
 import LvQtnListPage from "./pages/LvQtnListPage";
 import LvConfiguratorPage from "./pages/LvConfiguratorPage";
+// Brand fonts — self-hosted via @fontsource so local dev stays offline-capable.
+// Poppins = body/UI; Montserrat = headline stand-in for Nexa (see index.css).
+import "@fontsource/poppins/300.css";
+import "@fontsource/poppins/400.css";
+import "@fontsource/poppins/500.css";
+import "@fontsource/poppins/600.css";
+import "@fontsource/poppins/700.css";
+import "@fontsource-variable/montserrat";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

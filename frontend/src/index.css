@@ -2,25 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ----------------------------------------------------------------------------
+   Brand headline font — Nexa (commercial; not shipped in the brand kit).
+   When you have the Nexa web fonts, drop Nexa-Regular.woff2 / Nexa-Bold.woff2
+   into frontend/public/fonts/ and UNCOMMENT the block below. "Nexa" is already
+   first in the `display` font stack (tailwind.config.js), so headings switch to
+   it automatically; until then they render in Montserrat (a close geometric
+   stand-in for Nexa).
+
+   @font-face {
+     font-family: "Nexa";
+     src: url("/fonts/Nexa-Regular.woff2") format("woff2");
+     font-weight: 400; font-style: normal; font-display: swap;
+   }
+   @font-face {
+     font-family: "Nexa";
+     src: url("/fonts/Nexa-Bold.woff2") format("woff2");
+     font-weight: 700; font-style: normal; font-display: swap;
+   }
+---------------------------------------------------------------------------- */
+
 @layer base {
   body {
     @apply bg-surface text-ink antialiased;
   }
-  /* Custom scrollbars in the warm palette */
+  /* Headlines, titles & display text use the brand headline face (Nexa). */
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display;
+  }
+  /* Neutral custom scrollbars (brand charcoal/grey palette) */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #e6d9d1 transparent;
+    scrollbar-color: #d6d6dd transparent;
   }
   *::-webkit-scrollbar {
     width: 9px;
     height: 9px;
   }
   *::-webkit-scrollbar-thumb {
-    background: #e6d9d1;
+    background: #d6d6dd;
     border-radius: 9px;
   }
   *::-webkit-scrollbar-thumb:hover {
-    background: #d8c6bb;
+    background: #c2c2cc;
   }
 }
 
@@ -80,7 +107,7 @@
 
 @layer utilities {
   .skeleton {
-    background: linear-gradient(90deg, #f0e9e4 25%, #f7f2ee 37%, #f0e9e4 63%);
+    background: linear-gradient(90deg, #e9e9ee 25%, #f4f4f7 37%, #e9e9ee 63%);
     background-size: 800px 100%;
     @apply animate-shimmer rounded;
   }
