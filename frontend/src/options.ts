@@ -4,7 +4,7 @@
 export const PRODUCT_CATEGORIES = [
   { key: "RMU", label: "RMU", ready: true, blurb: "Ring Main Units (PRAL air & PSEC SF6)" },
   { key: "KIOSK", label: "Kiosks", ready: true, blurb: "PCSS packaged substation design selector" },
-  { key: "LV", label: "LV", ready: false, blurb: "Low-voltage distribution panels" },
+  { key: "LV", label: "LV", ready: true, blurb: "LV panel configurator (ABB database)" },
 ] as const;
 
 export const PRODUCT_TYPES = ["PRAL", "PSEC"] as const;

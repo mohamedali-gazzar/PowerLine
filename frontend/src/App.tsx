@@ -62,7 +62,7 @@ export default function App() {
                   soon
                 </span>
               )}
-              {c.key === "KIOSK" && (
+              {(c.key === "KIOSK" || c.key === "LV") && (
                 <span className="ml-auto hidden animate-blink rounded bg-amber-400 px-1.5 text-[9px] font-bold uppercase tracking-wide text-amber-950 lg:inline">
                   new
                 </span>

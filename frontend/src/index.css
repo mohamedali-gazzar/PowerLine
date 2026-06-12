@@ -85,3 +85,30 @@
     @apply animate-shimmer rounded;
   }
 }
+
+/* Print: export the offer documents (Technical / Commercial) as PDF via the
+   browser's print dialog — only the .print-area is rendered. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    margin: 0;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  aside {
+    display: none !important;
+  }
+}
