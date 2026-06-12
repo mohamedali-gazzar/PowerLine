@@ -1,4 +1,6 @@
 # Root ignores (each app also has its own .gitignore)
+# Secrets handoff — NEVER commit (copy manually between machines)
+HANDOFF.secrets.md
 # Extracted source-standard text (derived from the Word offers) — keep local only
 tools/extracted/
 node_modules/
