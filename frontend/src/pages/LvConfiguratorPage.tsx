@@ -217,7 +217,7 @@ function PrintBar({ label }: { label: string }) {
  *  red item bar (Item No. | name | Item Qty.), red-label spec grid, then the
  *  components table (Qty | Description | Reference | Brand | Poles).
  *  Printing exports ALL panels as one PDF, one page each. */
-const TRED = "#b03a2e";
+const TRED = "#F16722"; // brand orange — drives item bar, spec labels & table header
 function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   if (!s.panels.length) {
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Technical Offer is generated from them.</div>;
@@ -243,15 +243,27 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
     };
   };
   const Lbl = ({ children }: { children: React.ReactNode }) => (
-    <td className="border px-2 py-1 text-[12.5px] font-bold" style={{ color: TRED, borderColor: "#e7c2bc" }}>{children}</td>
+    <td className="border px-2 py-1 text-[12px] font-bold" style={{ color: TRED, background: "#fdf0e9", borderColor: "#f1d3c4" }}>{children}</td>
   );
   const Val = ({ children }: { children?: React.ReactNode }) => (
-    <td className="border px-2 py-1 text-[12.5px]" style={{ borderColor: "#e7c2bc" }}>{children}</td>
+    <td className="border px-2 py-1 text-[12px]" style={{ borderColor: "#f1d3c4" }}>{children}</td>
   );
   return (
     <div className="animate-fade-up">
       <PrintBar label={`${s.panels.length} panel${s.panels.length > 1 ? "s" : ""} → ${s.panels.length} technical page${s.panels.length > 1 ? "s" : ""} in one PDF.`} />
       <div className="print-area space-y-6">
+        {/* Cover page (branded title page) */}
+        <section className="tech-cover" style={{ breakAfter: "page" }}>
+          <img src="/brand/logo-color.png" alt="PowerLine" className="w-72 max-w-[70%]" />
+          <a href="https://www.powerline.com.eg" className="text-sm font-semibold" style={{ color: TRED }}>www.powerline.com.eg</a>
+          <div className="mt-8 space-y-1">
+            <div className="text-2xl font-extrabold tracking-tight text-ink">Technical Offer</div>
+            <div className="text-sm font-bold" style={{ color: TRED }}>{qtnNo}</div>
+            {s.project.name && <div className="text-sm text-ink">{s.project.name}</div>}
+            {s.project.customer && <div className="text-sm text-muted">{s.project.customer}</div>}
+            {s.project.date && <div className="text-xs text-muted">{s.project.date}</div>}
+          </div>
+        </section>
         {s.panels.map((p, pi) => {
           const sp = specOf(p);
           return (
@@ -293,39 +305,65 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
               <table className="w-full border-collapse">
                 <thead>
                   <tr style={{ background: TRED }} className="text-white">
-                    <th className="w-16 px-2 py-1.5 text-left text-[12px] font-bold">Qty</th>
+                    <th className="w-14 px-2 py-1.5 text-center text-[12px] font-bold">Qty</th>
                     <th className="px-2 py-1.5 text-left text-[12px] font-bold">Description</th>
-                    <th className="w-44 px-2 py-1.5 text-left text-[12px] font-bold">Reference</th>
-                    <th className="w-28 px-2 py-1.5 text-left text-[12px] font-bold">Brand</th>
-                    <th className="w-20 px-2 py-1.5 text-right text-[12px] font-bold">Poles</th>
+                    <th className="w-32 px-2 py-1.5 text-left text-[12px] font-bold">Brand</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {p.components.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-2 py-5 text-center text-sm text-muted">No components.</td>
-                    </tr>
-                  ) : (
-                    p.components.map((c) => (
-                      <tr key={c.id} className="border-b align-top" style={{ borderColor: "#f0d9d5" }}>
-                        <td className="px-2 py-1 text-[12.5px] font-semibold">{c.qty}</td>
-                        <td className="px-2 py-1 text-[12.5px]">
-                          {c.name}
-                          {(c.adj || c.comment || c.note) && (
-                            <div className="text-[11px] italic text-muted">
-                              {[c.adj && `Adj: ${c.adj}`, c.comment, c.note].filter(Boolean).join(" · ")}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-2 py-1 text-[12px] text-muted">{c.ref}</td>
-                        <td className="px-2 py-1 text-[12.5px]">{c.brand}</td>
-                        <td className="px-2 py-1 text-right text-[12.5px]">{c.poles || ""}</td>
-                      </tr>
-                    ))
-                  )}
+                  {(() => {
+                    const secs = p.sections.filter((sec) => p.components.some((c) => c.section === sec));
+                    if (secs.length === 0)
+                      return (
+                        <tr><td colSpan={3} className="px-2 py-5 text-center text-sm text-muted">No components.</td></tr>
+                      );
+                    return secs.flatMap((sec) => {
+                      const comps = p.components.filter((c) => c.section === sec);
+                      const order: string[] = [];
+                      const byG = new Map<string, PanelComponent[]>();
+                      comps.forEach((c) => {
+                        const k = c.group || "";
+                        if (!byG.has(k)) { byG.set(k, []); order.push(k); }
+                        byG.get(k)!.push(c);
+                      });
+                      const rows: JSX.Element[] = [
+                        <tr key={`s-${sec}`}>
+                          <td colSpan={3} className="border px-2 py-1 text-center text-[12px] font-bold uppercase tracking-wide" style={{ background: "#f3f3f5", borderColor: "#f1d3c4" }}>{sec}</td>
+                        </tr>,
+                      ];
+                      for (const g of order) {
+                        if (g)
+                          rows.push(
+                            <tr key={`g-${sec}-${g}`}>
+                              <td colSpan={3} className="border px-2 py-0.5 text-center text-[11.5px] font-bold" style={{ color: "#b5470f", background: "#fdf0e9", borderColor: "#f1d3c4" }}>{g}</td>
+                            </tr>
+                          );
+                        for (const c of byG.get(g)!)
+                          rows.push(
+                            <tr key={c.id} className="border-b align-top" style={{ borderColor: "#f3ddd4" }}>
+                              <td className="px-2 py-1 text-center text-[12.5px] font-semibold">{c.qty}</td>
+                              <td className="px-2 py-1 text-[12.5px]">
+                                {c.name}
+                                {(c.adj || c.comment || c.note) && (
+                                  <div className="text-[11px] italic text-muted">
+                                    {[c.adj && `Adj: ${c.adj}`, c.comment, c.note].filter(Boolean).join(" · ")}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-2 py-1 text-[12.5px]">{c.brand}</td>
+                            </tr>
+                          );
+                      }
+                      return rows;
+                    });
+                  })()}
                 </tbody>
               </table>
-              <div className="px-2 py-1 text-right text-[9px] text-muted">{qtnNo} · Item {pi + 1}</div>
+              <div className="mt-1 flex justify-between border-t px-1 pt-1 text-[9px] text-muted" style={{ borderColor: "#f1d3c4" }}>
+                <span>{qtnNo}</span>
+                <span>Item {pi + 1} of {s.panels.length}</span>
+                <span>{s.project.date || ""}</span>
+              </div>
             </div>
           );
         })}
@@ -625,6 +663,10 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
   const [q, setQ] = useState("");
   const hits = useMemo(() => searchComponents(q, 40), [q]);
   const [newSection, setNewSection] = useState("");
+  // drag-and-drop: reorder rows and move them across sections
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overRow, setOverRow] = useState<string | null>(null);
+  const [overSec, setOverSec] = useState<string | null>(null);
 
   const setComp = (id: string, patch: Partial<PanelComponent>) =>
     u({ components: p.components.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
@@ -641,6 +683,42 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
     u({ components: arr });
   };
 
+  // Drop a dragged row onto another row: it takes the target's section (move
+  // across sections) and is inserted just before it (reorder).
+  const dropOnRow = (targetId: string) => {
+    setOverRow(null);
+    const dId = dragId;
+    setDragId(null);
+    if (!dId || dId === targetId) return;
+    const arr = [...p.components];
+    const from = arr.findIndex((c) => c.id === dId);
+    const tgt = arr.find((c) => c.id === targetId);
+    if (from < 0 || !tgt) return;
+    const moved = { ...arr[from], section: tgt.section };
+    arr.splice(from, 1);
+    const tIdx = arr.findIndex((c) => c.id === targetId);
+    arr.splice(tIdx, 0, moved);
+    u({ components: arr });
+  };
+
+  // Drop a dragged row onto a section tab/header: move it to the end of that section.
+  const dropOnSection = (section: string) => {
+    setOverSec(null);
+    const dId = dragId;
+    setDragId(null);
+    if (!dId) return;
+    const arr = [...p.components];
+    const from = arr.findIndex((c) => c.id === dId);
+    if (from < 0) return;
+    const moved = { ...arr[from], section };
+    arr.splice(from, 1);
+    let lastIdx = -1;
+    for (let i = 0; i < arr.length; i++) if (arr[i].section === section) lastIdx = i;
+    if (lastIdx >= 0) arr.splice(lastIdx + 1, 0, moved);
+    else arr.push(moved);
+    u({ components: arr });
+  };
+
   const add = (c: DbComponent) => {
     u({ components: [...p.components, toPanelComponent(c, p.activeSection)] });
     setQ("");
@@ -654,8 +732,13 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         {p.sections.map((sec) => (
           <button key={sec} onClick={() => u({ activeSection: sec })}
-            className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-              p.activeSection === sec ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"
+            onDragOver={(e) => { if (dragId) { e.preventDefault(); if (overSec !== sec) setOverSec(sec); } }}
+            onDragLeave={() => setOverSec((x) => (x === sec ? null : x))}
+            onDrop={(e) => { e.preventDefault(); dropOnSection(sec); }}
+            title={dragId ? `Move component to “${sec}”` : undefined}
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+              overSec === sec ? "border-brand bg-brand-light text-brand-dark ring-2 ring-brand/50"
+              : p.activeSection === sec ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"
             }`}>
             {sec}
           </button>
@@ -701,11 +784,17 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
       ) : (
         p.sections.filter((sec) => p.components.some((c) => c.section === sec)).map((sec) => (
           <div key={sec} className="mb-3">
-            <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-brand-dark">{sec}</div>
+            <div
+              onDragOver={(e) => { if (dragId) { e.preventDefault(); if (overSec !== sec) setOverSec(sec); } }}
+              onDragLeave={() => setOverSec((x) => (x === sec ? null : x))}
+              onDrop={(e) => { e.preventDefault(); dropOnSection(sec); }}
+              className={`mb-1 rounded px-1 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-dark transition ${overSec === sec ? "bg-brand-tint ring-1 ring-brand/40" : ""}`}
+            >{sec}</div>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
+                    <th className="w-5 py-1"></th>
                     <th className="py-1 pr-2">Description</th>
                     <th className="py-1 pr-2">Ref</th>
                     <th className="w-16 py-1 pr-2">Qty</th>
@@ -718,7 +807,25 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                 </thead>
                 <tbody>
                   {p.components.filter((c) => c.section === sec).map((c) => (
-                    <tr key={c.id} className="border-t border-line/70 align-middle">
+                    <tr key={c.id}
+                      onDragOver={(e) => { if (dragId && dragId !== c.id) { e.preventDefault(); if (overRow !== c.id) setOverRow(c.id); } }}
+                      onDragLeave={() => setOverRow((r) => (r === c.id ? null : r))}
+                      onDrop={(e) => { e.preventDefault(); dropOnRow(c.id); }}
+                      className={`border-t align-middle transition-colors ${
+                        overRow === c.id ? "border-brand bg-brand-tint" : "border-line/70"
+                      } ${dragId === c.id ? "opacity-40" : ""}`}>
+                      <td
+                        draggable
+                        onDragStart={(e) => { setDragId(c.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", c.id); } catch {} }}
+                        onDragEnd={() => { setDragId(null); setOverRow(null); setOverSec(null); }}
+                        title="Drag to reorder or move to another section"
+                        className="cursor-grab select-none py-1 pr-1 text-muted/50 hover:text-brand active:cursor-grabbing">
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                          <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
+                          <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
+                          <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
+                        </svg>
+                      </td>
                       <td className="max-w-[330px] py-1 pr-2">
                         {c.group && <span className="mr-1 rounded bg-brand-light px-1 text-[9px] font-bold text-brand-dark">{c.group}</span>}
                         {c.name}

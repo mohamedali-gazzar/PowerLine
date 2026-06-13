@@ -35,3 +35,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </BrowserRouter>
   </React.StrictMode>
 );
+
+// Fade out the boot splash (index.html) once the app has mounted.
+const splashEl = document.getElementById("pl-splash");
+if (splashEl) {
+  requestAnimationFrame(() => {
+    splashEl.classList.add("pl-hide");
+    setTimeout(() => splashEl.remove(), 450);
+  });
+}

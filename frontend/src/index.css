@@ -103,6 +103,10 @@
   .nav-item-active {
     @apply bg-brand text-white hover:bg-brand hover:text-white;
   }
+  /* Technical-offer cover (title) page */
+  .tech-cover {
+    @apply flex min-h-[55vh] flex-col items-center justify-center gap-3 rounded-xl2 border border-line bg-white p-10 text-center shadow-soft;
+  }
 }
 
 @layer utilities {
@@ -110,6 +114,33 @@
     background: linear-gradient(90deg, #e9e9ee 25%, #f4f4f7 37%, #e9e9ee 63%);
     background-size: 800px 100%;
     @apply animate-shimmer rounded;
+  }
+}
+
+/* Visible keyboard focus rings (brand). Uses :focus-visible so mouse clicks
+   stay clean while keyboard users get a clear orange indicator (a11y). */
+@layer base {
+  a:focus-visible,
+  button:focus-visible,
+  select:focus-visible,
+  summary:focus-visible,
+  [role="button"]:focus-visible {
+    outline: 2px solid #f16722;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+/* Respect prefers-reduced-motion: neutralize animations/transitions for users
+   who request reduced motion (the app uses many entrance/blink animations). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -138,4 +169,22 @@
   aside {
     display: none !important;
   }
+  /* Print background colors (orange item bars, spec labels) exactly */
+  .print-area,
+  .print-area * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* The technical-offer cover fills its own page */
+  .tech-cover {
+    min-height: 247mm;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+}
+
+@page {
+  size: A4;
+  margin: 12mm;
 }
