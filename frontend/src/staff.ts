@@ -21,11 +21,23 @@ export interface StaffRegistry {
 const KEY = "powerline-staff-v1";
 
 export function defaultStaff(): StaffRegistry {
+  // The Sales Manager (Ali Kamal) carries his real contact from the sales-people list.
+  const mgr = DEFAULT_SALES_PEOPLE.find((p) => p.name === SALES_MANAGER);
   return {
     salesPeople: DEFAULT_SALES_PEOPLE.map((p) => ({ ...p })),
-    salesManagers: [{ name: SALES_MANAGER, mobile: "", email: "" }],
+    salesManagers: [mgr ? { ...mgr } : { name: SALES_MANAGER, mobile: "", email: "" }],
     supportEngineers: DEFAULT_SUPPORT_ENGINEERS.map((n) => ({ name: n, mobile: "", email: "" })),
   };
+}
+
+// Fill blank mobile/email from the known sales-people list, so e.g. the Sales
+// Manager "Ali Kamal" always shows his real contact — even in older saved registries.
+function backfillContacts(list: Person[]): Person[] {
+  return list.map((p) => {
+    if (p.mobile && p.email) return p;
+    const known = DEFAULT_SALES_PEOPLE.find((x) => x.name === p.name);
+    return known ? { name: p.name, mobile: p.mobile || known.mobile, email: p.email || known.email } : p;
+  });
 }
 
 export function loadStaff(): StaffRegistry {
@@ -35,8 +47,8 @@ export function loadStaff(): StaffRegistry {
       const s = JSON.parse(raw) as Partial<StaffRegistry>;
       const d = defaultStaff();
       return {
-        salesPeople: s.salesPeople ?? d.salesPeople,
-        salesManagers: s.salesManagers ?? d.salesManagers,
+        salesPeople: backfillContacts(s.salesPeople ?? d.salesPeople),
+        salesManagers: backfillContacts(s.salesManagers ?? d.salesManagers),
         supportEngineers: s.supportEngineers ?? d.supportEngineers,
       };
     }

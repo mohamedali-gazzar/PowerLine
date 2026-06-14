@@ -17,6 +17,7 @@ import {
   type SalesPerson,
 } from "./catalog";
 import { defaultCellConfig, type CellConfig } from "./cells";
+import type { CopperTool } from "./copper";
 
 let uidCtr = 0;
 export const uid = () => `u${++uidCtr}_${Math.random().toString(36).slice(2, 7)}`;
@@ -82,6 +83,8 @@ export interface LvPanel {
   encFam: string;        // legacy — superseded by panelItems
   encKey: string;        // legacy — superseded by panelItems
   mainBusbarKg: number;  // auto for panels / manual for cells (Phase 1: editable)
+  copperTool: CopperTool; // RPT-1: per-rating copper lengths (Cells → Copper Tool)
+  draft: string;          // RPT-1: per-panel scratchpad — never included in outputs
   sections: string[];
   activeSection: string;
   components: PanelComponent[];
@@ -92,16 +95,19 @@ export interface LvPanel {
 }
 
 export interface LvProject {
-  ref: string;
+  // QTN number is entered once at QTN creation (rec.number) — not duplicated here.
+  optyNo: string;       // RPT-1: Opportunity number
+  revisionNo: string;   // RPT-1: Revision number
   name: string;
   customer: string;
-  location: string;
   date: string;
   salesPerson: string;
   salesMobile: string;
   salesEmail: string;
   supportEngineer: string;
   salesManager: string;
+  salesManagerMobile: string; // RPT-1: sales-manager phone (auto-filled from staff)
+  salesManagerEmail: string;  // RPT-1: sales-manager email (auto-filled from staff)
 }
 
 export interface LvState {
@@ -115,10 +121,10 @@ export interface LvState {
 
 export const DEFAULT_SECTIONS = ["Main Incoming", "Outgoings", "Metering", "Other"];
 
-export function newPanel(n: number): LvPanel {
+export function newPanel(_n?: number): LvPanel {
   return {
     id: uid(),
-    name: `Panel ${n}`,
+    name: "", // RPT-1: blank by default; mandatory before any output
     code: "",
     fedFrom: "",
     qty: 1,
@@ -133,6 +139,8 @@ export function newPanel(n: number): LvPanel {
     encFam: "SR-Basic",
     encKey: "",
     mainBusbarKg: 0,
+    copperTool: {},
+    draft: "",
     sections: [...DEFAULT_SECTIONS],
     activeSection: DEFAULT_SECTIONS[0],
     components: [],
@@ -146,10 +154,11 @@ export function newPanel(n: number): LvPanel {
 export function initialState(): LvState {
   return {
     project: {
-      ref: "", name: "", customer: "", location: "",
+      optyNo: "", revisionNo: "", name: "", customer: "",
       date: new Date().toISOString().slice(0, 10),
       salesPerson: "", salesMobile: "", salesEmail: "",
       supportEngineer: "", salesManager: SALES_MANAGER,
+      salesManagerMobile: "", salesManagerEmail: "",
     },
     factors: { ...DEFAULT_FACTORS },
     salesPeople: [...DEFAULT_SALES_PEOPLE],
@@ -166,8 +175,13 @@ export function loadState(): LvState {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return initialState();
     const s = JSON.parse(raw) as LvState;
-    // forward-compat defaults
-    return { ...initialState(), ...s, factors: { ...DEFAULT_FACTORS, ...s.factors } };
+    // forward-compat defaults (deep-merge project so new RPT-1 fields get defaults)
+    return {
+      ...initialState(),
+      ...s,
+      project: { ...initialState().project, ...s.project },
+      factors: { ...DEFAULT_FACTORS, ...s.factors },
+    };
   } catch {
     return initialState();
   }

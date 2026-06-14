@@ -79,7 +79,7 @@ export const DOUBLE_FAMILIES = ["SR-Basic", "Unikit"] as const;
 export const DOUBLE_SECOND_WIDTHS = [60, 80] as const;
 
 // Staff lists (RPT-01) — editable in the UI; these are the seeded defaults.
-export const SALES_MANAGER = "Alaa Essam";
+export const SALES_MANAGER = "Ali Kamal";
 export const DEFAULT_SUPPORT_ENGINEERS = [
   "Rana Hazem", "Fatma Ibrahim", "Sara Mohamed", "Yasmina Mohamed",
   "Reham ElHusseiny", "H.Hassan", "Esraa Emara", "Merna Magdy",

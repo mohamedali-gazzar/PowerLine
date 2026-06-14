@@ -17,7 +17,7 @@ import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
   PHOTOCELL_RATINGS, buildPhotocell,
   MCC_KINDS, mccKws, mccTypes, buildMcc,
-  PFC_DEFAULT, pfcTotalKvar, buildPfc,
+  PFC_DEFAULT, pfcTotalKvar, pfcHeader, buildPfc,
   WD_OPTIONS, buildWd,
   type ComboLine, type AtsTypeId,
 } from "../lv/combos";
@@ -25,6 +25,9 @@ import {
   PRO_E_DEPTHS, PRO_E_THICKNESS, PRO_E_IPS, IS2_DEPTHS, PLP_DEPTHS,
   proEIp31Disabled, retable, defaultCellConfig, type CellType,
 } from "../lv/cells";
+import {
+  COPPER_RATINGS, csaFor, copperWeight, copperTotal, nearestRating, pctOf,
+} from "../lv/copper";
 
 type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material";
 
@@ -95,9 +98,25 @@ export default function LvConfiguratorPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const [rec] = useState(() => getQtn(id));
-  const [s, setS] = useState<LvState>(() => rec?.state ?? null!);
+  // RPT-1: history-aware state so the whole workspace supports Undo / Redo.
+  const [hist, setHist] = useState<{ past: LvState[]; present: LvState; future: LvState[] }>(
+    () => ({ past: [], present: rec?.state ?? null!, future: [] })
+  );
+  const s = hist.present;
   const [tab, setTab] = useState<Tab>(() => (rec?.state.panels.length ? "panels" : "project"));
   const [matAbbOnly, setMatAbbOnly] = useState(false);
+
+  const apply = (updater: (old: LvState) => LvState) =>
+    setHist((h) => {
+      const next = updater(h.present);
+      return next === h.present ? h : { past: [...h.past, h.present].slice(-60), present: next, future: [] };
+    });
+  const undo = () =>
+    setHist((h) => (h.past.length ? { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future].slice(0, 60) } : h));
+  const redo = () =>
+    setHist((h) => (h.future.length ? { past: [...h.past, h.present].slice(-60), present: h.future[0], future: h.future.slice(1) } : h));
+  const canUndo = hist.past.length > 0;
+  const canRedo = hist.future.length > 0;
 
   useEffect(() => {
     if (!rec) navigate("/lv", { replace: true });
@@ -105,28 +124,46 @@ export default function LvConfiguratorPage() {
   useEffect(() => {
     if (rec && s) saveQtn(rec.id, s);
   }, [rec, s]);
+  // RPT-1: keyboard — Ctrl/Cmd+Z = undo, Ctrl/Cmd+Y or Shift+Z = redo (ignored while
+  // typing in a field so native text-undo still works there).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
+      const k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((k === "z" && e.shiftKey) || k === "y") { e.preventDefault(); redo(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totals = useMemo(() => (s ? grandTotals(s) : { sell: 0, vat: 0, incl: 0 }), [s]);
   if (!rec || !s) return null;
   const sel = s.panels.find((p) => p.id === s.selectedId) ?? null;
+  // RPT-1: block every offer/output tab until each panel has its mandatory fields.
+  const offerIssues = s.panels.flatMap((p, i) =>
+    panelInvalid(p).map((msg) => `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}: ${msg}`));
 
   // immutable update helpers
-  const up = (patch: Partial<LvState>) => setS((old) => ({ ...old, ...patch }));
+  const up = (patch: Partial<LvState>) => apply((old) => ({ ...old, ...patch }));
   const upPanel = (id: string, patch: Partial<LvPanel>) =>
-    setS((old) => ({ ...old, panels: old.panels.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
+    apply((old) => ({ ...old, panels: old.panels.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
 
   const addPanel = () => {
     const p = newPanel(s.panels.length + 1);
-    setS((old) => ({ ...old, panels: [...old.panels, p], selectedId: p.id }));
+    apply((old) => ({ ...old, panels: [...old.panels, p], selectedId: p.id }));
     setTab("panels");
   };
   const removePanel = (id: string) =>
-    setS((old) => {
+    apply((old) => {
       const panels = old.panels.filter((p) => p.id !== id);
       return { ...old, panels, selectedId: panels[0]?.id ?? null };
     });
   const clonePanel = (id: string) =>
-    setS((old) => {
+    apply((old) => {
       const src = old.panels.find((p) => p.id === id);
       if (!src) return old;
       const copy = duplicatePanel(src, 1);
@@ -150,6 +187,10 @@ export default function LvConfiguratorPage() {
             {totals.sell > 0 && <> · <strong className="text-ink">{fmtEgp(totals.incl)}</strong> incl. {Math.round(s.factors.vat * 100)}% VAT</>}
           </p>
         </div>
+        <div className="flex gap-2">
+          <button className="btn-ghost" disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)">↶ Undo</button>
+          <button className="btn-ghost" disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -170,9 +211,34 @@ export default function LvConfiguratorPage() {
         <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
           onAdd={addPanel} onDel={removePanel} onClone={clonePanel} />
       )}
-      {tab === "technical" && <TechnicalTab s={s} qtnNo={rec.number} />}
-      {tab === "commercial" && <CommercialTab s={s} qtnNo={rec.number} />}
-      {tab === "material" && <MaterialTab s={s} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} />}
+      {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={rec.number} />)}
+      {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={rec.number} />)}
+      {tab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} />)}
+    </div>
+  );
+}
+
+// dd/mm/yyyy display for an ISO yyyy-mm-dd date string (RPT-1).
+function fmtDate(iso: string): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}/${m}/${y}` : iso;
+}
+
+// RPT-1: a panel needs a name and an incoming C.B rating before any output.
+function panelInvalid(p: LvPanel): string[] {
+  const out: string[] = [];
+  if (!p.name.trim()) out.push("Panel name is required");
+  if (!p.ratingA || p.ratingA <= 0) out.push("Incoming C.B rating is required");
+  return out;
+}
+function OfferBlocked({ issues }: { issues: string[] }) {
+  return (
+    <div className="card border-amber-300 bg-amber-50 p-6 animate-fade-up">
+      <p className="font-bold text-amber-800">⚠ Complete the required panel fields before generating any offer.</p>
+      <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-amber-700">
+        {issues.map((m, i) => <li key={i}>{m}</li>)}
+      </ul>
     </div>
   );
 }
@@ -180,6 +246,9 @@ export default function LvConfiguratorPage() {
 // ── Offer documents (the configurator's main output) ────────────────────────
 function DocHeader({ s, qtnNo, title }: { s: LvState; qtnNo: string; title: string }) {
   const pr = s.project;
+  const [staff] = useStaff();
+  const mgr = staff.salesManagers.find((m) => m.name === pr.salesManager);
+  const mgrMobile = mgr?.mobile || pr.salesManagerMobile || "";
   return (
     <div className="border-b-4 border-brand pb-4">
       <div className="flex items-start justify-between">
@@ -190,16 +259,18 @@ function DocHeader({ s, qtnNo, title }: { s: LvState; qtnNo: string; title: stri
         <div className="text-right">
           <div className="text-lg font-extrabold">{title}</div>
           <div className="font-mono text-sm font-bold text-brand-dark">{qtnNo}</div>
-          <div className="text-xs text-muted">{pr.date}</div>
+          <div className="text-xs text-muted">{fmtDate(pr.date)}</div>
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-0.5 text-sm sm:grid-cols-3">
         <div><span className="text-muted">Project:</span> <b>{pr.name || "—"}</b></div>
         <div><span className="text-muted">Customer:</span> <b>{pr.customer || "—"}</b></div>
-        <div><span className="text-muted">Location:</span> <b>{pr.location || "—"}</b></div>
+        <div><span className="text-muted">OPTY No.:</span> <b>{pr.optyNo || "—"}</b></div>
         <div><span className="text-muted">Sales:</span> <b>{pr.salesPerson || "—"}</b>{pr.salesMobile && <span className="text-xs text-muted"> · {pr.salesMobile}</span>}</div>
         <div><span className="text-muted">Email:</span> <b className="text-xs">{pr.salesEmail || "—"}</b></div>
         <div><span className="text-muted">Support eng.:</span> <b>{pr.supportEngineer || "—"}</b></div>
+        <div><span className="text-muted">Sales mgr:</span> <b>{pr.salesManager || "—"}</b>{mgrMobile && <span className="text-xs text-muted"> · {mgrMobile}</span>}</div>
+        {pr.revisionNo && <div><span className="text-muted">Rev. No.:</span> <b>{pr.revisionNo}</b></div>}
       </div>
     </div>
   );
@@ -227,7 +298,8 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
     if (p.sizingMode === "cells") {
       const cc = p.cellConfig;
       return {
-        panelType: `${cc.type} · ${cc.depth} cm${cc.type === "Pro-E" ? ` · ${cc.thickness} mm` : ""}`,
+        // RPT-1: panel type shows the type only — sizing (depth/thickness) removed.
+        panelType: `${cc.type} cell`,
         ip: cc.ip.replace(/^IP/, ""),
         mount: "Floor standing",
         ral: "7035",
@@ -237,7 +309,8 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
     const it = pItems[0];
     const enc = it ? ENCLOSURES.find((e) => e.ref === it.ref && e.name === it.name) : undefined;
     return {
-      panelType: it ? `${it.fam} — ${it.name}${pItems.length > 1 ? ` (+${pItems.length - 1})` : ""}` : "—",
+      // RPT-1: panel type shows the family only — sizing (enclosure name) removed.
+      panelType: it ? it.fam : "—",
       ip: it?.ip || "—",
       mount: enc?.mount || "—",
       ral: enc?.ral || "—",
@@ -262,7 +335,7 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             <div className="text-sm font-bold" style={{ color: TRED }}>{qtnNo}</div>
             {s.project.name && <div className="text-sm text-ink">{s.project.name}</div>}
             {s.project.customer && <div className="text-sm text-muted">{s.project.customer}</div>}
-            {s.project.date && <div className="text-xs text-muted">{s.project.date}</div>}
+            {s.project.date && <div className="text-xs text-muted">{fmtDate(s.project.date)}</div>}
           </div>
         </section>
         {s.panels.map((p, pi) => {
@@ -309,6 +382,7 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                     <th className="w-14 px-2 py-1.5 text-center text-[12px] font-bold">Qty</th>
                     <th className="px-2 py-1.5 text-left text-[12px] font-bold">Description</th>
                     <th className="w-32 px-2 py-1.5 text-left text-[12px] font-bold">Brand</th>
+                    <th className="w-40 px-2 py-1.5 text-left text-[12px] font-bold">Notes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -316,7 +390,7 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                     const secs = p.sections.filter((sec) => p.components.some((c) => c.section === sec));
                     if (secs.length === 0)
                       return (
-                        <tr><td colSpan={3} className="px-2 py-5 text-center text-sm text-muted">No components.</td></tr>
+                        <tr><td colSpan={4} className="px-2 py-5 text-center text-sm text-muted">No components.</td></tr>
                       );
                     return secs.flatMap((sec) => {
                       const comps = p.components.filter((c) => c.section === sec);
@@ -329,14 +403,14 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                       });
                       const rows: JSX.Element[] = [
                         <tr key={`s-${sec}`}>
-                          <td colSpan={3} className="border px-2 py-1 text-center text-[12px] font-bold uppercase tracking-wide" style={{ background: "#f3f3f5", borderColor: "#f1d3c4" }}>{sec}</td>
+                          <td colSpan={4} className="border px-2 py-1 text-center text-[12px] font-bold uppercase tracking-wide" style={{ background: "#f3f3f5", borderColor: "#f1d3c4" }}>{sec}</td>
                         </tr>,
                       ];
                       for (const g of order) {
                         if (g)
                           rows.push(
                             <tr key={`g-${sec}-${g}`}>
-                              <td colSpan={3} className="border px-2 py-0.5 text-center text-[11.5px] font-bold" style={{ color: "#b5470f", background: "#fdf0e9", borderColor: "#f1d3c4" }}>{g}</td>
+                              <td colSpan={4} className="border px-2 py-0.5 text-center text-[11.5px] font-bold" style={{ color: "#b5470f", background: "#fdf0e9", borderColor: "#f1d3c4" }}>{g}</td>
                             </tr>
                           );
                         for (const c of byG.get(g)!)
@@ -345,13 +419,14 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                               <td className="px-2 py-1 text-center text-[12.5px] font-semibold">{c.qty}</td>
                               <td className="px-2 py-1 text-[12.5px]">
                                 {c.name}
-                                {(c.adj || c.comment || c.note) && (
+                                {(c.adj || c.comment) && (
                                   <div className="text-[11px] italic text-muted">
-                                    {[c.adj && `Adj: ${c.adj}`, c.comment, c.note].filter(Boolean).join(" · ")}
+                                    {[c.adj && `Adj: ${c.adj}`, c.comment].filter(Boolean).join(" · ")}
                                   </div>
                                 )}
                               </td>
                               <td className="px-2 py-1 text-[12.5px]">{c.brand}</td>
+                              <td className="px-2 py-1 text-[11.5px] text-muted">{c.note}</td>
                             </tr>
                           );
                       }
@@ -363,7 +438,7 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
               <div className="mt-1 flex justify-between border-t px-1 pt-1 text-[9px] text-muted" style={{ borderColor: "#f1d3c4" }}>
                 <span>{qtnNo}</span>
                 <span>Item {pi + 1} of {s.panels.length}</span>
-                <span>{s.project.date || ""}</span>
+                <span>{fmtDate(s.project.date)}</span>
               </div>
             </div>
           );
@@ -375,15 +450,28 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
 
 /** Commercial Offer — panel prices at the current Pricing Settings. */
 function CommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
+  // RPT-1: selling currency — default USD; EGP-based prices convert via the Pricing rate.
+  const [cur, setCur] = useState<"USD" | "EGP">("USD");
   if (!s.panels.length) {
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Commercial Offer is generated from them.</div>;
   }
   const calcs: [LvPanel, PanelCalc][] = s.panels.map((p) => [p, calcPanel(p, s.factors)]);
   const subtotal = calcs.reduce((t, [, c]) => t + c.totalSell, 0);
   const vat = subtotal * s.factors.vat;
+  const rate = cur === "USD" ? (s.factors.usd || 1) : 1; // EGP per unit of display currency
+  const m = (egp: number) => fmtEgp(egp / rate);
   return (
     <div className="animate-fade-up">
       <PrintBar label="Prices follow the Pricing Settings tab (rates, ABB discount, factor) live." />
+      <div className="mb-3 flex items-center gap-2 no-print">
+        <span className="text-xs font-semibold text-muted">Currency</span>
+        <div className="inline-flex rounded-lg border border-line bg-white p-0.5">
+          {(["USD", "EGP"] as const).map((c) => (
+            <button key={c} type="button" onClick={() => setCur(c)}
+              className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${cur === c ? "bg-brand text-white" : "text-muted hover:text-brand"}`}>{c}</button>
+          ))}
+        </div>
+      </div>
       <div className="card print-area space-y-5 p-6">
         <DocHeader s={s} qtnNo={qtnNo} title="Commercial Offer" />
         <table className="w-full text-sm">
@@ -392,8 +480,8 @@ function CommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
               <th className="py-1.5 pr-2 w-10">Item</th>
               <th className="py-1.5 pr-2">Description</th>
               <th className="py-1.5 pr-2 text-center w-14">Qty</th>
-              <th className="py-1.5 pr-2 text-right w-32">Unit price (EGP)</th>
-              <th className="py-1.5 text-right w-32">Total (EGP)</th>
+              <th className="py-1.5 pr-2 text-right w-32">Unit price ({cur})</th>
+              <th className="py-1.5 text-right w-32">Total ({cur})</th>
             </tr>
           </thead>
           <tbody>
@@ -407,19 +495,19 @@ function CommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                   </div>
                 </td>
                 <td className="py-1.5 pr-2 text-center font-semibold">{p.qty}</td>
-                <td className="py-1.5 pr-2 text-right">{fmtEgp(c.sellUnit)}</td>
-                <td className="py-1.5 text-right font-semibold">{fmtEgp(c.totalSell)}</td>
+                <td className="py-1.5 pr-2 text-right">{m(c.sellUnit)}</td>
+                <td className="py-1.5 text-right font-semibold">{m(c.totalSell)}</td>
               </tr>
             ))}
           </tbody>
         </table>
         <div className="ml-auto w-72 space-y-1 text-sm">
-          <div className="flex justify-between"><span className="text-muted">Subtotal (excl. VAT)</span><b>{fmtEgp(subtotal)}</b></div>
-          <div className="flex justify-between"><span className="text-muted">VAT {Math.round(s.factors.vat * 100)}%</span><b>{fmtEgp(vat)}</b></div>
-          <div className="flex justify-between border-t-2 border-brand pt-1 text-base"><span className="font-bold">Total (EGP)</span><b className="text-brand-dark">{fmtEgp(subtotal + vat)}</b></div>
+          <div className="flex justify-between"><span className="text-muted">Subtotal (excl. VAT)</span><b>{m(subtotal)}</b></div>
+          <div className="flex justify-between"><span className="text-muted">VAT {Math.round(s.factors.vat * 100)}%</span><b>{m(vat)}</b></div>
+          <div className="flex justify-between border-t-2 border-brand pt-1 text-base"><span className="font-bold">Total ({cur})</span><b className="text-brand-dark">{m(subtotal + vat)}</b></div>
         </div>
         <p className="border-t border-line pt-2 text-[10px] text-muted">
-          Prices in EGP. Validity per agreement · delivery ex-works PowerLine · {qtnNo}.
+          Prices in {cur}{cur === "USD" ? ` (1 USD = ${fmtEgp(s.factors.usd)} EGP)` : ""}. Validity per agreement · delivery ex-works PowerLine · {qtnNo}.
         </p>
       </div>
     </div>
@@ -435,6 +523,12 @@ function ProjectTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
     const sp = staff.salesPeople.find((x) => x.name === name);
     upPr({ salesPerson: name, salesMobile: sp?.mobile ?? "", salesEmail: sp?.email ?? "" });
   };
+  const pickManager = (name: string) => {
+    const m = staff.salesManagers.find((x) => x.name === name);
+    upPr({ salesManager: name, salesManagerMobile: m?.mobile ?? "", salesManagerEmail: m?.email ?? "" });
+  };
+  // Manager phone/email are fixed from the registry for the selected manager.
+  const mgr = staff.salesManagers.find((m) => m.name === pr.salesManager);
   const [newSales, setNewSales] = useState({ name: "", mobile: "", email: "" });
   const [newEng, setNewEng] = useState("");
 
@@ -445,16 +539,20 @@ function ProjectTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
         <p className="mb-3 text-xs text-muted">Used to generate the Technical & Commercial offer cover pages.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div><L>Project name</L><input className="input" value={pr.name} onChange={(e) => upPr({ name: e.target.value })} /></div>
-          <div><L>Our reference</L><input className="input" value={pr.ref} onChange={(e) => upPr({ ref: e.target.value })} /></div>
+          <div><L>OPTY No.</L><input className="input" value={pr.optyNo} onChange={(e) => upPr({ optyNo: e.target.value })} /></div>
+          <div><L>Revision No.</L><input className="input" value={pr.revisionNo} onChange={(e) => upPr({ revisionNo: e.target.value })} /></div>
           <div><L>Customer</L><input className="input" value={pr.customer} onChange={(e) => upPr({ customer: e.target.value })} /></div>
-          <div><L>Location</L><input className="input" value={pr.location} onChange={(e) => upPr({ location: e.target.value })} /></div>
           <div><L>Date</L><input className="input" type="date" value={pr.date} onChange={(e) => upPr({ date: e.target.value })} /></div>
           <div>
             <L>Sales manager</L>
-            <select className="input cursor-pointer" value={pr.salesManager} onChange={(e) => upPr({ salesManager: e.target.value })}>
+            <select className="input cursor-pointer" value={pr.salesManager} onChange={(e) => pickManager(e.target.value)}>
               <option value="">— select —</option>
               {staff.salesManagers.map((p) => <option key={p.name}>{p.name}</option>)}
             </select>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><L>Manager no</L><input className="input bg-surface" value={mgr?.mobile ?? ""} readOnly /></div>
+            <div><L>Manager email</L><input className="input bg-surface" value={mgr?.email ?? ""} readOnly /></div>
           </div>
           <div>
             <L>Sales person</L>
@@ -470,8 +568,8 @@ function ProjectTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
               {staff.supportEngineers.map((p) => <option key={p.name}>{p.name}</option>)}
             </select>
           </div>
-          <div><L>Sales no (auto)</L><input className="input bg-surface" value={pr.salesMobile} readOnly /></div>
-          <div><L>Sales email (auto)</L><input className="input bg-surface" value={pr.salesEmail} readOnly /></div>
+          <div><L>Sales no</L><input className="input bg-surface" value={pr.salesMobile} readOnly /></div>
+          <div><L>Sales email</L><input className="input bg-surface" value={pr.salesEmail} readOnly /></div>
         </div>
       </div>
 
@@ -581,7 +679,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
               className={`mb-1.5 block w-full rounded-lg border px-3 py-2 text-left transition-colors ${
                 active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
               }`}>
-              <div className={`text-sm font-bold ${active ? "text-brand-dark" : "text-ink"}`}>{p.name}</div>
+              <div className={`text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.name.trim() || "(unnamed panel)"}</div>
               <div className="text-[11px] text-muted">{p.encFam}{p.qty > 1 ? ` · ×${p.qty}` : ""} · {fmtEgp(c.totalSell)} EGP</div>
             </button>
           );
@@ -605,6 +703,19 @@ function PanelEditor({ s, p, upPanel, onDel, onClone }: {
 
   return (
     <div className="space-y-4">
+      {/* Cost summary (RPT-1: shown first, above the panel name & details) */}
+      <div className="card p-5">
+        <h2 className="sec-head">Panel cost (live)</h2>
+        <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
+          <div className="rounded-lg bg-surface p-2.5">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5">Enclosure + kits<br /><b>{fmtEgp(calc.enclCost + calc.kits)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5">Copper ({calc.cuWeight.toFixed(1)} kg + busbar)<br /><b>{fmtEgp(calc.cuConnCost + calc.busbarCost)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5">Unit cost + ops<br /><b>{fmtEgp(calc.unitCostOps)} EGP</b></div>
+          <div className="rounded-lg bg-brand-light p-2.5 text-brand-dark">Unit selling<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
+          <div className="rounded-lg bg-brand p-2.5 text-white">Total ×{p.qty}<br /><b>{fmtEgp(calc.totalSell)} EGP</b></div>
+        </div>
+      </div>
+
       {/* Panel details */}
       <div className="card p-5">
         <div className="mb-3 flex items-center justify-between">
@@ -615,12 +726,15 @@ function PanelEditor({ s, p, upPanel, onDel, onClone }: {
           </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
-          <div><L>Panel name</L><input className="input" value={p.name} onChange={(e) => u({ name: e.target.value })} /></div>
+          <div><L>Panel name <span className="text-brand">*</span></L>
+            <input className={`input ${!p.name.trim() ? "border-red-400 bg-red-50/40" : ""}`} value={p.name}
+              placeholder="required" onChange={(e) => u({ name: e.target.value })} /></div>
           <div><L>Fed from</L><input className="input" value={p.fedFrom} onChange={(e) => u({ fedFrom: e.target.value })} /></div>
-          <div><L>Quantity</L><input className="input" type="number" min={1} value={p.qty}
-            onChange={(e) => u({ qty: Math.max(1, parseInt(e.target.value) || 1) })} /></div>
-          <div><L>Incoming C.B rating (A)</L><input className="input" type="number" min={0} value={p.ratingA || ""}
-            placeholder="e.g. 630" onChange={(e) => u({ ratingA: parseInt(e.target.value) || 0 })} /></div>
+          <div><L>Quantity</L><input className="input" inputMode="numeric" value={p.qty}
+            onChange={(e) => u({ qty: Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1) })} /></div>
+          <div><L>Incoming C.B rating (A) <span className="text-brand">*</span></L>
+            <input className={`input ${!p.ratingA ? "border-red-400 bg-red-50/40" : ""}`} inputMode="numeric" value={p.ratingA || ""}
+              placeholder="e.g. 630" onChange={(e) => u({ ratingA: parseInt(e.target.value.replace(/[^\d]/g, "")) || 0 })} /></div>
           <div><L>Amb. temp</L><Sel value={p.ambTemp as any} onChange={(v) => u({ ambTemp: v })} options={AMB_TEMPS} /></div>
           <div><L>Form</L><Sel value={p.form as any} onChange={(v) => u({ form: v })} options={FORMS} /></div>
           <div><L>Neutral</L><Sel value={p.neutral as any} onChange={(v) => u({ neutral: v })} options={NEUTRAL_EARTH} /></div>
@@ -650,17 +764,12 @@ function PanelEditor({ s, p, upPanel, onDel, onClone }: {
       {/* Components */}
       <ComponentsCard s={s} p={p} u={u} />
 
-      {/* Cost summary */}
+      {/* RPT-1: per-panel Draft — notes & calculations, never included in outputs */}
       <div className="card p-5">
-        <h2 className="sec-head">Panel cost (live)</h2>
-        <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
-          <div className="rounded-lg bg-surface p-2.5">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Enclosure + kits<br /><b>{fmtEgp(calc.enclCost + calc.kits)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Copper ({calc.cuWeight.toFixed(1)} kg + busbar)<br /><b>{fmtEgp(calc.cuConnCost + calc.busbarCost)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Unit cost + ops<br /><b>{fmtEgp(calc.unitCostOps)} EGP</b></div>
-          <div className="rounded-lg bg-brand-light p-2.5 text-brand-dark">Unit selling<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
-          <div className="rounded-lg bg-brand p-2.5 text-white">Total ×{p.qty}<br /><b>{fmtEgp(calc.totalSell)} EGP</b></div>
-        </div>
+        <h2 className="sec-head">Draft <span className="text-[11px] font-normal text-muted">· notes &amp; calculations for this panel (not included in any offer)</span></h2>
+        <textarea className="input min-h-[120px] w-full font-mono text-xs"
+          placeholder="Scratchpad for this panel — calculations, reminders, notes…"
+          value={p.draft ?? ""} onChange={(e) => u({ draft: e.target.value })} />
       </div>
     </div>
   );
@@ -875,10 +984,12 @@ function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void
 
   const commit = () => {
     if (!preview.length) return;
+    // RPT-1: each line keeps its own group header (e.g. ATS → Source 1 / Source 2
+    // / Interlock / Control CT; P.F.C → the generated formula header).
     const items = preview.map((l) =>
       l.comp
-        ? toPanelComponent(l.comp, p.activeSection, l.qty, tag)
-        : freeComponent(l.desc, p.activeSection, l.qty, tag)
+        ? toPanelComponent(l.comp, p.activeSection, l.qty, l.groupLabel || tag)
+        : freeComponent(l.desc, p.activeSection, l.qty, l.groupLabel || tag)
     );
     u({ components: [...p.components, ...items] });
     setPreview([]);
@@ -887,7 +998,15 @@ function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void
 
   return (
     <div className="card p-5">
-      <h2 className="sec-head">Circuit combinations</h2>
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="sec-head mb-0 pb-0 after:hidden">Circuit combinations</h2>
+        {p.components.some((c) => c.group) && (
+          <button className="text-xs font-semibold text-red-600 hover:underline"
+            onClick={() => { if (confirm("Remove ALL generated combinations from this panel?")) u({ components: p.components.filter((c) => !c.group) }); }}>
+            ✕ Clear all combinations
+          </button>
+        )}
+      </div>
       <p className="mb-2 text-xs text-muted">
         Predefined assemblies — generated from the database, then fully editable in the table above (defaults only).
       </p>
@@ -1029,16 +1148,19 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
   const [type, setType] = useState(1);
   useEffect(() => setType(types[0] ?? 1), [types]);
   const [withCtl, setWithCtl] = useState(true);
+  const [qty, setQty] = useState(1); // RPT-1: quantity for this combination
   return (
     <div className="rounded-lg border border-line p-3">
       <div className="flex flex-wrap items-end gap-3">
         <div><L>Starter</L><Sel value={kind as any} onChange={(v) => setKind(v)} options={MCC_KINDS as any} className="w-36" /></div>
         <div><L>Motor (kW)</L><Sel value={kw as any} onChange={(v) => setKw(v)} options={kws as any} className="w-32" /></div>
         <div><L>Type</L><Sel value={String(type) as any} onChange={(v) => setType(+v)} options={types.map(String) as any} className="w-24" /></div>
+        <div><L>Qty</L><input className="input w-20" inputMode="numeric" value={qty}
+          onChange={(e) => setQty(Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1))} /></div>
         <label className="flex items-center gap-1.5 pb-2 text-xs font-semibold text-ink">
           <input type="checkbox" checked={withCtl} onChange={(e) => setWithCtl(e.target.checked)} /> + control acc.
         </label>
-        <button className="btn-ghost" onClick={() => onPreview(buildMcc(kind, kw, type, withCtl), `MCC ${kind} ${kw}`)}>Generate combination</button>
+        <button className="btn-ghost" onClick={() => onPreview(buildMcc(kind, kw, type, withCtl, qty), `MCC ${kind} ${kw}${qty > 1 ? ` ×${qty}` : ""}`)}>Generate combination</button>
       </div>
     </div>
   );
@@ -1047,6 +1169,7 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
 function PfcBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
   const [i, setI] = useState({ ...PFC_DEFAULT });
   const tot = pfcTotalKvar(i);
+  const header = pfcHeader(i);
   // plain functions (not nested components) so inputs keep focus while typing
   const num = (k: "kvar" | "fixedSteps" | "var1Steps" | "var2Steps", label: string) => (
     <div key={k}>
@@ -1068,6 +1191,12 @@ function PfcBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
       <p className="mb-2 text-[11px] text-muted">Phase 1: 400 V systems, 25/50 kVAR steps only (RPT-03).</p>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {num("kvar", "Required kVAR")}
+        <div>
+          <L>P.F.C. C.B (A) <span className="text-brand">*</span></L>
+          <input className={`input w-28 ${!i.cbRating ? "border-red-400 bg-red-50/40" : ""}`} inputMode="numeric"
+            value={i.cbRating || ""} placeholder="e.g. 250"
+            onChange={(e) => setI({ ...i, cbRating: parseInt(e.target.value.replace(/[^\d]/g, "")) || 0 })} />
+        </div>
         {num("fixedSteps", "Fixed steps")}{kvarSel("fixedKvar", "Fixed step kVAR")}
         {num("var1Steps", "Var. steps 1")}{kvarSel("var1Kvar", "Var.1 step kVAR")}
         {num("var2Steps", "Var. steps 2")}{kvarSel("var2Kvar", "Var.2 step kVAR")}
@@ -1075,7 +1204,9 @@ function PfcBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
       <p className={`mt-2 text-xs font-semibold ${tot >= i.kvar ? "text-green-700" : "text-amber-700"}`}>
         Configured: {tot} kVAR {i.kvar ? `of ${i.kvar} required` : ""} {tot >= i.kvar ? "✓" : "— short by " + (i.kvar - tot)}
       </p>
-      <button className="btn-ghost mt-2" onClick={() => onPreview(buildPfc(i), "P.F.C")}>Generate combination</button>
+      <div className="mt-2 rounded bg-surface px-2 py-1 text-[11px] font-semibold text-ink">Header: {header}</div>
+      <button className="btn-ghost mt-2" disabled={!i.cbRating}
+        onClick={() => i.cbRating && onPreview(buildPfc(i), "P.F.C")}>Generate combination</button>
     </div>
   );
 }
@@ -1116,7 +1247,12 @@ function SizingCard({ p, u, factors }: {
 
   const famOptions = ps.layout === "Double" ? DOUBLE_FAMILIES : PANEL_SYSTEMS;
   const sizing1Pool = ENCLOSURES.filter((e) => e.fam === ps.family);
-  const sizing2Pool = sizing1Pool.filter((e) => /^(60|80)0?x/i.test(e.name) || e.W === 600 || e.W === 800);
+  // RPT-1: in a Double layout, panel 2 inherits panel 1's height & depth — only
+  // the width (60/80) may vary.
+  const slot1Sel = (p.panelItems ?? []).find((it) => (it.slot ?? 1) === 1) ?? null;
+  const slot1Enc = slot1Sel ? ENCLOSURES.find((e) => e.ref === slot1Sel.ref && e.name === slot1Sel.name) : undefined;
+  const sizing2Pool = sizing1Pool.filter((e) =>
+    (e.W === 600 || e.W === 800) && (!slot1Enc || (e.H === slot1Enc.H && e.D === slot1Enc.D)));
 
   const ip31Off = proEIp31Disabled(cc.depth, cc.thickness);
 
@@ -1124,7 +1260,9 @@ function SizingCard({ p, u, factors }: {
   const items = p.panelItems ?? [];
   const slotItem = (slot: 1 | 2) => items.find((it) => (it.slot ?? 1) === slot) ?? null;
   const setSlot = (slot: 1 | 2, e: (typeof ENCLOSURES)[number] | null) => {
-    const others = items.filter((it) => (it.slot ?? 1) !== slot);
+    let others = items.filter((it) => (it.slot ?? 1) !== slot);
+    // RPT-1: changing panel 1 in a Double layout clears panel 2 (it must re-match H&D).
+    if (slot === 1 && ps.layout === "Double") others = others.filter((it) => (it.slot ?? 1) !== 2);
     const next: PanelTypeItem[] = e
       ? [...others, { id: uid(), slot, fam: e.fam, name: e.name, ref: e.ref, ip: String(e.ip ?? ""), eur: e.eur, egp: e.egp, qty: 1 }]
       : others;
@@ -1217,7 +1355,7 @@ function SizingCard({ p, u, factors }: {
             </div>
             {ps.layout === "Double" && (
               <div>
-                <L>Sizing (2) — width 60/80 only</L>
+                <L>Sizing (2) — width only (H &amp; D match panel 1)</L>
                 <SearchSelect value={keyOf(slotItem(2))} placeholder="Search size — one selection…"
                   options={sizing2Pool.map((e) => ({
                     key: `${e.name}|${e.ref}`,
@@ -1339,8 +1477,78 @@ function SizingCard({ p, u, factors }: {
               ))}
             </tbody>
           </table>
+          <CopperToolCard p={p} u={u} />
         </div>
       )}
+    </div>
+  );
+}
+
+// RPT-1: Copper Tool (Cells) — free-text copper lengths per standard rating, with
+// live weight (kg) and P/N/E rows highlighted as recommendations from the incomer.
+function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void }) {
+  const type = p.cellConfig.type;
+  const tool = p.copperTool ?? {};
+  const setLen = (rating: number, key: "p" | "n" | "e", val: number) => {
+    const cur = tool[String(rating)] ?? { p: 0, n: 0, e: 0 };
+    const next = { ...tool, [String(rating)]: { ...cur, [key]: val } };
+    // Total busbar copper weight flows into the panel cost.
+    u({ copperTool: next, mainBusbarKg: Math.round(copperTotal(type, next) * 10) / 10 });
+  };
+  const inc = p.ratingA || 0;
+  const hiP = inc ? nearestRating(inc) : 0;
+  const hiN = inc ? nearestRating(inc * pctOf(p.neutral)) : 0;
+  const hiE = inc ? nearestRating(inc * pctOf(p.earth)) : 0;
+  const total = copperTotal(type, tool);
+  const cell = (rating: number, key: "p" | "n" | "e", hi: boolean, color: string) => {
+    const v = tool[String(rating)]?.[key] ?? 0;
+    return (
+      <input className="input h-7 w-16 px-1 text-center text-xs" inputMode="decimal" value={v || ""} placeholder="0"
+        style={hi ? { boxShadow: `inset 0 0 0 2px ${color}`, fontWeight: 700 } : undefined}
+        onChange={(e) => setLen(rating, key, parseFloat(e.target.value.replace(/[^\d.]/g, "")) || 0)} />
+    );
+  };
+  return (
+    <div className="mt-4 rounded-lg border border-line p-3">
+      <div className="mb-1 flex items-center justify-between">
+        <h3 className="text-sm font-bold text-ink">Copper Tool <span className="text-[11px] font-normal text-muted">· {type} · lengths in metres</span></h3>
+        <span className="text-xs font-bold text-brand-dark">Busbar copper: {total.toFixed(1)} kg</span>
+      </div>
+      <p className="mb-2 text-[11px] text-muted">
+        Enter the required copper length per rating. Recommended rows are highlighted from the incoming rating —{" "}
+        <span style={{ color: "#dc2626" }}>Phase</span> · <span style={{ color: "#111827", fontWeight: 700 }}>Neutral</span> · <span style={{ color: "#16a34a" }}>Earth</span>. All values stay editable.
+      </p>
+      <div className="overflow-auto">
+        <table className="w-full min-w-[460px] text-xs">
+          <thead>
+            <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
+              <th className="px-1 py-1">Rating</th>
+              <th className="px-1 py-1">CSA mm²</th>
+              <th className="px-1 py-1 text-center">Phase L (m)</th>
+              <th className="px-1 py-1 text-center">Neutral L (m)</th>
+              <th className="px-1 py-1 text-center">Earth L (m)</th>
+              <th className="px-1 py-1 text-right">Weight kg</th>
+            </tr>
+          </thead>
+          <tbody>
+            {COPPER_RATINGS.map((r) => {
+              const csa = csaFor(type, r);
+              const row = tool[String(r)] ?? { p: 0, n: 0, e: 0 };
+              const wkg = copperWeight(row.p, csa, 3) + copperWeight(row.n, csa, 1) + copperWeight(row.e, csa, 1);
+              return (
+                <tr key={r} className="border-t border-line/60">
+                  <td className="px-1 py-0.5 font-semibold">{r} A</td>
+                  <td className="px-1 py-0.5 text-muted">{csa}</td>
+                  <td className="px-1 py-0.5 text-center">{cell(r, "p", hiP === r, "#dc2626")}</td>
+                  <td className="px-1 py-0.5 text-center">{cell(r, "n", hiN === r, "#111827")}</td>
+                  <td className="px-1 py-0.5 text-center">{cell(r, "e", hiE === r, "#16a34a")}</td>
+                  <td className="px-1 py-0.5 text-right font-semibold">{wkg ? wkg.toFixed(1) : "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1383,6 +1591,25 @@ function MatTable({ title, rows, withSupplier, note }: { title: string; rows: Ma
 function MaterialTab({ s, abbOnly, setAbbOnly }: { s: LvState; abbOnly: boolean; setAbbOnly: (v: boolean) => void }) {
   const ml = useMemo(() => buildMaterialList(s), [s]);
   const empty = !s.panels.length || (!ml.abb.length && !ml.other.length && !ml.abbEnclosures.length && !ml.proE.length && !ml.is2.length && !ml.plpCells.length);
+  // RPT-1: number report tables sequentially by display order, skipping any
+  // hidden/empty section — subsequent sections renumber automatically.
+  type Block =
+    | { kind: "table"; title: string; rows: MatRow[]; withSupplier?: boolean; note?: string }
+    | { kind: "copper"; title: string; kg: number };
+  const abbNote = s.factors.abbDiscount > 0
+    ? `ABB discount ${Math.round(s.factors.abbDiscount * 100)}% applies to this table only`
+    : "ABB discount applies to this table only";
+  const candidates: (Block | false)[] = [
+    { kind: "table", title: "ABB Products", rows: ml.abb, note: abbNote },
+    !abbOnly && { kind: "table", title: "Other Suppliers", rows: ml.other, withSupplier: true },
+    !abbOnly && { kind: "table", title: "PLP Cells", rows: ml.plpCells },
+    { kind: "table", title: "ABB Enclosures", rows: ml.abbEnclosures },
+    !abbOnly && { kind: "table", title: "IS2", rows: ml.is2 },
+    !abbOnly && { kind: "copper", title: "Copper — total project weight", kg: ml.copperKg },
+    !abbOnly && { kind: "table", title: "Pro-E", rows: ml.proE },
+  ];
+  const visible = candidates.filter((b): b is Block =>
+    !!b && (b.kind === "copper" ? b.kg > 0 : b.rows.length > 0));
   return (
     <div className="space-y-4 animate-fade-up">
       <div className="flex items-center gap-2">
@@ -1399,18 +1626,14 @@ function MaterialTab({ s, abbOnly, setAbbOnly }: { s: LvState; abbOnly: boolean;
         <div className="card p-10 text-center text-sm text-muted">Configure panels first — the Material List updates automatically.</div>
       ) : (
         <>
-          <MatTable title="1 · ABB Products" rows={ml.abb} note={s.factors.abbDiscount > 0 ? `ABB discount ${Math.round(s.factors.abbDiscount * 100)}% applies to this table only` : "ABB discount applies to this table only"} />
-          {!abbOnly && <MatTable title="2 · Other Suppliers" rows={ml.other} withSupplier />}
-          {!abbOnly && <MatTable title="3 · PLP Cells" rows={ml.plpCells} />}
-          <MatTable title="4 · ABB Enclosures" rows={ml.abbEnclosures} />
-          {!abbOnly && <MatTable title="5 · IS2" rows={ml.is2} />}
-          {!abbOnly && (
-            <div className="card flex items-center justify-between p-4">
-              <h3 className="text-sm font-bold text-brand-dark">6 · Copper — total project weight</h3>
-              <span className="text-lg font-extrabold text-ink">{ml.copperKg.toFixed(1)} kg</span>
+          {visible.map((b, i) => b.kind === "table" ? (
+            <MatTable key={b.title} title={`${i + 1} · ${b.title}`} rows={b.rows} withSupplier={b.withSupplier} note={b.note} />
+          ) : (
+            <div key={b.title} className="card flex items-center justify-between p-4">
+              <h3 className="text-sm font-bold text-brand-dark">{i + 1} · {b.title}</h3>
+              <span className="text-lg font-extrabold text-ink">{b.kg.toFixed(1)} kg</span>
             </div>
-          )}
-          {!abbOnly && <MatTable title="7 · Pro-E" rows={ml.proE} />}
+          ))}
         </>
       )}
     </div>

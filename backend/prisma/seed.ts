@@ -14,7 +14,6 @@ async function main() {
       offerNumber: "PL-2026-0001",
       projectName: "Sample Substation — Feeder Upgrade",
       customer: "Acme Power Co.",
-      location: "Cairo, Egypt",
       status: "DRAFT",
       currency: "USD",
       unitPrice: 0,

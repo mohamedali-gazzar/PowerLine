@@ -251,7 +251,7 @@ prices/material lists in `lv/store.ts`. "PDF" = browser print of a styled
 
 **Models** (`backend/prisma/schema.prisma`):
 - `Offer` — offerNumber (unique, `PL-YYYY-####`), category (RMU|KIOSK|LV, only RMU
-  used), project/customer/location/status, sales/order numbers, commercial fields
+  used), project/customer/status, sales/order numbers, commercial fields
   (currency/unitPrice/qty/discount/validity/delivery/payment/warranty/notes),
   `rmu RmuConfig?`, timestamps.
 - `RmuConfig` — the RMU inputs (productType, lbsBrand, clientSpec, voltageKv,

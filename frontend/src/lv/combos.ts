@@ -43,6 +43,14 @@ export function buildAts(type: AtsTypeId, frame: string, breakers: DbComponent[]
   const tpl = (COMBOS.ats as any)[type]?.[frame] as { group: string; items: { qty: number; desc: string }[] }[] | undefined;
   if (!tpl) return [];
   const out: ComboLine[] = [];
+  // RPT-1: standardise ATS section headers → Source 1 / Source 2 / Interlock / Control CT.
+  const atsGroup = (raw: string): string => {
+    const m = raw.match(/source\s*\(?\s*(\d+)/i);
+    if (m) return `Source ${m[1]}`;
+    if (/interlock/i.test(raw)) return "Interlock";
+    if (/control/i.test(raw)) return "Control CT";
+    return raw;
+  };
   tpl.forEach((g) => {
     g.items.forEach((it) => {
       // template "C.B (n)" placeholders become the chosen breakers
@@ -50,10 +58,10 @@ export function buildAts(type: AtsTypeId, frame: string, breakers: DbComponent[]
       if (cbMatch) {
         const idx = +cbMatch[1] - 1;
         const b = breakers[idx] ?? breakers[0];
-        if (b) out.push({ qty: it.qty, desc: b.n, comp: b, groupLabel: g.group });
+        if (b) out.push({ qty: it.qty, desc: b.n, comp: b, groupLabel: atsGroup(g.group) });
         return;
       }
-      out.push({ qty: it.qty, desc: it.desc, comp: findByName(it.desc), groupLabel: g.group });
+      out.push({ qty: it.qty, desc: it.desc, comp: findByName(it.desc), groupLabel: atsGroup(g.group) });
     });
   });
   return out;
@@ -82,18 +90,20 @@ export const mccKws = (kind: string) => [...new Set(COMBOS.mcc.combos.filter((m)
 export const mccTypes = (kind: string, kw: string) =>
   [...new Set(COMBOS.mcc.combos.filter((m) => m.kind === kind && m.kw === kw).map((m) => m.type))].sort();
 
-export function buildMcc(kind: string, kw: string, type: number, withControl: boolean): ComboLine[] {
+export function buildMcc(kind: string, kw: string, type: number, withControl: boolean, qty = 1): ComboLine[] {
   const row = COMBOS.mcc.combos.find((m) => m.kind === kind && m.kw === kw && m.type === type);
   if (!row) return [];
+  const n = Math.max(1, qty); // RPT-1: combination quantity multiplies every part
+  const label = `${kind} ${kw} (Type ${type})${n > 1 ? ` ×${n}` : ""}`;
   const out: ComboLine[] = row.parts.map((p) => ({
-    qty: 1,
+    qty: n,
     desc: p,
     comp: findByName(p),
-    groupLabel: `${kind} ${kw} (Type ${type})`,
+    groupLabel: label,
   }));
   if (withControl) {
     COMBOS.mcc.control.forEach((c) =>
-      out.push({ qty: c.qty, desc: c.desc, comp: findByName(c.desc), groupLabel: "MCC control acc." })
+      out.push({ qty: c.qty * n, desc: c.desc, comp: findByName(c.desc), groupLabel: label })
     );
   }
   return out;
@@ -102,6 +112,7 @@ export function buildMcc(kind: string, kw: string, type: number, withControl: bo
 // ── PFC (Phase 1: 400 V, 25/50 kVAR steps only — RPT-03) ─────────────────────
 export interface PfcInput {
   kvar: number;
+  cbRating: number; // RPT-1: main P.F.C. circuit-breaker rating (A) — mandatory
   fixedSteps: number;
   fixedKvar: 25 | 50;
   var1Steps: number;
@@ -110,7 +121,7 @@ export interface PfcInput {
   var2Kvar: 25 | 50;
 }
 export const PFC_DEFAULT: PfcInput = {
-  kvar: 600, fixedSteps: 1, fixedKvar: 25, var1Steps: 3, var1Kvar: 25, var2Steps: 10, var2Kvar: 50,
+  kvar: 600, cbRating: 0, fixedSteps: 1, fixedKvar: 25, var1Steps: 3, var1Kvar: 25, var2Steps: 10, var2Kvar: 50,
 };
 
 const CAP_25 = "25 KVAR";
@@ -122,29 +133,50 @@ export function pfcTotalKvar(i: PfcInput): number {
   return i.fixedSteps * i.fixedKvar + i.var1Steps * i.var1Kvar + i.var2Steps * i.var2Kvar;
 }
 
+/** RPT-1: dynamic P.F.C. header, e.g.
+ *  "P.F.C. [(4 × 25) KVAR Fixed + (4 × 50) + (2 × 100) KVAR Variable] = 500 KVAR".
+ *  Any section with zero/blank steps or kVAR is omitted; if no variable steps are
+ *  used the whole Variable section is dropped. */
+export function pfcHeader(i: PfcInput): string {
+  const fixed = i.fixedSteps > 0 && i.fixedKvar > 0 ? `(${i.fixedSteps} × ${i.fixedKvar}) KVAR Fixed` : "";
+  const v1 = i.var1Steps > 0 && i.var1Kvar > 0 ? `(${i.var1Steps} × ${i.var1Kvar})` : "";
+  const v2 = i.var2Steps > 0 && i.var2Kvar > 0 ? `(${i.var2Steps} × ${i.var2Kvar})` : "";
+  const varInner = [v1, v2].filter(Boolean).join(" + ");
+  const variable = varInner ? `${varInner} KVAR Variable` : "";
+  const inner = [fixed, variable].filter(Boolean).join(" + ");
+  return `P.F.C. [${inner}] = ${pfcTotalKvar(i)} KVAR`;
+}
+
 /** Per the database sheet: capacitors are counted as 25 kVAR units (a 50 kVAR step = 2×25),
  *  3 fuses + 3 bases per step, one contactor per variable step, controller(s) by variable steps. */
 export function buildPfc(i: PfcInput): ComboLine[] {
   const out: ComboLine[] = [];
-  const block = (label: string, steps: number, kv: 25 | 50, withContactor: boolean) => {
+  // RPT-1: every P.F.C. line is grouped under the generated header.
+  const header = pfcHeader(i);
+  // RPT-1: mandatory main P.F.C. circuit breaker (manually-entered rating).
+  if (i.cbRating > 0) {
+    const cbName = `P.F.C. Circuit Breaker ${i.cbRating}A`;
+    out.push({ qty: 1, desc: cbName, comp: findByName(cbName), groupLabel: header });
+  }
+  const block = (steps: number, kv: 25 | 50, withContactor: boolean) => {
     if (steps <= 0) return;
     const capUnits = steps * (kv === 50 ? 2 : 1);
-    out.push({ qty: capUnits, desc: CAP_25, comp: findByName(CAP_25), groupLabel: label });
-    out.push({ qty: steps * 3, desc: fuseFor(kv), comp: findByName(fuseFor(kv)), groupLabel: label });
-    out.push({ qty: steps * 3, desc: "Fuse Base 160A", comp: findByName("Fuse Base 160A"), groupLabel: label });
+    out.push({ qty: capUnits, desc: CAP_25, comp: findByName(CAP_25), groupLabel: header });
+    out.push({ qty: steps * 3, desc: fuseFor(kv), comp: findByName(fuseFor(kv)), groupLabel: header });
+    out.push({ qty: steps * 3, desc: "Fuse Base 160A", comp: findByName("Fuse Base 160A"), groupLabel: header });
     if (withContactor)
-      out.push({ qty: steps, desc: contactorFor(kv), comp: findByName(contactorFor(kv)), groupLabel: label });
+      out.push({ qty: steps, desc: contactorFor(kv), comp: findByName(contactorFor(kv)), groupLabel: header });
   };
-  block("Fixed steps", i.fixedSteps, i.fixedKvar, false);
-  block("Variable steps 1", i.var1Steps, i.var1Kvar, true);
-  block("Variable steps 2", i.var2Steps, i.var2Kvar, true);
+  block(i.fixedSteps, i.fixedKvar, false);
+  block(i.var1Steps, i.var1Kvar, true);
+  block(i.var2Steps, i.var2Kvar, true);
 
   const varSteps = i.var1Steps + i.var2Steps;
   const ctl: string[] = [];
   if (varSteps > 0 && varSteps <= 6) ctl.push("Power Factor Controller 6 step RVT-6");
   else if (varSteps <= 12) ctl.push("Power Factor Controller 12 step RVT-12");
-  else ctl.push("Power Factor Controller 6 step RVT-6", "Power Factor Controller 12 step RVT-12");
-  ctl.forEach((c) => out.push({ qty: 1, desc: c, comp: findByName(c), groupLabel: "Controller" }));
+  else if (varSteps > 12) ctl.push("Power Factor Controller 6 step RVT-6", "Power Factor Controller 12 step RVT-12");
+  ctl.forEach((c) => out.push({ qty: 1, desc: c, comp: findByName(c), groupLabel: header }));
   return out;
 }
 
