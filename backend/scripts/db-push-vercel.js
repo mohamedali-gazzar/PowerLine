@@ -17,4 +17,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 console.log("[db-push] Vercel build — syncing schema to Neon (prisma db push)...");
-execSync("npx prisma db push --skip-generate", { stdio: "inherit" });
+// --accept-data-loss lets the build apply intended destructive changes (e.g. the
+// dropped `location` column). Without it, `prisma db push` aborts the whole deploy
+// whenever the schema drops/renames a column.
+execSync("npx prisma db push --skip-generate --accept-data-loss", { stdio: "inherit" });
