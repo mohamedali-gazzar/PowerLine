@@ -10,6 +10,7 @@ import {
   Toggle,
 } from "../components/fields";
 import OfferView from "../components/OfferView";
+import { useStaff, findPerson } from "../staff";
 import {
   RTU_TYPES,
   BRANDS_BY_FAMILY,
@@ -32,6 +33,7 @@ const initialRmu: RmuConfigInput = {
   busbarCurrentA: 630,
   fuseRatingA: null,
   meteringCtPrimaryA: null,
+  ctClass: null,
   vtCores: 1,
   vtBurdenVa: null,
   vtClass: null,
@@ -53,9 +55,11 @@ export default function NewOfferPage() {
 
   const [projectName, setProjectName] = useState("");
   const [customer, setCustomer] = useState("");
-  const [location, setLocation] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  const [currency, setCurrency] = useState<"USD" | "EGP">("USD");
+  const [usdRate, setUsdRate] = useState(0); // USD→EGP rate (used when currency = EGP)
+  const [rateLoading, setRateLoading] = useState(false);
   const [unitPrice, setUnitPrice] = useState(0);
+  const [priceTouched, setPriceTouched] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [discountPct, setDiscountPct] = useState(0);
   const [validityDays, setValidityDays] = useState(7);
@@ -67,7 +71,9 @@ export default function NewOfferPage() {
   const setR = <K extends keyof RmuConfigInput>(k: K, v: RmuConfigInput[K]) =>
     setRmu((c) => ({ ...c, [k]: v }));
 
-  // What to generate
+  // What to generate (each is independently selectable — e.g. export Commercial
+  // or SLD only, without the Technical offer). At least one must be selected.
+  const [wantTechnical, setWantTechnical] = useState(true);
   const [wantCommercial, setWantCommercial] = useState(false);
   const [wantSld, setWantSld] = useState(false);
 
@@ -75,6 +81,34 @@ export default function NewOfferPage() {
   const [salesNumber, setSalesNumber] = useState("");
   const [orderNumber, setOrderNumber] = useState("");
   const [notes, setNotes] = useState("");
+
+  // Offer cover-page team — sales lists are the SHARED registry (also used by LV)
+  const [staff, setStaff] = useStaff();
+  const [newSales, setNewSales] = useState({ name: "", mobile: "", email: "" });
+  const [team, setTeam] = useState({
+    quotationNo: "", opportunityNo: "",
+    salesName: "", salesMobile: "", salesEmail: "",
+    salesManagerName: "", salesManagerMobile: "", salesManagerEmail: "",
+    supportName: "", supportMobile: "", supportEmail: "",
+  });
+  const upTeam = (patch: Partial<typeof team>) => setTeam((t) => ({ ...t, ...patch }));
+  const pickSales = (name: string) => {
+    const p = findPerson(staff.salesPeople, name);
+    upTeam({ salesName: name, salesMobile: p?.mobile ?? "", salesEmail: p?.email ?? "" });
+  };
+  const pickManager = (name: string) => {
+    const p = findPerson(staff.salesManagers, name);
+    upTeam({ salesManagerName: name, salesManagerMobile: p?.mobile ?? "", salesManagerEmail: p?.email ?? "" });
+  };
+  const pickSupport = (name: string) => {
+    const p = findPerson(staff.supportEngineers, name);
+    upTeam({ supportName: name, supportMobile: p?.mobile ?? "", supportEmail: p?.email ?? "" });
+  };
+  const addSalesPerson = () => {
+    if (!newSales.name.trim()) return;
+    setStaff({ ...staff, salesPeople: [...staff.salesPeople, { ...newSales, name: newSales.name.trim() }] });
+    setNewSales({ name: "", mobile: "", email: "" });
+  };
 
   // Keep the brand to one we actually have data for (PSEC: ABB/Murge, PRAL: ABB)
   // — reset to ABB if the current brand isn't available for the family.
@@ -111,10 +145,12 @@ export default function NewOfferPage() {
     [rmu]
   );
   const panelCode = preview?.panelCode ?? "…";
-  const basePrice = preview?.listPricing?.basePrice ?? null;
+  const basePriceUsd = preview?.listPricing?.basePrice ?? null;
   const addOns = preview?.listPricing?.addOns ?? [];
+  const rate = currency === "EGP" ? usdRate || 1 : 1;
+  const basePrice = basePriceUsd == null ? null : basePriceUsd * rate; // in the selected currency
   const effUnit = unitPrice > 0 ? unitPrice : basePrice ?? 0;
-  const addOnsUnit = addOns.reduce((s, a) => s + a.price, 0);
+  const addOnsUnit = addOns.reduce((s, a) => s + a.price, 0) * rate;
   const totals = useMemo(() => {
     const qty = quantity || 0;
     const panelSubtotal = effUnit * qty;
@@ -140,11 +176,41 @@ export default function NewOfferPage() {
     return () => clearTimeout(timer.current);
   }, [rmu]);
 
+  // Default the unit price from the price-list DB; once the user edits it we stop
+  // auto-filling so their manual value sticks.
+  useEffect(() => {
+    if (!priceTouched) setUnitPrice(basePrice ?? 0);
+  }, [basePrice, priceTouched]);
+
+  // USD→EGP exchange rate — auto-fetched when EGP is selected, but editable.
+  async function fetchRate() {
+    setRateLoading(true);
+    try {
+      const res = await fetch("https://open.er-api.com/v6/latest/USD");
+      const j = await res.json();
+      const egp = j?.rates?.EGP;
+      if (egp) setUsdRate(Math.round(egp * 100) / 100);
+    } catch {
+      /* offline / blocked — keep the manual value */
+    } finally {
+      setRateLoading(false);
+    }
+  }
+  useEffect(() => {
+    if (currency === "EGP" && !usdRate) fetchRate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currency]);
+
   // No catalogue price for this config and no manual price entered.
   const priceMissing = basePrice == null && unitPrice <= 0;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!wantTechnical && !wantCommercial && !wantSld) {
+      setError("Select at least one output to export (Technical, Commercial, or SLD).");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     if (wantCommercial && priceMissing) {
       setError(
         `No catalogue price for ${panelCode}. Enter a unit price in the Commercial section before generating a commercial offer.`
@@ -160,12 +226,23 @@ export default function NewOfferPage() {
         category: "RMU",
         salesNumber: salesNumber || null,
         orderNumber: orderNumber || null,
+        quotationNo: team.quotationNo || null,
+        opportunityNo: team.opportunityNo || null,
+        salesName: team.salesName || null,
+        salesMobile: team.salesMobile || null,
+        salesEmail: team.salesEmail || null,
+        salesManagerName: team.salesManagerName || null,
+        salesManagerMobile: team.salesManagerMobile || null,
+        salesManagerEmail: team.salesManagerEmail || null,
+        supportName: team.supportName || null,
+        supportMobile: team.supportMobile || null,
+        supportEmail: team.supportEmail || null,
         projectName,
         customer,
-        location: location || null,
         status: "DRAFT",
         notes: notes || null,
         currency,
+        usdToEgpRate: currency === "EGP" ? usdRate || null : null,
         unitPrice,
         quantity,
         discountPct,
@@ -176,11 +253,12 @@ export default function NewOfferPage() {
         rmu,
       };
       const created = await api.createOffer(payload);
-      // Directly download the selected outputs (Technical always; Commercial / SLD if chosen).
+      // Directly download the selected outputs (any combination of Technical /
+      // Commercial / SLD — e.g. Commercial or SLD only).
       const num = created.offerNumber;
-      const jobs: { url: string; name: string; label: string }[] = [
-        { url: `${api.pdfUrl(created.id)}?dl=1`, name: `${num}-Technical.pdf`, label: "Technical" },
-      ];
+      const jobs: { url: string; name: string; label: string }[] = [];
+      if (wantTechnical)
+        jobs.push({ url: `${api.pdfUrl(created.id)}?dl=1`, name: `${num}-Technical.pdf`, label: "Technical" });
       if (wantCommercial)
         jobs.push({ url: `${api.commercialPdfUrl(created.id)}?dl=1`, name: `${num}-Commercial.pdf`, label: "Commercial" });
       if (wantSld)
@@ -215,7 +293,12 @@ export default function NewOfferPage() {
           What do you want to generate?
         </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <OutputCard active locked label="Technical Offer" desc="Specs & cubicle lineup" />
+          <OutputCard
+            active={wantTechnical}
+            onClick={() => setWantTechnical((v) => !v)}
+            label="Technical Offer"
+            desc="Specs & cubicle lineup"
+          />
           <OutputCard
             active={wantCommercial}
             onClick={() => setWantCommercial((v) => !v)}
@@ -271,9 +354,50 @@ export default function NewOfferPage() {
               <Field label="Customer *">
                 <TextInput value={customer} onChange={setCustomer} placeholder="EEHC" />
               </Field>
-              <Field label="Location">
-                <TextInput value={location} onChange={setLocation} placeholder="City, Country" />
+            </div>
+          </section>
+
+          <section className="card p-5 animate-fade-up" style={{ animationDelay: "0.06s" }}>
+            <h2 className="sec-head">Project team &amp; cover</h2>
+            <p className="mb-3 text-xs text-muted">
+              Shown on the offer cover. The sales / manager / support lists are <b>shared with the LV section</b> —
+              add someone here and they appear there too.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Quotation No. (QTN)">
+                <TextInput value={team.quotationNo} onChange={(v) => upTeam({ quotationNo: v })} placeholder="QTN-26-0001" />
               </Field>
+              <Field label="Opportunity No. (OPTY)">
+                <TextInput value={team.opportunityNo} onChange={(v) => upTeam({ opportunityNo: v })} placeholder="OPTY-0001" />
+              </Field>
+              <Field label="Sales person">
+                <select className="input cursor-pointer" value={team.salesName} onChange={(e) => pickSales(e.target.value)}>
+                  <option value="">— select —</option>
+                  {staff.salesPeople.map((p) => <option key={p.name}>{p.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Sales mobile / email" hint="Auto-filled from the sales person">
+                <input className="input bg-surface" readOnly value={[team.salesMobile, team.salesEmail].filter(Boolean).join("  ·  ")} />
+              </Field>
+              <Field label="Sales manager">
+                <select className="input cursor-pointer" value={team.salesManagerName} onChange={(e) => pickManager(e.target.value)}>
+                  <option value="">— select —</option>
+                  {staff.salesManagers.map((p) => <option key={p.name}>{p.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Sales support">
+                <select className="input cursor-pointer" value={team.supportName} onChange={(e) => pickSupport(e.target.value)}>
+                  <option value="">— select —</option>
+                  {staff.supportEngineers.map((p) => <option key={p.name}>{p.name}</option>)}
+                </select>
+              </Field>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+              <span className="text-xs font-semibold text-muted">+ Add sales person:</span>
+              <input className="input h-9 w-32" placeholder="Name" value={newSales.name} onChange={(e) => setNewSales({ ...newSales, name: e.target.value })} />
+              <input className="input h-9 w-32" placeholder="Mobile" value={newSales.mobile} onChange={(e) => setNewSales({ ...newSales, mobile: e.target.value })} />
+              <input className="input h-9 w-44" placeholder="Email" value={newSales.email} onChange={(e) => setNewSales({ ...newSales, email: e.target.value })} />
+              <button type="button" className="btn-ghost h-9" onClick={addSalesPerson}>Add</button>
             </div>
           </section>
 
@@ -349,8 +473,8 @@ export default function NewOfferPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <Field label="Ring feeders (R)" hint="NAL — R2 to R5">
-                  <NumberInput value={rmu.nalCount} min={2} onChange={(v) => setR("nalCount", v)} />
+                <Field label="Ring feeders (R)" hint="NAL — R0 to R5">
+                  <NumberInput value={rmu.nalCount} min={0} onChange={(v) => setR("nalCount", v)} />
                 </Field>
                 <Field label="Transformer feeders (T)" hint="NALF — T0 to T2">
                   <NumberInput value={rmu.nalfCount} min={0} onChange={(v) => setR("nalfCount", v)} />
@@ -394,6 +518,14 @@ export default function NewOfferPage() {
                     onChange={(v) => setR("meteringCtPrimaryA", Number.isNaN(v) ? null : v)}
                   />
                 </Field>
+                <Field label="CT class (CL)" hint="Metering CT accuracy class">
+                  <Segmented
+                    value={(rmu.ctClass ?? "0.5") as "0.5" | "0.5S" | "0.2"}
+                    onChange={(v) => setR("ctClass", v)}
+                    options={["0.5", "0.5S", "0.2"] as const}
+                    renderLabel={(v) => v}
+                  />
+                </Field>
                 <Field label="Voltage transformer">
                   <Segmented
                     value={String(rmu.vtCores ?? 1) as "1" | "2"}
@@ -402,19 +534,11 @@ export default function NewOfferPage() {
                     renderLabel={(v) => (v === "1" ? "Single core" : "Two core")}
                   />
                 </Field>
-                <Field label="VT burden (VA)" hint="Blank = standard">
-                  <TextInput
-                    value={rmu.vtBurdenVa ?? ""}
-                    onChange={(v) => setR("vtBurdenVa", v)}
-                    placeholder="standard"
-                  />
+                <Field label="VT burden (VA)" hint="Fixed (non-editable)">
+                  <input className="input bg-surface" value="50-100" readOnly />
                 </Field>
-                <Field label="VT class (CL)" hint="Blank = standard">
-                  <TextInput
-                    value={rmu.vtClass ?? ""}
-                    onChange={(v) => setR("vtClass", v)}
-                    placeholder="standard"
-                  />
+                <Field label="VT class (CL)" hint="Fixed (non-editable)">
+                  <input className="input bg-surface" value="0.5" readOnly />
                 </Field>
                 <div className="sm:col-span-2">
                   <Field label="VT protection" hint="Affects the panel code & price">
@@ -450,17 +574,27 @@ export default function NewOfferPage() {
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label="Currency">
-                <TextInput value={currency} onChange={(v) => setCurrency(v.toUpperCase())} />
+                <Segmented value={currency} onChange={(v) => setCurrency(v)} options={["USD", "EGP"] as const} />
               </Field>
+              {currency === "EGP" && (
+                <Field label="USD → EGP rate" hint="Auto-fetched daily rate — editable">
+                  <div className="flex gap-2">
+                    <NumberInput value={usdRate || NaN} step={0.01} placeholder="rate" onChange={(v) => setUsdRate(Number.isNaN(v) ? 0 : v)} />
+                    <button type="button" className="btn-ghost shrink-0 whitespace-nowrap" onClick={fetchRate} disabled={rateLoading}>
+                      {rateLoading ? "…" : "↻ Fetch"}
+                    </button>
+                  </div>
+                </Field>
+              )}
               <Field
                 label={basePrice == null ? "Unit price *" : "Unit price"}
-                hint={basePrice != null ? "Blank = panel list price" : "Required — no catalogue price"}
+                hint={basePrice != null ? "From price list — editable" : "Required — no catalogue price"}
               >
                 <NumberInput
                   value={unitPrice || NaN}
                   step={0.01}
                   placeholder={basePrice != null ? String(basePrice) : "0"}
-                  onChange={(v) => setUnitPrice(Number.isNaN(v) ? 0 : v)}
+                  onChange={(v) => { setPriceTouched(true); setUnitPrice(Number.isNaN(v) ? 0 : v); }}
                 />
               </Field>
               <Field label="Quantity">
@@ -492,8 +626,8 @@ export default function NewOfferPage() {
               </div>
               {addOns.map((a) => (
                 <div key={a.name} className="flex justify-between text-muted">
-                  <span>{a.name} · {quantity} × {currency} {a.price.toLocaleString()}</span>
-                  <span>{currency} {(a.price * quantity).toLocaleString()}</span>
+                  <span>{a.name} · {quantity} × {currency} {(a.price * rate).toLocaleString()}</span>
+                  <span>{currency} {(a.price * rate * quantity).toLocaleString()}</span>
                 </div>
               ))}
               {discountPct > 0 && (

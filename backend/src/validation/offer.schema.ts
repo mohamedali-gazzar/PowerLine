@@ -19,7 +19,7 @@ export const rmuConfigSchema = z.object({
     .refine((v) => (VOLTAGES as number[]).includes(v), {
       message: "Voltage must be 12 or 24 kV",
     }),
-  nalCount: z.number().int().min(2).max(5), // Ring feeders R2–R5
+  nalCount: z.number().int().min(0).max(5), // Ring feeders R0–R5
   nalfCount: z.number().int().min(0).max(2), // Transformer feeders T0–T2
   hasMetering: z.boolean().default(false),
   rtuType: z.enum(RTU_TYPES as [string, ...string[]]).default("NONE"),
@@ -27,6 +27,7 @@ export const rmuConfigSchema = z.object({
   busbarCurrentA: z.number().int().positive().max(2500).default(630),
   fuseRatingA: z.number().int().positive().max(400).optional().nullable(),
   meteringCtPrimaryA: z.number().int().positive().max(5000).optional().nullable(),
+  ctClass: z.string().trim().max(20).optional().nullable(),
   vtCores: z
     .number()
     .int()
@@ -66,12 +67,23 @@ export const createOfferSchema = z.object({
   category: z.enum(PRODUCT_CATEGORIES).default("RMU"),
   salesNumber: z.string().trim().max(60).optional().nullable(),
   orderNumber: z.string().trim().max(60).optional().nullable(),
+  quotationNo: z.string().trim().max(120).optional().nullable(),
+  opportunityNo: z.string().trim().max(120).optional().nullable(),
+  salesName: z.string().trim().max(120).optional().nullable(),
+  salesMobile: z.string().trim().max(60).optional().nullable(),
+  salesEmail: z.string().trim().max(160).optional().nullable(),
+  salesManagerName: z.string().trim().max(120).optional().nullable(),
+  salesManagerMobile: z.string().trim().max(60).optional().nullable(),
+  salesManagerEmail: z.string().trim().max(160).optional().nullable(),
+  supportName: z.string().trim().max(120).optional().nullable(),
+  supportMobile: z.string().trim().max(60).optional().nullable(),
+  supportEmail: z.string().trim().max(160).optional().nullable(),
   projectName: z.string().trim().min(1).max(160),
   customer: z.string().trim().min(1).max(160),
-  location: z.string().trim().max(160).optional().nullable(),
   status: z.enum(OFFER_STATUS).default("DRAFT"),
 
-  currency: z.string().trim().min(1).max(8).default("USD"),
+  currency: z.enum(["USD", "EGP"]).default("USD"),
+  usdToEgpRate: z.number().positive().max(1000).optional().nullable(),
   unitPrice: z.number().min(0).default(0),
   quantity: z.number().int().positive().default(1),
   discountPct: z.number().min(0).max(100).default(0),

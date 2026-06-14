@@ -44,7 +44,6 @@ export default function OfferDetailPage() {
           </div>
           <p className="mt-1 text-sm text-muted">
             {offer.projectName} · {offer.customer}
-            {offer.location ? ` · ${offer.location}` : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

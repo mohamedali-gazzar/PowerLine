@@ -32,6 +32,7 @@ type StoredRmu = {
   busbarCurrentA: number;
   fuseRatingA: number | null;
   meteringCtPrimaryA: number | null;
+  ctClass: string | null;
   vtCores: number;
   vtBurdenVa: string | null;
   vtClass: string | null;
@@ -53,6 +54,7 @@ export function toConfigInput(rmu: StoredRmu): RmuConfigInput {
     busbarCurrentA: rmu.busbarCurrentA,
     fuseRatingA: rmu.fuseRatingA,
     meteringCtPrimaryA: rmu.meteringCtPrimaryA,
+    ctClass: rmu.ctClass,
     vtCores: rmu.vtCores,
     vtBurdenVa: rmu.vtBurdenVa,
     vtClass: rmu.vtClass,
@@ -87,11 +89,22 @@ export async function createOffer(input: CreateOfferInput) {
       category: input.category,
       salesNumber: input.salesNumber ?? null,
       orderNumber: input.orderNumber ?? null,
+      quotationNo: input.quotationNo ?? null,
+      opportunityNo: input.opportunityNo ?? null,
+      salesName: input.salesName ?? null,
+      salesMobile: input.salesMobile ?? null,
+      salesEmail: input.salesEmail ?? null,
+      salesManagerName: input.salesManagerName ?? null,
+      salesManagerMobile: input.salesManagerMobile ?? null,
+      salesManagerEmail: input.salesManagerEmail ?? null,
+      supportName: input.supportName ?? null,
+      supportMobile: input.supportMobile ?? null,
+      supportEmail: input.supportEmail ?? null,
       projectName: input.projectName,
       customer: input.customer,
-      location: input.location ?? null,
       status: input.status,
       currency: input.currency,
+      usdToEgpRate: input.usdToEgpRate ?? null,
       unitPrice: input.unitPrice,
       quantity: input.quantity,
       discountPct: input.discountPct,
@@ -114,6 +127,7 @@ export async function createOffer(input: CreateOfferInput) {
           busbarCurrentA: input.rmu.busbarCurrentA,
           fuseRatingA: input.rmu.fuseRatingA ?? null,
           meteringCtPrimaryA: input.rmu.meteringCtPrimaryA ?? null,
+          ctClass: input.rmu.ctClass ?? null,
           vtCores: input.rmu.vtCores ?? 1,
           vtBurdenVa: input.rmu.vtBurdenVa ?? null,
           vtClass: input.rmu.vtClass ?? null,

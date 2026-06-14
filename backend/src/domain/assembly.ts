@@ -88,6 +88,7 @@ export interface RmuConfigInput {
   fuseRatingA?: number | null; // override; null → standard for the voltage
   // Metering options (only relevant when hasMetering)
   meteringCtPrimaryA?: number | null; // CT primary current (X in "X/5"); null → leave as "X"
+  ctClass?: string | null; // CT accuracy class, default "0.5" (0.5 / 0.5S / 0.2)
   vtCores?: number | null; // VT secondary cores: 1 (default) or 2
   vtBurdenVa?: string | null; // VT burden, default "50-100"
   vtClass?: string | null; // VT accuracy class, default "0.5"
@@ -111,7 +112,7 @@ export interface Cubicle {
 }
 export interface GeneratedOffer {
   configCode: string; // e.g. PRAL12(2+1+M)
-  panelCode: string; // catalogue code, e.g. P-RAL12N3F1M1
+  panelCode: string; // RMU system code, e.g. PSEC10AB24R2T1M (see buildProductCode)
   priceKey: string; // price-list key (panelCode + "-With Fuse" when applicable)
   commercialDescription: string; // line-item scope text for the commercial offer
   titleProduct: string; // "P-Ral 12KV" or "Smart P-Sec 12KV-TYPE 1"
@@ -227,6 +228,7 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
   const fuseA = c.fuseRatingA ?? r.defaultFuseRatingA;
   const vtCores = c.vtCores ?? 1;
   const ctPrimaryA = c.meteringCtPrimaryA ?? null;
+  const ctClass = c.ctClass ?? "0.5";
   const insulWord = p.gasInsulated ? "SF6" : "Air";
   const motor = c.rtuType === "TYPE2"; // Type 2 = monitor & control → motorized
   const hasRtu = c.rtuType !== "NONE";
@@ -238,9 +240,11 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
   const mz = (name: string) => (motor ? `Motorized ${name}` : name);
 
   // ---- Title ----
-  const titleProduct = hasRtu
-    ? `Smart ${p.productName} ${c.voltageKv}KV-TYPE ${c.rtuType === "TYPE1" ? 1 : 2}`
-    : `${p.productName} ${c.voltageKv}KV`;
+  const titleProduct =
+    (hasRtu
+      ? `Smart ${p.productName} ${c.voltageKv}KV-TYPE ${c.rtuType === "TYPE1" ? 1 : 2}`
+      : `${p.productName} ${c.voltageKv}KV`) +
+    (c.installation === "OUTDOOR" ? " (Outdoor)" : " (Indoor)");
 
   // ---- General Data ----
   const generalData: Row[] = [
@@ -252,7 +256,7 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
     { label: "Altitude", value: GENERAL.altitude },
     { label: "Humidity", value: GENERAL.humidity },
     { label: "FAT", value: GENERAL.fat },
-    { label: "Protection index", value: p.protectionIndex },
+    { label: "Protection index", value: c.installation === "OUTDOOR" ? "IP54" : p.protectionIndex },
     { label: "Internal Arc Classification (IAC)", value: GENERAL.iac },
     { label: "Switchgear color", value: GENERAL.color },
     { label: "Busbars treatment", value: GENERAL.busbarsTreatment },
@@ -279,13 +283,16 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
       value: "With Manometer",
     });
   }
-  additionalData.push({
-    label: p.gasInsulated
-      ? "Flag Relays (AC/DC Loss – Any MCB Trip – SF6 Leakage/Low Gas)"
-      : "Flag Relays (AC/DC Loss – Any MCB Trip)",
-    value: "Yes",
-  });
-  additionalData.push({ label: "Limit Switch 220V, 5A", value: "Yes" });
+  // Limit Switch & Flag options are provided only for KAHRABA projects (not EEHC).
+  if (c.clientSpec === "KAHRABA") {
+    additionalData.push({
+      label: p.gasInsulated
+        ? "Flag Relays (AC/DC Loss – Any MCB Trip – SF6 Leakage/Low Gas)"
+        : "Flag Relays (AC/DC Loss – Any MCB Trip)",
+      value: "Yes",
+    });
+    additionalData.push({ label: "Limit Switch 220V, 5A", value: "Yes" });
+  }
 
   // ---- Cubicles ----
   const cubicles: Cubicle[] = [];
@@ -314,9 +321,9 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
       name: `PMC (Powerline Measurement Cubical)-${c.busbarCurrentA}A (${p.meteringDims})mm²`,
       qty: 1,
       dims: p.meteringDims,
-      items: meteringItems(r.serviceVoltageKv, c.voltageKv, ctPrimaryA, vtCores, {
-        va: c.vtBurdenVa?.trim() || "50-100",
-        cls: c.vtClass?.trim() || "0.5",
+      items: meteringItems(r.serviceVoltageKv, c.voltageKv, ctPrimaryA, ctClass, vtCores, {
+        va: "50-100", // VT burden is fixed and non-editable
+        cls: "0.5", // VT class is fixed at 0.5
         withFuse: !!c.meteringWithFuse,
       }),
     });
@@ -438,6 +445,7 @@ function meteringItems(
   serviceVoltageKv: number,
   voltageKv: number,
   ctPrimaryA: number | null,
+  ctClass: string,
   vtCores: number,
   vt: { va: string; cls: string; withFuse: boolean }
 ): CubicleItem[] {
@@ -451,8 +459,8 @@ function meteringItems(
       : "Generic Cast Epoxy DIN CT X KV, Ip=X A (X: to be determined by the client)";
   const ctCore =
     ctPrimaryA != null
-      ? `Core1: ${ctPrimaryA}/5; 10-15 VA; CL 0.5; fs 5; Frequency: 50Hz`
-      : "Core1: X/5; 10-15 VA; CL 0.5; fs 5; Frequency: 50Hz";
+      ? `Core1: ${ctPrimaryA}/5; 10-15 VA; CL ${ctClass}; fs 5; Frequency: 50Hz`
+      : `Core1: X/5; 10-15 VA; CL ${ctClass}; fs 5; Frequency: 50Hz`;
 
   const items: CubicleItem[] = [
     { qty: 1, description: "Cubical type: measurement, LSC2A – Universal Metering Panel" },
@@ -468,9 +476,10 @@ function meteringItems(
   // Two-core VT adds a second core whose secondary is 110/3 (residual/open-delta).
   if (vtCores >= 2) {
     items.push({ qty: 3, description: `Core 2: Us=${us}/√3 : 110/3 V; ${vt.va} VA; CL ${vt.cls}` });
-  }
-  // VT protection fuses when the "with fuse" variant is selected.
-  if (vt.withFuse) {
+    // A double-core (measuring) VT is treated the same as VT-with-Fuse, but the
+    // fuse is NOT P&C (it is a measuring VT, not protection & control).
+    items.push({ qty: 3, description: `MV fuse ${voltageKv} kV for VT protection` });
+  } else if (vt.withFuse) {
     items.push({ qty: 3, description: `MV fuse ${voltageKv} kV for VT protection – P&C` });
   }
   items.push(

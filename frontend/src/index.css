@@ -117,6 +117,17 @@
   }
 }
 
+/* Number fields render as plain text — no up/down spinner controls. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* Visible keyboard focus rings (brand). Uses :focus-visible so mouse clicks
    stay clean while keyboard users get a clear orange indicator (a11y). */
 @layer base {

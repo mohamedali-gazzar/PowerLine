@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getQtn, saveQtn } from "../lv/qtns";
+import { useStaff } from "../staff";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
   PANEL_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
@@ -429,8 +430,9 @@ function CommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
 function ProjectTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }) {
   const pr = s.project;
   const upPr = (patch: Partial<LvState["project"]>) => up({ project: { ...pr, ...patch } });
+  const [staff, setStaff] = useStaff();
   const pickSales = (name: string) => {
-    const sp = s.salesPeople.find((x) => x.name === name);
+    const sp = staff.salesPeople.find((x) => x.name === name);
     upPr({ salesPerson: name, salesMobile: sp?.mobile ?? "", salesEmail: sp?.email ?? "" });
   };
   const [newSales, setNewSales] = useState({ name: "", mobile: "", email: "" });
@@ -447,19 +449,25 @@ function ProjectTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
           <div><L>Customer</L><input className="input" value={pr.customer} onChange={(e) => upPr({ customer: e.target.value })} /></div>
           <div><L>Location</L><input className="input" value={pr.location} onChange={(e) => upPr({ location: e.target.value })} /></div>
           <div><L>Date</L><input className="input" type="date" value={pr.date} onChange={(e) => upPr({ date: e.target.value })} /></div>
-          <div><L>Sales manager (fixed)</L><input className="input bg-surface" value={pr.salesManager} readOnly /></div>
+          <div>
+            <L>Sales manager</L>
+            <select className="input cursor-pointer" value={pr.salesManager} onChange={(e) => upPr({ salesManager: e.target.value })}>
+              <option value="">— select —</option>
+              {staff.salesManagers.map((p) => <option key={p.name}>{p.name}</option>)}
+            </select>
+          </div>
           <div>
             <L>Sales person</L>
             <select className="input cursor-pointer" value={pr.salesPerson} onChange={(e) => pickSales(e.target.value)}>
               <option value="">— select —</option>
-              {s.salesPeople.map((p) => <option key={p.name}>{p.name}</option>)}
+              {staff.salesPeople.map((p) => <option key={p.name}>{p.name}</option>)}
             </select>
           </div>
           <div>
             <L>Sales support engineer</L>
             <select className="input cursor-pointer" value={pr.supportEngineer} onChange={(e) => upPr({ supportEngineer: e.target.value })}>
               <option value="">— select —</option>
-              {s.supportEngineers.map((p) => <option key={p}>{p}</option>)}
+              {staff.supportEngineers.map((p) => <option key={p.name}>{p.name}</option>)}
             </select>
           </div>
           <div><L>Sales no (auto)</L><input className="input bg-surface" value={pr.salesMobile} readOnly /></div>
@@ -469,14 +477,14 @@ function ProjectTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
 
       <div className="card p-5">
         <h2 className="sec-head">Staff lists</h2>
-        <p className="mb-3 text-xs text-muted">Editable — add new names or remove inactive ones (RPT-01).</p>
+        <p className="mb-3 text-xs text-muted">Editable — <b>shared with the RMU offer form</b>. Add or remove names (RPT-01).</p>
         <L>Sales people</L>
         <div className="mb-2 max-h-44 overflow-auto rounded-lg border border-line">
-          {s.salesPeople.map((p) => (
+          {staff.salesPeople.map((p) => (
             <div key={p.name} className="flex items-center justify-between border-b border-line/60 px-3 py-1 text-sm last:border-0">
               <span>{p.name} <span className="text-[11px] text-muted">{p.mobile} · {p.email}</span></span>
               <button className="text-red-500 hover:underline"
-                onClick={() => up({ salesPeople: s.salesPeople.filter((x) => x.name !== p.name) })}>remove</button>
+                onClick={() => setStaff({ ...staff, salesPeople: staff.salesPeople.filter((x) => x.name !== p.name) })}>remove</button>
             </div>
           ))}
         </div>
@@ -486,23 +494,23 @@ function ProjectTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
           <input className="input h-9 w-48" placeholder="Email" value={newSales.email} onChange={(e) => setNewSales({ ...newSales, email: e.target.value })} />
           <button className="btn-ghost h-9" onClick={() => {
             if (!newSales.name.trim()) return;
-            up({ salesPeople: [...s.salesPeople, { ...newSales, name: newSales.name.trim() }] });
+            setStaff({ ...staff, salesPeople: [...staff.salesPeople, { ...newSales, name: newSales.name.trim() }] });
             setNewSales({ name: "", mobile: "", email: "" });
           }}>+ Add</button>
         </div>
         <L>Sales support engineers</L>
         <div className="mb-2 flex flex-wrap gap-1.5">
-          {s.supportEngineers.map((e) => (
-            <span key={e} className="chip bg-surface text-ink">
-              {e}
-              <button className="ml-1.5 text-red-500" onClick={() => up({ supportEngineers: s.supportEngineers.filter((x) => x !== e) })}>×</button>
+          {staff.supportEngineers.map((e) => (
+            <span key={e.name} className="chip bg-surface text-ink">
+              {e.name}
+              <button className="ml-1.5 text-red-500" onClick={() => setStaff({ ...staff, supportEngineers: staff.supportEngineers.filter((x) => x.name !== e.name) })}>×</button>
             </span>
           ))}
         </div>
         <div className="flex gap-2">
           <input className="input h-9 w-56" placeholder="New engineer name" value={newEng} onChange={(e) => setNewEng(e.target.value)} />
           <button className="btn-ghost h-9" onClick={() => {
-            if (newEng.trim()) { up({ supportEngineers: [...s.supportEngineers, newEng.trim()] }); setNewEng(""); }
+            if (newEng.trim()) { setStaff({ ...staff, supportEngineers: [...staff.supportEngineers, { name: newEng.trim(), mobile: "", email: "" }] }); setNewEng(""); }
           }}>+ Add</button>
         </div>
       </div>

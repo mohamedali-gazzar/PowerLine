@@ -20,7 +20,17 @@ export interface CommercialData {
   date: string;
   customer: string;
   project: string;
-  location: string | null;
+  quotationNo?: string | null;
+  opportunityNo?: string | null;
+  salesName?: string | null;
+  salesMobile?: string | null;
+  salesEmail?: string | null;
+  salesManagerName?: string | null;
+  salesManagerMobile?: string | null;
+  salesManagerEmail?: string | null;
+  supportName?: string | null;
+  supportMobile?: string | null;
+  supportEmail?: string | null;
   currency: string;
   items: CommercialItem[];
   subtotal: number;
@@ -42,8 +52,19 @@ interface OfferLike {
   offerNumber: string;
   projectName: string;
   customer: string;
-  location: string | null;
+  quotationNo?: string | null;
+  opportunityNo?: string | null;
+  salesName?: string | null;
+  salesMobile?: string | null;
+  salesEmail?: string | null;
+  salesManagerName?: string | null;
+  salesManagerMobile?: string | null;
+  salesManagerEmail?: string | null;
+  supportName?: string | null;
+  supportMobile?: string | null;
+  supportEmail?: string | null;
   currency: string;
+  usdToEgpRate?: number | null;
   unitPrice: number;
   quantity: number;
   discountPct: number;
@@ -61,8 +82,11 @@ export function buildCommercial(
 ): CommercialData {
   // Panel unit price: the offer's price if set, else the base (floor) price.
   // Add-ons (e.g. Outdoor Enclosure) are shown as their own line items.
-  const basePrice = pricing?.basePrice ?? null;
-  const listPrice = pricing?.listPrice ?? null;
+  // The price list is in USD; when the offer currency is EGP, convert USD-sourced
+  // values (base/list price + add-ons) using the offer's stored exchange rate.
+  const rate = offer.currency === "EGP" && offer.usdToEgpRate && offer.usdToEgpRate > 0 ? offer.usdToEgpRate : 1;
+  const basePrice = pricing?.basePrice != null ? round2(pricing.basePrice * rate) : null;
+  const listPrice = pricing?.listPrice != null ? round2(pricing.listPrice * rate) : null;
   const panelUnit =
     offer.unitPrice && offer.unitPrice > 0 ? offer.unitPrice : basePrice ?? 0;
   const qty = offer.quantity || 1;
@@ -77,11 +101,12 @@ export function buildCommercial(
   ];
   // Additional items (outdoor enclosure, etc.) priced per unit from the sheet.
   for (const a of pricing?.addOns ?? []) {
+    const p = round2(a.price * rate);
     items.push({
       description: a.name,
       qty,
-      unitPrice: round2(a.price),
-      total: round2(a.price * qty),
+      unitPrice: p,
+      total: round2(p * qty),
     });
   }
 
@@ -97,7 +122,17 @@ export function buildCommercial(
     date: new Date(offer.createdAt).toISOString().slice(0, 10),
     customer: offer.customer,
     project: offer.projectName,
-    location: offer.location,
+    quotationNo: offer.quotationNo ?? null,
+    opportunityNo: offer.opportunityNo ?? null,
+    salesName: offer.salesName ?? null,
+    salesMobile: offer.salesMobile ?? null,
+    salesEmail: offer.salesEmail ?? null,
+    salesManagerName: offer.salesManagerName ?? null,
+    salesManagerMobile: offer.salesManagerMobile ?? null,
+    salesManagerEmail: offer.salesManagerEmail ?? null,
+    supportName: offer.supportName ?? null,
+    supportMobile: offer.supportMobile ?? null,
+    supportEmail: offer.supportEmail ?? null,
     currency: offer.currency,
     items,
     subtotal,

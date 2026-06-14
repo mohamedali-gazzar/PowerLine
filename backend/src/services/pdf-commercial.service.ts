@@ -177,17 +177,21 @@ function coverPage(doc: PDFKit.PDFDocument, d: CommercialData) {
 
   // Customer / reference block
   const boxY = y + 78;
-  const boxH = 168;
+  const boxH = 206;
   doc.roundedRect(MARGIN, boxY, CONTENT_W, boxH, 8).fillAndStroke(TINT, LIGHT);
   doc.rect(MARGIN, boxY, 5, boxH).fill(ORANGE);
+  const contact = (n?: string | null, m?: string | null, e?: string | null) =>
+    [n, m, e].map((s) => (s || "").trim()).filter(Boolean).join("  ·  ") || "—";
   const rows: [string, string][] = [
     ["Customer Name", d.customer],
     ["Project Name", d.project],
-    ["Location", d.location || "—"],
-    ["Customer Reference No.", "—"],
+    ["Quotation No. (QTN)", d.quotationNo || d.plReference],
+    ["Opportunity No. (OPTY)", d.opportunityNo || "—"],
     ["PL Reference No.", d.plReference],
     ["Revision Date", d.date],
-    ["Sales Manager", "Ali Kamal  ·  0100 000 2147  ·  ali.kamal@powerline.com.eg"],
+    ["Sales", contact(d.salesName, d.salesMobile, d.salesEmail)],
+    ["Sales Manager", contact(d.salesManagerName, d.salesManagerMobile, d.salesManagerEmail)],
+    ["Sales Support", contact(d.supportName, d.supportMobile, d.supportEmail)],
   ];
   let ry = boxY + 14;
   for (const [k, v] of rows) {
@@ -197,7 +201,7 @@ function coverPage(doc: PDFKit.PDFDocument, d: CommercialData) {
     } else {
       doc.font(BODY).fontSize(9.5).fillColor(INK).text(v, MARGIN + 188, ry, { width: CONTENT_W - 205 });
     }
-    ry += 21.5;
+    ry += 20;
   }
 
   // Footer

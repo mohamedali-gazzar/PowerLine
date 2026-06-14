@@ -139,11 +139,22 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, g: GeneratedOffe
   // Product identity card (orange) below the photo
   let cardY = y + 22 + imgH + 18;
   doc.roundedRect(MARGIN, cardY, CONTENT_W, 70, 8).fill(ORANGE);
-  doc.fillColor("white").font(BOLD).fontSize(20)
-    .text(g.titleProduct, MARGIN + 18, cardY + 12);
+  // Title (left) auto-shrinks to fit its column so a long "… (Outdoor)" title
+  // never collides with the right-aligned product code.
+  const codeW = 150;
+  const titleW = CONTENT_W - 36 - codeW;
+  let tSize = 20;
+  doc.font(BOLD);
+  while (tSize > 12 && doc.fontSize(tSize).widthOfString(g.titleProduct) > titleW) tSize -= 1;
+  doc.fillColor("white").font(BOLD).fontSize(tSize)
+    .text(g.titleProduct, MARGIN + 18, cardY + 12 + (20 - tSize) / 2, {
+      width: titleW,
+      lineBreak: false,
+      ellipsis: true,
+    });
   doc.font(BODY).fontSize(12).fillColor("white")
-    .text(g.titleFamily, MARGIN + 18, cardY + 38);
-  doc.font(BOLD).fontSize(15)
+    .text(g.titleFamily, MARGIN + 18, cardY + 38, { width: titleW, lineBreak: false, ellipsis: true });
+  doc.font(BOLD).fontSize(15).fillColor("white")
     .text(g.panelCode, MARGIN, cardY + 16, { width: CONTENT_W - 18, align: "right" });
   doc.font(BODY).fontSize(10).fillColor("white")
     .text(g.configCode, MARGIN, cardY + 40, { width: CONTENT_W - 18, align: "right" });
@@ -164,7 +175,6 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, g: GeneratedOffe
     ["Project", offer.projectName],
     ["Customer", offer.customer],
   ];
-  if (offer.location) metaRows.push(["Location", offer.location]);
   let my = boxY + 14;
   for (const [k, v] of metaRows) {
     doc.font(BOLD).fontSize(9).fillColor(GREY)
@@ -199,22 +209,28 @@ function runningHeader(doc: PDFKit.PDFDocument, g: GeneratedOffer) {
 
 // --------------------------------------------------------------- CONTENT
 
-function sectionTitle(doc: PDFKit.PDFDocument, title: string) {
-  ensure(doc, 40);
+function sectionTitle(doc: PDFKit.PDFDocument, title: string, keepWith = 24) {
+  // Reserve the heading (~26) PLUS the first chunk of its content, so a heading
+  // never lands alone at the bottom of a page (orphaned from its rows).
+  ensure(doc, 26 + keepWith);
   doc.font(BOLD).fontSize(13).fillColor(ORANGE_DK).text(title, MARGIN, doc.y);
   doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 50, doc.y + 2).lineWidth(3).strokeColor(ORANGE).stroke();
   doc.fillColor(INK).moveDown(0.5);
 }
 
 function dataTable(doc: PDFKit.PDFDocument, title: string, rows: Row[]) {
-  sectionTitle(doc, title);
   const labelW = 210;
   const valueW = CONTENT_W - labelW - 12;
-  for (const [i, r] of rows.entries()) {
-    // Variable row height so wrapped labels/values don't overlap.
+  // Variable row height so wrapped labels/values don't overlap.
+  const rowHeight = (r: Row) => {
     const lh = doc.font(BOLD).fontSize(9.5).heightOfString(r.label, { width: labelW });
     const vh = doc.font(BODY).fontSize(9.5).heightOfString(r.value, { width: valueW });
-    const rowH = Math.max(18, Math.max(lh, vh) + 8);
+    return Math.max(18, Math.max(lh, vh) + 8);
+  };
+  // Keep the heading glued to its first row across a page break.
+  sectionTitle(doc, title, rows.length ? rowHeight(rows[0]) : 24);
+  for (const [i, r] of rows.entries()) {
+    const rowH = rowHeight(r);
     ensure(doc, rowH);
     const y = doc.y;
     if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, rowH).fill(TINT).fillColor(INK);
@@ -228,7 +244,7 @@ function dataTable(doc: PDFKit.PDFDocument, title: string, rows: Row[]) {
 
 function generalNotes(doc: PDFKit.PDFDocument, notes: string[]) {
   if (!notes.length) return;
-  sectionTitle(doc, "General Notes");
+  sectionTitle(doc, "General Notes", 18);
   doc.font(BODY).fontSize(9.5).fillColor(INK);
   for (const n of notes) {
     ensure(doc, 16);
@@ -240,7 +256,8 @@ function generalNotes(doc: PDFKit.PDFDocument, notes: string[]) {
 }
 
 function lineup(doc: PDFKit.PDFDocument, g: GeneratedOffer) {
-  sectionTitle(doc, "Ring Main Unit Structure");
+  // keepWith=60 → the section title stays with the first cubicle's header bar.
+  sectionTitle(doc, "Ring Main Unit Structure", 60);
   for (const c of g.cubicles) cubicleBlock(doc, c);
   if (g.communication && g.communication.length) {
     cubicleBlock(doc, { code: "RTU", name: "Communication", qty: 1, dims: "", items: g.communication });
@@ -248,12 +265,17 @@ function lineup(doc: PDFKit.PDFDocument, g: GeneratedOffer) {
 }
 
 function cubicleBlock(doc: PDFKit.PDFDocument, c: Cubicle) {
-  ensure(doc, 56);
-  doc.moveDown(0.2);
   const heading = c.code === "RTU" ? "Communication:" : `QTY ${c.qty} Cubical: ${c.name}, each consisting of:`;
+  const hH = Math.max(18, doc.heightOfString(heading, { width: CONTENT_W - 16 }) + 8);
+  // Keep the cubicle header bar + the table header (15) + the first item row
+  // together, so a cubicle never begins with only its title at the page bottom.
+  const firstItemH = c.items.length
+    ? Math.max(16, doc.heightOfString(c.items[0].description, { width: CONTENT_W - 42 - 8 }) + 6)
+    : 0;
+  ensure(doc, hH + 15 + firstItemH + 10);
+  doc.moveDown(0.2);
   // gradient-like header (solid orange bar)
   const hY = doc.y;
-  const hH = Math.max(18, doc.heightOfString(heading, { width: CONTENT_W - 16 }) + 8);
   doc.roundedRect(MARGIN, hY, CONTENT_W, hH, 3).fill(ORANGE_DK);
   doc.fillColor("white").font(BOLD).fontSize(9.5)
     .text(heading, MARGIN + 8, hY + 4, { width: CONTENT_W - 16 });

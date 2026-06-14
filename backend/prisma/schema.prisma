@@ -30,7 +30,6 @@ model Offer {
   category    String @default("RMU")
   projectName String
   customer    String
-  location    String?
   // Lifecycle: DRAFT | SENT | WON | LOST
   status      String @default("DRAFT")
 
@@ -38,8 +37,22 @@ model Offer {
   salesNumber String?
   orderNumber String?
 
+  // Offer cover-page fields (QTN / OPTY + sales contacts)
+  quotationNo        String?
+  opportunityNo      String?
+  salesName          String?
+  salesMobile        String?
+  salesEmail         String?
+  salesManagerName   String?
+  salesManagerMobile String?
+  salesManagerEmail  String?
+  supportName        String?
+  supportMobile      String?
+  supportEmail       String?
+
   // Commercial (optional at this stage — technical offer is the focus)
   currency       String  @default("USD")
+  usdToEgpRate   Float?
   unitPrice      Float   @default(0)
   quantity       Int     @default(1)
   discountPct    Float   @default(0)
@@ -77,6 +90,7 @@ model RmuConfig {
 
   // Metering options (used when hasMetering)
   meteringCtPrimaryA Int? // CT primary current (X in "X/5"); null → keep "X"
+  ctClass            String? // CT accuracy class, default "0.5" (0.5 / 0.5S / 0.2)
   vtCores            Int  @default(1) // VT secondary cores: 1 or 2
   vtBurdenVa         String? // VT burden, default "50-100"
   vtClass            String? // VT accuracy class, default "0.5"

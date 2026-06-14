@@ -86,12 +86,12 @@ export function listQtns(): QtnListItem[] {
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export function createQtn(): QtnRecord {
+export function createQtn(number: string): QtnRecord {
   const reg = loadRegistry();
-  reg.seq += 1;
+  reg.seq += 1; // advances the suggested-next number
   const rec: QtnRecord = {
     id: `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-    number: qtnNumber(reg.seq),
+    number: number.trim() || qtnNumber(reg.seq),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     state: initialState(),
@@ -99,6 +99,19 @@ export function createQtn(): QtnRecord {
   reg.qtns.push(rec);
   saveRegistry(reg);
   return rec;
+}
+
+/** Suggested next number in the QTN-YY-#### sequence — only a hint; the user
+ *  types the actual number when creating a quotation. */
+export function nextQtnNumber(): string {
+  return qtnNumber(loadRegistry().seq + 1);
+}
+
+/** True if a quotation already uses this number (case-insensitive). */
+export function qtnNumberExists(number: string): boolean {
+  const n = number.trim().toLowerCase();
+  if (!n) return false;
+  return loadRegistry().qtns.some((q) => q.number.trim().toLowerCase() === n);
 }
 
 export function getQtn(id: string): QtnRecord | null {

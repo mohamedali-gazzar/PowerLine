@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listQtns, createQtn, deleteQtn, duplicateQtn, type QtnListItem } from "../lv/qtns";
+import { listQtns, createQtn, deleteQtn, duplicateQtn, nextQtnNumber, qtnNumberExists, type QtnListItem } from "../lv/qtns";
 import { fmtEgp } from "../lv/catalog";
 
 /** LV landing page — the list of quotations. "+ New QTN" opens a fresh
@@ -8,12 +8,23 @@ import { fmtEgp } from "../lv/catalog";
 export default function LvQtnListPage() {
   const navigate = useNavigate();
   const [qtns, setQtns] = useState<QtnListItem[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [num, setNum] = useState("");
+  const [err, setErr] = useState("");
 
   const reload = () => setQtns(listQtns());
   useEffect(reload, []);
 
   const onNew = () => {
-    const rec = createQtn();
+    setNum("");
+    setErr("");
+    setCreating(true);
+  };
+  const confirmNew = () => {
+    const n = num.trim();
+    if (!n) { setErr("Quotation number is required."); return; }
+    if (qtnNumberExists(n)) { setErr("A quotation with this number already exists."); return; }
+    const rec = createQtn(n);
     navigate(`/lv/qtn/${rec.id}`);
   };
   const onDelete = (e: React.MouseEvent, id: string) => {
@@ -88,6 +99,62 @@ export default function LvQtnListPage() {
           </table>
         </div>
       )}
+
+      {creating && (
+        <NewQtnModal
+          value={num}
+          error={err}
+          suggestion={nextQtnNumber()}
+          onChange={(v) => { setNum(v); if (err) setErr(""); }}
+          onUseSuggestion={(s) => { setNum(s); setErr(""); }}
+          onCancel={() => setCreating(false)}
+          onConfirm={confirmNew}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Required-number dialog shown when creating a new quotation. */
+function NewQtnModal({ value, error, suggestion, onChange, onUseSuggestion, onCancel, onConfirm }: {
+  value: string;
+  error: string;
+  suggestion: string;
+  onChange: (v: string) => void;
+  onUseSuggestion: (s: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}>
+      <div className="absolute inset-0 bg-ink/40 animate-fade-in" onClick={onCancel} />
+      <div role="dialog" aria-modal="true" aria-label="New quotation"
+        className="relative w-full max-w-sm rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
+        <h2 className="text-lg font-extrabold tracking-tight text-ink">New Quotation</h2>
+        <p className="mt-0.5 text-xs text-muted">Enter the quotation number for this job.</p>
+        <label className="label mt-4" htmlFor="qtn-number">
+          Quotation number <span className="text-brand">*</span>
+        </label>
+        <input id="qtn-number" ref={inputRef} className="input" placeholder="e.g. QTN-26-0001"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") onConfirm(); }} />
+        {error ? (
+          <p className="mt-1.5 text-xs font-semibold text-red-600">{error}</p>
+        ) : (
+          <button type="button" className="mt-1.5 text-[11px] text-muted hover:text-brand"
+            onClick={() => onUseSuggestion(suggestion)}>
+            Suggested next: <b>{suggestion}</b> — click to use
+          </button>
+        )}
+        <div className="mt-5 flex justify-end gap-2">
+          <button className="btn-ghost" onClick={onCancel}>Cancel</button>
+          <button className="btn-primary" onClick={onConfirm} disabled={!value.trim()}>Create QTN</button>
+        </div>
+      </div>
     </div>
   );
 }
