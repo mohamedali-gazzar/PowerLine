@@ -7,6 +7,10 @@ import {
   getRatings,
   GENERAL,
   GENERAL_NOTES,
+  rtuHasRtu,
+  rtuMotorized,
+  rtuTypeNum,
+  rtuIsReady,
   type ProductType,
   type VoltageKv,
   type RtuType,
@@ -191,7 +195,7 @@ export function buildPanelCode(c: RmuConfigInput): string {
  */
 export function buildProductCode(c: RmuConfigInput): string {
   const client = (c.clientSpec ?? "EECH") === "KAHRABA" ? "2" : "1";
-  const type = c.rtuType !== "NONE" ? "9" : "0"; // Smart (has RTU) vs Standard
+  const type = rtuHasRtu(c.rtuType) ? "9" : "0"; // Smart (has RTU) vs Standard/Ready
   const brand = BRAND_CODE[(c.lbsBrand ?? "ABB") as LbsBrand];
   const meas = c.hasMetering ? "M" : "W";
   return `${c.productType}${client}${type}${brand}${c.voltageKv}R${c.nalCount}T${c.nalfCount}${meas}`;
@@ -199,7 +203,7 @@ export function buildProductCode(c: RmuConfigInput): string {
 
 /** True when this configuration is a "Smart" RMU (has RTU/communication). */
 export function isSmart(c: RmuConfigInput): boolean {
-  return c.rtuType !== "NONE";
+  return rtuHasRtu(c.rtuType);
 }
 
 /** Price-list key: the panel code plus the "-With Fuse" VT variant suffix. */
@@ -230,8 +234,8 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
   const ctPrimaryA = c.meteringCtPrimaryA ?? null;
   const ctClass = c.ctClass ?? "0.5";
   const insulWord = p.gasInsulated ? "SF6" : "Air";
-  const motor = c.rtuType === "TYPE2"; // Type 2 = monitor & control → motorized
-  const hasRtu = c.rtuType !== "NONE";
+  const motor = rtuMotorized(c.rtuType); // type 2 = monitor & control → motorized
+  const hasRtu = rtuHasRtu(c.rtuType);   // actual RTU installed (Smart, not Ready)
 
   // Switch names as printed in the BOM.
   const nalSwitch = c.productType === "PRAL" ? "NAL" : "G-Sec";
@@ -240,11 +244,14 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
   const mz = (name: string) => (motor ? `Motorized ${name}` : name);
 
   // ---- Title ----
+  const typeNum = rtuTypeNum(c.rtuType);
+  const titleBase = hasRtu
+    ? `Smart ${p.productName} ${c.voltageKv}KV-TYPE ${typeNum}`
+    : rtuIsReady(c.rtuType)
+    ? `${p.productName} ${c.voltageKv}KV (Ready to be Smart-TYPE ${typeNum})`
+    : `${p.productName} ${c.voltageKv}KV`;
   const titleProduct =
-    (hasRtu
-      ? `Smart ${p.productName} ${c.voltageKv}KV-TYPE ${c.rtuType === "TYPE1" ? 1 : 2}`
-      : `${p.productName} ${c.voltageKv}KV`) +
-    (c.installation === "OUTDOOR" ? " (Outdoor)" : " (Indoor)");
+    titleBase + (c.installation === "OUTDOOR" ? " (Outdoor)" : " (Indoor)");
 
   // ---- General Data ----
   const generalData: Row[] = [
@@ -337,7 +344,7 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
       { qty: 3, description: "Expansion module 16 DI" },
       { qty: 1, description: "Power supply 24 VDC, 10A" },
     ];
-    if (c.rtuType === "TYPE2") {
+    if (rtuMotorized(c.rtuType)) {
       communication.push({ qty: 1, description: "Expansion module 8 DO" });
     }
   }
@@ -474,13 +481,14 @@ function meteringItems(
     { qty: 3, description: `Core 1: Us=${us}/√3 : 110/√3 V; ${vt.va} VA; CL ${vt.cls}` },
   ];
   // Two-core VT adds a second core whose secondary is 110/3 (residual/open-delta).
+  // The fuse is a DOUBLE-CORE-only option — a single-core measuring VT never has
+  // a fuse. A double-core measuring VT with fuse is treated as VT-with-Fuse, but
+  // the fuse is NOT P&C.
   if (vtCores >= 2) {
     items.push({ qty: 3, description: `Core 2: Us=${us}/√3 : 110/3 V; ${vt.va} VA; CL ${vt.cls}` });
-    // A double-core (measuring) VT is treated the same as VT-with-Fuse, but the
-    // fuse is NOT P&C (it is a measuring VT, not protection & control).
-    items.push({ qty: 3, description: `MV fuse ${voltageKv} kV for VT protection` });
-  } else if (vt.withFuse) {
-    items.push({ qty: 3, description: `MV fuse ${voltageKv} kV for VT protection – P&C` });
+    if (vt.withFuse) {
+      items.push({ qty: 3, description: `MV fuse ${voltageKv} kV for VT protection` });
+    }
   }
   items.push(
     { qty: 3, description: "Ammeter ; CL0.5" },

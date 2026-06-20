@@ -23,7 +23,7 @@ export default function OfferView({ g }: { g: GeneratedOffer }) {
           <Tag>R{s.nalCount} ring</Tag>
           <Tag>T{s.nalfCount} transformer</Tag>
           {s.hasMetering && <Tag>Metering</Tag>}
-          {s.rtuType !== "NONE" && <Tag>RTU {s.rtuType.replace("TYPE", "Type ")}</Tag>}
+          <Tag>{s.smart ? "Smart" : "Ready"} type {/2$/.test(s.rtuType) ? "2" : "1"}</Tag>
           <Tag>{s.installation}</Tag>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getQtn, saveQtn } from "../lv/qtns";
-import { useStaff } from "../staff";
+import { useStaff, SALES_MANAGER } from "../staff";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
   PANEL_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
@@ -9,7 +9,7 @@ import {
   type DbComponent,
 } from "../lv/catalog";
 import {
-  newPanel, duplicatePanel, toPanelComponent, freeComponent, uid,
+  newPanel, duplicatePanel, nextDuplicateName, toPanelComponent, freeComponent, uid,
   calcPanel, grandTotals, buildMaterialList, searchComponents,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem,
 } from "../lv/store";
@@ -166,7 +166,7 @@ export default function LvConfiguratorPage() {
     apply((old) => {
       const src = old.panels.find((p) => p.id === id);
       if (!src) return old;
-      const copy = duplicatePanel(src, 1);
+      const copy = duplicatePanel(src, nextDuplicateName(src.name, old.panels));
       const i = old.panels.findIndex((p) => p.id === id);
       const panels = [...old.panels];
       panels.splice(i + 1, 0, copy);
@@ -193,8 +193,10 @@ export default function LvConfiguratorPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="mb-4 flex flex-wrap gap-1.5 animate-fade-up no-print">
+      {/* Tabs — sticky header so sections are reachable without scrolling up.
+          Negative margins let the bg band span the full content width; py keeps a
+          solid band so content scrolls cleanly underneath. */}
+      <div className="sticky top-0 z-30 -mx-4 mb-4 flex flex-wrap gap-1.5 border-b border-line/60 bg-surface px-4 py-2.5 no-print sm:-mx-6 sm:px-6">
         {([["project", "Project"], ["pricing", "Pricing Settings"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"]] as [Tab, string][]).map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)}
             className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
@@ -247,8 +249,8 @@ function OfferBlocked({ issues }: { issues: string[] }) {
 function DocHeader({ s, qtnNo, title }: { s: LvState; qtnNo: string; title: string }) {
   const pr = s.project;
   const [staff] = useStaff();
-  const mgr = staff.salesManagers.find((m) => m.name === pr.salesManager);
-  const mgrMobile = mgr?.mobile || pr.salesManagerMobile || "";
+  const mgr = staff.salesManagers.find((m) => m.name === SALES_MANAGER);
+  const mgrMobile = mgr?.mobile || "";
   return (
     <div className="border-b-4 border-brand pb-4">
       <div className="flex items-start justify-between">
@@ -269,7 +271,7 @@ function DocHeader({ s, qtnNo, title }: { s: LvState; qtnNo: string; title: stri
         <div><span className="text-muted">Sales:</span> <b>{pr.salesPerson || "—"}</b>{pr.salesMobile && <span className="text-xs text-muted"> · {pr.salesMobile}</span>}</div>
         <div><span className="text-muted">Email:</span> <b className="text-xs">{pr.salesEmail || "—"}</b></div>
         <div><span className="text-muted">Support eng.:</span> <b>{pr.supportEngineer || "—"}</b></div>
-        <div><span className="text-muted">Sales mgr:</span> <b>{pr.salesManager || "—"}</b>{mgrMobile && <span className="text-xs text-muted"> · {mgrMobile}</span>}</div>
+        <div><span className="text-muted">Sales mgr:</span> <b>{SALES_MANAGER}</b>{mgrMobile && <span className="text-xs text-muted"> · {mgrMobile}</span>}</div>
         {pr.revisionNo && <div><span className="text-muted">Rev. No.:</span> <b>{pr.revisionNo}</b></div>}
       </div>
     </div>
@@ -523,12 +525,8 @@ function ProjectTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
     const sp = staff.salesPeople.find((x) => x.name === name);
     upPr({ salesPerson: name, salesMobile: sp?.mobile ?? "", salesEmail: sp?.email ?? "" });
   };
-  const pickManager = (name: string) => {
-    const m = staff.salesManagers.find((x) => x.name === name);
-    upPr({ salesManager: name, salesManagerMobile: m?.mobile ?? "", salesManagerEmail: m?.email ?? "" });
-  };
-  // Manager phone/email are fixed from the registry for the selected manager.
-  const mgr = staff.salesManagers.find((m) => m.name === pr.salesManager);
+  // Sales manager is fixed (Ali Kamal); his contact comes from the shared registry.
+  const mgr = staff.salesManagers.find((m) => m.name === SALES_MANAGER);
   const [newSales, setNewSales] = useState({ name: "", mobile: "", email: "" });
   const [newEng, setNewEng] = useState("");
 
@@ -545,10 +543,7 @@ function ProjectTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
           <div><L>Date</L><input className="input" type="date" value={pr.date} onChange={(e) => upPr({ date: e.target.value })} /></div>
           <div>
             <L>Sales manager</L>
-            <select className="input cursor-pointer" value={pr.salesManager} onChange={(e) => pickManager(e.target.value)}>
-              <option value="">— select —</option>
-              {staff.salesManagers.map((p) => <option key={p.name}>{p.name}</option>)}
-            </select>
+            <input className="input bg-surface" value={SALES_MANAGER} readOnly />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div><L>Manager no</L><input className="input bg-surface" value={mgr?.mobile ?? ""} readOnly /></div>
@@ -558,7 +553,7 @@ function ProjectTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
             <L>Sales person</L>
             <select className="input cursor-pointer" value={pr.salesPerson} onChange={(e) => pickSales(e.target.value)}>
               <option value="">— select —</option>
-              {staff.salesPeople.map((p) => <option key={p.name}>{p.name}</option>)}
+              {staff.salesPeople.filter((p) => p.name !== SALES_MANAGER).map((p) => <option key={p.name}>{p.name}</option>)}
             </select>
           </div>
           <div>
@@ -669,34 +664,39 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
   }
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[260px_1fr] animate-fade-up">
-      {/* panel list */}
-      <div className="card p-3 lg:sticky lg:top-6">
+      {/* panel list — sticks below the sticky tab header */}
+      <div className="card p-3 lg:sticky lg:top-16">
         {s.panels.map((p) => {
           const c = calcPanel(p, s.factors);
           const active = p.id === s.selectedId;
           return (
-            <button key={p.id} onClick={() => up({ selectedId: p.id })}
-              className={`mb-1.5 block w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+            <div key={p.id}
+              className={`mb-1.5 flex items-center gap-1 rounded-lg border px-2 py-2 transition-colors ${
                 active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
               }`}>
-              <div className={`text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.name.trim() || "(unnamed panel)"}</div>
-              <div className="text-[11px] text-muted">{p.encFam}{p.qty > 1 ? ` · ×${p.qty}` : ""} · {fmtEgp(c.totalSell)} EGP</div>
-            </button>
+              <button onClick={() => up({ selectedId: p.id })} className="min-w-0 flex-1 text-left">
+                <div className={`truncate text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.name.trim() || "(unnamed panel)"}</div>
+                <div className="truncate text-[11px] text-muted">{p.encFam}{p.qty > 1 ? ` · ×${p.qty}` : ""} · {fmtEgp(c.totalSell)} EGP</div>
+              </button>
+              <button onClick={() => onClone(p.id)} title="Duplicate panel"
+                className="shrink-0 rounded p-1 text-base text-muted transition-colors hover:bg-white hover:text-brand-dark">⧉</button>
+              <button onClick={() => onDel(p.id)} title="Delete panel"
+                className="shrink-0 rounded p-1 text-base text-red-500 transition-colors hover:bg-white">✕</button>
+            </div>
           );
         })}
         <button className="btn-ghost mt-1 w-full" onClick={onAdd}>+ Add panel</button>
       </div>
 
       {/* editor */}
-      {sel && <PanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} onDel={onDel} onClone={onClone} />}
+      {sel && <PanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />}
     </div>
   );
 }
 
-function PanelEditor({ s, p, upPanel, onDel, onClone }: {
+function PanelEditor({ s, p, upPanel }: {
   s: LvState; p: LvPanel;
   upPanel: (id: string, patch: Partial<LvPanel>) => void;
-  onDel: (id: string) => void; onClone: (id: string) => void;
 }) {
   const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
   const calc = calcPanel(p, s.factors);
@@ -718,13 +718,7 @@ function PanelEditor({ s, p, upPanel, onDel, onClone }: {
 
       {/* Panel details */}
       <div className="card p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="sec-head mb-0 pb-0 after:hidden">Panel details</h2>
-          <div className="flex gap-2">
-            <button className="btn-ghost" onClick={() => onClone(p.id)}>⧉ Duplicate</button>
-            <button className="btn-ghost text-red-600" onClick={() => onDel(p.id)}>✕ Delete panel</button>
-          </div>
-        </div>
+        <h2 className="sec-head">Panel details</h2>
         <div className="grid gap-3 sm:grid-cols-3">
           <div><L>Panel name <span className="text-brand">*</span></L>
             <input className={`input ${!p.name.trim() ? "border-red-400 bg-red-50/40" : ""}`} value={p.name}
@@ -798,6 +792,17 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
     if (j < 0 || j >= arr.length) return;
     [arr[i], arr[j]] = [arr[j], arr[i]];
     u({ components: arr });
+  };
+  // Reorder whole sections — swaps with the adjacent VISIBLE section; the new
+  // order flows straight into the Technical offer (which iterates p.sections).
+  const moveSection = (sec: string, dir: -1 | 1) => {
+    const visible = p.sections.filter((x) => p.components.some((c) => c.section === x));
+    const target = visible[visible.indexOf(sec) + dir];
+    if (!target) return;
+    const arr = [...p.sections];
+    const a = arr.indexOf(sec), b = arr.indexOf(target);
+    [arr[a], arr[b]] = [arr[b], arr[a]];
+    u({ sections: arr });
   };
 
   // Drop a dragged row onto another row: it takes the target's section (move
@@ -899,14 +904,24 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
           No components — search above or use the combination builders below.
         </p>
       ) : (
-        p.sections.filter((sec) => p.components.some((c) => c.section === sec)).map((sec) => (
+        p.sections.filter((sec) => p.components.some((c) => c.section === sec)).map((sec, si, arr) => (
           <div key={sec} className="mb-3">
             <div
               onDragOver={(e) => { if (dragId) { e.preventDefault(); if (overSec !== sec) setOverSec(sec); } }}
               onDragLeave={() => setOverSec((x) => (x === sec ? null : x))}
               onDrop={(e) => { e.preventDefault(); dropOnSection(sec); }}
-              className={`mb-1 rounded px-1 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-dark transition ${overSec === sec ? "bg-brand-tint ring-1 ring-brand/40" : ""}`}
-            >{sec}</div>
+              className={`mb-1 flex items-center justify-between rounded px-1 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-dark transition ${overSec === sec ? "bg-brand-tint ring-1 ring-brand/40" : ""}`}
+            >
+              <span>{sec}</span>
+              <span className="flex items-center gap-0.5">
+                <button type="button" title="Move section up" disabled={si === 0}
+                  onClick={() => moveSection(sec, -1)}
+                  className="rounded px-1 text-sm leading-none text-muted hover:bg-white hover:text-brand-dark disabled:opacity-25">↑</button>
+                <button type="button" title="Move section down" disabled={si === arr.length - 1}
+                  onClick={() => moveSection(sec, 1)}
+                  className="rounded px-1 text-sm leading-none text-muted hover:bg-white hover:text-brand-dark disabled:opacity-25">↓</button>
+              </span>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>

@@ -26,7 +26,7 @@ async function main() {
           nalCount: 2,
           nalfCount: 1,
           hasMetering: false,
-          rtuType: "NONE",
+          rtuType: "READY1",
           installation: "INDOOR",
           busbarCurrentA: 630,
           fuseRatingA: null,

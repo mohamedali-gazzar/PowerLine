@@ -10,7 +10,7 @@ import {
   Toggle,
 } from "../components/fields";
 import OfferView from "../components/OfferView";
-import { useStaff, findPerson } from "../staff";
+import { useStaff, findPerson, SALES_MANAGER } from "../staff";
 import {
   RTU_TYPES,
   BRANDS_BY_FAMILY,
@@ -28,7 +28,7 @@ const initialRmu: RmuConfigInput = {
   nalCount: 2,
   nalfCount: 1,
   hasMetering: false,
-  rtuType: "NONE",
+  rtuType: "READY1",
   installation: "INDOOR",
   busbarCurrentA: 630,
   fuseRatingA: null,
@@ -96,10 +96,10 @@ export default function NewOfferPage() {
     const p = findPerson(staff.salesPeople, name);
     upTeam({ salesName: name, salesMobile: p?.mobile ?? "", salesEmail: p?.email ?? "" });
   };
-  const pickManager = (name: string) => {
-    const p = findPerson(staff.salesManagers, name);
-    upTeam({ salesManagerName: name, salesManagerMobile: p?.mobile ?? "", salesManagerEmail: p?.email ?? "" });
-  };
+  // Sales manager is fixed (Ali Kamal); his contact comes from the shared registry.
+  const manager = findPerson(staff.salesManagers, SALES_MANAGER)
+    ?? findPerson(staff.salesPeople, SALES_MANAGER)
+    ?? { name: SALES_MANAGER, mobile: "", email: "" };
   const pickSupport = (name: string) => {
     const p = findPerson(staff.supportEngineers, name);
     upTeam({ supportName: name, supportMobile: p?.mobile ?? "", supportEmail: p?.email ?? "" });
@@ -231,9 +231,9 @@ export default function NewOfferPage() {
         salesName: team.salesName || null,
         salesMobile: team.salesMobile || null,
         salesEmail: team.salesEmail || null,
-        salesManagerName: team.salesManagerName || null,
-        salesManagerMobile: team.salesManagerMobile || null,
-        salesManagerEmail: team.salesManagerEmail || null,
+        salesManagerName: manager.name || null,
+        salesManagerMobile: manager.mobile || null,
+        salesManagerEmail: manager.email || null,
         supportName: team.supportName || null,
         supportMobile: team.supportMobile || null,
         supportEmail: team.supportEmail || null,
@@ -306,11 +306,10 @@ export default function NewOfferPage() {
             desc="Pricing, VAT & terms"
           />
           <OutputCard
-            active={wantSld}
-            disabled={rmu.productType !== "PSEC"}
-            onClick={() => setWantSld((v) => !v)}
+            active={false}
+            disabled
             label="Single-line Diagram"
-            desc={rmu.productType === "PSEC" ? "SLD drawing set (PSEC)" : "PSEC only"}
+            desc="🔒 Locked"
           />
         </div>
       </div>
@@ -373,17 +372,17 @@ export default function NewOfferPage() {
               <Field label="Sales person">
                 <select className="input cursor-pointer" value={team.salesName} onChange={(e) => pickSales(e.target.value)}>
                   <option value="">— select —</option>
-                  {staff.salesPeople.map((p) => <option key={p.name}>{p.name}</option>)}
+                  {staff.salesPeople.filter((p) => p.name !== SALES_MANAGER).map((p) => <option key={p.name}>{p.name}</option>)}
                 </select>
               </Field>
               <Field label="Sales mobile / email" hint="Auto-filled from the sales person">
                 <input className="input bg-surface" readOnly value={[team.salesMobile, team.salesEmail].filter(Boolean).join("  ·  ")} />
               </Field>
-              <Field label="Sales manager">
-                <select className="input cursor-pointer" value={team.salesManagerName} onChange={(e) => pickManager(e.target.value)}>
-                  <option value="">— select —</option>
-                  {staff.salesManagers.map((p) => <option key={p.name}>{p.name}</option>)}
-                </select>
+              <Field label="Sales manager" hint="Fixed">
+                <input className="input bg-surface" readOnly value={manager.name} />
+              </Field>
+              <Field label="Manager mobile / email" hint="Fixed">
+                <input className="input bg-surface" readOnly value={[manager.mobile, manager.email].filter(Boolean).join("  ·  ")} />
               </Field>
               <Field label="Sales support">
                 <select className="input cursor-pointer" value={team.supportName} onChange={(e) => pickSupport(e.target.value)}>
@@ -495,7 +494,7 @@ export default function NewOfferPage() {
                 </Field>
               </div>
 
-              <Field label="RTU / SCADA" hint="Any RTU ⇒ Smart RMU (spec ·9); None ⇒ Standard (·0)">
+              <Field label="Smart" hint="Smart (with RTU) ⇒ spec ·9; Ready-to-be-smart ⇒ spec ·0">
                 <Select value={rmu.rtuType} onChange={(v) => setR("rtuType", v)} options={RTU_TYPES} />
               </Field>
             </div>
@@ -529,7 +528,12 @@ export default function NewOfferPage() {
                 <Field label="Voltage transformer">
                   <Segmented
                     value={String(rmu.vtCores ?? 1) as "1" | "2"}
-                    onChange={(v) => setR("vtCores", Number(v))}
+                    onChange={(v) => {
+                      const cores = Number(v);
+                      setR("vtCores", cores);
+                      // Single core has no fuse option; double core defaults to with-fuse.
+                      setR("meteringWithFuse", cores === 2);
+                    }}
                     options={["1", "2"] as const}
                     renderLabel={(v) => (v === "1" ? "Single core" : "Two core")}
                   />
@@ -540,16 +544,18 @@ export default function NewOfferPage() {
                 <Field label="VT class (CL)" hint="Fixed (non-editable)">
                   <input className="input bg-surface" value="0.5" readOnly />
                 </Field>
-                <div className="sm:col-span-2">
-                  <Field label="VT protection" hint="Affects the panel code & price">
-                    <Segmented
-                      value={rmu.meteringWithFuse ? "with" : "without"}
-                      onChange={(v) => setR("meteringWithFuse", v === "with")}
-                      options={["without", "with"] as const}
-                      renderLabel={(v) => (v === "without" ? "Without fuse" : "With fuse")}
-                    />
-                  </Field>
-                </div>
+                {rmu.vtCores === 2 && (
+                  <div className="sm:col-span-2">
+                    <Field label="VT protection" hint="Double-core VT only — affects the panel code & price">
+                      <Segmented
+                        value={rmu.meteringWithFuse ? "with" : "without"}
+                        onChange={(v) => setR("meteringWithFuse", v === "with")}
+                        options={["without", "with"] as const}
+                        renderLabel={(v) => (v === "without" ? "Without fuse" : "With fuse")}
+                      />
+                    </Field>
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -655,11 +661,11 @@ export default function NewOfferPage() {
               Item number on the drawings = panel code <b>{panelCode}</b>. Project, customer &amp; QTY come from above.
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Sales Number">
+              <Field label="Sales Order">
                 <TextInput value={salesNumber} onChange={setSalesNumber} placeholder="e.g. SO-2026-123" />
               </Field>
-              <Field label="Order Number">
-                <TextInput value={orderNumber} onChange={setOrderNumber} placeholder="e.g. PO-456" />
+              <Field label="Work Order">
+                <TextInput value={orderNumber} onChange={setOrderNumber} placeholder="e.g. WO-456" />
               </Field>
               <div className="sm:col-span-2">
                 <Field label="Notes (cover)">

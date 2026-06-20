@@ -9,7 +9,7 @@ export const PRODUCT_CATEGORIES = [
 
 export const PRODUCT_TYPES = ["PRAL", "PSEC"] as const;
 export const VOLTAGES = [12, 24] as const;
-export const RTU_TYPES = ["NONE", "TYPE1", "TYPE2"] as const;
+export const RTU_TYPES = ["READY1", "READY2", "SMART1", "SMART2"] as const;
 export const INSTALLATIONS = ["INDOOR", "OUTDOOR"] as const;
 export const OFFER_STATUS = ["DRAFT", "SENT", "WON", "LOST"] as const;
 
@@ -34,9 +34,10 @@ export const AVAILABLE_BRANDS_BY_FAMILY: Record<"PRAL" | "PSEC", readonly string
 export const LABELS: Record<string, string> = {
   PRAL: "PRAL — Air insulated",
   PSEC: "PSEC — SF6 / GIS",
-  NONE: "None",
-  TYPE1: "RTU Type 1 — Monitor only",
-  TYPE2: "RTU Type 2 — Monitor & Control",
+  READY1: "Ready to be smart type 1",
+  READY2: "Ready to be Smart type 2",
+  SMART1: "Smart type 1 (monitor only)",
+  SMART2: "Smart type 2 (monitor and control)",
   INDOOR: "Indoor",
   OUTDOOR: "Outdoor",
   DRAFT: "Draft",

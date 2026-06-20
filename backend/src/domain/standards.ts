@@ -6,13 +6,26 @@
 
 export type ProductType = "PRAL" | "PSEC";
 export type VoltageKv = 12 | 24;
-export type RtuType = "NONE" | "TYPE1" | "TYPE2";
+// Smart level (replaces the old NONE/TYPE1/TYPE2 RTU options):
+//   READY1/2 = "ready to be smart" (prepared, no RTU yet); SMART1/2 = actual RTU.
+//   type 1 = monitor only; type 2 = monitor & control (motorized switch).
+export type RtuType = "READY1" | "READY2" | "SMART1" | "SMART2";
 export type Installation = "INDOOR" | "OUTDOOR";
 
 export const PRODUCT_TYPES: ProductType[] = ["PRAL", "PSEC"];
 export const VOLTAGES: VoltageKv[] = [12, 24];
-export const RTU_TYPES: RtuType[] = ["NONE", "TYPE1", "TYPE2"];
+export const RTU_TYPES: RtuType[] = ["READY1", "READY2", "SMART1", "SMART2"];
 export const INSTALLATIONS: Installation[] = ["INDOOR", "OUTDOOR"];
+
+// Smart-level semantics — tolerant of the legacy NONE/TYPE1/TYPE2 values that may
+// still exist in stored offers (NONE→ready, TYPE1→smart-1, TYPE2→smart-2).
+export const rtuHasRtu = (t: string): boolean =>
+  t === "SMART1" || t === "SMART2" || t === "TYPE1" || t === "TYPE2";
+export const rtuMotorized = (t: string): boolean =>
+  t === "SMART2" || t === "READY2" || t === "TYPE2"; // type 2 = control → motorized
+export const rtuTypeNum = (t: string): 1 | 2 =>
+  t === "SMART2" || t === "READY2" || t === "TYPE2" ? 2 : 1;
+export const rtuIsReady = (t: string): boolean => t === "READY1" || t === "READY2";
 
 /** Identity of a product family. */
 export interface ProductProfile {

@@ -114,7 +114,7 @@ export default function OffersListPage() {
                   <td className="px-4 py-3 text-muted">{o.customer}</td>
                   <td className="px-4 py-3 text-muted">
                     {o.generated.summary.totalCubicles} ways
-                    {o.generated.summary.rtuType !== "NONE" && " · RTU"}
+                    {o.generated.summary.smart && " · Smart"}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`chip ${statusColors[o.status] ?? ""}`}>{label(o.status)}</span>

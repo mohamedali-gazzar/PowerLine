@@ -79,7 +79,7 @@ export default function App() {
 
       {/* Main content */}
       <div className="flex-1">
-        <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+        <main className="mx-auto w-full max-w-[1800px] px-4 py-6 sm:px-6">
           <Outlet />
         </main>
       </div>

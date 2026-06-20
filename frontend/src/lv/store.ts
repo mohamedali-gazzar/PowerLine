@@ -211,11 +211,29 @@ export function freeComponent(desc: string, section: string, qty: number, group?
   };
 }
 
-export function duplicatePanel(p: LvPanel, n: number): LvPanel {
+/** RPT: incremental duplicate name — "PANEL 4" → "PANEL 4-1" → "PANEL 4-2" …
+ *  Strips an existing "-N" (or legacy "(copy)") suffix so the series continues
+ *  from the highest number already used for that base name. */
+export function nextDuplicateName(srcName: string, panels: LvPanel[]): string {
+  const base = srcName
+    .replace(/\s*\(copy[^)]*\)\s*$/i, "") // legacy "(copy)" / "(copy 2)"
+    .replace(/\s*-\s*\d+\s*$/, "")          // existing "-N"
+    .trim();
+  const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`^${esc}\\s*-\\s*(\\d+)$`);
+  let max = 0;
+  for (const p of panels) {
+    const m = p.name.trim().match(re);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `${base}-${max + 1}`;
+}
+
+export function duplicatePanel(p: LvPanel, name: string): LvPanel {
   return {
     ...structuredClone(p),
     id: uid(),
-    name: `${p.name} (copy${n > 1 ? ` ${n}` : ""})`,
+    name,
     components: p.components.map((c) => ({ ...c, id: uid() })),
   };
 }

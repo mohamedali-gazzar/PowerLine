@@ -10,6 +10,7 @@ import {
   type SalesPerson,
 } from "./lv/catalog";
 
+export { SALES_MANAGER }; // re-export the fixed Sales Manager name (Ali Kamal)
 export type Person = SalesPerson; // { name, mobile, email }
 
 export interface StaffRegistry {
