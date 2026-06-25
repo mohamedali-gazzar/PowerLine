@@ -70,8 +70,20 @@ export function buildAts(type: AtsTypeId, frame: string, breakers: DbComponent[]
 // ── Photocell ────────────────────────────────────────────────────────────────
 export const PHOTOCELL_RATINGS = COMBOS.photocell.ratings.map((r) => r.a);
 
+/** Breakers selectable as the photocell circuit breaker (any MCB / MCCB / ACB). */
+export function breakerPool(): DbComponent[] {
+  return COMPONENTS.filter((c) => c.t === "MCCB" || c.t === "MCB" || c.t === "ACB");
+}
+/** Ampere rating parsed from a breaker's rating/name, e.g. "…160A-36kA…" → 160. */
+export function breakerAmps(c: DbComponent): number {
+  const m = `${c.r || ""} ${c.n || ""}`.match(/(\d+)\s*A\b/i);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
 export function buildPhotocell(ratingA: number, cb?: DbComponent): ComboLine[] {
-  const row = COMBOS.photocell.ratings.find((r) => r.a === ratingA);
+  // Size the contactor/aux to the rating: smallest ladder value >= rating (else largest).
+  const rows = [...COMBOS.photocell.ratings].sort((a, b) => a.a - b.a);
+  const row = rows.find((r) => r.a >= ratingA) ?? rows[rows.length - 1];
   const out: ComboLine[] = [];
   if (cb) out.push({ qty: 1, desc: cb.n, comp: cb, groupLabel: "Circuit Breaker" });
   if (row) {
@@ -149,12 +161,15 @@ export function pfcHeader(i: PfcInput): string {
 
 /** Per the database sheet: capacitors are counted as 25 kVAR units (a 50 kVAR step = 2×25),
  *  3 fuses + 3 bases per step, one contactor per variable step, controller(s) by variable steps. */
-export function buildPfc(i: PfcInput): ComboLine[] {
+export function buildPfc(i: PfcInput, cb?: DbComponent): ComboLine[] {
   const out: ComboLine[] = [];
   // RPT-1: every P.F.C. line is grouped under the generated header.
   const header = pfcHeader(i);
-  // RPT-1: mandatory main P.F.C. circuit breaker (manually-entered rating).
-  if (i.cbRating > 0) {
+  // RPT-1: mandatory main P.F.C. circuit breaker — the chosen catalogue breaker
+  // (with its price/ref) when selected, else a generic line from the entered rating.
+  if (cb) {
+    out.push({ qty: 1, desc: cb.n, comp: cb, groupLabel: header });
+  } else if (i.cbRating > 0) {
     const cbName = `P.F.C. Circuit Breaker ${i.cbRating}A`;
     out.push({ qty: 1, desc: cbName, comp: findByName(cbName), groupLabel: header });
   }

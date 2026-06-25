@@ -1,21 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getQtn, saveQtn } from "../lv/qtns";
 import { useStaff, SALES_MANAGER } from "../staff";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
   PANEL_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
-  ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp,
+  COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp,
   type DbComponent,
 } from "../lv/catalog";
 import {
-  newPanel, duplicatePanel, nextDuplicateName, toPanelComponent, freeComponent, uid,
+  newPanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, toPanelComponent, freeComponent, uid,
   calcPanel, grandTotals, buildMaterialList, searchComponents,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem,
 } from "../lv/store";
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
-  PHOTOCELL_RATINGS, buildPhotocell,
+  breakerPool, breakerAmps, buildPhotocell,
   MCC_KINDS, mccKws, mccTypes, buildMcc,
   PFC_DEFAULT, pfcTotalKvar, pfcHeader, buildPfc,
   WD_OPTIONS, buildWd,
@@ -26,7 +26,7 @@ import {
   proEIp31Disabled, retable, defaultCellConfig, type CellType,
 } from "../lv/cells";
 import {
-  COPPER_RATINGS, csaFor, copperWeight, copperTotal, nearestRating, pctOf,
+  COPPER_RATINGS, csaFor, copperWeight, copperTotal, roundUpRating, pctOf,
 } from "../lv/copper";
 
 type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material";
@@ -749,14 +749,14 @@ function PanelEditor({ s, p, upPanel }: {
         </div>
       </div>
 
-      {/* Panel type (enclosure sizings as component-like items) */}
-      <SizingCard p={p} u={u} factors={s.factors} />
-
       {/* Circuit combinations */}
       <CombosCard p={p} u={u} />
 
       {/* Components */}
       <ComponentsCard s={s} p={p} u={u} />
+
+      {/* Panel type — placed after Components (enclosure sizings as component-like items) */}
+      <SizingCard p={p} u={u} factors={s.factors} />
 
       {/* RPT-1: per-panel Draft — notes & calculations, never included in outputs */}
       <div className="card p-5">
@@ -774,6 +774,9 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
   const [q, setQ] = useState("");
   const hits = useMemo(() => searchComponents(q, 40), [q]);
   const [newSection, setNewSection] = useState("");
+  const [editingSec, setEditingSec] = useState<string | null>(null); // custom-section rename
+  const [editVal, setEditVal] = useState("");
+  const [editComp, setEditComp] = useState<string | null>(null); // row being re-selected
   // drag-and-drop: reorder rows and move them across sections
   const [dragId, setDragId] = useState<string | null>(null);
   const [overRow, setOverRow] = useState<string | null>(null);
@@ -782,6 +785,13 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
   const setComp = (id: string, patch: Partial<PanelComponent>) =>
     u({ components: p.components.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
   const delComp = (id: string) => u({ components: p.components.filter((c) => c.id !== id) });
+  // Re-select a component from the database, keeping qty / adj / comment / note /
+  // section / group; all technical + pricing fields update from the new component.
+  const replaceComp = (id: string, c: DbComponent) =>
+    u({ components: p.components.map((x) => (x.id === id ? {
+      ...x, name: c.n, desc: c.d, ref: c.ref, type: c.t, brand: c.brand, rating: c.r,
+      eur: c.eur, egp: c.egp, poles: c.poles, cuP: c.cuP, cuC: c.cuC, stock: c.stock,
+    } : x)) });
   const move = (id: string, dir: -1 | 1) => {
     const arr = [...p.components];
     const i = arr.findIndex((c) => c.id === id);
@@ -803,6 +813,30 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
     const a = arr.indexOf(sec), b = arr.indexOf(target);
     [arr[a], arr[b]] = [arr[b], arr[a]];
     u({ sections: arr });
+  };
+  // Only USER-ADDED sections (not the defaults) can be renamed or removed.
+  const isCustom = (sec: string) => !DEFAULT_SECTIONS.includes(sec);
+  const renameSection = (oldName: string, raw: string) => {
+    const nn = raw.trim();
+    if (!isCustom(oldName) || !p.sections.includes(oldName)) return;
+    if (!nn || nn === oldName || p.sections.includes(nn)) return;
+    u({
+      sections: p.sections.map((x) => (x === oldName ? nn : x)),
+      components: p.components.map((c) => (c.section === oldName ? { ...c, section: nn } : c)),
+      activeSection: p.activeSection === oldName ? nn : p.activeSection,
+    });
+  };
+  const removeSection = (sec: string) => {
+    if (!isCustom(sec)) return;
+    const hasComps = p.components.some((c) => c.section === sec);
+    if (hasComps && !confirm(`Remove section “${sec}”? Its components move to another section.`)) return;
+    const sections = p.sections.filter((x) => x !== sec);
+    const fallback = sections.find((x) => DEFAULT_SECTIONS.includes(x)) ?? sections[0] ?? DEFAULT_SECTIONS[0];
+    u({
+      sections,
+      components: p.components.map((c) => (c.section === sec ? { ...c, section: fallback } : c)),
+      activeSection: p.activeSection === sec ? fallback : p.activeSection,
+    });
   };
 
   // Drop a dragged row onto another row: it takes the target's section (move
@@ -852,19 +886,41 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
 
       {/* sections */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        {p.sections.map((sec) => (
-          <button key={sec} onClick={() => u({ activeSection: sec })}
-            onDragOver={(e) => { if (dragId) { e.preventDefault(); if (overSec !== sec) setOverSec(sec); } }}
-            onDragLeave={() => setOverSec((x) => (x === sec ? null : x))}
-            onDrop={(e) => { e.preventDefault(); dropOnSection(sec); }}
-            title={dragId ? `Move component to “${sec}”` : undefined}
-            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-              overSec === sec ? "border-brand bg-brand-light text-brand-dark ring-2 ring-brand/50"
-              : p.activeSection === sec ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"
-            }`}>
-            {sec}
-          </button>
-        ))}
+        {p.sections.map((sec) => {
+          if (editingSec === sec) {
+            return (
+              <input key={sec} autoFocus className="input h-8 w-36 text-xs" value={editVal}
+                onChange={(e) => setEditVal(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { renameSection(sec, editVal); setEditingSec(null); }
+                  else if (e.key === "Escape") setEditingSec(null);
+                }}
+                onBlur={() => { renameSection(sec, editVal); setEditingSec(null); }} />
+            );
+          }
+          const active = p.activeSection === sec;
+          return (
+            <span key={sec}
+              onDragOver={(e) => { if (dragId) { e.preventDefault(); if (overSec !== sec) setOverSec(sec); } }}
+              onDragLeave={() => setOverSec((x) => (x === sec ? null : x))}
+              onDrop={(e) => { e.preventDefault(); dropOnSection(sec); }}
+              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                overSec === sec ? "border-brand bg-brand-light text-brand-dark ring-2 ring-brand/50"
+                : active ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"
+              }`}>
+              <button type="button" onClick={() => u({ activeSection: sec })}
+                title={dragId ? `Move component to “${sec}”` : undefined}>{sec}</button>
+              {isCustom(sec) && (
+                <>
+                  <button type="button" title="Rename section" onClick={() => { setEditVal(sec); setEditingSec(sec); }}
+                    className="opacity-50 hover:opacity-100">✎</button>
+                  <button type="button" title="Remove section" onClick={() => removeSection(sec)}
+                    className="text-red-500 opacity-60 hover:opacity-100">✕</button>
+                </>
+              )}
+            </span>
+          );
+        })}
         <input className="input h-8 w-36 text-xs" placeholder="New section…" value={newSection}
           onChange={(e) => setNewSection(e.target.value)}
           onKeyDown={(e) => {
@@ -961,6 +1017,11 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                       <td className="max-w-[330px] py-1 pr-2">
                         {c.group && <span className="mr-1 rounded bg-brand-light px-1 text-[9px] font-bold text-brand-dark">{c.group}</span>}
                         {c.name}
+                        {editComp === c.id && (
+                          <ComponentEditSelect current={c}
+                            onPick={(nc) => { replaceComp(c.id, nc); setEditComp(null); }}
+                            onClose={() => setEditComp(null)} />
+                        )}
                       </td>
                       <td className="py-1 pr-2 text-[11px] text-muted">{c.ref}</td>
                       <td className="py-1 pr-2">
@@ -974,7 +1035,8 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                       <td className="py-1 pr-2"><input className="input h-7 px-1.5 text-xs" value={c.note} placeholder="—"
                         onChange={(e) => setComp(c.id, { note: e.target.value })} /></td>
                       <td className="py-1 pr-2 text-right font-semibold">{fmtEgp(componentPriceEgp(c, s.factors) * c.qty)}</td>
-                      <td className="py-1 text-right">
+                      <td className="whitespace-nowrap py-1 text-right">
+                        <button className="px-1 text-muted hover:text-brand-dark" title="Change component" onClick={() => setEditComp(c.id)}>✎</button>
                         <button className="px-1 text-muted hover:text-ink" title="Move up" onClick={() => move(c.id, -1)}>↑</button>
                         <button className="px-1 text-muted hover:text-ink" title="Move down" onClick={() => move(c.id, 1)}>↓</button>
                         <button className="px-1 text-red-500" title="Remove" onClick={() => delComp(c.id)}>✕</button>
@@ -987,6 +1049,55 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
           </div>
         ))
       )}
+    </div>
+  );
+}
+
+// RPT: re-select a component from the database. Shows the full list in database
+// order with the current component highlighted in its original position (scrolls
+// to it on open), plus a search box. Picking one updates technical + pricing data.
+function ComponentEditSelect({ current, onPick, onClose }: {
+  current: PanelComponent; onPick: (c: DbComponent) => void; onClose: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const curRef = useRef<HTMLButtonElement>(null);
+  const isCurrent = (c: DbComponent) => c.ref === current.ref && c.n === current.name;
+  const shown = useMemo(() => {
+    const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return COMPONENTS; // full list, in database order
+    return COMPONENTS.filter((c) => {
+      const hay = `${c.n} ${c.ref} ${c.t} ${c.r} ${c.brand}`.toLowerCase();
+      return terms.every((t) => hay.includes(t));
+    });
+  }, [q]);
+  useEffect(() => { curRef.current?.scrollIntoView({ block: "center" }); }, []);
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-ink/30 p-4 pt-20"
+      onMouseDown={onClose}>
+      <div className="w-full max-w-xl overflow-hidden rounded-xl2 border border-line bg-white shadow-lift"
+        onMouseDown={(e) => e.stopPropagation()}>
+        <div className="border-b border-line p-3">
+          <p className="mb-1.5 text-xs font-bold text-ink">Change component <span className="font-normal text-muted">— current: {current.name}</span></p>
+          <input autoFocus className="input h-9 text-sm" placeholder="Search name / reference / type / rating…"
+            value={q} onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") onClose(); }} />
+        </div>
+        <div className="max-h-[55vh] overflow-auto">
+          {shown.length === 0 && <div className="px-3 py-3 text-xs text-muted">No matches.</div>}
+          {shown.map((c) => {
+            const cur = isCurrent(c);
+            return (
+              <button key={c.ref + c.n} ref={cur ? curRef : undefined} type="button"
+                onMouseDown={() => onPick(c)}
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-brand-tint ${cur ? "bg-brand-light font-bold text-brand-dark" : ""}`}>
+                <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{c.t}</span>
+                <span className="min-w-0 flex-1 truncate">{c.n}</span>
+                <span className="shrink-0 text-[11px] text-muted">{c.ref} · {c.brand}{cur ? " · current" : ""}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1137,19 +1248,28 @@ function AtsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
 }
 
 function PhotocellBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
-  const [rating, setRating] = useState<number>(PHOTOCELL_RATINGS[0] ?? 16);
+  const pool = useMemo(() => breakerPool(), []);
+  const [cb, setCb] = useState<DbComponent | null>(null);
+  const [manual, setManual] = useState(0); // manual rating override (A)
+  const rating = manual > 0 ? manual : cb ? breakerAmps(cb) : 0;
   return (
     <div className="rounded-lg border border-line p-3">
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <BreakerSelect label="Circuit breaker" value={cb} onPick={(c) => { setCb(c); setManual(0); }} pool={pool} />
         <div>
-          <L>C.B rating (A)</L>
-          <select className="input w-36 cursor-pointer" value={rating} onChange={(e) => setRating(+e.target.value)}>
-            {PHOTOCELL_RATINGS.map((r) => <option key={r} value={r}>{r} A</option>)}
-          </select>
+          <L>Rating (A) <span className="text-[11px] font-normal text-muted">— auto from C.B, or type manually</span></L>
+          <input className="input" inputMode="numeric" value={rating || ""} placeholder="e.g. 160"
+            onChange={(e) => setManual(parseInt(e.target.value.replace(/[^\d]/g, "")) || 0)} />
         </div>
-        <button className="btn-ghost" onClick={() => onPreview(buildPhotocell(rating), "Photocell")}>Generate combination</button>
       </div>
-      <p className="mt-2 text-[11px] text-muted">Contactor + aux auto-selected from rating; photocell, selector, timer, pushbuttons & lamps are fixed.</p>
+      {cb && (
+        <p className="mt-1.5 text-[11px] text-muted">
+          Detected C.B rating: <b>{breakerAmps(cb) || "?"} A</b>{manual > 0 ? ` · using ${manual} A (manual)` : ""}
+        </p>
+      )}
+      <p className="mt-1 text-[11px] text-muted">Contactor + aux are sized from the rating; photocell, selector, timer, pushbuttons &amp; lamps are fixed.</p>
+      <button className="btn-ghost mt-2" disabled={!rating}
+        onClick={() => rating && onPreview(buildPhotocell(rating, cb ?? undefined), "Photocell")}>Generate combination</button>
     </div>
   );
 }
@@ -1182,6 +1302,8 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
 }
 
 function PfcBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
+  const pool = useMemo(() => breakerPool(), []);
+  const [cb, setCb] = useState<DbComponent | null>(null);
   const [i, setI] = useState({ ...PFC_DEFAULT });
   const tot = pfcTotalKvar(i);
   const header = pfcHeader(i);
@@ -1204,14 +1326,20 @@ function PfcBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
   return (
     <div className="rounded-lg border border-line p-3">
       <p className="mb-2 text-[11px] text-muted">Phase 1: 400 V systems, 25/50 kVAR steps only (RPT-03).</p>
+      {/* P.F.C. main circuit breaker — pick from the catalogue (rating auto-derived), or type a rating */}
+      <div className="mb-2 grid gap-2 sm:grid-cols-2">
+        <BreakerSelect label="P.F.C. circuit breaker *" value={cb}
+          onPick={(c) => { setCb(c); setI((x) => ({ ...x, cbRating: breakerAmps(c) })); }} pool={pool} />
+        <div>
+          <L>C.B rating (A) <span className="text-[11px] font-normal text-muted">— auto from C.B, or type manually</span></L>
+          <input className={`input ${!i.cbRating ? "border-red-400 bg-red-50/40" : ""}`} inputMode="numeric"
+            value={i.cbRating || ""} placeholder="e.g. 250"
+            onChange={(e) => { setI({ ...i, cbRating: parseInt(e.target.value.replace(/[^\d]/g, "")) || 0 }); setCb(null); }} />
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {num("kvar", "Required kVAR")}
-        <div>
-          <L>P.F.C. C.B (A) <span className="text-brand">*</span></L>
-          <input className={`input w-28 ${!i.cbRating ? "border-red-400 bg-red-50/40" : ""}`} inputMode="numeric"
-            value={i.cbRating || ""} placeholder="e.g. 250"
-            onChange={(e) => setI({ ...i, cbRating: parseInt(e.target.value.replace(/[^\d]/g, "")) || 0 })} />
-        </div>
+        <div />
         {num("fixedSteps", "Fixed steps")}{kvarSel("fixedKvar", "Fixed step kVAR")}
         {num("var1Steps", "Var. steps 1")}{kvarSel("var1Kvar", "Var.1 step kVAR")}
         {num("var2Steps", "Var. steps 2")}{kvarSel("var2Kvar", "Var.2 step kVAR")}
@@ -1221,7 +1349,7 @@ function PfcBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
       </p>
       <div className="mt-2 rounded bg-surface px-2 py-1 text-[11px] font-semibold text-ink">Header: {header}</div>
       <button className="btn-ghost mt-2" disabled={!i.cbRating}
-        onClick={() => i.cbRating && onPreview(buildPfc(i), "P.F.C")}>Generate combination</button>
+        onClick={() => i.cbRating && onPreview(buildPfc(i, cb ?? undefined), "P.F.C")}>Generate combination</button>
     </div>
   );
 }
@@ -1511,37 +1639,44 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
     u({ copperTool: next, mainBusbarKg: Math.round(copperTotal(type, next) * 10) / 10 });
   };
   const inc = p.ratingA || 0;
-  const hiP = inc ? nearestRating(inc) : 0;
-  const hiN = inc ? nearestRating(inc * pctOf(p.neutral)) : 0;
-  const hiE = inc ? nearestRating(inc * pctOf(p.earth)) : 0;
+  const hiP = inc ? roundUpRating(inc) : 0;
+  const hiN = inc ? roundUpRating(inc * pctOf(p.neutral)) : 0;
+  const hiE = inc ? roundUpRating(inc * pctOf(p.earth)) : 0;
   const total = copperTotal(type, tool);
   const cell = (rating: number, key: "p" | "n" | "e", hi: boolean, color: string) => {
     const v = tool[String(rating)]?.[key] ?? 0;
     return (
       <input className="input h-7 w-16 px-1 text-center text-xs" inputMode="decimal" value={v || ""} placeholder="0"
-        style={hi ? { boxShadow: `inset 0 0 0 2px ${color}`, fontWeight: 700 } : undefined}
+        style={hi ? { boxShadow: `inset 0 0 0 2px ${color}`, background: `${color}22`, color, fontWeight: 700 } : undefined}
         onChange={(e) => setLen(rating, key, parseFloat(e.target.value.replace(/[^\d.]/g, "")) || 0)} />
     );
   };
   return (
     <div className="mt-4 rounded-lg border border-line p-3">
       <div className="mb-1 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-ink">Copper Tool <span className="text-[11px] font-normal text-muted">· {type} · lengths in metres</span></h3>
+        <h3 className="text-sm font-bold text-ink">Copper Tool <span className="text-[11px] font-normal text-muted">· {type} · lengths in mm</span></h3>
         <span className="text-xs font-bold text-brand-dark">Busbar copper: {total.toFixed(1)} kg</span>
       </div>
-      <p className="mb-2 text-[11px] text-muted">
-        Enter the required copper length per rating. Recommended rows are highlighted from the incoming rating —{" "}
-        <span style={{ color: "#dc2626" }}>Phase</span> · <span style={{ color: "#111827", fontWeight: 700 }}>Neutral</span> · <span style={{ color: "#16a34a" }}>Earth</span>. All values stay editable.
-      </p>
+      <p className="mb-1 text-[11px] text-muted">Enter the required copper length per rating. Recommended cells are highlighted (all values stay editable):</p>
+      {inc > 0 ? (
+        <p className="mb-2 text-[11px] font-semibold">
+          <span style={{ color: "#dc2626" }}>Phase {hiP} A</span> ·{" "}
+          <span style={{ color: "#111827" }}>Neutral {hiN} A</span> ·{" "}
+          <span style={{ color: "#16a34a" }}>Earth {hiE} A</span>
+          <span className="font-normal text-muted"> — from {inc} A incomer (N {Math.round(pctOf(p.neutral) * 100)}% · E {Math.round(pctOf(p.earth) * 100)}%)</span>
+        </p>
+      ) : (
+        <p className="mb-2 text-[11px] text-muted">Set the panel's Incoming C.B rating to get Phase / Neutral / Earth recommendations.</p>
+      )}
       <div className="overflow-auto">
         <table className="w-full min-w-[460px] text-xs">
           <thead>
             <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
               <th className="px-1 py-1">Rating</th>
-              <th className="px-1 py-1">CSA mm²</th>
-              <th className="px-1 py-1 text-center">Phase L (m)</th>
-              <th className="px-1 py-1 text-center">Neutral L (m)</th>
-              <th className="px-1 py-1 text-center">Earth L (m)</th>
+              <th className="px-1 py-1">CSA <span className="normal-case">(mm²)</span></th>
+              <th className="px-1 py-1 text-center">Phase L <span className="normal-case">(mm)</span></th>
+              <th className="px-1 py-1 text-center">Neutral L <span className="normal-case">(mm)</span></th>
+              <th className="px-1 py-1 text-center">Earth L <span className="normal-case">(mm)</span></th>
               <th className="px-1 py-1 text-right">Weight kg</th>
             </tr>
           </thead>
@@ -1552,7 +1687,11 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
               const wkg = copperWeight(row.p, csa, 3) + copperWeight(row.n, csa, 1) + copperWeight(row.e, csa, 1);
               return (
                 <tr key={r} className="border-t border-line/60">
-                  <td className="px-1 py-0.5 font-semibold">{r} A</td>
+                  <td className="whitespace-nowrap px-1 py-0.5 font-semibold">{r} A
+                    {hiP === r && <span className="ml-1 rounded px-1 text-[9px] font-bold text-white" style={{ background: "#dc2626" }}>P</span>}
+                    {hiN === r && <span className="ml-1 rounded px-1 text-[9px] font-bold text-white" style={{ background: "#111827" }}>N</span>}
+                    {hiE === r && <span className="ml-1 rounded px-1 text-[9px] font-bold text-white" style={{ background: "#16a34a" }}>E</span>}
+                  </td>
                   <td className="px-1 py-0.5 text-muted">{csa}</td>
                   <td className="px-1 py-0.5 text-center">{cell(r, "p", hiP === r, "#dc2626")}</td>
                   <td className="px-1 py-0.5 text-center">{cell(r, "n", hiN === r, "#111827")}</td>

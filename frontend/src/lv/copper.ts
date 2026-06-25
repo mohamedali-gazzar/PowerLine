@@ -1,6 +1,7 @@
 // RPT-1: Copper Tool — manual main-busbar copper lengths per standard rating,
 // with automatic weight using the database formula:
-//   weight(kg) = length(m) × CSA(mm²) × 0.000009   (×3 for a 3-phase run)
+//   weight(kg) = length(mm) × CSA(mm²) × 0.000009   (×3 for a 3-phase run)
+//   (0.000009 ≈ copper density in kg/mm³, so the length is in MILLIMETRES)
 import type { CellType } from "./cells";
 
 export const COPPER_RATINGS = [
@@ -22,22 +23,18 @@ export function csaFor(type: CellType, rating: number): number {
   return (type === "Pro-E" ? CSA_PRO_E : CSA_PLP)[rating] ?? 0;
 }
 
-export interface CopperLen { p: number; n: number; e: number } // lengths in metres
+export interface CopperLen { p: number; n: number; e: number } // lengths in mm
 export type CopperTool = Record<string, CopperLen>;            // keyed by rating
 
-const K = 0.000009;
-export const copperWeight = (lengthM: number, csa: number, phases = 1): number =>
-  (lengthM || 0) * csa * K * phases;
+const K = 0.000009; // copper density (kg/mm³)
+export const copperWeight = (lengthMm: number, csa: number, phases = 1): number =>
+  (lengthMm || 0) * csa * K * phases;
 
-/** Nearest standard rating to a target current (ties round up). */
-export function nearestRating(a: number): number {
-  let best: number = COPPER_RATINGS[0];
-  let bestD = Infinity;
-  for (const r of COPPER_RATINGS) {
-    const d = Math.abs(r - a);
-    if (d < bestD - 1e-9 || (Math.abs(d - bestD) < 1e-9 && r > best)) { bestD = d; best = r; }
-  }
-  return best;
+/** Round a current UP to the next available standard rating (ceiling),
+ *  e.g. 315 → 400, 625 → 630. Exceeding the top of the ladder → the largest. */
+export function roundUpRating(a: number): number {
+  for (const r of COPPER_RATINGS) if (r >= a - 1e-9) return r; // COPPER_RATINGS is ascending
+  return COPPER_RATINGS[COPPER_RATINGS.length - 1];
 }
 
 /** Total copper weight (kg) for a tool, using the cell type's CSA table. */
