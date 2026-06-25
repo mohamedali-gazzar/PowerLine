@@ -210,3 +210,20 @@ export function buildWd(key: string): ComboLine[] {
   if (w.mp) out.push({ qty: 1, desc: w.mp, comp: findByName(w.mp), groupLabel: `WD ${w.frame} moving part` });
   return out;
 }
+
+// ── Indication Lamps ─────────────────────────────────────────────────────────
+// Fixed three-lamp signalling set: Red / Green / Yellow pilot lights (LED 230 V AC).
+export const INDICATION_LAMPS: { qty: number; desc: string }[] = [
+  { qty: 1, desc: "Pilot Light Red LED 230V AC" },
+  { qty: 1, desc: "Pilot Light Green LED 230V AC" },
+  { qty: 1, desc: "Pilot Light Yellow LED 230V AC" },
+];
+
+export function buildIndicationLamps(): ComboLine[] {
+  return INDICATION_LAMPS.map((l) => ({
+    qty: l.qty,
+    desc: l.desc,
+    comp: findByName(l.desc),
+    groupLabel: "Indication Lamps",
+  }));
+}

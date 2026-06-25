@@ -9,7 +9,7 @@ import {
   type DbComponent,
 } from "../lv/catalog";
 import {
-  newPanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, toPanelComponent, freeComponent, uid,
+  newPanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   calcPanel, grandTotals, buildMaterialList, searchComponents,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem,
 } from "../lv/store";
@@ -19,8 +19,12 @@ import {
   MCC_KINDS, mccKws, mccTypes, buildMcc,
   PFC_DEFAULT, pfcTotalKvar, pfcHeader, buildPfc,
   WD_OPTIONS, buildWd,
+  buildIndicationLamps,
   type ComboLine, type AtsTypeId,
 } from "../lv/combos";
+import { rankSearchOptions } from "../lv/search";
+import { materialAoa, type MatBlock } from "../lv/materialExcel";
+import * as XLSX from "xlsx";
 import {
   PRO_E_DEPTHS, PRO_E_THICKNESS, PRO_E_IPS, IS2_DEPTHS, PLP_DEPTHS,
   proEIp31Disabled, retable, defaultCellConfig, type CellType,
@@ -52,16 +56,8 @@ function SearchSelect({ value, placeholder, options, onPick }: {
 }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
-  const shown = useMemo(() => {
-    const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    const list = terms.length
-      ? options.filter((o) => {
-          const hay = (o.label + " " + (o.hint ?? "")).toLowerCase();
-          return terms.every((t) => hay.includes(t));
-        })
-      : options;
-    return list.slice(0, 80);
-  }, [q, options]);
+  // Live, flexible filter+rank — see rankSearchOptions (lv/search.ts).
+  const shown = useMemo(() => rankSearchOptions(options, q), [q, options]);
   const sel = options.find((o) => o.key === value);
   // Keyboard nav: first option auto-highlighted; ↑/↓ move, Enter picks the highlight.
   const [activeIdx, setActiveIdx] = useState(0);
@@ -237,7 +233,7 @@ export default function LvConfiguratorPage() {
       )}
       {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} />)}
       {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} />)}
-      {tab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} />)}
+      {tab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} />)}
     </div>
   );
 }
@@ -302,11 +298,28 @@ function DocHeader({ s, qtnNo, title }: { s: LvState; qtnNo: string; title: stri
   );
 }
 
-function PrintBar({ label }: { label: string }) {
+// Export name: prefix the document kind to the QTN number ("QTN-26-0001" →
+// "TO-QTN-26-0001") and append the 2-digit revision. Used for the TO/CO print
+// filename (document.title) and the Material List Excel filename ("ML-…").
+function offerTitle(kind: "TO" | "CO" | "ML", qtnNo: string, rev: string): string {
+  return `${kind}-${qtnNo} Rev ${String(rev ?? "").padStart(2, "0")}`;
+}
+
+function PrintBar({ label, docTitle }: { label: string; docTitle?: string }) {
+  // Set the document title right before printing so the saved PDF / print job is
+  // named after the offer; restore it once the dialog closes (afterprint).
+  const print = () => {
+    if (!docTitle) return window.print();
+    const prev = document.title;
+    document.title = docTitle;
+    const restore = () => { document.title = prev; window.removeEventListener("afterprint", restore); };
+    window.addEventListener("afterprint", restore);
+    window.print();
+  };
   return (
     <div className="mb-3 flex items-center justify-between no-print">
       <p className="text-xs text-muted">{label}</p>
-      <button className="btn-primary" onClick={() => window.print()}>⬇ PDF / Print</button>
+      <button className="btn-primary" onClick={print}>⬇ PDF / Print</button>
     </div>
   );
 }
@@ -350,7 +363,8 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   );
   return (
     <div className="animate-fade-up">
-      <PrintBar label={`${s.panels.length} panel${s.panels.length > 1 ? "s" : ""} → ${s.panels.length} technical page${s.panels.length > 1 ? "s" : ""} in one PDF.`} />
+      <PrintBar label={`${s.panels.length} panel${s.panels.length > 1 ? "s" : ""} → ${s.panels.length} technical page${s.panels.length > 1 ? "s" : ""} in one PDF.`}
+        docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} />
       <div className="print-area space-y-6">
         {/* Cover page (branded title page) */}
         <section className="tech-cover" style={{ breakAfter: "page" }}>
@@ -490,7 +504,8 @@ function CommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const m = (egp: number) => fmtEgp(egp / rate);
   return (
     <div className="animate-fade-up">
-      <PrintBar label="Prices follow the Pricing Settings tab (rates, ABB discount, factor) live." />
+      <PrintBar label="Prices follow the Pricing Settings tab (rates, ABB discount, factor) live."
+        docTitle={offerTitle("CO", qtnNo, s.project.revisionNo)} />
       <div className="mb-3 flex items-center gap-2 no-print">
         <span className="text-xs font-semibold text-muted">Currency</span>
         <div className="inline-flex rounded-lg border border-line bg-white p-0.5">
@@ -883,11 +898,12 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
     [arr[a], arr[b]] = [arr[b], arr[a]];
     u({ sections: arr });
   };
-  // Only USER-ADDED sections (not the defaults) can be renamed or removed.
-  const isCustom = (sec: string) => !DEFAULT_SECTIONS.includes(sec);
+  // Every section except the three fixed ones (Main Incoming / Outgoings /
+  // Metering) can be renamed or removed — including "Other" and user-added ones.
+  const isFixed = (sec: string) => FIXED_SECTIONS.includes(sec);
   const renameSection = (oldName: string, raw: string) => {
     const nn = raw.trim();
-    if (!isCustom(oldName) || !p.sections.includes(oldName)) return;
+    if (isFixed(oldName) || !p.sections.includes(oldName)) return;
     if (!nn || nn === oldName || p.sections.includes(nn)) return;
     u({
       sections: p.sections.map((x) => (x === oldName ? nn : x)),
@@ -896,11 +912,17 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
     });
   };
   const removeSection = (sec: string) => {
-    if (!isCustom(sec)) return;
+    if (isFixed(sec) || !p.sections.includes(sec)) return;
+    // A panel must always keep at least one section to hold its components.
+    if (p.sections.length <= 1) {
+      alert("A panel needs at least one section — add another before removing this one.");
+      return;
+    }
     const hasComps = p.components.some((c) => c.section === sec);
     if (hasComps && !confirm(`Remove section “${sec}”? Its components move to another section.`)) return;
     const sections = p.sections.filter((x) => x !== sec);
-    const fallback = sections.find((x) => DEFAULT_SECTIONS.includes(x)) ?? sections[0] ?? DEFAULT_SECTIONS[0];
+    // Prefer a remaining default as the new home; otherwise the first section left.
+    const fallback = sections.find((x) => DEFAULT_SECTIONS.includes(x)) ?? sections[0];
     u({
       sections,
       components: p.components.map((c) => (c.section === sec ? { ...c, section: fallback } : c)),
@@ -979,7 +1001,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
               }`}>
               <button type="button" onClick={() => u({ activeSection: sec })}
                 title={dragId ? `Move component to “${sec}”` : undefined}>{sec}</button>
-              {isCustom(sec) && (
+              {!isFixed(sec) && (
                 <span className="ml-1 inline-flex items-center gap-0.5 border-l border-line/70 pl-1">
                   <button type="button" title="Rename section" onClick={() => { setEditVal(sec); setEditingSec(sec); }}
                     className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">✎</button>
@@ -1199,7 +1221,7 @@ function ComponentEditSelect({ current, onPick, onClose }: {
 
 // ── Combination builders (RPT-03) ────────────────────────────────────────────
 function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void }) {
-  const [kind, setKind] = useState<"ats" | "photocell" | "mcc" | "pfc" | "wd" | null>(null);
+  const [kind, setKind] = useState<"ats" | "photocell" | "mcc" | "pfc" | "wd" | "lamps" | null>(null);
   const [preview, setPreview] = useState<ComboLine[]>([]);
   const [tag, setTag] = useState("");
 
@@ -1232,7 +1254,7 @@ function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void
         Predefined assemblies — generated from the database, then fully editable in the table above (defaults only).
       </p>
       <div className="mb-3 flex flex-wrap gap-1.5">
-        {([["ats", "ATS"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["pfc", "P.F.C"], ["wd", "WD kit"]] as const).map(([k, label]) => (
+        {([["lamps", "Indication Lamps"], ["ats", "ATS"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["pfc", "P.F.C"], ["wd", "WD kit"]] as const).map(([k, label]) => (
           <button key={k} onClick={() => { setKind(kind === k ? null : k); setPreview([]); }}
             className={`rounded-full border px-3.5 py-1.5 text-xs font-bold ${
               kind === k ? "border-brand bg-brand text-white" : "border-line bg-white text-muted hover:border-brand/40"
@@ -1247,6 +1269,7 @@ function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void
       {kind === "mcc" && <MccBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
       {kind === "pfc" && <PfcBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
       {kind === "wd" && <WdBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
+      {kind === "lamps" && <LampsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
 
       {preview.length > 0 && (
         <div className="mt-3 rounded-lg border border-line bg-surface p-3">
@@ -1463,6 +1486,17 @@ function WdBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => 
         <button className="btn-ghost" onClick={() => onPreview(buildWd(key), "WD kit")}>Generate kit</button>
       </div>
       <p className="mt-2 text-[11px] text-muted">Adds the fixed part + moving part kit for the selected withdrawable breaker.</p>
+    </div>
+  );
+}
+
+function LampsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
+  return (
+    <div className="rounded-lg border border-line p-3">
+      <p className="mb-2 text-[11px] text-muted">
+        Red / Green / Yellow pilot lights (LED 230 V AC) — 1 each.
+      </p>
+      <button className="btn-ghost" onClick={() => onPreview(buildIndicationLamps(), "Indication Lamps")}>Generate set</button>
     </div>
   );
 }
@@ -1837,7 +1871,7 @@ function MatTable({ title, rows, withSupplier, note }: { title: string; rows: Ma
   );
 }
 
-function MaterialTab({ s, abbOnly, setAbbOnly }: { s: LvState; abbOnly: boolean; setAbbOnly: (v: boolean) => void }) {
+function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly }: { s: LvState; qtnNo: string; abbOnly: boolean; setAbbOnly: (v: boolean) => void }) {
   const ml = useMemo(() => buildMaterialList(s), [s]);
   const empty = !s.panels.length || (!ml.abb.length && !ml.other.length && !ml.abbEnclosures.length && !ml.proE.length && !ml.is2.length && !ml.plpCells.length);
   // RPT-1: number report tables sequentially by display order, skipping any
@@ -1859,9 +1893,22 @@ function MaterialTab({ s, abbOnly, setAbbOnly }: { s: LvState; abbOnly: boolean;
   ];
   const visible = candidates.filter((b): b is Block =>
     !!b && (b.kind === "copper" ? b.kg > 0 : b.rows.length > 0));
+  // Export the current Material List (same rows/columns as the tables) to a real
+  // .xlsx via SheetJS. Filename defaults to "ML-<qtn> Rev NN" (same qtn/rev as the
+  // TO/CO PDF export) and is editable; cancelling the prompt skips the export.
+  const exportExcel = () => {
+    const def = offerTitle("ML", qtnNo, s.project.revisionNo);
+    const name = window.prompt("Excel file name:", def);
+    if (name === null) return; // cancelled
+    const ws = XLSX.utils.aoa_to_sheet(materialAoa(visible as MatBlock[]));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Material List");
+    const trimmed = name.trim() || def;
+    XLSX.writeFile(wb, /\.xlsx$/i.test(trimmed) ? trimmed : `${trimmed}.xlsx`);
+  };
   return (
     <div className="space-y-4 animate-fade-up">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {([["ABB M.L", true], ["Full M.L", false]] as [string, boolean][]).map(([label, v]) => (
           <button key={label} onClick={() => setAbbOnly(v)}
             className={`rounded-full border px-4 py-1.5 text-xs font-bold ${
@@ -1869,6 +1916,12 @@ function MaterialTab({ s, abbOnly, setAbbOnly }: { s: LvState; abbOnly: boolean;
             }`}>{label}</button>
         ))}
         <span className="text-[11px] text-muted">ABB M.L → for ABB discount · Full M.L → supply chain &amp; stock</span>
+        {!empty && (
+          <button onClick={exportExcel} title="Download the current Material List as an .xlsx file"
+            className="ml-auto rounded-full border border-brand bg-white px-4 py-1.5 text-xs font-bold text-brand-dark hover:bg-brand-light no-print">
+            ⬇ Export to Excel
+          </button>
+        )}
       </div>
 
       {empty ? (

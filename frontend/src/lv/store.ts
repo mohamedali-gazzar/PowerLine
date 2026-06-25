@@ -120,6 +120,9 @@ export interface LvState {
 }
 
 export const DEFAULT_SECTIONS = ["Main Incoming", "Outgoings", "Metering", "Other"];
+// Structural sections that can't be renamed or removed ("Other" and any
+// user-added sections remain editable/removable).
+export const FIXED_SECTIONS = ["Main Incoming", "Outgoings", "Metering"];
 
 export function newPanel(_n?: number): LvPanel {
   return {
@@ -131,8 +134,8 @@ export function newPanel(_n?: number): LvPanel {
     ratingA: 0,
     ambTemp: "35°C",
     neutral: "50% Phase",
-    earth: "50% Phase",
-    copperType: "Tin-plated",
+    earth: "25% Phase",
+    copperType: "Bare",
     incomingCables: "Bottom",
     outgoingCables: "Bottom",
     form: "1",
