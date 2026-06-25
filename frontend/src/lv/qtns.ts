@@ -114,6 +114,22 @@ export function qtnNumberExists(number: string): boolean {
   return loadRegistry().qtns.some((q) => q.number.trim().toLowerCase() === n);
 }
 
+/** Rename a quotation's number. Enforces non-empty + uniqueness (case-insensitive,
+ *  excluding the record itself). Returns an error message instead of throwing. */
+export function renameQtn(id: string, number: string): { ok: true } | { ok: false; error: string } {
+  const n = number.trim();
+  if (!n) return { ok: false, error: "QTN number can't be empty." };
+  const reg = loadRegistry();
+  const q = reg.qtns.find((x) => x.id === id);
+  if (!q) return { ok: false, error: "Quotation not found." };
+  if (reg.qtns.some((x) => x.id !== id && x.number.trim().toLowerCase() === n.toLowerCase()))
+    return { ok: false, error: "A quotation with this number already exists." };
+  q.number = n;
+  q.updatedAt = new Date().toISOString();
+  saveRegistry(reg);
+  return { ok: true };
+}
+
 export function getQtn(id: string): QtnRecord | null {
   const rec = loadRegistry().qtns.find((q) => q.id === id) ?? null;
   if (rec) {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getQtn, saveQtn } from "../lv/qtns";
+import { getQtn, saveQtn, renameQtn } from "../lv/qtns";
 import { useStaff, SALES_MANAGER } from "../staff";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
@@ -63,6 +63,11 @@ function SearchSelect({ value, placeholder, options, onPick }: {
     return list.slice(0, 80);
   }, [q, options]);
   const sel = options.find((o) => o.key === value);
+  // Keyboard nav: first option auto-highlighted; ↑/↓ move, Enter picks the highlight.
+  const [activeIdx, setActiveIdx] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { setActiveIdx(0); }, [q, open]);
+  useEffect(() => { (listRef.current?.children[activeIdx] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" }); }, [activeIdx]);
   return (
     <div className="relative">
       <input
@@ -73,13 +78,21 @@ function SearchSelect({ value, placeholder, options, onPick }: {
         onClick={() => { if (!open) { setOpen(true); setQ(""); } }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onKeyDown={(e) => {
+          if (!open) { if (e.key === "ArrowDown" || e.key === "Enter") { setOpen(true); setQ(""); } return; }
+          if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, shown.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIdx((i) => Math.max(i - 1, 0)); }
+          else if (e.key === "Enter") { e.preventDefault(); const o = shown[activeIdx]; if (o) { onPick(o.key); setOpen(false); } }
+          else if (e.key === "Escape") setOpen(false);
+        }}
       />
       {open && (
-        <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-line bg-white shadow-lift">
+        <div ref={listRef} className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-line bg-white shadow-lift">
           {shown.length === 0 && <div className="px-3 py-2 text-xs text-muted">No matches</div>}
-          {shown.map((o) => (
+          {shown.map((o, i) => (
             <button key={o.key} type="button"
-              className="block w-full px-3 py-1.5 text-left text-sm hover:bg-brand-tint"
+              className={`block w-full px-3 py-1.5 text-left text-sm ${i === activeIdx ? "bg-brand-light" : "hover:bg-brand-tint"}`}
+              onMouseEnter={() => setActiveIdx(i)}
               onMouseDown={() => { onPick(o.key); setOpen(false); }}>
               {o.label}
               {o.hint && <span className="ml-1 text-[11px] text-muted">{o.hint}</span>}
@@ -105,6 +118,15 @@ export default function LvConfiguratorPage() {
   const s = hist.present;
   const [tab, setTab] = useState<Tab>(() => (rec?.state.panels.length ? "panels" : "project"));
   const [matAbbOnly, setMatAbbOnly] = useState(false);
+  // RPT-1: the QTN number is editable after creation (kept unique in the registry).
+  const [qtnNum, setQtnNum] = useState(() => rec?.number ?? "");
+  // Renames the QTN in the registry (unique, non-empty). Edited from the Project tab.
+  const renameQtnNumber = (n: string): { ok: boolean; error?: string } => {
+    if (!rec) return { ok: false, error: "Quotation not found." };
+    const res = renameQtn(rec.id, n);
+    if (res.ok) setQtnNum(n.trim());
+    return res;
+  };
 
   const apply = (updater: (old: LvState) => LvState) =>
     setHist((h) => {
@@ -179,7 +201,7 @@ export default function LvConfiguratorPage() {
         <div>
           <Link to="/lv" className="text-xs font-semibold text-brand hover:underline">← All QTNs</Link>
           <h1 className="flex items-center gap-3 text-2xl font-extrabold tracking-tight">
-            <span className="code-chip">{rec.number}</span>
+            <span className="code-chip">{qtnNum}</span>
             {s.project.name || "LV Quotation"}
           </h1>
           <p className="text-sm text-muted">
@@ -207,14 +229,14 @@ export default function LvConfiguratorPage() {
         ))}
       </div>
 
-      {tab === "project" && <ProjectTab s={s} up={up} />}
+      {tab === "project" && <ProjectTab s={s} up={up} qtnNum={qtnNum} onRenameQtn={renameQtnNumber} />}
       {tab === "pricing" && <PricingTab s={s} up={up} />}
       {tab === "panels" && (
         <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
           onAdd={addPanel} onDel={removePanel} onClone={clonePanel} />
       )}
-      {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={rec.number} />)}
-      {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={rec.number} />)}
+      {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} />)}
+      {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} />)}
       {tab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} />)}
     </div>
   );
@@ -251,6 +273,7 @@ function DocHeader({ s, qtnNo, title }: { s: LvState; qtnNo: string; title: stri
   const [staff] = useStaff();
   const mgr = staff.salesManagers.find((m) => m.name === SALES_MANAGER);
   const mgrMobile = mgr?.mobile || "";
+  const mgrEmail = mgr?.email || "";
   return (
     <div className="border-b-4 border-brand pb-4">
       <div className="flex items-start justify-between">
@@ -262,17 +285,18 @@ function DocHeader({ s, qtnNo, title }: { s: LvState; qtnNo: string; title: stri
           <div className="text-lg font-extrabold">{title}</div>
           <div className="font-mono text-sm font-bold text-brand-dark">{qtnNo}</div>
           <div className="text-xs text-muted">{fmtDate(pr.date)}</div>
+          {pr.optyNo && <div className="text-xs text-muted">OPTY No.: {pr.optyNo}</div>}
+          {pr.revisionNo && <div className="text-xs text-muted">Rev. No.: {pr.revisionNo}</div>}
         </div>
       </div>
+      {/* Row 1: Project | Sales(+phone) | Sales mgr(+phone)   Row 2: Customer | Email(Sales) | Email(Sales mgr) */}
       <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-0.5 text-sm sm:grid-cols-3">
         <div><span className="text-muted">Project:</span> <b>{pr.name || "—"}</b></div>
-        <div><span className="text-muted">Customer:</span> <b>{pr.customer || "—"}</b></div>
-        <div><span className="text-muted">OPTY No.:</span> <b>{pr.optyNo || "—"}</b></div>
         <div><span className="text-muted">Sales:</span> <b>{pr.salesPerson || "—"}</b>{pr.salesMobile && <span className="text-xs text-muted"> · {pr.salesMobile}</span>}</div>
+        <div><span className="text-muted">Sales Manager:</span> <b>{SALES_MANAGER}</b>{mgrMobile && <span className="text-xs text-muted"> · {mgrMobile}</span>}</div>
+        <div><span className="text-muted">Customer:</span> <b>{pr.customer || "—"}</b></div>
         <div><span className="text-muted">Email:</span> <b className="text-xs">{pr.salesEmail || "—"}</b></div>
-        <div><span className="text-muted">Support eng.:</span> <b>{pr.supportEngineer || "—"}</b></div>
-        <div><span className="text-muted">Sales mgr:</span> <b>{SALES_MANAGER}</b>{mgrMobile && <span className="text-xs text-muted"> · {mgrMobile}</span>}</div>
-        {pr.revisionNo && <div><span className="text-muted">Rev. No.:</span> <b>{pr.revisionNo}</b></div>}
+        <div><span className="text-muted">Email:</span> <b className="text-xs">{mgrEmail || "—"}</b></div>
       </div>
     </div>
   );
@@ -394,6 +418,10 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                       return (
                         <tr><td colSpan={4} className="px-2 py-5 text-center text-sm text-muted">No components.</td></tr>
                       );
+                    // RPT: the orange group sub-labels (Circuit Breaker, Contactor…) only
+                    // appear when the panel has MORE THAN ONE section; a single-section
+                    // panel prints a clean flat component list under its section header.
+                    const multiSection = secs.length > 1;
                     return secs.flatMap((sec) => {
                       const comps = p.components.filter((c) => c.section === sec);
                       const order: string[] = [];
@@ -403,18 +431,16 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                         if (!byG.has(k)) { byG.set(k, []); order.push(k); }
                         byG.get(k)!.push(c);
                       });
-                      const rows: JSX.Element[] = [
-                        <tr key={`s-${sec}`}>
-                          <td colSpan={4} className="border px-2 py-1 text-center text-[12px] font-bold uppercase tracking-wide" style={{ background: "#f3f3f5", borderColor: "#f1d3c4" }}>{sec}</td>
-                        </tr>,
-                      ];
+                      const rows: JSX.Element[] = [];
+                      // Section header only when there's MORE THAN ONE section; the orange
+                      // group sub-labels (Circuit Breaker, Contactor…) are never shown here.
+                      if (multiSection)
+                        rows.push(
+                          <tr key={`s-${sec}`}>
+                            <td colSpan={4} className="border px-2 py-1 text-center text-[12px] font-bold uppercase tracking-wide" style={{ background: "#f3f3f5", borderColor: "#f1d3c4" }}>{sec}</td>
+                          </tr>
+                        );
                       for (const g of order) {
-                        if (g)
-                          rows.push(
-                            <tr key={`g-${sec}-${g}`}>
-                              <td colSpan={4} className="border px-2 py-0.5 text-center text-[11.5px] font-bold" style={{ color: "#b5470f", background: "#fdf0e9", borderColor: "#f1d3c4" }}>{g}</td>
-                            </tr>
-                          );
                         for (const c of byG.get(g)!)
                           rows.push(
                             <tr key={c.id} className="border-b align-top" style={{ borderColor: "#f3ddd4" }}>
@@ -517,7 +543,10 @@ function CommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
 }
 
 // ── Project tab (RPT-01) ─────────────────────────────────────────────────────
-function ProjectTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }) {
+function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
+  s: LvState; up: (p: Partial<LvState>) => void;
+  qtnNum: string; onRenameQtn: (n: string) => { ok: boolean; error?: string };
+}) {
   const pr = s.project;
   const upPr = (patch: Partial<LvState["project"]>) => up({ project: { ...pr, ...patch } });
   const [staff, setStaff] = useStaff();
@@ -529,33 +558,39 @@ function ProjectTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
   const mgr = staff.salesManagers.find((m) => m.name === SALES_MANAGER);
   const [newSales, setNewSales] = useState({ name: "", mobile: "", email: "" });
   const [newEng, setNewEng] = useState("");
+  // QTN number — editable here; commits to the registry on blur / Enter (kept unique).
+  const [qtnDraft, setQtnDraft] = useState(qtnNum);
+  const [qtnErr, setQtnErr] = useState("");
+  useEffect(() => { setQtnDraft(qtnNum); }, [qtnNum]);
+  const commitQtn = () => {
+    if (qtnDraft.trim() === qtnNum.trim()) { setQtnErr(""); return; }
+    const res = onRenameQtn(qtnDraft);
+    setQtnErr(res.ok ? "" : res.error || "Invalid QTN number.");
+  };
 
   return (
-    <div className="grid items-start gap-5 lg:grid-cols-2 animate-fade-up">
+    <div className="grid max-w-4xl gap-5 animate-fade-up">
       <div className="card p-5">
         <h2 className="sec-head">Project</h2>
         <p className="mb-3 text-xs text-muted">Used to generate the Technical & Commercial offer cover pages.</p>
         <div className="grid gap-3 sm:grid-cols-2">
+          {/* Row 1: Project name | Customer */}
           <div><L>Project name</L><input className="input" value={pr.name} onChange={(e) => upPr({ name: e.target.value })} /></div>
-          <div><L>OPTY No.</L><input className="input" value={pr.optyNo} onChange={(e) => upPr({ optyNo: e.target.value })} /></div>
-          <div><L>Revision No.</L><input className="input" value={pr.revisionNo} onChange={(e) => upPr({ revisionNo: e.target.value })} /></div>
           <div><L>Customer</L><input className="input" value={pr.customer} onChange={(e) => upPr({ customer: e.target.value })} /></div>
-          <div><L>Date</L><input className="input" type="date" value={pr.date} onChange={(e) => upPr({ date: e.target.value })} /></div>
-          <div>
-            <L>Sales manager</L>
-            <input className="input bg-surface" value={SALES_MANAGER} readOnly />
+          {/* Row 2 left (spans the Project-name column): QTN No. + Revision No. */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <L>QTN No.</L>
+              <input className="input" value={qtnDraft}
+                onChange={(e) => { setQtnDraft(e.target.value); setQtnErr(""); }}
+                onBlur={commitQtn}
+                onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setQtnDraft(qtnNum); setQtnErr(""); } }} />
+              {qtnErr && <p className="mt-1 text-[11px] font-semibold text-red-600">{qtnErr}</p>}
+            </div>
+            <div><L>Revision No.</L><input className="input" value={pr.revisionNo} onChange={(e) => upPr({ revisionNo: e.target.value })} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><L>Manager no</L><input className="input bg-surface" value={mgr?.mobile ?? ""} readOnly /></div>
-            <div><L>Manager email</L><input className="input bg-surface" value={mgr?.email ?? ""} readOnly /></div>
-          </div>
-          <div>
-            <L>Sales person</L>
-            <select className="input cursor-pointer" value={pr.salesPerson} onChange={(e) => pickSales(e.target.value)}>
-              <option value="">— select —</option>
-              {staff.salesPeople.filter((p) => p.name !== SALES_MANAGER).map((p) => <option key={p.name}>{p.name}</option>)}
-            </select>
-          </div>
+          {/* Row 2 right: OPTY No. */}
+          <div><L>OPTY No.</L><input className="input" value={pr.optyNo} onChange={(e) => upPr({ optyNo: e.target.value })} /></div>
           <div>
             <L>Sales support engineer</L>
             <select className="input cursor-pointer" value={pr.supportEngineer} onChange={(e) => upPr({ supportEngineer: e.target.value })}>
@@ -563,8 +598,29 @@ function ProjectTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
               {staff.supportEngineers.map((p) => <option key={p.name}>{p.name}</option>)}
             </select>
           </div>
-          <div><L>Sales no</L><input className="input bg-surface" value={pr.salesMobile} readOnly /></div>
-          <div><L>Sales email</L><input className="input bg-surface" value={pr.salesEmail} readOnly /></div>
+          <div><L>Date</L><input className="input" type="date" value={pr.date} onChange={(e) => upPr({ date: e.target.value })} /></div>
+          {/* Sales manager — name + phone side by side, email full width below */}
+          <div className="grid content-start gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div><L>Sales manager</L><input className="input bg-surface" value={SALES_MANAGER} readOnly /></div>
+              <div><L>Phone no.</L><input className="input bg-surface" value={mgr?.mobile ?? ""} readOnly /></div>
+            </div>
+            <div><L>Manager email</L><input className="input bg-surface" value={mgr?.email ?? ""} readOnly /></div>
+          </div>
+          {/* Sales person — name + phone side by side, email full width below */}
+          <div className="grid content-start gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <L>Sales person</L>
+                <select className="input cursor-pointer" value={pr.salesPerson} onChange={(e) => pickSales(e.target.value)}>
+                  <option value="">— select —</option>
+                  {staff.salesPeople.filter((p) => p.name !== SALES_MANAGER).map((p) => <option key={p.name}>{p.name}</option>)}
+                </select>
+              </div>
+              <div><L>Phone no.</L><input className="input bg-surface" value={pr.salesMobile} readOnly /></div>
+            </div>
+            <div><L>Sales person email</L><input className="input bg-surface" value={pr.salesEmail} readOnly /></div>
+          </div>
         </div>
       </div>
 
@@ -777,6 +833,19 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
   const [editingSec, setEditingSec] = useState<string | null>(null); // custom-section rename
   const [editVal, setEditVal] = useState("");
   const [editComp, setEditComp] = useState<string | null>(null); // row being re-selected
+  // Picking a search result opens a small qty popup before the component is added.
+  const [pending, setPending] = useState<DbComponent | null>(null);
+  const [pendQty, setPendQty] = useState(""); // empty box — typed number becomes the qty (blank = 1)
+  const qtyRef = useRef<HTMLInputElement>(null);
+  // When the qty popup opens, focus + select the field so the quantity can be typed
+  // straight from the keyboard (type the number, then Enter to add).
+  useEffect(() => { if (pending) { qtyRef.current?.focus(); qtyRef.current?.select(); } }, [pending]);
+  // Keyboard nav of the search results: first hit auto-highlighted; ↑/↓ move the
+  // selection, Enter picks the highlighted component (then the qty popup opens).
+  const [activeIdx, setActiveIdx] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { setActiveIdx(0); }, [q]);
+  useEffect(() => { (listRef.current?.children[activeIdx] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" }); }, [activeIdx]);
   // drag-and-drop: reorder rows and move them across sections
   const [dragId, setDragId] = useState<string | null>(null);
   const [overRow, setOverRow] = useState<string | null>(null);
@@ -875,8 +944,8 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
     u({ components: arr });
   };
 
-  const add = (c: DbComponent) => {
-    u({ components: [...p.components, toPanelComponent(c, p.activeSection)] });
+  const add = (c: DbComponent, qty = 1) => {
+    u({ components: [...p.components, { ...toPanelComponent(c, p.activeSection), qty: Math.max(1, qty) }] });
     setQ("");
   };
 
@@ -911,12 +980,12 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
               <button type="button" onClick={() => u({ activeSection: sec })}
                 title={dragId ? `Move component to “${sec}”` : undefined}>{sec}</button>
               {isCustom(sec) && (
-                <>
+                <span className="ml-1 inline-flex items-center gap-0.5 border-l border-line/70 pl-1">
                   <button type="button" title="Rename section" onClick={() => { setEditVal(sec); setEditingSec(sec); }}
-                    className="opacity-50 hover:opacity-100">✎</button>
+                    className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">✎</button>
                   <button type="button" title="Remove section" onClick={() => removeSection(sec)}
-                    className="text-red-500 opacity-60 hover:opacity-100">✕</button>
-                </>
+                    className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-red-500 hover:bg-red-100 hover:text-red-600">✕</button>
+                </span>
               )}
             </span>
           );
@@ -934,14 +1003,22 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
       {/* search */}
       <div className="relative mb-3">
         <input className="input" placeholder={`Search 2,124 components (name / reference / type / rating) → adds to “${p.activeSection}”`}
-          value={q} onChange={(e) => setQ(e.target.value)} />
-        {q && (
-          <div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-line bg-white shadow-lift">
+          value={q} onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (pending || !q) return;
+            if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, hits.length - 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIdx((i) => Math.max(i - 1, 0)); }
+            else if (e.key === "Enter") { e.preventDefault(); const c = hits[activeIdx]; if (c) { setPending(c); setPendQty(""); } }
+            else if (e.key === "Escape") setQ("");
+          }} />
+        {q && !pending && (
+          <div ref={listRef} className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-line bg-white shadow-lift">
             {hits.length === 0 && <div className="px-3 py-2 text-xs text-muted">No matches</div>}
-            {hits.map((c) => (
+            {hits.map((c, i) => (
               <button key={c.ref + c.n} type="button"
-                className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-sm hover:bg-brand-tint"
-                onMouseDown={() => add(c)}>
+                className={`flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-sm ${i === activeIdx ? "bg-brand-light" : "hover:bg-brand-tint"}`}
+                onMouseEnter={() => setActiveIdx(i)}
+                onMouseDown={() => { setPending(c); setPendQty(""); }}>
                 <span>
                   <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{c.t}</span>
                   {c.n}
@@ -950,6 +1027,24 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                 <b className="shrink-0 text-brand-dark">{fmtEgp(componentPriceEgp(c, s.factors))}</b>
               </button>
             ))}
+          </div>
+        )}
+        {/* qty popup — opened when a search result is picked */}
+        {pending && (
+          <div className="absolute z-30 mt-1 w-full rounded-lg border border-brand/50 bg-white p-3 shadow-lift">
+            <p className="mb-2 text-xs">
+              <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{pending.t}</span>
+              <span className="font-bold text-ink">{pending.n}</span>
+              <span className="ml-1 text-[11px] text-muted">{pending.ref} · {pending.brand} → “{p.activeSection}”</span>
+            </p>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-muted">Qty</label>
+              <input ref={qtyRef} autoFocus inputMode="numeric" className="input h-9 w-24" placeholder="1" value={pendQty}
+                onChange={(e) => setPendQty(e.target.value.replace(/[^\d]/g, ""))}
+                onKeyDown={(e) => { if (e.key === "Enter") { add(pending, parseInt(pendQty, 10) || 1); setPending(null); } if (e.key === "Escape") setPending(null); }} />
+              <button type="button" className="btn-primary h-9 px-4 text-sm" onClick={() => { add(pending, parseInt(pendQty, 10) || 1); setPending(null); }}>Add</button>
+              <button type="button" className="btn-ghost h-9 px-3 text-sm" onClick={() => setPending(null)}>Cancel</button>
+            </div>
           </div>
         )}
       </div>
