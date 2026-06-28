@@ -458,8 +458,8 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                       for (const g of order) {
                         for (const c of byG.get(g)!)
                           rows.push(isSpacer(c) ? (
-                            <tr key={c.id} style={{ border: "none" }}>
-                              <td colSpan={4} className="px-2 py-1 text-[12.5px]" style={{ border: "none" }}>&nbsp;</td>
+                            <tr key={c.id}>
+                              <td colSpan={4} className="border-y px-2 py-1 text-[12.5px]" style={{ borderColor: "#f3ddd4" }}>&nbsp;</td>
                             </tr>
                           ) : (
                             <tr key={c.id} className="border-b align-top" style={{ borderColor: "#f3ddd4" }}>
