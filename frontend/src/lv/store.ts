@@ -122,7 +122,17 @@ export interface LvState {
   selectedId: string | null;
 }
 
-export const DEFAULT_SECTIONS = ["Main Incoming", "Outgoings", "Metering", "Other"];
+export const DEFAULT_SECTIONS = ["Main Incoming", "Metering", "Outgoings", "Other"];
+/** Migration: move Metering to just before Outgoings on existing panels (the
+ *  default order changed). No-op if either is missing or already in order. */
+export function meteringBeforeOutgoings(sections: string[]): string[] {
+  const oi = sections.indexOf("Outgoings");
+  const mi = sections.indexOf("Metering");
+  if (oi === -1 || mi === -1 || mi < oi) return sections;
+  const next = sections.filter((s) => s !== "Metering");
+  next.splice(next.indexOf("Outgoings"), 0, "Metering");
+  return next;
+}
 // Structural sections that can't be renamed or removed ("Other" and any
 // user-added sections remain editable/removable).
 export const FIXED_SECTIONS = ["Main Incoming", "Outgoings", "Metering"];

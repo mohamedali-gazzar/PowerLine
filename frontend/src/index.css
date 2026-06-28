@@ -59,7 +59,7 @@
     @apply w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink
       shadow-sm transition-all duration-150 outline-none
       placeholder:text-muted/60
-      focus:border-brand focus:ring-4 focus:ring-brand/15 hover:border-accent/60;
+      focus:border-brand focus:ring-4 focus:ring-brand/40 hover:border-accent/60;
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2

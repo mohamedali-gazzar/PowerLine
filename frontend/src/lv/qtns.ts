@@ -3,7 +3,7 @@
 // Material List inside it, like the Excel configurator files QTN-26-XXXX).
 // Stored client-side; backend persistence is a later phase.
 
-import { initialState, grandTotals, type LvState } from "./store";
+import { initialState, grandTotals, meteringBeforeOutgoings, type LvState } from "./store";
 
 export interface QtnRecord {
   id: string;
@@ -136,6 +136,7 @@ export function getQtn(id: string): QtnRecord | null {
     // normalize older stored shapes (incl. the earlier multi-add panelItems)
     rec.state.panels.forEach((p) => {
       p.code ??= "";
+      if (Array.isArray(p.sections)) p.sections = meteringBeforeOutgoings(p.sections);
       p.panelItems = ((p as any).panelItems ?? []).map((it: any, i: number) => ({
         ...it,
         qty: 1,

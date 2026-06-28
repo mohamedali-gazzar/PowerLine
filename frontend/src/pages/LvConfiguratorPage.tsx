@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getQtn, saveQtn, renameQtn } from "../lv/qtns";
 import { useStaff, SALES_MANAGER } from "../staff";
@@ -35,6 +35,41 @@ import {
 } from "../lv/copper";
 
 type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material";
+const TABS: Tab[] = ["project", "pricing", "panels", "technical", "commercial", "material"];
+
+// ── Keyboard field navigation (arrow keys move between fields by layout) ───────
+type ArrowKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
+/** Visible, enabled input/select fields within a container. */
+function navigableFields(root: HTMLElement | null): HTMLElement[] {
+  if (!root) return [];
+  return [...root.querySelectorAll<HTMLElement>("input, select")].filter((el) => {
+    const inp = el as HTMLInputElement;
+    if (inp.disabled || inp.readOnly) return false;
+    if (el.tagName === "INPUT" && ["hidden", "checkbox", "radio", "button", "submit", "range"].includes(inp.type)) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 1 && r.height > 1;
+  });
+}
+/** The nearest field from `cur` in the pressed direction (by geometry). */
+function nearestField(cur: HTMLElement, list: HTMLElement[], key: ArrowKey): HTMLElement | null {
+  const a = cur.getBoundingClientRect();
+  const cx = a.left + a.width / 2, cy = a.top + a.height / 2;
+  let best: HTMLElement | null = null, bestScore = Infinity;
+  for (const el of list) {
+    if (el === cur) continue;
+    const r = el.getBoundingClientRect();
+    const dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy;
+    let inDir = false, along = 0, perp = 0;
+    if (key === "ArrowRight") { inDir = dx > 1; along = dx; perp = Math.abs(dy); }
+    else if (key === "ArrowLeft") { inDir = dx < -1; along = -dx; perp = Math.abs(dy); }
+    else if (key === "ArrowDown") { inDir = dy > 1; along = dy; perp = Math.abs(dx); }
+    else { inDir = dy < -1; along = -dy; perp = Math.abs(dx); }
+    if (!inDir) continue;
+    const score = along + perp * 2; // closest in-line, then best-aligned
+    if (score < bestScore) { bestScore = score; best = el; }
+  }
+  return best;
+}
 
 // ── tiny UI atoms (match the app theme) ──────────────────────────────────────
 function L({ children }: { children: React.ReactNode }) {
@@ -113,7 +148,12 @@ export default function LvConfiguratorPage() {
     () => ({ past: [], present: rec?.state ?? null!, future: [] })
   );
   const s = hist.present;
-  const [tab, setTab] = useState<Tab>(() => (rec?.state.panels.length ? "panels" : "project"));
+  // Restore the last tab this QTN was on (per-QTN), else the default view.
+  const tabKey = `lv-tab-${id}`;
+  const [tab, setTab] = useState<Tab>(() => {
+    const saved = localStorage.getItem(tabKey) as Tab | null;
+    return saved && TABS.includes(saved) ? saved : (rec?.state.panels.length ? "panels" : "project");
+  });
   const [matAbbOnly, setMatAbbOnly] = useState(false);
   // RPT-1: the QTN number is editable after creation (kept unique in the registry).
   const [qtnNum, setQtnNum] = useState(() => rec?.number ?? "");
@@ -192,6 +232,64 @@ export default function LvConfiguratorPage() {
       return { ...old, panels, selectedId: copy.id };
     });
 
+  // Per-tab memory: remember each tab's scroll position (and the last active tab
+  // for this QTN), and restore them when you return — instead of resetting.
+  const scrollByTab = useRef<Record<string, number>>({});
+  const goToTab = (t: Tab) => {
+    scrollByTab.current[tab] = window.scrollY; // remember where we were on this tab
+    localStorage.setItem(tabKey, t);
+    setTab(t);
+  };
+  useLayoutEffect(() => {
+    window.scrollTo(0, scrollByTab.current[tab] ?? 0); // restore the entered tab's position
+  }, [tab]);
+
+  // Arrow-key navigation between form fields, based on their on-screen layout —
+  // fast keyboard data entry. Left/Right move the text cursor first (navigate
+  // only at the start/end); Up/Down navigate. For a CLOSED dropdown (<select>)
+  // the arrows navigate too and the native value-cycling is suppressed — the
+  // value only changes once the dropdown is opened (Alt+Down / click), after
+  // which the OS popup handles the arrows (this handler no longer fires).
+  const navRef = useRef<HTMLDivElement>(null);
+  const onFieldArrowNav = (e: React.KeyboardEvent) => {
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return; // Alt+Down opens the select natively
+    const el = document.activeElement as HTMLElement | null;
+    if (!el || (el.tagName !== "INPUT" && el.tagName !== "SELECT")) return;
+    const isSelect = el.tagName === "SELECT";
+    // Enter advances to the next field in reading order (Excel-style).
+    if (e.key === "Enter") {
+      const fields = navigableFields(navRef.current);
+      const idx = fields.indexOf(el);
+      if (idx >= 0 && idx < fields.length - 1) {
+        e.preventDefault();
+        const next = fields[idx + 1] as HTMLInputElement;
+        next.focus();
+        if (next.tagName === "INPUT" && typeof next.selectionStart === "number") next.select();
+      }
+      return;
+    }
+    const key = e.key as ArrowKey;
+    if (key !== "ArrowUp" && key !== "ArrowDown" && key !== "ArrowLeft" && key !== "ArrowRight") return;
+    const horiz = key === "ArrowLeft" || key === "ArrowRight";
+    if (!isSelect && horiz) {
+      const inp = el as HTMLInputElement;
+      if (typeof inp.selectionStart === "number") { // textual input → move cursor first
+        const atStart = inp.selectionStart === 0 && inp.selectionEnd === 0;
+        const atEnd = inp.selectionStart === inp.value.length && inp.selectionEnd === inp.value.length;
+        if (key === "ArrowLeft" && !atStart) return;
+        if (key === "ArrowRight" && !atEnd) return;
+      }
+    }
+    const target = nearestField(el, navigableFields(navRef.current), key);
+    // On a closed dropdown, always suppress the native value change — even when
+    // there is no neighbouring field to move to.
+    if (isSelect) e.preventDefault();
+    if (!target) return;
+    e.preventDefault();
+    target.focus();
+    if (target.tagName === "INPUT" && typeof (target as HTMLInputElement).selectionStart === "number") (target as HTMLInputElement).select();
+  };
+
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3 animate-fade-up no-print">
@@ -217,7 +315,7 @@ export default function LvConfiguratorPage() {
           solid band so content scrolls cleanly underneath. */}
       <div className="sticky top-0 z-30 -mx-4 mb-4 flex flex-wrap gap-1.5 border-b border-line/60 bg-surface px-4 py-2.5 no-print sm:-mx-6 sm:px-6">
         {([["project", "Project"], ["pricing", "Pricing Settings"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"]] as [Tab, string][]).map(([t, label]) => (
-          <button key={t} onClick={() => setTab(t)}
+          <button key={t} onClick={() => goToTab(t)}
             className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
               tab === t ? "border-brand bg-brand text-white shadow-soft" : "border-line bg-white text-muted hover:border-brand/40"
             }`}>
@@ -226,15 +324,17 @@ export default function LvConfiguratorPage() {
         ))}
       </div>
 
-      {tab === "project" && <ProjectTab s={s} up={up} qtnNum={qtnNum} onRenameQtn={renameQtnNumber} />}
-      {tab === "pricing" && <PricingTab s={s} up={up} />}
-      {tab === "panels" && (
-        <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
-          onAdd={addPanel} onDel={removePanel} onClone={clonePanel} />
-      )}
-      {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} />)}
-      {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} />)}
-      {tab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} />)}
+      <div ref={navRef} onKeyDown={onFieldArrowNav}>
+        {tab === "project" && <ProjectTab s={s} up={up} qtnNum={qtnNum} onRenameQtn={renameQtnNumber} />}
+        {tab === "pricing" && <PricingTab s={s} up={up} />}
+        {tab === "panels" && (
+          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
+            onAdd={addPanel} onDel={removePanel} onClone={clonePanel} />
+        )}
+        {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} />)}
+        {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} />)}
+        {tab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} />)}
+      </div>
     </div>
   );
 }
@@ -729,6 +829,9 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
   upPanel: (id: string, p: Partial<LvPanel>) => void;
   onAdd: () => void; onDel: (id: string) => void; onClone: (id: string) => void;
 }) {
+  // Drag-and-drop reorder state (hooks must precede the early return).
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
   if (!s.panels.length) {
     return (
       <div className="card p-12 text-center animate-fade-up">
@@ -738,21 +841,49 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
       </div>
     );
   }
+  // Drop the dragged panel before the target; position-based numbering and the
+  // saved order (autosaved to the QTN) follow automatically.
+  const dropPanel = (targetId: string) => {
+    const dId = dragId;
+    setDragId(null); setOverId(null);
+    if (!dId || dId === targetId) return;
+    const arr = [...s.panels];
+    const from = arr.findIndex((p) => p.id === dId);
+    if (from < 0) return;
+    const [moved] = arr.splice(from, 1);
+    const to = arr.findIndex((p) => p.id === targetId);
+    arr.splice(to < 0 ? arr.length : to, 0, moved);
+    up({ panels: arr });
+  };
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[260px_1fr] animate-fade-up">
       {/* panel list — sticks below the sticky tab header */}
       <div className="card p-3 lg:sticky lg:top-16">
-        {s.panels.map((p) => {
-          const c = calcPanel(p, s.factors);
+        {s.panels.map((p, i) => {
           const active = p.id === s.selectedId;
           return (
             <div key={p.id}
-              className={`mb-1.5 flex items-center gap-1 rounded-lg border px-2 py-2 transition-colors ${
+              onDragOver={(e) => { if (dragId && dragId !== p.id) { e.preventDefault(); if (overId !== p.id) setOverId(p.id); } }}
+              onDragLeave={() => setOverId((o) => (o === p.id ? null : o))}
+              onDrop={(e) => { e.preventDefault(); dropPanel(p.id); }}
+              className={`mb-1.5 flex items-center gap-1 rounded-lg border px-2 py-2 transition-all duration-150 ${
                 active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
-              }`}>
-              <button onClick={() => up({ selectedId: p.id })} className="min-w-0 flex-1 text-left">
+              } ${dragId === p.id ? "scale-[0.98] opacity-40" : ""} ${overId === p.id ? "border-t-2 border-t-brand bg-brand-tint" : ""}`}>
+              <span
+                draggable
+                onDragStart={(e) => { setDragId(p.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", p.id); } catch {} }}
+                onDragEnd={() => { setDragId(null); setOverId(null); }}
+                title="Drag to reorder"
+                className="shrink-0 cursor-grab select-none px-0.5 text-muted/50 transition-colors hover:text-brand active:cursor-grabbing">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
+                  <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
+                  <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
+                </svg>
+              </span>
+              <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{i + 1}</span>
+              <button onClick={() => up({ selectedId: p.id })} className="ml-2 min-w-0 flex-1 text-left">
                 <div className={`truncate text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.name.trim() || "(unnamed panel)"}</div>
-                <div className="truncate text-[11px] text-muted">{p.encFam}{p.qty > 1 ? ` · ×${p.qty}` : ""} · {fmtEgp(c.totalSell)} EGP</div>
               </button>
               <button onClick={() => onClone(p.id)} title="Duplicate panel"
                 className="shrink-0 rounded p-1 text-base text-muted transition-colors hover:bg-white hover:text-brand-dark">⧉</button>
@@ -1004,7 +1135,16 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                 overSec === sec ? "border-brand bg-brand-light text-brand-dark ring-2 ring-brand/50"
                 : active ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"
               }`}>
-              <button type="button" onClick={() => u({ activeSection: sec })}
+              <button type="button" data-section={sec} onClick={() => u({ activeSection: sec })}
+                onKeyDown={(e) => {
+                  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+                  e.preventDefault();
+                  const idx = p.sections.indexOf(sec);
+                  const next = p.sections[idx + (e.key === "ArrowRight" ? 1 : -1)];
+                  if (!next) return;
+                  u({ activeSection: next });
+                  requestAnimationFrame(() => (document.querySelector(`button[data-section="${CSS.escape(next)}"]`) as HTMLElement | null)?.focus());
+                }}
                 title={dragId ? `Move component to “${sec}”` : undefined}>{sec}</button>
               {!isFixed(sec) && (
                 <span className="ml-1 inline-flex items-center gap-0.5 border-l border-line/70 pl-1">
