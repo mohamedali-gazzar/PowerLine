@@ -10,7 +10,6 @@ import {
 } from "../lv/catalog";
 import {
   newPanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
-  spacerComponent, isSpacer,
   calcPanel, grandTotals, buildMaterialList, searchComponents,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem,
 } from "../lv/store";
@@ -24,7 +23,8 @@ import {
   type ComboLine, type AtsTypeId,
 } from "../lv/combos";
 import { rankSearchOptions } from "../lv/search";
-import { buildMaterialWorkbook, type MatBlock } from "../lv/materialExcel";
+import { materialAoa, type MatBlock } from "../lv/materialExcel";
+import * as XLSX from "xlsx";
 import {
   PRO_E_DEPTHS, PRO_E_THICKNESS, PRO_E_IPS, IS2_DEPTHS, PLP_DEPTHS,
   proEIp31Disabled, retable, defaultCellConfig, type CellType,
@@ -455,8 +455,7 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                           </tr>
                         );
                       for (const g of order) {
-                        for (const c of byG.get(g)!) {
-                          if (isSpacer(c)) continue; // spacer is editor-only — not shown in the offer
+                        for (const c of byG.get(g)!)
                           rows.push(
                             <tr key={c.id} className="border-b align-top" style={{ borderColor: "#f3ddd4" }}>
                               <td className="px-2 py-1 text-center text-[12.5px] font-semibold">{c.qty}</td>
@@ -472,7 +471,6 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                               <td className="px-2 py-1 text-[11.5px] text-muted">{c.note}</td>
                             </tr>
                           );
-                        }
                       }
                       return rows;
                     });
@@ -536,7 +534,7 @@ function CommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                 <td className="py-1.5 pr-2">
                   <b>{p.name}</b>
                   <div className="text-[11px] text-muted">
-                    {p.encFam} LV distribution panel{p.ratingA ? ` · ${p.ratingA} A incomer` : ""} · Form {p.form} · {p.components.filter((c) => !isSpacer(c)).length} components
+                    {p.encFam} LV distribution panel{p.ratingA ? ` · ${p.ratingA} A incomer` : ""} · Form {p.form} · {p.components.length} components
                   </div>
                 </td>
                 <td className="py-1.5 pr-2 text-center font-semibold">{p.qty}</td>
@@ -781,10 +779,8 @@ function PanelEditor({ s, p, upPanel }: {
         <h2 className="sec-head">Panel cost (live)</h2>
         <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
           <div className="rounded-lg bg-surface p-2.5">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Enclosure<br /><b>{fmtEgp(calc.enclCost)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Internal Kits<br /><b>{fmtEgp(calc.kits)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Main Busbar ({calc.busbarKg.toFixed(1)} kg)<br /><b>{fmtEgp(calc.busbarCost)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Cu Connections ({calc.cuWeight.toFixed(1)} kg)<br /><b>{fmtEgp(calc.cuConnCost)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5">Enclosure + kits<br /><b>{fmtEgp(calc.enclCost + calc.kits)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5">Copper ({calc.cuWeight.toFixed(1)} kg + busbar)<br /><b>{fmtEgp(calc.cuConnCost + calc.busbarCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Unit cost + ops<br /><b>{fmtEgp(calc.unitCostOps)} EGP</b></div>
           <div className="rounded-lg bg-brand-light p-2.5 text-brand-dark">Unit selling<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
           <div className="rounded-lg bg-brand p-2.5 text-white">Total ×{p.qty}<br /><b>{fmtEgp(calc.totalSell)} EGP</b></div>
@@ -1024,11 +1020,6 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
               setNewSection("");
             }
           }} />
-        <button type="button" title={`Insert a blank spacer row in “${p.activeSection}”`}
-          onClick={() => u({ components: [...p.components, spacerComponent(p.activeSection)] })}
-          className="h-8 rounded-full border border-dashed border-line px-3 text-xs font-semibold text-muted hover:border-brand/50 hover:text-brand-dark">
-          + Empty row
-        </button>
       </div>
 
       {/* search */}
@@ -1120,37 +1111,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                   </tr>
                 </thead>
                 <tbody>
-                  {p.components.filter((c) => c.section === sec).map((c) => isSpacer(c) ? (
-                    <tr key={c.id}
-                      onDragOver={(e) => { if (dragId && dragId !== c.id) { e.preventDefault(); if (overRow !== c.id) setOverRow(c.id); } }}
-                      onDragLeave={() => setOverRow((r) => (r === c.id ? null : r))}
-                      onDrop={(e) => { e.preventDefault(); dropOnRow(c.id); }}
-                      className={`border-t align-middle transition-colors ${
-                        overRow === c.id ? "border-brand bg-brand-tint" : "border-line/70"
-                      } ${dragId === c.id ? "opacity-40" : ""}`}>
-                      <td
-                        draggable
-                        onDragStart={(e) => { setDragId(c.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", c.id); } catch {} }}
-                        onDragEnd={() => { setDragId(null); setOverRow(null); setOverSec(null); }}
-                        title="Drag to reorder or move to another section"
-                        className="cursor-grab select-none py-1 pr-1 text-muted/50 hover:text-brand active:cursor-grabbing">
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                          <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
-                          <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
-                          <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
-                        </svg>
-                      </td>
-                      <td colSpan={6} className="py-1 pr-2">
-                        <span className="text-[11px] italic text-muted/50">empty row (spacer)</span>
-                      </td>
-                      <td className="py-1 pr-2" />
-                      <td className="whitespace-nowrap py-1 text-right">
-                        <button className="px-1 text-muted hover:text-ink" title="Move up" onClick={() => move(c.id, -1)}>↑</button>
-                        <button className="px-1 text-muted hover:text-ink" title="Move down" onClick={() => move(c.id, 1)}>↓</button>
-                        <button className="px-1 text-red-500" title="Remove" onClick={() => delComp(c.id)}>✕</button>
-                      </td>
-                    </tr>
-                  ) : (
+                  {p.components.filter((c) => c.section === sec).map((c) => (
                     <tr key={c.id}
                       onDragOver={(e) => { if (dragId && dragId !== c.id) { e.preventDefault(); if (overRow !== c.id) setOverRow(c.id); } }}
                       onDragLeave={() => setOverRow((r) => (r === c.id ? null : r))}
@@ -1932,23 +1893,18 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly }: { s: LvState; qtnNo: str
   ];
   const visible = candidates.filter((b): b is Block =>
     !!b && (b.kind === "copper" ? b.kg > 0 : b.rows.length > 0));
-  // Export the current Material List (the active ABB/Full view) to a styled .xlsx
-  // via ExcelJS — a visual mirror of the on-screen tables. Filename defaults to
-  // "ML-<qtn> Rev NN" (same qtn/rev as the TO/CO PDF export) and is editable;
-  // cancelling the prompt skips the export.
-  const exportExcel = async () => {
+  // Export the current Material List (same rows/columns as the tables) to a real
+  // .xlsx via SheetJS. Filename defaults to "ML-<qtn> Rev NN" (same qtn/rev as the
+  // TO/CO PDF export) and is editable; cancelling the prompt skips the export.
+  const exportExcel = () => {
     const def = offerTitle("ML", qtnNo, s.project.revisionNo);
     const name = window.prompt("Excel file name:", def);
     if (name === null) return; // cancelled
-    const wb = buildMaterialWorkbook(visible as MatBlock[]);
-    const buf = await wb.xlsx.writeBuffer();
+    const ws = XLSX.utils.aoa_to_sheet(materialAoa(visible as MatBlock[]));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Material List");
     const trimmed = name.trim() || def;
-    const fname = /\.xlsx$/i.test(trimmed) ? trimmed : `${trimmed}.xlsx`;
-    const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-    const a = document.createElement("a");
-    a.href = url; a.download = fname;
-    a.click();
-    URL.revokeObjectURL(url);
+    XLSX.writeFile(wb, /\.xlsx$/i.test(trimmed) ? trimmed : `${trimmed}.xlsx`);
   };
   return (
     <div className="space-y-4 animate-fade-up">

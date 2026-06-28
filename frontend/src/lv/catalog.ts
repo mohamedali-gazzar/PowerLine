@@ -104,49 +104,12 @@ export const DEFAULT_SALES_PEOPLE: SalesPerson[] = [
 // ── Pricing helpers ──────────────────────────────────────────────────────────
 const sane = (kg: number) => (kg > 0 && kg < 50 ? kg : 0); // guard stray codes in Cu columns
 
-// Live catalogue lookups by reference — so panels always price from the current
-// (V15.3-synced) catalogue rather than the snapshot stored when an item was added.
-const COMP_BY_REF = new Map(COMPONENTS.filter((c) => c.ref).map((c) => [c.ref, c]));
-export const componentByRef = (ref: string): DbComponent | undefined => (ref ? COMP_BY_REF.get(ref) : undefined);
-const ENC_BY_KEY = new Map(ENCLOSURES.map((e) => [`${e.ref}|${e.name}`, e]));
-export const enclosureByRefName = (ref: string, name: string): DbEnclosure | undefined => ENC_BY_KEY.get(`${ref}|${name}`);
-// Cell systems (Pro-E / IS2 / PLP) are looked up by family + name, since a cell
-// row carries a description (= the enclosure name) but no reference.
-const ENC_BY_FAMNAME = new Map(ENCLOSURES.map((e) => [`${e.fam}|${e.name}`, e]));
-export const enclosureByFamName = (fam: string, name: string): DbEnclosure | undefined => ENC_BY_FAMNAME.get(`${fam}|${name}`);
-
-/** EGP price of a component at current factors. Per the V15.3 price analysis the
- *  ABB discount applies ONLY to the ABB price-list (euro) portion — never to an
- *  EGP-listed price. */
+/** EGP price of a component at current factors. ABB discount applies to ABB only (RPT-01). */
 export function componentPriceEgp(c: { eur: number; egp: number; brand: string }, f: Factors): number {
-  if (c.eur > 0) {
-    const disc = c.brand === "ABB" ? 1 - f.abbDiscount : 1;
-    return c.eur * f.euro * disc;
-  }
-  return c.egp; // EGP-listed price is never discounted
+  const disc = c.brand === "ABB" ? 1 - f.abbDiscount : 1;
+  if (c.eur > 0) return c.eur * f.euro * disc;
+  return c.egp * disc;
 }
-
-/** Busbar copper-type cost multipliers (V15.3 "Copper for Cells" L6:M9). */
-const COPPER_TYPE_MULT: Record<string, number> = {
-  "Bare": 1,
-  "Tin-plated": 1.05,
-  "Silver-Plated Connections": 1.15,
-  "Raychem": 1.02,
-};
-export const copperTypeMult = (t: string): number => COPPER_TYPE_MULT[t] ?? 1;
-
-/** Internal-kit cost as a fraction of the enclosure price, by family — from the
- *  V15.3 price analysis ('Panels Data' column AA = enclosure price × this rate):
- *  SR-Basic & Local sheet-metal = 10%; Pro-E & IS2 (IP65/IP31/IS2 cells) = 3%;
- *  Minicenter, Primo, Pillars, Coffree (and any other) = 0. */
-const KIT_RATE: Record<string, number> = {
-  "SR-Basic": 0.1,
-  "Local (Sheet Metal)": 0.1,
-  "PLP": 0.1,
-  "Pro-E": 0.03,
-  "IS2": 0.03,
-};
-export const kitRate = (fam: string): number => KIT_RATE[fam] ?? 0;
 export function enclosurePriceEgp(e: DbEnclosure, f: Factors): number {
   return e.eur > 0 ? e.eur * f.euro : e.egp;
 }
