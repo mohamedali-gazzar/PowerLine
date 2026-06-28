@@ -43,7 +43,10 @@ export interface PanelComponent {
   comment: string;  // RPT-01: free text
   note: string;     // RPT-01: free text
   group?: string;   // combination tag (e.g. "ATS 1 Out of 2")
+  spacer?: boolean; // blank separator row — excluded from all cost/count/exports
 }
+/** True for a blank spacer row (separates component groups; never priced/counted). */
+export const isSpacer = (c: PanelComponent): boolean => c.spacer === true;
 
 export type SizingMode = "none" | "panels" | "cells";
 export interface PanelsSizing {
@@ -213,6 +216,14 @@ export function freeComponent(desc: string, section: string, qty: number, group?
     adj: "", comment: "", note: "", group,
   };
 }
+/** A blank spacer row used to separate component groups within a section. */
+export function spacerComponent(section: string): PanelComponent {
+  return {
+    id: uid(), section, name: "", desc: "", ref: "", type: "", brand: "",
+    rating: "", eur: 0, egp: 0, poles: 0, cuP: 0, cuC: 0, stock: "", qty: 0,
+    adj: "", comment: "", note: "", spacer: true,
+  };
+}
 
 /** RPT: incremental duplicate name — "PANEL 4" → "PANEL 4-1" → "PANEL 4-2" …
  *  Strips an existing "-N" (or legacy "(copy)") suffix so the series continues
@@ -261,6 +272,7 @@ export function calcPanel(p: LvPanel, f: Factors): PanelCalc {
   let compCost = 0;
   let cuWeight = 0;
   for (const c of p.components) {
+    if (isSpacer(c)) continue; // blank separator — no cost/copper
     compCost += componentPriceEgp(c, f) * c.qty;
     cuWeight += cuPanelKg(c) * c.qty;
   }
@@ -318,6 +330,7 @@ export function buildMaterialList(s: LvState): MaterialList {
   for (const p of s.panels) {
     const mult = p.qty || 1;
     for (const c of p.components) {
+      if (isSpacer(c)) continue; // blank separator — never a material line
       add(`c|${c.ref || c.name}`, {
         supplier: c.brand || "ABB",
         description: c.name,
