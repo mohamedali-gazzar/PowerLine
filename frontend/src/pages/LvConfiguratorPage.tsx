@@ -988,6 +988,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
   const [pending, setPending] = useState<DbComponent | null>(null);
   const [pendQty, setPendQty] = useState(""); // empty box — typed number becomes the qty (blank = 1)
   const qtyRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   // When the qty popup opens, focus + select the field so the quantity can be typed
   // straight from the keyboard (type the number, then Enter to add).
   useEffect(() => { if (pending) { qtyRef.current?.focus(); qtyRef.current?.select(); } }, [pending]);
@@ -1105,6 +1106,8 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
   const add = (c: DbComponent, qty = 1) => {
     u({ components: [...p.components, { ...toPanelComponent(c, p.activeSection), qty: Math.max(1, qty) }] });
     setQ("");
+    // Return focus to the search box so the next component can be typed without the mouse.
+    requestAnimationFrame(() => searchRef.current?.focus());
   };
 
   return (
@@ -1174,7 +1177,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
 
       {/* search */}
       <div className="relative mb-3">
-        <input className="input" placeholder={`Search 2,124 components (name / reference / type / rating) → adds to “${p.activeSection}”`}
+        <input ref={searchRef} className="input" placeholder={`Search 2,124 components (name / reference / type / rating) → adds to “${p.activeSection}”`}
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
             if (pending || !q) return;
