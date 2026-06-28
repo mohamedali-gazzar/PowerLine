@@ -10,7 +10,13 @@ import {
   DEFAULT_SUPPORT_ENGINEERS,
   SALES_MANAGER,
   componentPriceEgp,
+  enclosurePriceEgp,
+  componentByRef,
+  enclosureByRefName,
+  enclosureByFamName,
   cuPanelKg,
+  copperTypeMult,
+  kitRate,
   type DbComponent,
   type DbEnclosure,
   type Factors,
@@ -43,7 +49,10 @@ export interface PanelComponent {
   comment: string;  // RPT-01: free text
   note: string;     // RPT-01: free text
   group?: string;   // combination tag (e.g. "ATS 1 Out of 2")
+  spacer?: boolean; // blank separator row — excluded from all cost/count/exports
 }
+/** True for a blank spacer row (separates component groups; never priced/counted). */
+export const isSpacer = (c: PanelComponent): boolean => c.spacer === true;
 
 export type SizingMode = "none" | "panels" | "cells";
 export interface PanelsSizing {
@@ -213,6 +222,14 @@ export function freeComponent(desc: string, section: string, qty: number, group?
     adj: "", comment: "", note: "", group,
   };
 }
+/** A blank spacer row used to separate component groups within a section. */
+export function spacerComponent(section: string): PanelComponent {
+  return {
+    id: uid(), section, name: "", desc: "", ref: "", type: "", brand: "",
+    rating: "", eur: 0, egp: 0, poles: 0, cuP: 0, cuC: 0, stock: "", qty: 0,
+    adj: "", comment: "", note: "", spacer: true,
+  };
+}
 
 /** RPT: incremental duplicate name — "PANEL 4" → "PANEL 4-1" → "PANEL 4-2" …
  *  Strips an existing "-N" (or legacy "(copy)") suffix so the series continues
@@ -249,6 +266,7 @@ export interface PanelCalc {
   busbarCost: number;
   kits: number;
   cuWeight: number;
+  busbarKg: number;
   unitCost: number;
   unitCostOps: number;
   sellUnit: number;
@@ -257,27 +275,78 @@ export interface PanelCalc {
 export function findEnclosure(p: LvPanel): DbEnclosure | undefined {
   return ENCLOSURES.find((e) => e.fam === p.encFam && `${e.name}|${e.ref}` === p.encKey);
 }
+
+// V15.3 main busbar (Technical L8): for panels with a busbar-bearing enclosure
+// the busbar weight = 3 phases × CSA(rating) × enclosure height (mm) × copper
+// density. CSA tiers follow the Panels Data busbar table.
+const BUSBAR_FAMILIES = new Set(["SR-Basic", "Unikit"]);
+function busbarCsa(ratingA: number): number {
+  if (ratingA <= 160) return 100;
+  if (ratingA <= 250) return 200;
+  if (ratingA <= 400) return 300;
+  if (ratingA <= 630) return 400;
+  return 500;
+}
+/** Auto main-busbar weight (kg) for a panel, or 0 when it doesn't apply (e.g.
+ *  cells / non-busbar families) — in which case the manual mainBusbarKg is used. */
+export function autoMainBusbarKg(p: LvPanel): number {
+  if (!p.ratingA || p.ratingA <= 0) return 0;
+  const items = p.panelItems ?? [];
+  const item = items.find((it) => it.slot === 1) ?? items[0];
+  if (!item) return 0;
+  const enc = ENCLOSURES.find((e) => e.ref === item.ref && e.name === item.name);
+  if (!enc || !BUSBAR_FAMILIES.has(enc.fam)) return 0;
+  return 3 * busbarCsa(p.ratingA) * enc.H * 0.000009;
+}
 export function calcPanel(p: LvPanel, f: Factors): PanelCalc {
   let compCost = 0;
-  let cuWeight = 0;
+  let cuWeight = 0;     // physical copper weight (kg) → Material List
+  let cuConnKg = 0;     // cost-weighted copper (V15.3: Busway connections ×1.5)
   for (const c of p.components) {
-    compCost += componentPriceEgp(c, f) * c.qty;
-    cuWeight += cuPanelKg(c) * c.qty;
+    if (isSpacer(c)) continue; // blank separator — no cost/copper
+    // Price from the live catalogue by ref (V15.3-synced); fall back to the
+    // stored line for free / combination items not in the database.
+    compCost += componentPriceEgp(componentByRef(c.ref) ?? c, f) * c.qty;
+    const kg = cuPanelKg(c) * c.qty;
+    cuWeight += kg;
+    cuConnKg += kg * (c.type === "Busway" ? 1.5 : 1);
   }
-  // Panel Type items (enclosure sizings added like components)
+  // Panel Type items (enclosure sizings added like components). V15.3 internal
+  // kits are a per-enclosure fraction of its price by family (Panels Data AA).
   let enclCost = 0;
+  let kits = 0;
   for (const it of p.panelItems ?? []) {
-    enclCost += (it.eur > 0 ? it.eur * f.euro : it.egp) * it.qty;
+    const enc = enclosureByRefName(it.ref, it.name);
+    const unit = enc ? enclosurePriceEgp(enc, f) : (it.eur > 0 ? it.eur * f.euro : it.egp);
+    const itemCost = unit * it.qty;
+    enclCost += itemCost;
+    kits += itemCost * kitRate(it.fam);
   }
-  const cuConnCost = cuWeight * f.copper;
-  const busbarCost = (p.mainBusbarKg || 0) * f.copper;
-  const fam = p.panelsSizing?.family ?? "";
-  const noKit = fam === "Minicenter" || fam === "Primo";
-  const kits = noKit ? 0 : enclCost * (0.02 + (f.forms[p.form] || 0));
+  // Cells mode (floor-standing Pro-E / IS2 / PLP): cost each selected cell system
+  // from the catalogue (V15.3 "Enclosure / PLP Cells / Pro-E" buckets), with the
+  // same family kit rate. Cell rows carry the enclosure name as their description.
+  if (p.sizingMode === "cells" && p.cellConfig) {
+    const cc = p.cellConfig;
+    for (const row of cc.rows) {
+      if (!(row.qty > 0)) continue;
+      const enc = enclosureByFamName(cc.type, row.desc);
+      if (!enc) continue;
+      const cellCost = enclosurePriceEgp(enc, f) * row.qty;
+      enclCost += cellCost;
+      // "Sides" rows are locked and carry no kit (V15.3 AA blank for them).
+      if (!row.locked) kits += cellCost * kitRate(cc.type);
+    }
+  }
+  const cuConnCost = cuConnKg * f.copper;
+  // V15.3 main busbar: kg × Cu price × copper-type multiplier × Double (×1.5).
+  // Weight is auto-computed for panels; the manual field is the cells fallback.
+  const busbarKg = autoMainBusbarKg(p) || (p.mainBusbarKg || 0);
+  const busbarMult = copperTypeMult(p.copperType) * (p.panelsSizing?.layout === "Double" ? 1.5 : 1);
+  const busbarCost = busbarKg * f.copper * busbarMult;
   const unitCost = compCost + enclCost + cuConnCost + busbarCost + kits;
   const unitCostOps = unitCost * (1 + f.operations);
   const sellUnit = f.factor > 0 ? unitCostOps / f.factor : unitCostOps;
-  return { compCost, enclCost, cuConnCost, busbarCost, kits, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
+  return { compCost, enclCost, cuConnCost, busbarCost, kits, cuWeight, busbarKg, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
 }
 export function grandTotals(s: LvState) {
   let sell = 0;
@@ -318,6 +387,7 @@ export function buildMaterialList(s: LvState): MaterialList {
   for (const p of s.panels) {
     const mult = p.qty || 1;
     for (const c of p.components) {
+      if (isSpacer(c)) continue; // blank separator — never a material line
       add(`c|${c.ref || c.name}`, {
         supplier: c.brand || "ABB",
         description: c.name,
@@ -336,7 +406,7 @@ export function buildMaterialList(s: LvState): MaterialList {
         qty: it.qty * mult,
       });
     }
-    copperKg += (p.mainBusbarKg || 0) * mult;
+    copperKg += (autoMainBusbarKg(p) || p.mainBusbarKg || 0) * mult;
     // Sizing & Copper cell tables → their own supplier buckets
     if (p.sizingMode === "cells") {
       for (const r of p.cellConfig.rows) {
