@@ -74,6 +74,7 @@ export interface LvPanel {
   name: string;
   code: string;
   fedFrom: string;   // RPT-01: next to panel name
+  shortCircuit: string; // short-circuit withstand (e.g. "50 kA") — shown on the technical offer
   qty: number;
   ratingA: number;   // incoming breaker rating (drives the 800 A rule)
   ambTemp: string;
@@ -113,6 +114,7 @@ export interface LvProject {
   salesManagerEmail: string;  // RPT-1: sales-manager email (auto-filled from staff)
 }
 
+export interface TermsSection { title: string; body: string }
 export interface LvState {
   project: LvProject;
   factors: Factors;
@@ -120,7 +122,109 @@ export interface LvState {
   supportEngineers: string[];
   panels: LvPanel[];
   selectedId: string | null;
+  notesGeneral: string[];          // editable "General Notes" page (after the cover)
+  notesAdditional: string[];       // editable "Additional Notes" page
+  commercialTerms: TermsSection[];   // editable "General Terms & Conditions" — English
+  commercialTermsAr: TermsSection[]; // editable Arabic terms (shown after the English)
 }
+
+/** Default General Terms & Conditions shown at the end of the commercial offer — editable.
+ *  Stored as { title, body } sections so each header renders bold/larger. */
+const DEFAULT_TERMS_TEXT = `Validity of the Offer
+The offer is valid for a period of three days starting from the offer date. Powerline has the right to change prices, terms and conditions after offer expiry. The offer validity can be extended with a written request before offer expiry.
+
+Shop Drawings Approvals
+Shop drawings shall be provided within 10 days from the date of purchase order, letter of award and advance payment whichever comes the latest, and the customer shall approve shop drawings within 5 days from receiving them.
+
+Taxes
+The offer excludes any applicable taxes, stamps and insurance, and excludes sales taxes and value added taxes.
+
+Warranty
+Powerline's warranty policy will not cover normal wear of the equipment, neglecting maintenance, operation by unqualified persons or improper use of the equipment. The Company warrants its (Products/Works) against manufacturing defects for a period of (12) months starting from the provisional acceptance date of receiving the (Products/Works), or the deemed acceptance date (2 weeks from informing the customer that Products/Works are ready to be tested and delivered while the customer defaults doing the same during this period).
+
+Variations
+Customer has the right within one week from purchase order or contract date to change the value of the contract in the range of ±15% by a written variation contract approved by both sides. In the event of a change in the foreign currency rate from the Central Bank during the execution period, prices shall be calculated based on the exchange rate applicable on the actual delivery date for receipt payments.
+
+Contract Termination
+Should the purchaser cancel the order after signature during preparation of the supplier in executing the contract (studies, purchasing materials, etc.), the purchaser pays the supplier all expenses and compensations for these losses. In the event of the purchaser cancelling the order after the supplier starts manufacturing, the supplier has the right to hold the down payment and to ask the purchaser for compensation for his losses.
+
+Applicable Laws
+In case any conflict happens between both parties, they dedicate all their appropriate means to settle the issue amicably. In case attempts fail, Egyptian Laws shall be applied in front of Cairo concerned Courts.
+
+Force Majeure
+In case of devaluation of EGP conducted by CBE during the execution period of the offer, Powerline has the right to reprice the offer to imbed such currency effect in the pricing. Powerline will not be liable for any delay in delivery time mentioned in this offer which results attributable to COVID-19 ramifications.
+
+Payment Terms
+(50)% of the total price as an advance payment by a certified check or in cash according to the central bank exchange rate on the due date. (50)% of the total price after testing at factory and before delivery by a certified check or in cash according to the central bank exchange rate on the due date. In case of delaying the advance payment more than two weeks from purchase order / contract date, Powerline has the right to terminate the contract.
+
+Delivery Period
+Low Voltage Panels: (3-4) months. All delivery periods will be calculated from the date of purchase order, receiving the advance payment and receiving drawings approval whichever comes the latest. In the event that the required foreign currency is not available through Egyptian banks to procure imported components, Powerline shall be entitled to request payment in foreign currency.
+
+Delivery Place
+EX Works (EXW) factories at 10th of Ramadan city.
+
+Receiving Authorization
+The Customer must send an official authorization letter naming the representative authorized to receive the panels from our factories at 10th of Ramadan City. If delivery is made to the customer's location, an official authorization must also be provided for the person authorized by the customer to receive the panels at the location.
+
+Storage Penalty
+Powerline has the right to impose a penalty (storage costs) of 1% of the total contract value in the event that the customer is late in receiving the supplies from the factory for a period exceeding two weeks from the date of notification of the supplies' readiness or the test date, whichever is later.`;
+export const DEFAULT_COMMERCIAL_TERMS: TermsSection[] = DEFAULT_TERMS_TEXT.split("\n\n").map((block) => {
+  const [title, ...rest] = block.split("\n");
+  return { title: title.trim(), body: rest.join("\n").trim() };
+});
+
+/** Arabic General Terms & Conditions (الشروط والأحكام العامة) — editable, shown after the English. */
+const DEFAULT_TERMS_TEXT_AR = `صلاحية العرض
+يسري هذا العرض لمدة ثلاثة أيام تبدأ من تاريخ إرسال العرض. يحق لشركة باورلاين تغيير الأسعار والشروط والأحكام بعد انتهاء صلاحية العرض. يمكن تمديد صلاحية العرض بطلب كتابي قبل انتهاء صلاحية العرض.
+
+إعتماد الرسومات الفنية
+سيتم إنهاء الرسومات الفنية خلال 10 أيام من تاريخ أمر التوريد أو خطاب الترسية أو الدفعة المقدمة أيهما لاحق، وعلى العميل اعتماد هذه الرسومات خلال 5 أيام من استلامها.
+
+الضرائب
+عرض السعر لا يشمل أي دمغات أو ضرائب أو تأمينات واجبة التطبيق، ولا يشمل ضريبة المبيعات أو ضريبة القيمة المضافة.
+
+فترة الضمان
+لن تغطي سياسة ضمان باورلاين التآكل العادي للمعدات أو إهمال الصيانة أو التشغيل من قبل أشخاص غير مؤهلين أو الاستخدام غير السليم للمعدات. تضمن الشركة (معداتها/أعمالها) ضد عيوب التصنيع لمدة (12) شهرًا بدءًا من تاريخ الاستلام الابتدائي لـ(المعدات/الأعمال) أو تاريخ القبول المعتبر وهو مرور أسبوعين بعد إخطار العميل بأن (المعدات/الأعمال) جاهزة للاختبار والتسليم في حين تقصير العميل القيام بالشيء نفسه في غضون تلك المدة.
+
+تغيّر قيمة العقد
+يحق للعميل في غضون أسبوع واحد فقط من أمر الشراء أو تاريخ العقد تغيير قيمة العقد في نطاق ±15% بموجب عقد تغيير مكتوب معتمد من كلا الجانبين. في حالة تغيير سعر العملة الأجنبية بالبنك المركزي خلال مدة التنفيذ يتم احتساب الأسعار طبقًا لسعر العملة في يوم التسليم الفعلي وذلك بالنسبة لدفعات الاستلام.
+
+إنهاء العقد
+يجب على العميل في حالة إلغاء الأمر بعد التوقيع أثناء تجهيز المورد لتنفيذ العقد (دراسات، شراء مواد، إلخ) أن يدفع للمورد جميع النفقات والتعويضات عن هذه الخسائر. إذا ألغى المشتري الطلب بعد بدء المورد في التصنيع، فيكون للمورد الحق في حجز الدفعة المقدمة وكذلك مطالبة العميل بتعويض عن خسائره.
+
+النزاع والخلافات
+في حالة حدوث أي نزاع بين الطرفين، يسعى الطرفان بكل الطرق المناسبة لتسوية النزاع وديًا. وفي حالة فشل المحاولات تُطبَّق القوانين المصرية أمام محاكم القاهرة المختصة.
+
+القوى القهرية
+في حالة قيام البنك المركزي المصري بتخفيض قيمة الجنيه المصري خلال مدة التنفيذ، يحق لشركة باورلاين إعادة تسعير العرض لتضمين قيمة تأثير العملة. باورلاين غير مسؤولة عن أي تأخير في مدة التسليم المذكورة في العرض والذي قد ينتج عن تداعيات COVID-19.
+
+شروط الدفع
+(50)% من السعر الإجمالي كدفعة مقدمة عند صدور أمر التوريد بشيك بنكي مقبول الدفع أو نقدًا وفقًا لسعر صرف البنك المركزي لتاريخ استحقاقه. (50)% من السعر الإجمالي بعد اختبار المهمات بالمصنع وقبل الاستلام بشيك بنكي مقبول الدفع أو نقدًا وفقًا لسعر صرف البنك المركزي لتاريخ استحقاقه. في حالة تأخر الدفعة المقدمة أكثر من أسبوعين من تاريخ أمر التوريد أو تاريخ العقد، يحق لشركة باورلاين إلغاء العقد.
+
+مدة التوريد
+لوحات الجهد المنخفض: (3-4) شهور. سيتم احتساب جميع فترات التسليم من تاريخ أمر الشراء واستلام الدفعة المقدمة واستلام اعتماد الرسومات الفنية أيهما لاحق. في حالة عدم توافر العملة الأجنبية اللازمة لتوفير المكونات المستوردة بالبنوك المصرية يحق لباورلاين المطالبة بالسداد بالعملة الأجنبية.
+
+مكان التوريد
+تسليم في موقع المصنع Ex Works (EXW) بمدينة العاشر من رمضان.
+
+تفويض الاستلام
+يجب على العميل إرسال تفويض رسمي باسم المندوب المفوض باستلام اللوحات من مصانعنا بمدينة العاشر من رمضان. وفي حال تم التسليم في موقع العميل يجب كذلك وجود تفويض رسمي للشخص المفوض من قبل العميل باستلام اللوحات في الموقع.
+
+غرامة التخزين
+يحق لشركة باورلاين فرض غرامة (تكاليف تخزين) بقيمة 1% من إجمالي قيمة العقد في حالة تأخر العميل عن استلام المهمات من المصنع لمدة تزيد عن أسبوعين من تاريخ الإخطار بجاهزية المهمات أو تاريخ الاختبار أيهما لاحق.`;
+export const DEFAULT_COMMERCIAL_TERMS_AR: TermsSection[] = DEFAULT_TERMS_TEXT_AR.split("\n\n").map((block) => {
+  const [title, ...rest] = block.split("\n");
+  return { title: title.trim(), body: rest.join("\n").trim() };
+});
+
+/** Default General Notes shown on the notes page (after the cover) — editable. */
+export const DEFAULT_GENERAL_NOTES = [
+  "Commercial offer is based on the Technical offer and any deviation may impact price",
+  "PLP panels are 2mm thick",
+  "SR-Basic/Unikit are 1.5mm thick cold rolled sheet steel IK10 (Mechanical Impact)",
+  "Minicenter/Primo are 1mm thick cold rolled sheet steel IK07",
+  "Design is based on straight enclosures unless mentioned beforehand",
+];
 
 export const DEFAULT_SECTIONS = ["Main Incoming", "Metering", "Outgoings", "Other"];
 /** Migration: move Metering to just before Outgoings on existing panels (the
@@ -143,6 +247,7 @@ export function newPanel(_n?: number): LvPanel {
     name: "", // RPT-1: blank by default; mandatory before any output
     code: "",
     fedFrom: "",
+    shortCircuit: "",
     qty: 1,
     ratingA: 0,
     ambTemp: "35°C",
@@ -170,7 +275,7 @@ export function newPanel(_n?: number): LvPanel {
 export function initialState(): LvState {
   return {
     project: {
-      optyNo: "", revisionNo: "", name: "", customer: "",
+      optyNo: "OPTY-", revisionNo: "", name: "", customer: "",
       date: new Date().toISOString().slice(0, 10),
       salesPerson: "", salesMobile: "", salesEmail: "",
       supportEngineer: "", salesManager: SALES_MANAGER,
@@ -181,6 +286,10 @@ export function initialState(): LvState {
     supportEngineers: [...DEFAULT_SUPPORT_ENGINEERS],
     panels: [],
     selectedId: null,
+    notesGeneral: [...DEFAULT_GENERAL_NOTES],
+    notesAdditional: [],
+    commercialTerms: DEFAULT_COMMERCIAL_TERMS.map((s) => ({ ...s })),
+    commercialTermsAr: DEFAULT_COMMERCIAL_TERMS_AR.map((s) => ({ ...s })),
   };
 }
 

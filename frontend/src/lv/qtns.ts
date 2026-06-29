@@ -3,7 +3,7 @@
 // Material List inside it, like the Excel configurator files QTN-26-XXXX).
 // Stored client-side; backend persistence is a later phase.
 
-import { initialState, grandTotals, meteringBeforeOutgoings, type LvState } from "./store";
+import { initialState, grandTotals, meteringBeforeOutgoings, DEFAULT_GENERAL_NOTES, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR, type LvState } from "./store";
 
 export interface QtnRecord {
   id: string;
@@ -133,9 +133,15 @@ export function renameQtn(id: string, number: string): { ok: true } | { ok: fals
 export function getQtn(id: string): QtnRecord | null {
   const rec = loadRegistry().qtns.find((q) => q.id === id) ?? null;
   if (rec) {
+    // notes page (added later) — seed defaults for older quotations
+    rec.state.notesGeneral ??= [...DEFAULT_GENERAL_NOTES];
+    rec.state.notesAdditional ??= [];
+    if (!Array.isArray(rec.state.commercialTerms)) rec.state.commercialTerms = DEFAULT_COMMERCIAL_TERMS.map((s) => ({ ...s }));
+    if (!Array.isArray(rec.state.commercialTermsAr)) rec.state.commercialTermsAr = DEFAULT_COMMERCIAL_TERMS_AR.map((s) => ({ ...s }));
     // normalize older stored shapes (incl. the earlier multi-add panelItems)
     rec.state.panels.forEach((p) => {
       p.code ??= "";
+      p.shortCircuit ??= "";
       if (Array.isArray(p.sections)) p.sections = meteringBeforeOutgoings(p.sections);
       p.panelItems = ((p as any).panelItems ?? []).map((it: any, i: number) => ({
         ...it,

@@ -10,9 +10,9 @@ import {
 } from "../lv/catalog";
 import {
   newPanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
-  spacerComponent, isSpacer,
+  spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   calcPanel, grandTotals, buildMaterialList, searchComponents,
-  type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem,
+  type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection,
 } from "../lv/store";
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
@@ -331,8 +331,8 @@ export default function LvConfiguratorPage() {
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
             onAdd={addPanel} onDel={removePanel} onClone={clonePanel} />
         )}
-        {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} />)}
-        {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} />)}
+        {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} />)}
+        {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} />)}
         {tab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} />)}
       </div>
     </div>
@@ -365,39 +365,6 @@ function OfferBlocked({ issues }: { issues: string[] }) {
 }
 
 // ── Offer documents (the configurator's main output) ────────────────────────
-function DocHeader({ s, qtnNo, title }: { s: LvState; qtnNo: string; title: string }) {
-  const pr = s.project;
-  const [staff] = useStaff();
-  const mgr = staff.salesManagers.find((m) => m.name === SALES_MANAGER);
-  const mgrMobile = mgr?.mobile || "";
-  const mgrEmail = mgr?.email || "";
-  return (
-    <div className="border-b-4 border-brand pb-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-2xl font-extrabold tracking-tight text-brand">Power<span className="text-ink">Line</span></div>
-          <div className="text-[11px] text-muted">Electrical Industries — powerline.com.eg</div>
-        </div>
-        <div className="text-right">
-          <div className="text-lg font-extrabold">{title}</div>
-          <div className="font-mono text-sm font-bold text-brand-dark">{qtnNo}</div>
-          <div className="text-xs text-muted">{fmtDate(pr.date)}</div>
-          {pr.optyNo && <div className="text-xs text-muted">OPTY No.: {pr.optyNo}</div>}
-          {pr.revisionNo && <div className="text-xs text-muted">Rev. No.: {pr.revisionNo}</div>}
-        </div>
-      </div>
-      {/* Row 1: Project | Sales(+phone) | Sales mgr(+phone)   Row 2: Customer | Email(Sales) | Email(Sales mgr) */}
-      <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-0.5 text-sm sm:grid-cols-3">
-        <div><span className="text-muted">Project:</span> <b>{pr.name || "—"}</b></div>
-        <div><span className="text-muted">Sales:</span> <b>{pr.salesPerson || "—"}</b>{pr.salesMobile && <span className="text-xs text-muted"> · {pr.salesMobile}</span>}</div>
-        <div><span className="text-muted">Sales Manager:</span> <b>{SALES_MANAGER}</b>{mgrMobile && <span className="text-xs text-muted"> · {mgrMobile}</span>}</div>
-        <div><span className="text-muted">Customer:</span> <b>{pr.customer || "—"}</b></div>
-        <div><span className="text-muted">Email:</span> <b className="text-xs">{pr.salesEmail || "—"}</b></div>
-        <div><span className="text-muted">Email:</span> <b className="text-xs">{mgrEmail || "—"}</b></div>
-      </div>
-    </div>
-  );
-}
 
 // Export name: prefix the document kind to the QTN number ("QTN-26-0001" →
 // "TO-QTN-26-0001") and append the 2-digit revision. Used for the TO/CO print
@@ -430,7 +397,178 @@ function PrintBar({ label, docTitle }: { label: string; docTitle?: string }) {
  *  components table (Qty | Description | Reference | Brand | Poles).
  *  Printing exports ALL panels as one PDF, one page each. */
 const TRED = "#F16722"; // brand orange — drives item bar, spec labels & table header
-function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
+// ── Shared branded offer cover (used by both Technical & Commercial offers) ──
+const coverTel = (phone: string) => {
+  const d = phone.replace(/[^\d+]/g, "");
+  return d.startsWith("+") ? `tel:${d}` : `tel:+20${d.replace(/^0/, "")}`;
+};
+const CoverPhoneI = () => (
+  <svg viewBox="0 0 24 24" className="mr-1 inline-block h-3 w-3 align-[-2px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" />
+  </svg>
+);
+const CoverMailI = () => (
+  <svg viewBox="0 0 24 24" className="mr-1 inline-block h-3 w-3 align-[-2px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-10 6L2 7" />
+  </svg>
+);
+function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Technical" | "Commercial" }) {
+  const [staff] = useStaff();
+  const mgr = staff.salesManagers.find((m) => m.name === SALES_MANAGER);
+  const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
+  const qtnRef = revNum > 0 ? `${qtnNo}-${revNum}` : qtnNo;
+  const coverContacts = [
+    { role: "Sales", name: s.project.salesPerson, phone: s.project.salesMobile, email: s.project.salesEmail },
+    { role: "Manager", name: s.project.salesManager || mgr?.name || SALES_MANAGER, phone: mgr?.mobile || "", email: mgr?.email || "" },
+    { role: "Support", name: s.project.supportEngineer, phone: "", email: "" },
+  ].filter((c) => c.name);
+  return (
+    <section className="a4-sheet flex flex-col overflow-hidden" style={{ breakAfter: "page" }}>
+      <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
+      <div className="flex flex-1 flex-col px-12 pb-8 pt-12">
+        <div className="flex items-center justify-between">
+          <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-32" />
+          {s.project.date && (
+            <span className="rounded-full bg-surface px-5 py-2 text-sm font-bold tracking-wide text-charcoal">{fmtDate(s.project.date)}</span>
+          )}
+        </div>
+        <div className="mt-8">
+          <div className="font-display text-7xl font-extrabold leading-[1.04] tracking-tight text-ink">{kind}</div>
+          <div className="font-display text-7xl font-extrabold leading-[1.04] tracking-tight" style={{ color: TRED }}>Offer</div>
+          <div className="mt-5 h-[6px] w-28 rounded-full" style={{ background: TRED }} />
+          <p className="mt-6 text-xl text-muted">Egyptian electrification solutions · ABB-certified assembler</p>
+          {(qtnNo || s.project.name) && (
+            <div className="mt-6 space-y-0.5">
+              {qtnRef && <div className="text-[18px] font-bold" style={{ color: TRED }}>{qtnRef}</div>}
+              {s.project.optyNo && <div className="mb-2 text-[14px] font-semibold text-muted">{s.project.optyNo}</div>}
+              {s.project.name && <div className="text-base text-ink">{s.project.name}</div>}
+              {s.project.customer && <div className="mb-3 text-base text-muted">{s.project.customer}</div>}
+              {coverContacts.length > 0 && (
+                <div className="mt-2 grid w-fit grid-cols-[4rem_auto_auto_auto] items-baseline gap-x-4 gap-y-1 text-left text-[12px] text-muted">
+                  <div className="col-span-4 h-3" />
+                  {coverContacts.map((c) => (
+                    <div key={c.role} className="contents">
+                      <span className="inline-block w-16 text-[12px] font-semibold text-ink">{c.role}:</span>
+                      <span className="whitespace-nowrap">{c.name}</span>
+                      <span className="whitespace-nowrap">{c.phone && <a href={coverTel(c.phone)} className="text-inherit no-underline"><CoverPhoneI />{c.phone}</a>}</span>
+                      <span className="whitespace-nowrap">{c.email && <a href={`mailto:${c.email}`} className="text-inherit no-underline"><CoverMailI />{c.email}</a>}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="mt-6 grid grid-cols-4 gap-5">
+          {[
+            { label: "LV MDBs", icon: (
+              <svg viewBox="0 0 48 64" className="h-16 w-12" fill="none" stroke="#585859" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="12" y="8" width="24" height="48" rx="2" /><line x1="24" y1="8" x2="24" y2="56" /><line x1="12" y1="28" x2="36" y2="28" />
+                <rect x="21" y="30" width="6" height="6" rx="1" fill="#F16722" stroke="none" />
+              </svg>
+            ) },
+            { label: "LV Sub DBs", icon: (
+              <svg viewBox="0 0 48 64" className="h-16 w-12" fill="none" stroke="#585859" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="12" y="8" width="24" height="48" rx="2" /><line x1="12" y1="26" x2="36" y2="26" /><line x1="12" y1="40" x2="36" y2="40" />
+                <rect x="21" y="30" width="6" height="6" rx="1" fill="#F16722" stroke="none" />
+              </svg>
+            ) },
+            { label: "SF6 RMUs", icon: (
+              <svg viewBox="0 0 48 64" className="h-16 w-12" fill="none" stroke="#585859" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="13" y="8" width="22" height="48" rx="2" /><circle cx="24" cy="22" r="5" /><line x1="24" y1="27" x2="24" y2="36" />
+                <rect x="21" y="44" width="6" height="6" rx="1" fill="#F16722" stroke="none" />
+              </svg>
+            ) },
+            { label: "Air RMUs", icon: (
+              <svg viewBox="0 0 48 64" className="h-16 w-12" fill="none" stroke="#585859" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="13" y="8" width="22" height="48" rx="2" /><circle cx="24" cy="20" r="4.5" /><circle cx="24" cy="34" r="4.5" />
+                <rect x="21" y="46" width="6" height="6" rx="1" fill="#F16722" stroke="none" />
+              </svg>
+            ) },
+          ].map((c) => (
+            <div key={c.label} className="flex flex-col items-center gap-4 rounded-2xl bg-surface px-4 py-5">
+              {c.icon}
+              <div className="text-lg font-bold text-ink">{c.label}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-auto pt-8">
+          <div className="h-[3px] w-full rounded" style={{ background: TRED }} />
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            {[
+              { name: "ISO 9001", url: "https://drive.google.com/file/d/1D2GThbsl9FDr7rnhdFl7jsnWKXyOc8KY/view" },
+              { name: "ISO 14001", url: "https://drive.google.com/file/d/1yqz35dDFJDZ18X2fURFwufHtzg7c50rZ/view" },
+              { name: "ISO 45001", url: "https://drive.google.com/file/d/1nzbbwg3CLKqUkYY6RBXhcFTI0PJpToMG/view" },
+            ].map((b) => (
+              <a key={b.name} href={b.url} target="_blank" rel="noopener noreferrer"
+                className="rounded-full bg-surface px-5 py-2 text-sm font-bold text-charcoal transition-colors hover:bg-brand-light hover:text-brand-darker">
+                {b.name}
+              </a>
+            ))}
+            <a href="https://drive.google.com/file/d/16I86eVMca56UUUiMsLusKEb1G4R6iYD6/view" target="_blank" rel="noopener noreferrer"
+              className="rounded-full px-5 py-2 text-sm font-extrabold transition-opacity hover:opacity-80" style={{ background: "#FEF3ED", color: TRED }}>ABB CERTIFIED</a>
+          </div>
+          <div className="mt-6 flex items-center justify-between gap-4">
+            <p className="text-sm text-muted">
+              <a href="https://maps.app.goo.gl/kqZBxFo286ps7qBP8" target="_blank" rel="noopener noreferrer" className="text-inherit no-underline hover:text-brand">20 Ammar Ibn Yasser, Heliopolis, Cairo</a>
+              {" · "}
+              <a href="tel:+202262215022" className="text-inherit no-underline hover:text-brand">+2 02262215022</a>
+              {" · "}
+              <a href="mailto:info@powerline.com.eg" className="text-inherit no-underline hover:text-brand">info@powerline.com.eg</a>
+            </p>
+            <div className="flex items-center gap-2.5">
+              {[
+                { label: "Website", url: "https://powerlinei.com/", icon: (
+                  <svg viewBox="0 0 24 24" className="h-[17px] w-[17px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" /><line x1="3" y1="12" x2="21" y2="12" />
+                    <path d="M12 3c2.5 2.6 3.8 5.7 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z" />
+                  </svg>
+                ) },
+                { label: "Facebook", url: "https://www.facebook.com/Powerline.ABB", icon: (
+                  <svg viewBox="0 0 320 512" className="h-[18px] w-[18px]" fill="currentColor">
+                    <path d="M279.14 288l14.22-92.66h-88.91v-60.13c0-25.35 12.42-49.84 52.24-49.84h40.42V6.26S260.43 0 225.36 0c-73.22 0-121.08 44.38-121.08 124.72v70.62H22.89V288h81.39v224h100.17V288z" />
+                  </svg>
+                ) },
+                { label: "LinkedIn", url: "https://www.linkedin.com/login/?session_redirect=%2Fcompany%2F9288669", icon: (
+                  <svg viewBox="0 0 448 512" className="h-[18px] w-[18px]" fill="currentColor">
+                    <path d="M100.28 448H7.4V148.9h92.88zM53.79 108.1C24.09 108.1 0 83.5 0 53.8a53.79 53.79 0 0 1 107.58 0c0 29.7-24.1 54.3-53.79 54.3zM447.9 448h-92.68V302.4c0-34.7-.7-79.2-48.29-79.2-48.29 0-55.69 37.7-55.69 76.7V448h-92.78V148.9h89.08v40.8h1.3c12.4-23.5 42.69-48.3 87.88-48.3 94 0 111.28 61.9 111.28 142.3V448z" />
+                  </svg>
+                ) },
+              ].map((sl) => (
+                <a key={sl.label} href={sl.url} target="_blank" rel="noopener noreferrer" aria-label={sl.label}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-white transition-opacity hover:opacity-85" style={{ background: TRED }}>
+                  {sl.icon}
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// Running page header on every non-cover offer page (logo + project name + QTN · customer).
+function PageHeader({ s, qtnRef }: { s: LvState; qtnRef: string }) {
+  return (
+    <div className="mb-3 flex items-center justify-between gap-4 border-b pb-2" style={{ borderColor: "#f1d3c4" }}>
+      <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-14" />
+      <div className="text-right">
+        {s.project.name && <div className="text-base font-bold leading-tight text-ink">{s.project.name}</div>}
+        <div className="text-[13px] text-muted">{[qtnRef, s.project.customer].filter(Boolean).join(" · ")}</div>
+      </div>
+    </div>
+  );
+}
+
+type NotesKey = "notesGeneral" | "notesAdditional";
+function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void }) {
+  // Editable notes page (after the cover): edit / add / remove lines.
+  const notesOf = (k: NotesKey) => s[k] ?? [];
+  const setNotes = (k: NotesKey, a: string[]) => up(k === "notesGeneral" ? { notesGeneral: a } : { notesAdditional: a });
+  const editNote = (k: NotesKey, i: number, v: string) => { const a = [...notesOf(k)]; a[i] = v; setNotes(k, a); };
+  const removeNote = (k: NotesKey, i: number) => setNotes(k, notesOf(k).filter((_, j) => j !== i));
+  const addNote = (k: NotesKey) => setNotes(k, [...notesOf(k), ""]);
   if (!s.panels.length) {
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Technical Offer is generated from them.</div>;
   }
@@ -457,46 +595,75 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
     };
   };
   const Lbl = ({ children }: { children: React.ReactNode }) => (
-    <td className="border px-2 py-1 text-[12px] font-bold" style={{ color: TRED, background: "#fdf0e9", borderColor: "#f1d3c4" }}>{children}</td>
+    <td className="whitespace-nowrap border px-2 font-display text-[11px] font-bold leading-[20px]" style={{ color: TRED, background: "#fdf0e9", borderColor: "#f1d3c4" }}>{children}</td>
   );
   const Val = ({ children }: { children?: React.ReactNode }) => (
-    <td className="border px-2 py-1 text-[12px]" style={{ borderColor: "#f1d3c4" }}>{children}</td>
+    <td className="whitespace-nowrap border px-2 text-[12px] leading-[20px]" style={{ borderColor: "#f1d3c4" }}>{children}</td>
   );
+  // Revision is folded into the QTN number: rev 00 → unchanged, rev 01 → "-1", rev 02 → "-2", …
+  const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
+  const qtnRef = revNum > 0 ? `${qtnNo}-${revNum}` : qtnNo;
   return (
     <div className="animate-fade-up">
       <PrintBar label={`${s.panels.length} panel${s.panels.length > 1 ? "s" : ""} → ${s.panels.length} technical page${s.panels.length > 1 ? "s" : ""} in one PDF.`}
         docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} />
+      <div className="offer-workspace">
       <div className="print-area space-y-6">
-        {/* Cover page (branded title page) */}
-        <section className="tech-cover" style={{ breakAfter: "page" }}>
-          <img src="/brand/logo-color.png" alt="PowerLine" className="w-72 max-w-[70%]" />
-          <a href="https://www.powerline.com.eg" className="text-sm font-semibold" style={{ color: TRED }}>www.powerline.com.eg</a>
-          <div className="mt-8 space-y-1">
-            <div className="text-2xl font-extrabold tracking-tight text-ink">Technical Offer</div>
-            <div className="text-sm font-bold" style={{ color: TRED }}>{qtnNo}</div>
-            {s.project.name && <div className="text-sm text-ink">{s.project.name}</div>}
-            {s.project.customer && <div className="text-sm text-muted">{s.project.customer}</div>}
-            {s.project.date && <div className="text-xs text-muted">{fmtDate(s.project.date)}</div>}
-          </div>
+        {/* Cover page (shared branded title page) */}
+        <OfferCover s={s} qtnNo={qtnNo} kind="Technical" />
+        {/* Notes page (editable: edit / add / remove lines) — after the cover */}
+        <section className="a4-sheet flex flex-col px-12 pb-10 pt-14" style={{ breakAfter: "page" }}>
+          <PageHeader s={s} qtnRef={qtnRef} />
+          {([["General Notes :-", "notesGeneral"], ["Additional Notes :-", "notesAdditional"]] as [string, NotesKey][]).map(([title, key]) => (
+            <div key={key} className="mt-5">
+              <h3 className="mb-2 text-lg font-bold italic underline" style={{ color: TRED }}>{title}</h3>
+              <ol className="space-y-1">
+                {notesOf(key).map((n, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="mt-px w-6 shrink-0 text-right text-[13px] font-semibold" style={{ color: TRED }}>{i + 1}-</span>
+                    <input value={n} onChange={(e) => editNote(key, i, e.target.value)} placeholder="Write a note…"
+                      className="flex-1 border-b border-transparent bg-transparent px-1 text-[13px] text-ink outline-none hover:border-line focus:border-brand" />
+                    <button type="button" onClick={() => removeNote(key, i)} title="Remove"
+                      className="no-print px-1 text-base leading-none text-muted hover:text-red-500">×</button>
+                  </li>
+                ))}
+              </ol>
+              <button type="button" onClick={() => addNote(key)}
+                className="no-print mt-2 ml-8 text-xs font-semibold text-brand hover:underline">+ Add note</button>
+            </div>
+          ))}
         </section>
         {s.panels.map((p, pi) => {
           const sp = specOf(p);
           return (
-            <div key={p.id} className="card overflow-hidden"
+            <div key={p.id} className="a4-sheet flex flex-col px-8 pb-7 pt-14"
               style={pi < s.panels.length - 1 ? { breakAfter: "page" } : undefined}>
+              <PageHeader s={s} qtnRef={qtnRef} />
               {/* item bar */}
-              <table className="w-full border-collapse">
+              <table className="w-full table-fixed border-collapse">
+                <colgroup>
+                  <col className="w-[18%]" />
+                  <col className="w-[55%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[13%]" />
+                </colgroup>
                 <tbody>
-                  <tr style={{ background: TRED }} className="text-white">
-                    <td className="w-44 border-r border-white/40 px-3 py-2 text-sm font-bold">Item No. {pi + 1}</td>
-                    <td className="px-3 py-2 text-center text-sm font-bold">{p.name}</td>
-                    <td className="w-40 border-l border-white/40 px-3 py-2 text-sm font-bold">Item Qty.</td>
-                    <td className="w-24 border-l border-white/40 px-3 py-2 text-center text-sm font-bold">{p.qty}</td>
+                  <tr style={{ background: TRED }} className="text-white font-display">
+                    <td className="border-r border-white/40 px-3 text-sm font-bold leading-[28px]">Item No. {pi + 1}</td>
+                    <td className="px-3 text-center text-sm font-bold leading-[28px]">{p.name}</td>
+                    <td className="border-l border-white/40 px-3 text-center text-sm font-bold leading-[28px]">Item Qty.</td>
+                    <td className="border-l border-white/40 px-3 text-center text-sm font-bold leading-[28px]">{p.qty}</td>
                   </tr>
                 </tbody>
               </table>
               {/* spec grid — 2 label/value pairs per row, like the reference */}
-              <table className="w-full border-collapse">
+              <table className="w-full table-fixed border-collapse">
+                <colgroup>
+                  <col className="w-[18%]" />
+                  <col className="w-[55%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[13%]" />
+                </colgroup>
                 <tbody>
                   {([
                     ["Panel Type", sp.panelType, "IP", sp.ip],
@@ -505,7 +672,7 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                     ["Copper", p.copperType, "Neutral", p.neutral],
                     ["Incoming Cables", p.incomingCables, "Earth", p.earth],
                     ["Outgoing Cables", p.outgoingCables, "Form", p.form],
-                    ["Designation", p.code, "Fed From", p.fedFrom],
+                    ["Short Circuit", p.shortCircuit, "Fed From", p.fedFrom],
                   ] as [string, React.ReactNode, string, React.ReactNode][]).map(([l1, v1, l2, v2]) => (
                     <tr key={l1}>
                       <Lbl>{l1}</Lbl>
@@ -517,13 +684,21 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                 </tbody>
               </table>
               {/* components table */}
-              <table className="w-full border-collapse">
+              <table className="w-full table-fixed border-collapse">
+                <colgroup>
+                  <col className="w-[18%]" />
+                  <col className="w-[48%]" />
+                  <col className="w-[7%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[13%]" />
+                </colgroup>
                 <thead>
-                  <tr style={{ background: TRED }} className="text-white">
-                    <th className="w-14 px-2 py-1.5 text-center text-[12px] font-bold">Qty</th>
-                    <th className="px-2 py-1.5 text-left text-[12px] font-bold">Description</th>
-                    <th className="w-32 px-2 py-1.5 text-left text-[12px] font-bold">Brand</th>
-                    <th className="w-40 px-2 py-1.5 text-left text-[12px] font-bold">Notes</th>
+                  <tr style={{ background: TRED }} className="text-white font-display">
+                    <th className="px-2 text-center text-[12px] font-bold leading-[23px]">Qty</th>
+                    <th className="px-2 text-left text-[12px] font-bold leading-[23px]">Description</th>
+                    <th className="px-2 text-center text-[12px] font-bold leading-[23px]">ADJ</th>
+                    <th className="px-2 text-left text-[12px] font-bold leading-[23px]">Brand</th>
+                    <th className="px-2 text-left text-[12px] font-bold leading-[23px]">NOTE</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -531,7 +706,7 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                     const secs = p.sections.filter((sec) => p.components.some((c) => c.section === sec));
                     if (secs.length === 0)
                       return (
-                        <tr><td colSpan={4} className="px-2 py-5 text-center text-sm text-muted">No components.</td></tr>
+                        <tr><td colSpan={5} className="px-2 py-5 text-center text-sm text-muted">No components.</td></tr>
                       );
                     // RPT: the orange group sub-labels (Circuit Breaker, Contactor…) only
                     // appear when the panel has MORE THAN ONE section; a single-section
@@ -552,28 +727,25 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                       if (multiSection)
                         rows.push(
                           <tr key={`s-${sec}`}>
-                            <td colSpan={4} className="border px-2 py-1 text-center text-[12px] font-bold uppercase tracking-wide" style={{ background: "#f3f3f5", borderColor: "#f1d3c4" }}>{sec}</td>
+                            <td colSpan={5} className="border px-2 text-center font-display text-[12px] font-bold uppercase tracking-wide leading-[20px]" style={{ background: "#f3f3f5", borderColor: "#f1d3c4" }}>{sec}</td>
                           </tr>
                         );
                       for (const g of order) {
                         for (const c of byG.get(g)!)
                           rows.push(isSpacer(c) ? (
                             <tr key={c.id}>
-                              <td colSpan={4} className="border-y px-2 py-1 text-[12.5px]" style={{ borderColor: "#f3ddd4" }}>&nbsp;</td>
+                              <td colSpan={5} className="border-y px-2 py-0.5 text-[12.5px]" style={{ borderColor: "#f3ddd4" }}>&nbsp;</td>
                             </tr>
                           ) : (
                             <tr key={c.id} className="border-b align-top" style={{ borderColor: "#f3ddd4" }}>
-                              <td className="px-2 py-1 text-center text-[12.5px] font-semibold">{c.qty}</td>
-                              <td className="px-2 py-1 text-[12.5px]">
+                              <td className="px-2 text-center text-[12.5px] font-semibold leading-[20px]">{c.qty}</td>
+                              <td className="px-2 text-[12.5px] leading-[20px]">
                                 {c.name}
-                                {(c.adj || c.comment) && (
-                                  <div className="text-[11px] italic text-muted">
-                                    {[c.adj && `Adj: ${c.adj}`, c.comment].filter(Boolean).join(" · ")}
-                                  </div>
-                                )}
+                                {c.comment && <div className="text-[11px] italic leading-tight text-muted">{c.comment}</div>}
                               </td>
-                              <td className="px-2 py-1 text-[12.5px]">{c.brand}</td>
-                              <td className="px-2 py-1 text-[11.5px] text-muted">{c.note}</td>
+                              <td className="px-2 text-center text-[12.5px] leading-[20px]">{c.adj}</td>
+                              <td className="px-2 text-[12.5px] leading-[20px]">{c.brand}</td>
+                              <td className="px-2 text-[11.5px] text-muted leading-[20px]">{c.note}</td>
                             </tr>
                           ));
                       }
@@ -582,21 +754,51 @@ function TechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                   })()}
                 </tbody>
               </table>
-              <div className="mt-1 flex justify-between border-t px-1 pt-1 text-[9px] text-muted" style={{ borderColor: "#f1d3c4" }}>
-                <span>{qtnNo}</span>
+              <div className="mt-auto flex justify-center border-t px-1 pt-3 text-[9px] text-muted" style={{ borderColor: "#f1d3c4" }}>
                 <span>Item {pi + 1} of {s.panels.length}</span>
-                <span>{fmtDate(s.project.date)}</span>
               </div>
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );
 }
 
 /** Commercial Offer — panel prices at the current Pricing Settings. */
-function CommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
+// Auto-growing borderless textarea (the section body).
+function AutoTextarea({ value, onChange, rtl }: { value: string; onChange: (v: string) => void; rtl?: boolean }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => { const el = ref.current; if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }, [value]);
+  return (
+    <textarea ref={ref} value={value} onChange={(e) => onChange(e.target.value)} rows={1} dir={rtl ? "rtl" : undefined}
+      className={`w-full resize-none whitespace-pre-wrap border-0 bg-transparent p-0 text-[12px] leading-relaxed text-ink outline-none ${rtl ? "text-right" : ""}`} />
+  );
+}
+
+// Editable Terms & Conditions — each section has a bold/larger title + body. Add / remove / edit.
+function TermsEditor({ value, onSave, rtl }: { value: TermsSection[]; onSave: (v: TermsSection[]) => void; rtl?: boolean }) {
+  const edit = (i: number, patch: Partial<TermsSection>) => onSave(value.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+  const remove = (i: number) => onSave(value.filter((_, j) => j !== i));
+  const add = () => onSave([...value, { title: "", body: "" }]);
+  return (
+    <div className="space-y-3" dir={rtl ? "rtl" : undefined}>
+      {value.map((sec, i) => (
+        <div key={i} className={`relative ${rtl ? "pl-5" : "pr-5"}`}>
+          <input value={sec.title} onChange={(e) => edit(i, { title: e.target.value })} placeholder="Section title" dir={rtl ? "rtl" : undefined}
+            className={`w-full border-0 bg-transparent p-0 font-display text-[14px] font-bold text-ink outline-none ${rtl ? "text-right" : ""}`} />
+          <AutoTextarea value={sec.body} onChange={(v) => edit(i, { body: v })} rtl={rtl} />
+          <button type="button" onClick={() => remove(i)} title="Remove section"
+            className={`no-print absolute top-0 px-1 text-base leading-none text-muted hover:text-red-500 ${rtl ? "left-0" : "right-0"}`}>×</button>
+        </div>
+      ))}
+      <button type="button" onClick={add} className="no-print text-xs font-semibold text-brand hover:underline">+ Add section</button>
+    </div>
+  );
+}
+
+function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void }) {
   // RPT-1: selling currency — default USD; EGP-based prices convert via the Pricing rate.
   const [cur, setCur] = useState<"USD" | "EGP">("USD");
   if (!s.panels.length) {
@@ -607,6 +809,8 @@ function CommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const vat = subtotal * s.factors.vat;
   const rate = cur === "USD" ? (s.factors.usd || 1) : 1; // EGP per unit of display currency
   const m = (egp: number) => fmtEgp(egp / rate);
+  const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
+  const qtnRef = revNum > 0 ? `${qtnNo}-${revNum}` : qtnNo;
   return (
     <div className="animate-fade-up">
       <PrintBar label="Prices follow the Pricing Settings tab (rates, ABB discount, factor) live."
@@ -620,11 +824,15 @@ function CommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
           ))}
         </div>
       </div>
-      <div className="card print-area space-y-5 p-6">
-        <DocHeader s={s} qtnNo={qtnNo} title="Commercial Offer" />
+      <div className="offer-workspace">
+      <div className="print-area space-y-6">
+        {/* Cover page — same branded cover as the Technical Offer */}
+        <OfferCover s={s} qtnNo={qtnNo} kind="Commercial" />
+        <section className="a4-sheet flex flex-col space-y-5 px-10 pb-10 pt-12">
+        <PageHeader s={s} qtnRef={qtnRef} />
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b-2 border-brand text-left text-[10px] uppercase tracking-wide text-muted">
+            <tr className="border-b-2 border-brand text-left text-[12px] uppercase tracking-wide text-muted">
               <th className="py-1.5 pr-2 w-10">Item</th>
               <th className="py-1.5 pr-2">Description</th>
               <th className="py-1.5 pr-2 text-center w-14">Qty</th>
@@ -636,12 +844,7 @@ function CommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             {calcs.map(([p, c], i) => (
               <tr key={p.id} className="border-b border-line/60 align-top">
                 <td className="py-1.5 pr-2 font-bold text-muted">{i + 1}</td>
-                <td className="py-1.5 pr-2">
-                  <b>{p.name}</b>
-                  <div className="text-[11px] text-muted">
-                    {p.encFam} LV distribution panel{p.ratingA ? ` · ${p.ratingA} A incomer` : ""} · Form {p.form} · {p.components.filter((c) => !isSpacer(c)).length} components
-                  </div>
-                </td>
+                <td className="py-1.5 pr-2"><b>{p.name}</b></td>
                 <td className="py-1.5 pr-2 text-center font-semibold">{p.qty}</td>
                 <td className="py-1.5 pr-2 text-right">{m(c.sellUnit)}</td>
                 <td className="py-1.5 text-right font-semibold">{m(c.totalSell)}</td>
@@ -654,9 +857,58 @@ function CommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
           <div className="flex justify-between"><span className="text-muted">VAT {Math.round(s.factors.vat * 100)}%</span><b>{m(vat)}</b></div>
           <div className="flex justify-between border-t-2 border-brand pt-1 text-base"><span className="font-bold">Total ({cur})</span><b className="text-brand-dark">{m(subtotal + vat)}</b></div>
         </div>
-        <p className="border-t border-line pt-2 text-[10px] text-muted">
-          Prices in {cur}{cur === "USD" ? ` (1 USD = ${fmtEgp(s.factors.usd)} EGP)` : ""}. Validity per agreement · delivery ex-works PowerLine · {qtnNo}.
-        </p>
+        </section>
+        {/* General Terms & Conditions (English) — its own A4 page; <thead> logo repeats per printed page. */}
+        <section className="a4-sheet px-10 pb-10 pt-12" style={{ breakAfter: "page" }}>
+          <table className="w-full">
+            <thead>
+              <tr><td className="pb-3">
+                <div className="flex items-center border-b pb-2" style={{ borderColor: "#f1d3c4" }}>
+                  <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-14" />
+                </div>
+              </td></tr>
+            </thead>
+            <tbody>
+              <tr><td>
+                <div className="mb-3 flex items-center justify-between gap-4">
+                  <h2 className="font-display text-xl font-bold" style={{ color: TRED }}>General Terms &amp; Conditions</h2>
+                  <button type="button" title="Reset to the default terms"
+                    onClick={() => { if (confirm("Reset General Terms & Conditions to the default? Your edits will be lost.")) up({ commercialTerms: DEFAULT_COMMERCIAL_TERMS.map((t) => ({ ...t })) }); }}
+                    className="no-print shrink-0 rounded-lg border border-line px-3 py-1 text-xs font-semibold text-muted transition-colors hover:border-brand/40 hover:bg-brand-tint hover:text-brand">
+                    ↺ Reset to default
+                  </button>
+                </div>
+                <TermsEditor key={qtnNo} value={Array.isArray(s.commercialTerms) ? s.commercialTerms : DEFAULT_COMMERCIAL_TERMS} onSave={(v) => up({ commercialTerms: v })} />
+              </td></tr>
+            </tbody>
+          </table>
+        </section>
+        {/* Arabic Terms & Conditions — starts on a new page. */}
+        <section className="a4-sheet px-10 pb-10 pt-12">
+          <table className="w-full">
+            <thead>
+              <tr><td className="pb-3">
+                <div className="flex items-center border-b pb-2" style={{ borderColor: "#f1d3c4" }}>
+                  <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-14" />
+                </div>
+              </td></tr>
+            </thead>
+            <tbody>
+              <tr><td>
+                <div className="mb-3 flex items-center justify-between gap-4" dir="rtl">
+                  <h2 className="font-display text-xl font-bold" style={{ color: TRED }}>الشروط والأحكام العامة</h2>
+                  <button type="button" title="إعادة التعيين إلى الافتراضي"
+                    onClick={() => { if (confirm("إعادة تعيين الشروط والأحكام إلى الافتراضي؟ ستفقد تعديلاتك.")) up({ commercialTermsAr: DEFAULT_COMMERCIAL_TERMS_AR.map((t) => ({ ...t })) }); }}
+                    className="no-print shrink-0 rounded-lg border border-line px-3 py-1 text-xs font-semibold text-muted transition-colors hover:border-brand/40 hover:bg-brand-tint hover:text-brand">
+                    ↺ إعادة التعيين
+                  </button>
+                </div>
+                <TermsEditor key={`${qtnNo}-ar`} rtl value={Array.isArray(s.commercialTermsAr) ? s.commercialTermsAr : DEFAULT_COMMERCIAL_TERMS_AR} onSave={(v) => up({ commercialTermsAr: v })} />
+              </td></tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
       </div>
     </div>
   );
@@ -936,6 +1188,8 @@ function PanelEditor({ s, p, upPanel }: {
           <div><L>Incoming C.B rating (A) <span className="text-brand">*</span></L>
             <input className={`input ${!p.ratingA ? "border-red-400 bg-red-50/40" : ""}`} inputMode="numeric" value={p.ratingA || ""}
               placeholder="e.g. 630" onChange={(e) => u({ ratingA: parseInt(e.target.value.replace(/[^\d]/g, "")) || 0 })} /></div>
+          <div><L>Short circuit</L><input className="input" value={p.shortCircuit}
+            placeholder="e.g. 50 kA" onChange={(e) => u({ shortCircuit: e.target.value })} /></div>
           <div><L>Amb. temp</L><Sel value={p.ambTemp as any} onChange={(v) => u({ ambTemp: v })} options={AMB_TEMPS} /></div>
           <div><L>Form</L><Sel value={p.form as any} onChange={(v) => u({ form: v })} options={FORMS} /></div>
           <div><L>Neutral</L><Sel value={p.neutral as any} onChange={(v) => u({ neutral: v })} options={NEUTRAL_EARTH} /></div>
@@ -1864,7 +2118,7 @@ function SizingCard({ p, u, factors }: {
               <div className="flex gap-1">
                 {(cc.type === "Pro-E" ? PRO_E_DEPTHS : cc.type === "IS2" ? IS2_DEPTHS : PLP_DEPTHS).map((d) => (
                   <button key={d} onClick={() => upCells({ depth: d })}
-                    className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-bold ${
+                    className={`flex-1 rounded-md border px-2 py-1 text-xs font-bold ${
                       cc.depth === d ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted"
                     }`}>{d} cm</button>
                 ))}
@@ -1880,7 +2134,7 @@ function SizingCard({ p, u, factors }: {
                         const ip = proEIp31Disabled(cc.depth, t) && cc.ip === "IP31" ? "IP65" : cc.ip;
                         upCells({ thickness: t, ip });
                       }}
-                        className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-bold ${
+                        className={`flex-1 rounded-md border px-2 py-1 text-xs font-bold ${
                           cc.thickness === t ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted"
                         }`}>{t} mm</button>
                     ))}
@@ -1895,7 +2149,7 @@ function SizingCard({ p, u, factors }: {
                         <button key={ip} disabled={off}
                           title={off ? "90 cm + 2 mm → IP65 only (RPT-02)" : undefined}
                           onClick={() => !off && upCells({ ip })}
-                          className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-bold ${
+                          className={`flex-1 rounded-md border px-2 py-1 text-xs font-bold ${
                             cc.ip === ip ? "border-brand bg-brand-light text-brand-dark"
                             : off ? "cursor-not-allowed border-line bg-surface text-muted/40" : "border-line bg-white text-muted"
                           }`}>{off && "🔒 "}{ip}</button>

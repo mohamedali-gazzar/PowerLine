@@ -16,7 +16,8 @@ export default function LvQtnListPage() {
   useEffect(reload, []);
 
   const onNew = () => {
-    setNum("");
+    // Pre-fill with the year-aware "QTN-26-" prefix; fully editable (prefix included).
+    setNum(`QTN-${String(new Date().getFullYear() % 100).padStart(2, "0")}-`);
     setErr("");
     setCreating(true);
   };
@@ -126,7 +127,10 @@ function NewQtnModal({ value, error, suggestion, onChange, onUseSuggestion, onCa
   onConfirm: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => {
+    const el = inputRef.current;
+    if (el) { el.focus(); const n = el.value.length; el.setSelectionRange(n, n); } // cursor after the prefix
+  }, []);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}>

@@ -81,7 +81,7 @@
   }
   /* Section heading with an animated underline bar */
   .sec-head {
-    @apply relative mb-3 pb-2 text-base font-bold text-ink;
+    @apply relative mb-3 pb-2 text-[16px] font-bold text-ink;
   }
   .sec-head::after {
     content: "";
@@ -152,6 +152,60 @@ input[type="number"] {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* A4 "sheet" pages for the generated offers — same proportions on screen and
+   in print (210 × 297 mm). On screen each reads as a centered page with a soft
+   shadow; in print each fills one A4 page (outer margins come from @page). */
+.a4-sheet {
+  position: relative;
+  background: #fff;
+}
+@media screen {
+  .a4-sheet {
+    width: 210mm; /* real A4 width (≈794px @96dpi) — what you see equals what prints */
+    min-height: 297mm; /* real A4 height (≈1123px); grows & re-paginates in print as content overflows */
+    flex: none;
+    margin-left: auto;
+    margin-right: auto;
+    border: 1px solid #e7e7eb;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(20, 20, 28, 0.08), 0 10px 30px rgba(20, 20, 28, 0.12);
+  }
+  /* Gray "workspace" canvas behind the sheets while editing (screen only). */
+  .offer-workspace {
+    background: #e2e4e8;
+    padding: 2rem 1.5rem;
+    border-radius: 14px;
+    overflow-x: auto;
+  }
+  .offer-workspace > .print-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 210mm; /* keep sheets at true A4 even if the pane is narrower (scrolls) */
+  }
+}
+@media print {
+  .offer-workspace {
+    background: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+  }
+}
+@media print {
+  html,
+  body {
+    background: #fff !important; /* avoid the grey app background bleeding into printed pages */
+  }
+  .a4-sheet {
+    width: 100%;
+    min-height: 273mm; /* A4 height (297mm) minus the @page 12mm top+bottom margins */
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
   }
 }
 
