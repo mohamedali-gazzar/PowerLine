@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { ZodError } from "zod";
+import { timingSafeEqual } from "crypto";
 import { prisma } from "../lib/prisma";
 import {
   hashPassword,
@@ -19,6 +20,9 @@ import {
 
 const CODE_TTL_MIN = 15;
 const MAX_ATTEMPTS = 6;
+// The code is only echoed back in the response when there's no real email AND we
+// aren't in production — so production never leaks codes even if misconfigured.
+const DEV = process.env.NODE_ENV !== "production";
 
 function pub(u: { id: string; email: string; name: string; photo: string | null }) {
   return { id: u.id, email: u.email, name: u.name, photo: u.photo };
@@ -75,7 +79,9 @@ async function checkCode(
     await prisma.emailCode.delete({ where: { id: rec.id } });
     return { ok: false, reason: "Too many attempts — request a new code." };
   }
-  if (rec.code !== code) {
+  const expected = Buffer.from(rec.code);
+  const given = Buffer.from(code);
+  if (expected.length !== given.length || !timingSafeEqual(expected, given)) {
     await prisma.emailCode.update({
       where: { id: rec.id },
       data: { attempts: rec.attempts + 1 },
@@ -96,7 +102,7 @@ export async function register(req: Request, res: Response) {
         .json({ error: "An account with this email already exists. Please sign in." });
     }
     const code = await issueCode(email, "signup");
-    res.json({ ok: true, ...(emailConfigured ? {} : { devCode: code }) });
+    res.json({ ok: true, ...(!emailConfigured && DEV ? { devCode: code } : {}) });
   } catch (e) {
     fail(res, e);
   }
@@ -159,7 +165,7 @@ export async function forgot(req: Request, res: Response) {
     const user = await prisma.user.findUnique({ where: { email } });
     let devCode: string | undefined;
     if (user) devCode = await issueCode(email, "reset");
-    res.json({ ok: true, ...(!emailConfigured && devCode ? { devCode } : {}) });
+    res.json({ ok: true, ...(!emailConfigured && DEV && devCode ? { devCode } : {}) });
   } catch (e) {
     fail(res, e);
   }

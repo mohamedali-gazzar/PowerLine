@@ -84,7 +84,7 @@ export default function App() {
         <div className="border-t border-white/10 p-3 lg:px-4 lg:py-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/15 text-sm font-bold text-white">
-              {user?.photo ? <img src={user.photo} alt="" className="h-full w-full object-cover" /> : initials}
+              {user?.photo && /^data:image\//.test(user.photo) ? <img src={user.photo} alt="" className="h-full w-full object-cover" /> : initials}
             </div>
             <div className="hidden min-w-0 flex-1 lg:block">
               <p className="truncate text-xs font-bold text-white">{user?.name || user?.email}</p>

@@ -200,11 +200,23 @@ export default function LvConfiguratorPage() {
   const canRedo = hist.future.length > 0;
 
   // Debounced live-save to the backend (replaces the previous localStorage save).
+  // saveRef holds the latest pending state so the final edit isn't lost if the
+  // user navigates away within the debounce window.
+  const saveRef = useRef<{ id: string; state: LvState } | null>(null);
   useEffect(() => {
     if (!rec || loading) return;
-    const t = setTimeout(() => { saveQtn(rec.id, s).catch(() => {}); }, 800);
+    saveRef.current = { id: rec.id, state: s };
+    const t = setTimeout(() => {
+      saveQtn(rec.id, s).catch(() => {});
+      saveRef.current = null;
+    }, 800);
     return () => clearTimeout(t);
   }, [rec, s, loading]);
+  // Flush a pending save on unmount so the last edit is never dropped.
+  useEffect(
+    () => () => { if (saveRef.current) saveQtn(saveRef.current.id, saveRef.current.state).catch(() => {}); },
+    []
+  );
   // RPT-1: keyboard — Ctrl/Cmd+Z = undo, Ctrl/Cmd+Y or Shift+Z = redo (ignored while
   // typing in a field so native text-undo still works there).
   useEffect(() => {

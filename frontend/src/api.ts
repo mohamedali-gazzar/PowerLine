@@ -38,6 +38,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) {
+    // Session expired/invalid on a protected call → drop the token and bounce to
+    // the login wall. Auth endpoints handle their own 401s (wrong credentials).
+    if (res.status === 401 && token && !path.startsWith("/auth/")) {
+      clearToken();
+      if (typeof window !== "undefined") window.location.reload();
+    }
     let message = `Request failed (${res.status})`;
     try {
       const body = await res.json();

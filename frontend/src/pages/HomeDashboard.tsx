@@ -209,7 +209,7 @@ function ProfilePhoto() {
         title="Change profile photo"
         className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-2 border-brand/30 bg-brand-tint text-2xl font-extrabold text-brand-dark"
       >
-        {user?.photo ? (
+        {user?.photo && /^data:image\//.test(user.photo) ? (
           <img src={user.photo} alt="" className="h-full w-full object-cover" />
         ) : (
           initials
