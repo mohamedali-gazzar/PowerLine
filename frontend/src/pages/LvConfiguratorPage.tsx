@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getQtn, saveQtn, renameQtn } from "../lv/qtns";
+import { getQtn, saveQtn, renameQtn, type QtnRecord } from "../lv/qtns";
 import { useStaff, SALES_MANAGER } from "../staff";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
@@ -11,7 +11,7 @@ import {
 import {
   newPanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, busbarBarAreaMm2,
+  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, busbarBarAreaMm2,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection,
 } from "../lv/store";
 import {
@@ -142,25 +142,47 @@ function SearchSelect({ value, placeholder, options, onPick }: {
 export default function LvConfiguratorPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
-  const [rec] = useState(() => getQtn(id));
-  // RPT-1: history-aware state so the whole workspace supports Undo / Redo.
+  // Async-loaded from the backend (per signed-in user). `rec` is null until loaded.
+  const [rec, setRec] = useState<QtnRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  // RPT-1: history-aware state (Undo/Redo). Starts on a placeholder so the hooks
+  // below stay unconditional, then is replaced once the quotation loads.
   const [hist, setHist] = useState<{ past: LvState[]; present: LvState; future: LvState[] }>(
-    () => ({ past: [], present: rec?.state ?? null!, future: [] })
+    () => ({ past: [], present: initialState(), future: [] })
   );
   const s = hist.present;
   // Restore the last tab this QTN was on (per-QTN), else the default view.
   const tabKey = `lv-tab-${id}`;
   const [tab, setTab] = useState<Tab>(() => {
     const saved = localStorage.getItem(tabKey) as Tab | null;
-    return saved && TABS.includes(saved) ? saved : (rec?.state.panels.length ? "panels" : "project");
+    return saved && TABS.includes(saved) ? saved : "project";
   });
   const [matAbbOnly, setMatAbbOnly] = useState(false);
-  // RPT-1: the QTN number is editable after creation (kept unique in the registry).
-  const [qtnNum, setQtnNum] = useState(() => rec?.number ?? "");
-  // Renames the QTN in the registry (unique, non-empty). Edited from the Project tab.
-  const renameQtnNumber = (n: string): { ok: boolean; error?: string } => {
+  // RPT-1: the QTN number is editable after creation (kept unique per user).
+  const [qtnNum, setQtnNum] = useState("");
+
+  // Load the quotation from the backend on mount (redirect to the list if gone).
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    getQtn(id)
+      .then((r) => {
+        if (!alive) return;
+        if (!r) { navigate("/lv", { replace: true }); return; }
+        setRec(r);
+        setHist({ past: [], present: r.state, future: [] });
+        setQtnNum(r.number);
+        if (!localStorage.getItem(tabKey) && r.state.panels.length) setTab("panels");
+        setLoading(false);
+      })
+      .catch(() => { if (alive) navigate("/lv", { replace: true }); });
+    return () => { alive = false; };
+  }, [id, navigate, tabKey]);
+
+  // Renames the QTN on the backend (unique, non-empty). Edited from the Project tab.
+  const renameQtnNumber = async (n: string): Promise<{ ok: boolean; error?: string }> => {
     if (!rec) return { ok: false, error: "Quotation not found." };
-    const res = renameQtn(rec.id, n);
+    const res = await renameQtn(rec.id, n);
     if (res.ok) setQtnNum(n.trim());
     return res;
   };
@@ -177,12 +199,12 @@ export default function LvConfiguratorPage() {
   const canUndo = hist.past.length > 0;
   const canRedo = hist.future.length > 0;
 
+  // Debounced live-save to the backend (replaces the previous localStorage save).
   useEffect(() => {
-    if (!rec) navigate("/lv", { replace: true });
-  }, [rec, navigate]);
-  useEffect(() => {
-    if (rec && s) saveQtn(rec.id, s);
-  }, [rec, s]);
+    if (!rec || loading) return;
+    const t = setTimeout(() => { saveQtn(rec.id, s).catch(() => {}); }, 800);
+    return () => clearTimeout(t);
+  }, [rec, s, loading]);
   // RPT-1: keyboard — Ctrl/Cmd+Z = undo, Ctrl/Cmd+Y or Shift+Z = redo (ignored while
   // typing in a field so native text-undo still works there).
   useEffect(() => {
@@ -199,8 +221,7 @@ export default function LvConfiguratorPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totals = useMemo(() => (s ? grandTotals(s) : { sell: 0, vat: 0, incl: 0 }), [s]);
-  if (!rec || !s) return null;
+  const totals = useMemo(() => grandTotals(s), [s]);
   const sel = s.panels.find((p) => p.id === s.selectedId) ?? null;
   // RPT-1: block every offer/output tab until each panel has its mandatory fields.
   const offerIssues = s.panels.flatMap((p, i) =>
@@ -251,6 +272,17 @@ export default function LvConfiguratorPage() {
   // value only changes once the dropdown is opened (Alt+Down / click), after
   // which the OS popup handles the arrows (this handler no longer fires).
   const navRef = useRef<HTMLDivElement>(null);
+
+  // The QTN loads asynchronously, so every hook above must run on every render;
+  // only now — after the last hook — may we early-return the loading state.
+  if (loading || !rec) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="h-7 w-7 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      </div>
+    );
+  }
+
   const onFieldArrowNav = (e: React.KeyboardEvent) => {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return; // Alt+Down opens the select natively
     const el = document.activeElement as HTMLElement | null;
@@ -920,7 +952,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
 // ── Project tab (RPT-01) ─────────────────────────────────────────────────────
 function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
   s: LvState; up: (p: Partial<LvState>) => void;
-  qtnNum: string; onRenameQtn: (n: string) => { ok: boolean; error?: string };
+  qtnNum: string; onRenameQtn: (n: string) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const pr = s.project;
   const upPr = (patch: Partial<LvState["project"]>) => up({ project: { ...pr, ...patch } });
@@ -937,9 +969,9 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
   const [qtnDraft, setQtnDraft] = useState(qtnNum);
   const [qtnErr, setQtnErr] = useState("");
   useEffect(() => { setQtnDraft(qtnNum); }, [qtnNum]);
-  const commitQtn = () => {
+  const commitQtn = async () => {
     if (qtnDraft.trim() === qtnNum.trim()) { setQtnErr(""); return; }
-    const res = onRenameQtn(qtnDraft);
+    const res = await onRenameQtn(qtnDraft);
     setQtnErr(res.ok ? "" : res.error || "Invalid QTN number.");
   };
 

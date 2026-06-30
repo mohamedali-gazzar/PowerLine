@@ -1,65 +1,25 @@
-// QTN registry — the LV section is a list of quotations ("New QTN" → its own
-// workspace page with Project / Pricing / Panels / Technical / Commercial /
-// Material List inside it, like the Excel configurator files QTN-26-XXXX).
-// Stored client-side; backend persistence is a later phase.
-
-import { initialState, grandTotals, meteringBeforeOutgoings, DEFAULT_GENERAL_NOTES, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR, type LvState } from "./store";
+// QTN data layer for the LV section. Each QTN is a quotation workspace (Project /
+// Pricing / Panels / Technical / Commercial / Material). Storage is the backend
+// (per signed-in user) via /api/qtns — the functions below are async wrappers
+// that also apply forward-compatible state normalization + the client-computed
+// summary the server stores alongside the JSON state.
+import { api, type QtnSummaryInput } from "../api";
+import {
+  initialState,
+  grandTotals,
+  meteringBeforeOutgoings,
+  DEFAULT_GENERAL_NOTES,
+  DEFAULT_COMMERCIAL_TERMS,
+  DEFAULT_COMMERCIAL_TERMS_AR,
+  type LvState,
+} from "./store";
 
 export interface QtnRecord {
   id: string;
-  number: string;     // e.g. "QTN-26-0001"
+  number: string; // e.g. "QTN-26-0001"
   createdAt: string;
   updatedAt: string;
   state: LvState;
-}
-interface Registry {
-  seq: number;
-  qtns: QtnRecord[];
-}
-
-const KEY = "powerline-lv-qtns-v1";
-const OLD_SINGLE = "powerline-lv-v1"; // pre-QTN single-state storage → migrated
-
-function loadRegistry(): Registry {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw) as Registry;
-  } catch {
-    /* corrupted — start fresh */
-  }
-  const reg: Registry = { seq: 0, qtns: [] };
-  // migrate the old single-configurator state into QTN #1, if present
-  try {
-    const old = localStorage.getItem(OLD_SINGLE);
-    if (old) {
-      const state = JSON.parse(old) as LvState;
-      reg.seq = 1;
-      reg.qtns.push({
-        id: "migrated-1",
-        number: qtnNumber(1),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        state,
-      });
-      localStorage.removeItem(OLD_SINGLE);
-      saveRegistry(reg);
-    }
-  } catch {
-    /* ignore */
-  }
-  return reg;
-}
-function saveRegistry(reg: Registry) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(reg));
-  } catch {
-    /* storage full — non-fatal */
-  }
-}
-
-export function qtnNumber(seq: number): string {
-  const yy = String(new Date().getFullYear() % 100).padStart(2, "0");
-  return `QTN-${yy}-${String(seq).padStart(4, "0")}`;
 }
 
 export interface QtnListItem {
@@ -70,118 +30,110 @@ export interface QtnListItem {
   customer: string;
   panels: number;
   totalEgp: number;
+  submitted?: boolean;
 }
 
-export function listQtns(): QtnListItem[] {
-  return loadRegistry()
-    .qtns.map((q) => ({
-      id: q.id,
-      number: q.number,
-      updatedAt: q.updatedAt,
-      projectName: q.state.project.name,
-      customer: q.state.project.customer,
-      panels: q.state.panels.length,
-      totalEgp: grandTotals(q.state).incl,
-    }))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-}
-
-export function createQtn(number: string): QtnRecord {
-  const reg = loadRegistry();
-  reg.seq += 1; // advances the suggested-next number
-  const rec: QtnRecord = {
-    id: `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-    number: number.trim() || qtnNumber(reg.seq),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    state: initialState(),
+/** Client-computed summary stored next to the JSON state (so listing/stats need
+ *  no pricing logic on the server). */
+function summaryOf(state: LvState): QtnSummaryInput {
+  return {
+    projectName: state.project.name,
+    customer: state.project.customer,
+    panelsCount: state.panels.length,
+    totalEgp: grandTotals(state).incl,
   };
-  reg.qtns.push(rec);
-  saveRegistry(reg);
-  return rec;
 }
 
-/** Suggested next number in the QTN-YY-#### sequence — only a hint; the user
- *  types the actual number when creating a quotation. */
-export function nextQtnNumber(): string {
-  return qtnNumber(loadRegistry().seq + 1);
+/** Forward-compatible defaults for a state loaded from the server. */
+function normalize(state: LvState): LvState {
+  state.notesGeneral ??= [...DEFAULT_GENERAL_NOTES];
+  state.notesAdditional ??= [];
+  if (!Array.isArray(state.commercialTerms))
+    state.commercialTerms = DEFAULT_COMMERCIAL_TERMS.map((x) => ({ ...x }));
+  if (!Array.isArray(state.commercialTermsAr))
+    state.commercialTermsAr = DEFAULT_COMMERCIAL_TERMS_AR.map((x) => ({ ...x }));
+  state.panels.forEach((p) => {
+    p.code ??= "";
+    p.shortCircuit ??= "";
+    p.busbarPoles ??= 3;
+    if (Array.isArray(p.sections)) p.sections = meteringBeforeOutgoings(p.sections);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    p.panelItems = ((p as any).panelItems ?? []).map((it: any, i: number) => ({
+      ...it,
+      qty: 1,
+      slot: it.slot ?? (i === 0 ? 1 : 2),
+    }));
+  });
+  return state;
 }
 
-/** True if a quotation already uses this number (case-insensitive). */
-export function qtnNumberExists(number: string): boolean {
-  const n = number.trim().toLowerCase();
-  if (!n) return false;
-  return loadRegistry().qtns.some((q) => q.number.trim().toLowerCase() === n);
+const toRecord = (r: {
+  id: string;
+  number: string;
+  createdAt: string;
+  updatedAt: string;
+  state: unknown;
+}): QtnRecord => ({
+  id: r.id,
+  number: r.number,
+  createdAt: r.createdAt,
+  updatedAt: r.updatedAt,
+  state: normalize(r.state as LvState),
+});
+
+export async function listQtns(): Promise<QtnListItem[]> {
+  return api.qtns.list();
 }
 
-/** Rename a quotation's number. Enforces non-empty + uniqueness (case-insensitive,
- *  excluding the record itself). Returns an error message instead of throwing. */
-export function renameQtn(id: string, number: string): { ok: true } | { ok: false; error: string } {
-  const n = number.trim();
-  if (!n) return { ok: false, error: "QTN number can't be empty." };
-  const reg = loadRegistry();
-  const q = reg.qtns.find((x) => x.id === id);
-  if (!q) return { ok: false, error: "Quotation not found." };
-  if (reg.qtns.some((x) => x.id !== id && x.number.trim().toLowerCase() === n.toLowerCase()))
-    return { ok: false, error: "A quotation with this number already exists." };
-  q.number = n;
-  q.updatedAt = new Date().toISOString();
-  saveRegistry(reg);
-  return { ok: true };
-}
-
-export function getQtn(id: string): QtnRecord | null {
-  const rec = loadRegistry().qtns.find((q) => q.id === id) ?? null;
-  if (rec) {
-    // notes page (added later) — seed defaults for older quotations
-    rec.state.notesGeneral ??= [...DEFAULT_GENERAL_NOTES];
-    rec.state.notesAdditional ??= [];
-    if (!Array.isArray(rec.state.commercialTerms)) rec.state.commercialTerms = DEFAULT_COMMERCIAL_TERMS.map((s) => ({ ...s }));
-    if (!Array.isArray(rec.state.commercialTermsAr)) rec.state.commercialTermsAr = DEFAULT_COMMERCIAL_TERMS_AR.map((s) => ({ ...s }));
-    // normalize older stored shapes (incl. the earlier multi-add panelItems)
-    rec.state.panels.forEach((p) => {
-      p.code ??= "";
-      p.shortCircuit ??= "";
-      p.busbarPoles ??= 3;
-      if (Array.isArray(p.sections)) p.sections = meteringBeforeOutgoings(p.sections);
-      p.panelItems = ((p as any).panelItems ?? []).map((it: any, i: number) => ({
-        ...it,
-        qty: 1,
-        slot: it.slot ?? (i === 0 ? 1 : 2),
-      }));
-    });
+export async function getQtn(id: string): Promise<QtnRecord | null> {
+  try {
+    return toRecord(await api.qtns.get(id));
+  } catch {
+    return null;
   }
-  return rec;
 }
 
-export function saveQtn(id: string, state: LvState) {
-  const reg = loadRegistry();
-  const q = reg.qtns.find((x) => x.id === id);
-  if (!q) return;
-  q.state = state;
-  q.updatedAt = new Date().toISOString();
-  saveRegistry(reg);
+export async function createQtn(number: string): Promise<QtnRecord> {
+  const state = initialState();
+  return toRecord(await api.qtns.create(number.trim(), state, summaryOf(state)));
 }
 
-export function deleteQtn(id: string) {
-  const reg = loadRegistry();
-  reg.qtns = reg.qtns.filter((q) => q.id !== id);
-  saveRegistry(reg);
+export async function saveQtn(id: string, state: LvState): Promise<void> {
+  await api.qtns.update(id, state, summaryOf(state));
 }
 
-export function duplicateQtn(id: string): QtnRecord | null {
-  const reg = loadRegistry();
-  const src = reg.qtns.find((q) => q.id === id);
-  if (!src) return null;
-  reg.seq += 1;
-  const rec: QtnRecord = {
-    id: `q${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-    number: qtnNumber(reg.seq),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    state: structuredClone(src.state),
-  };
-  reg.qtns.push(rec);
-  saveRegistry(reg);
-  return rec;
+export async function renameQtn(
+  id: string,
+  number: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!number.trim()) return { ok: false, error: "QTN number can't be empty." };
+  try {
+    return await api.qtns.rename(id, number);
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+export async function deleteQtn(id: string): Promise<void> {
+  await api.qtns.remove(id);
+}
+
+export async function duplicateQtn(id: string): Promise<QtnRecord | null> {
+  try {
+    return toRecord(await api.qtns.duplicate(id));
+  } catch {
+    return null;
+  }
+}
+
+export async function nextQtnNumber(): Promise<string> {
+  try {
+    return (await api.qtns.nextNumber()).suggestion;
+  } catch {
+    return "";
+  }
+}
+
+export async function submitQtn(id: string): Promise<void> {
+  await api.qtns.submit(id);
 }

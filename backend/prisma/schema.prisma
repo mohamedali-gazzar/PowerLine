@@ -64,6 +64,12 @@ model Offer {
 
   rmu RmuConfig?
 
+  // Accounts system: the signed-in user who created this offer, and when it was
+  // "submitted" (RMU offers are generated on creation, so set on create).
+  owner       User?     @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerId     String?
+  submittedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -98,4 +104,59 @@ model RmuConfig {
 
   // Cached human-readable code for quick listing/search, e.g. "PRAL12(2+1+M)".
   configCode String
+}
+
+// ─── Accounts system ─────────────────────────────────────────────────────────
+
+/// A registered user of the configurator. Owns LV quotations and RMU offers, and
+/// carries a profile photo (base64 data URL — serverless-safe, no disk on Vercel).
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String   @default("")
+  passwordHash  String
+  photo         String? // base64 data URL, e.g. "data:image/png;base64,..."
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  lvQtns LvQtn[]
+  offers Offer[]
+}
+
+/// One-time numeric codes emailed for sign-up verification and password reset.
+/// Single-use + short expiry; the controller deletes them once consumed.
+model EmailCode {
+  id        String   @id @default(cuid())
+  email     String
+  code      String // 6-digit code
+  purpose   String // "signup" | "reset"
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email, purpose])
+}
+
+/// A saved LV quotation owned by a user (migrated off browser localStorage). The
+/// full LvState lives in `state` as a JSON string; the summary columns are sent
+/// by the client on save so listing/stats need no business logic on the server.
+model LvQtn {
+  id          String    @id @default(cuid())
+  number      String
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId     String
+  state       String // JSON-serialized LvState
+  // client-computed summary (avoids duplicating pricing logic on the server)
+  projectName String    @default("")
+  customer    String    @default("")
+  panelsCount Int       @default(0)
+  totalEgp    Float     @default(0)
+  submitted   Boolean   @default(false)
+  submittedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([ownerId, number])
+  @@index([ownerId])
 }

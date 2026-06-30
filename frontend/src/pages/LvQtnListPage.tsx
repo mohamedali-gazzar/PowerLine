@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listQtns, createQtn, deleteQtn, duplicateQtn, nextQtnNumber, qtnNumberExists, type QtnListItem } from "../lv/qtns";
+import { listQtns, createQtn, deleteQtn, duplicateQtn, nextQtnNumber, type QtnListItem } from "../lv/qtns";
 import { fmtEgp } from "../lv/catalog";
 
 /** LV landing page — the list of quotations. "+ New QTN" opens a fresh
@@ -10,33 +10,45 @@ export default function LvQtnListPage() {
   const [qtns, setQtns] = useState<QtnListItem[]>([]);
   const [creating, setCreating] = useState(false);
   const [num, setNum] = useState("");
+  const [suggestion, setSuggestion] = useState("");
   const [err, setErr] = useState("");
 
-  const reload = () => setQtns(listQtns());
-  useEffect(reload, []);
+  const reload = async () => {
+    try {
+      setQtns(await listQtns());
+    } catch {
+      setQtns([]);
+    }
+  };
+  useEffect(() => {
+    reload();
+  }, []);
 
   const onNew = () => {
     // Pre-fill with the year-aware "QTN-26-00000" default; fully editable (prefix included).
     setNum(`QTN-${String(new Date().getFullYear() % 100).padStart(2, "0")}-00000`);
     setErr("");
     setCreating(true);
+    nextQtnNumber().then(setSuggestion).catch(() => {});
   };
-  const confirmNew = () => {
+  const confirmNew = async () => {
     const n = num.trim();
     if (!n) { setErr("Quotation number is required."); return; }
-    if (qtnNumberExists(n)) { setErr("A quotation with this number already exists."); return; }
-    const rec = createQtn(n);
-    navigate(`/lv/qtn/${rec.id}`);
+    try {
+      const rec = await createQtn(n);
+      navigate(`/lv/qtn/${rec.id}`);
+    } catch (e) {
+      setErr((e as Error).message || "Could not create the quotation.");
+    }
   };
-  const onDelete = (e: React.MouseEvent, id: string) => {
+  const onDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!confirm("Delete this QTN?")) return;
-    deleteQtn(id);
-    reload();
+    try { await deleteQtn(id); await reload(); } catch { /* ignore */ }
   };
-  const onDuplicate = (e: React.MouseEvent, id: string) => {
+  const onDuplicate = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    const rec = duplicateQtn(id);
+    const rec = await duplicateQtn(id);
     if (rec) navigate(`/lv/qtn/${rec.id}`);
   };
 
@@ -105,7 +117,7 @@ export default function LvQtnListPage() {
         <NewQtnModal
           value={num}
           error={err}
-          suggestion={nextQtnNumber()}
+          suggestion={suggestion}
           onChange={(v) => { setNum(v); if (err) setErr(""); }}
           onUseSuggestion={(s) => { setNum(s); setErr(""); }}
           onCancel={() => setCreating(false)}

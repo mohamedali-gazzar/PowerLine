@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { ZodError } from "zod";
+import { prisma } from "../lib/prisma";
 import {
   createOfferSchema,
   previewSchema,
@@ -23,6 +24,14 @@ export async function postOffer(req: Request, res: Response) {
   try {
     const input = createOfferSchema.parse(req.body);
     const offer = await createOffer(input);
+    // Accounts system: attribute the offer to the signed-in user (optionalAuth)
+    // and treat generation as the submission moment (feeds the dashboard charts).
+    if (req.userId) {
+      await prisma.offer.update({
+        where: { id: offer.id },
+        data: { ownerId: req.userId, submittedAt: new Date() },
+      });
+    }
     res.status(201).json(offer);
   } catch (err) {
     handleError(err, res);
