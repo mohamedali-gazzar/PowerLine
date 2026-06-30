@@ -64,9 +64,8 @@ export default function HomeDashboard() {
 
         {/* Section shortcuts */}
         <div className="grid gap-3 content-start">
-          <ShortcutCard icon="⚡" title="RMU offers" desc="Ring Main Unit technical & commercial offers" onClick={() => navigate("/rmu")} />
-          <ShortcutCard icon="📊" title="LV quotations" desc="Low-voltage panel configurator" onClick={() => navigate("/lv")} />
-          <ShortcutCard icon="🏗️" title="Kiosk tool" desc="PCSS kiosk design selector" onClick={() => navigate("/kiosks")} />
+          <ShortcutCard icon="⚡" title="RMU Offers History" desc="Ring Main Unit technical & commercial offers" onClick={() => navigate("/rmu")} />
+          <ShortcutCard icon="📊" title="LV Offers History" desc="Low-voltage panel quotations" onClick={() => navigate("/lv")} />
         </div>
       </div>
 
