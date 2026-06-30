@@ -108,7 +108,7 @@ export default function AuthPage() {
           )}
           {devCode && (
             <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              <b>Dev mode</b> (no email configured) — your code is{" "}
+              <b>Email not configured yet</b> — your verification code is{" "}
               <span className="font-mono text-base font-bold">{devCode}</span>
             </div>
           )}

@@ -101,8 +101,12 @@ export async function register(req: Request, res: Response) {
         .status(409)
         .json({ error: "An account with this email already exists. Please sign in." });
     }
+    // First-run bootstrap: on a fresh deployment with no email configured yet, the
+    // very first sign-up (empty user table) gets its code on-screen so the owner
+    // can create the initial account. After that, codes require real email.
+    const firstUser = (await prisma.user.count()) === 0;
     const code = await issueCode(email, "signup");
-    res.json({ ok: true, ...(!emailConfigured && DEV ? { devCode: code } : {}) });
+    res.json({ ok: true, ...(!emailConfigured && (DEV || firstUser) ? { devCode: code } : {}) });
   } catch (e) {
     fail(res, e);
   }
