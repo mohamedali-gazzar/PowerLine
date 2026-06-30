@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import {
   Field,
@@ -85,8 +85,10 @@ export default function NewOfferPage() {
   // Offer cover-page team — sales lists are the SHARED registry (also used by LV)
   const [staff, setStaff] = useStaff();
   const [newSales, setNewSales] = useState({ name: "", mobile: "", email: "" });
+  // Pre-fill the QTN from the New-QTN dialog (RMU → /offers/new?qtn=QTN-26-…).
+  const [params] = useSearchParams();
   const [team, setTeam] = useState({
-    quotationNo: "", opportunityNo: "",
+    quotationNo: params.get("qtn") || "", opportunityNo: "",
     salesName: "", salesMobile: "", salesEmail: "",
     salesManagerName: "", salesManagerMobile: "", salesManagerEmail: "",
     supportName: "", supportMobile: "", supportEmail: "",

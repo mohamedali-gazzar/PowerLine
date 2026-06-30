@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type HistoryItem, type WeekStat } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { createQtn } from "../lv/qtns";
+import { QtnNumberInput, qtnPrefix, composeQtn } from "../components/QtnNumberInput";
 
 /** Post-login home: profile, weekly performance, QTN history, and quick actions
  *  (New QTN → RMU/LV, plus the Kiosk tool). */
@@ -228,21 +229,23 @@ function ProfilePhoto() {
 // ── New QTN chooser (RMU / LV → number) ───────────────────────────────────────
 function NewQtnChooser({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"choose" | "lv">("choose");
-  const [number, setNumber] = useState("");
+  const [mode, setMode] = useState<"choose" | "lv" | "rmu">("choose");
+  const [suffix, setSuffix] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const openLv = () => {
-    setNumber(`QTN-${String(new Date().getFullYear() % 100).padStart(2, "0")}-00000`);
-    setMode("lv");
-  };
-  const createLv = async () => {
-    const n = number.trim();
-    if (!n) { setErr("Quotation number is required."); return; }
+  const start = (m: "lv" | "rmu") => { setSuffix(""); setErr(""); setMode(m); };
+  const create = async () => {
+    if (!suffix.trim()) { setErr("Enter the quotation number."); return; }
+    const number = composeQtn(suffix);
+    if (mode === "rmu") {
+      // RMU offers are created in the offer form; carry the QTN into its cover field.
+      navigate(`/offers/new?qtn=${encodeURIComponent(number)}`);
+      return;
+    }
     setBusy(true);
     try {
-      const rec = await createQtn(n);
+      const rec = await createQtn(number);
       navigate(`/lv/qtn/${rec.id}`);
     } catch (e) {
       setErr((e as Error).message || "Could not create the quotation.");
@@ -263,13 +266,13 @@ function NewQtnChooser({ onClose }: { onClose: () => void }) {
             <h2 className="text-lg font-extrabold tracking-tight">New QTN</h2>
             <p className="mt-0.5 text-xs text-muted">What kind of quotation do you want to create?</p>
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <button onClick={() => navigate("/offers/new")}
+              <button onClick={() => start("rmu")}
                 className="rounded-xl border-2 border-line p-4 text-left transition hover:border-brand hover:bg-brand-tint/40">
                 <div className="text-2xl">⚡</div>
                 <div className="mt-1 text-sm font-bold text-ink">RMU</div>
                 <div className="text-[11px] text-muted">Ring Main Unit (MV)</div>
               </button>
-              <button onClick={openLv}
+              <button onClick={() => start("lv")}
                 className="rounded-xl border-2 border-line p-4 text-left transition hover:border-brand hover:bg-brand-tint/40">
                 <div className="text-2xl">📊</div>
                 <div className="mt-1 text-sm font-bold text-ink">LV</div>
@@ -282,18 +285,18 @@ function NewQtnChooser({ onClose }: { onClose: () => void }) {
           </>
         ) : (
           <>
-            <h2 className="text-lg font-extrabold tracking-tight">New LV Quotation</h2>
-            <p className="mt-0.5 text-xs text-muted">Enter the quotation number for this job.</p>
+            <h2 className="text-lg font-extrabold tracking-tight">New {mode === "rmu" ? "RMU" : "LV"} Quotation</h2>
+            <p className="mt-0.5 text-xs text-muted">
+              <b className="font-mono">{qtnPrefix()}</b> is fixed — just type the number after it.
+            </p>
             <label className="label mt-4" htmlFor="qtn-number">Quotation number <span className="text-brand">*</span></label>
-            <input id="qtn-number" autoFocus className="input" placeholder="e.g. QTN-26-0001"
-              value={number}
-              onChange={(e) => { setNumber(e.target.value); if (err) setErr(""); }}
-              onKeyDown={(e) => { if (e.key === "Enter") createLv(); }} />
+            <QtnNumberInput id="qtn-number" autoFocus value={suffix}
+              onChange={(v) => { setSuffix(v); if (err) setErr(""); }} onEnter={create} />
             {err && <p className="mt-1.5 text-xs font-semibold text-red-600">{err}</p>}
             <div className="mt-5 flex justify-between">
               <button className="btn-ghost" onClick={() => setMode("choose")}>← Back</button>
-              <button className="btn-primary" onClick={createLv} disabled={busy || !number.trim()}>
-                {busy ? "Creating…" : "Create QTN"}
+              <button className="btn-primary" onClick={create} disabled={busy || !suffix.trim()}>
+                {busy ? "Creating…" : mode === "rmu" ? "Continue" : "Create QTN"}
               </button>
             </div>
           </>

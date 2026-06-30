@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listQtns, createQtn, deleteQtn, duplicateQtn, nextQtnNumber, type QtnListItem } from "../lv/qtns";
 import { fmtEgp } from "../lv/catalog";
+import { QtnNumberInput, qtnPrefix, composeQtn, qtnSuffix } from "../components/QtnNumberInput";
 
 /** LV landing page — the list of quotations. "+ New QTN" opens a fresh
  *  workspace (Project / Pricing / Panels / Technical / Commercial / Material). */
@@ -9,7 +10,7 @@ export default function LvQtnListPage() {
   const navigate = useNavigate();
   const [qtns, setQtns] = useState<QtnListItem[]>([]);
   const [creating, setCreating] = useState(false);
-  const [num, setNum] = useState("");
+  const [suffix, setSuffix] = useState("");
   const [suggestion, setSuggestion] = useState("");
   const [err, setErr] = useState("");
 
@@ -25,17 +26,15 @@ export default function LvQtnListPage() {
   }, []);
 
   const onNew = () => {
-    // Pre-fill with the year-aware "QTN-26-00000" default; fully editable (prefix included).
-    setNum(`QTN-${String(new Date().getFullYear() % 100).padStart(2, "0")}-00000`);
+    setSuffix(""); // QTN-YY- prefix is fixed; the user types only the suffix
     setErr("");
     setCreating(true);
     nextQtnNumber().then(setSuggestion).catch(() => {});
   };
   const confirmNew = async () => {
-    const n = num.trim();
-    if (!n) { setErr("Quotation number is required."); return; }
+    if (!suffix.trim()) { setErr("Quotation number is required."); return; }
     try {
-      const rec = await createQtn(n);
+      const rec = await createQtn(composeQtn(suffix));
       navigate(`/lv/qtn/${rec.id}`);
     } catch (e) {
       setErr((e as Error).message || "Could not create the quotation.");
@@ -115,11 +114,11 @@ export default function LvQtnListPage() {
 
       {creating && (
         <NewQtnModal
-          value={num}
+          value={suffix}
           error={err}
           suggestion={suggestion}
-          onChange={(v) => { setNum(v); if (err) setErr(""); }}
-          onUseSuggestion={(s) => { setNum(s); setErr(""); }}
+          onChange={(v) => { setSuffix(v); if (err) setErr(""); }}
+          onUseSuggestion={(s) => { setSuffix(qtnSuffix(s)); setErr(""); }}
           onCancel={() => setCreating(false)}
           onConfirm={confirmNew}
         />
@@ -150,14 +149,11 @@ function NewQtnModal({ value, error, suggestion, onChange, onUseSuggestion, onCa
       <div role="dialog" aria-modal="true" aria-label="New quotation"
         className="relative w-full max-w-sm rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
         <h2 className="text-lg font-extrabold tracking-tight text-ink">New Quotation</h2>
-        <p className="mt-0.5 text-xs text-muted">Enter the quotation number for this job.</p>
+        <p className="mt-0.5 text-xs text-muted"><b className="font-mono">{qtnPrefix()}</b> is fixed — just type the number after it.</p>
         <label className="label mt-4" htmlFor="qtn-number">
           Quotation number <span className="text-brand">*</span>
         </label>
-        <input id="qtn-number" ref={inputRef} className="input" placeholder="e.g. QTN-26-0001"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") onConfirm(); }} />
+        <QtnNumberInput id="qtn-number" autoFocus value={value} onChange={onChange} onEnter={onConfirm} />
         {error ? (
           <p className="mt-1.5 text-xs font-semibold text-red-600">{error}</p>
         ) : (
