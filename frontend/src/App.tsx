@@ -19,7 +19,7 @@ export default function App() {
           sections live on the Home dashboard, so the rail only needs Home. */}
       <div className="group fixed inset-y-0 left-0 z-40">
         <aside className="flex h-full w-14 flex-col overflow-hidden bg-sidebar transition-[width] duration-200 ease-out group-hover:w-60 group-hover:shadow-2xl">
-          <Link to="/" className="flex items-center px-3 py-5" title="PowerLine — Home">
+          <Link to="/" className="flex items-center justify-center px-3 py-5 group-hover:justify-start" title="PowerLine — Home">
             <img src="/brand/mark-white.png" alt="PowerLine" className="h-9 w-auto shrink-0 group-hover:hidden" />
             <img src="/brand/logo-white.png" alt="PowerLine" className="hidden h-10 w-auto group-hover:block" />
           </Link>
@@ -29,7 +29,9 @@ export default function App() {
               to="/"
               end
               title="Home"
-              className={({ isActive }) => `nav-item ${isActive ? "nav-item-active" : ""}`}
+              className={({ isActive }) =>
+                `nav-item justify-center group-hover:justify-start ${isActive ? "nav-item-active" : ""}`
+              }
             >
               <span className="shrink-0">{homeIcon}</span>
               <span className="hidden whitespace-nowrap group-hover:inline">Home</span>
