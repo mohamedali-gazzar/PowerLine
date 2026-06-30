@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { api, type HistoryItem, type WeekStat } from "../api";
 import { useAuth } from "../auth/AuthContext";
@@ -249,10 +250,12 @@ function NewQtnChooser({ onClose }: { onClose: () => void }) {
     }
   };
 
-  return (
+  // Rendered via a portal to <body> so a transformed ancestor (animate-fade-up)
+  // can't turn the fixed overlay into a partial, inset box.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
-      <div className="absolute inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
+      <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
       <div role="dialog" aria-modal="true"
         className="relative w-full max-w-md rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
         {mode === "choose" ? (
@@ -296,6 +299,7 @@ function NewQtnChooser({ onClose }: { onClose: () => void }) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

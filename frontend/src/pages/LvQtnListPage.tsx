@@ -146,7 +146,7 @@ function NewQtnModal({ value, error, suggestion, onChange, onUseSuggestion, onCa
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}>
-      <div className="absolute inset-0 bg-ink/40 animate-fade-in" onClick={onCancel} />
+      <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onCancel} />
       <div role="dialog" aria-modal="true" aria-label="New quotation"
         className="relative w-full max-w-sm rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
         <h2 className="text-lg font-extrabold tracking-tight text-ink">New Quotation</h2>
