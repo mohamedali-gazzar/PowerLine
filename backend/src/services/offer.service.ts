@@ -141,8 +141,11 @@ export async function createOffer(input: CreateOfferInput) {
   return decorate(offer);
 }
 
-export async function listOffers() {
+export async function listOffers(ownerId: string | undefined) {
+  // Per-user: only the signed-in owner's offers. Unauthenticated → none.
+  if (!ownerId) return [];
   const offers = await prisma.offer.findMany({
+    where: { ownerId },
     orderBy: { createdAt: "desc" },
     include: includeRmu,
   });

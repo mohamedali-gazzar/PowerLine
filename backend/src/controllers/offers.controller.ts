@@ -50,23 +50,26 @@ export function postPreview(req: Request, res: Response) {
   }
 }
 
-export async function getOffers(_req: Request, res: Response) {
-  res.json(await listOffers());
+export async function getOffers(req: Request, res: Response) {
+  res.json(await listOffers(req.userId));
 }
 
 export async function getOfferById(req: Request, res: Response) {
   const offer = await getOffer(req.params.id);
-  if (!offer) return res.status(404).json({ error: "Offer not found" });
+  // Only the owner can view it (hides legacy/other-user offers).
+  if (!offer || offer.ownerId !== req.userId) {
+    return res.status(404).json({ error: "Offer not found" });
+  }
   res.json(offer);
 }
 
 export async function deleteOfferById(req: Request, res: Response) {
-  try {
-    await deleteOffer(req.params.id);
-    res.status(204).end();
-  } catch {
-    res.status(404).json({ error: "Offer not found" });
+  const offer = await getOfferRaw(req.params.id);
+  if (!offer || offer.ownerId !== req.userId) {
+    return res.status(404).json({ error: "Offer not found" });
   }
+  await deleteOffer(req.params.id);
+  res.status(204).end();
 }
 
 export async function getOfferPdf(req: Request, res: Response) {
