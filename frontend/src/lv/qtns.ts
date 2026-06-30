@@ -142,6 +142,7 @@ export function getQtn(id: string): QtnRecord | null {
     rec.state.panels.forEach((p) => {
       p.code ??= "";
       p.shortCircuit ??= "";
+      p.busbarPoles ??= 3;
       if (Array.isArray(p.sections)) p.sections = meteringBeforeOutgoings(p.sections);
       p.panelItems = ((p as any).panelItems ?? []).map((it: any, i: number) => ({
         ...it,

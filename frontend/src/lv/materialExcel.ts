@@ -14,7 +14,7 @@ export function materialAoa(blocks: MatBlock[]): (string | number)[][] {
     const title = `${i + 1} · ${b.title}`;
     if (b.kind === "copper") {
       aoa.push([title]);
-      aoa.push(["Total project weight (kg)", Number(b.kg.toFixed(1))]);
+      aoa.push(["Total project weight (KG)", Number(b.kg.toFixed(1))]);
     } else {
       aoa.push([title]);
       aoa.push(["Description", "Reference", ...(b.withSupplier ? ["Supplier"] : []), "Stock", "Qty"]);

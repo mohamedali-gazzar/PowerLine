@@ -11,7 +11,7 @@ import {
 import {
   newPanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  calcPanel, grandTotals, buildMaterialList, searchComponents,
+  calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, busbarBarAreaMm2,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection,
 } from "../lv/store";
 import {
@@ -639,6 +639,8 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
             <div key={p.id} className="a4-sheet flex flex-col px-8 pb-7 pt-14"
               style={pi < s.panels.length - 1 ? { breakAfter: "page" } : undefined}>
               <PageHeader s={s} qtnRef={qtnRef} />
+              {/* item frame — softly rounded corners */}
+              <div className="overflow-hidden rounded-lg">
               {/* item bar */}
               <table className="w-full table-fixed border-collapse">
                 <colgroup>
@@ -754,6 +756,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                   })()}
                 </tbody>
               </table>
+              </div>
               <div className="mt-auto flex justify-center border-t px-1 pt-3 text-[9px] text-muted" style={{ borderColor: "#f1d3c4" }}>
                 <span>Item {pi + 1} of {s.panels.length}</span>
               </div>
@@ -1063,8 +1066,8 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
       <div className="grid gap-3 sm:grid-cols-3">
         {num("euro", "EUR → EGP")}
         {num("usd", "USD → EGP")}
-        {num("copper", "Copper (EGP/kg)", { step: 1 })}
-        {num("sheetMetal", "Sheet metal (EGP/kg)", { step: 1 })}
+        {num("copper", "Copper (EGP/KG)", { step: 1 })}
+        {num("sheetMetal", "Sheet metal (EGP/KG)", { step: 1 })}
         {num("operations", "Operations (%)", { pct: true })}
         {num("factor", "Selling factor", { hint: "cost ÷ factor = selling price" })}
         {num("abbDiscount", "ABB discount (%)", { pct: true, hint: "Applied to ABB products ONLY (RPT-01)" })}
@@ -1167,11 +1170,14 @@ function PanelEditor({ s, p, upPanel }: {
         <h2 className="sec-head">Panel cost (live)</h2>
         <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
           <div className="rounded-lg bg-surface p-2.5">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Enclosure + kits<br /><b>{fmtEgp(calc.enclCost + calc.kits)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Copper ({calc.cuWeight.toFixed(1)} kg + busbar)<br /><b>{fmtEgp(calc.cuConnCost + calc.busbarCost)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Unit cost + ops<br /><b>{fmtEgp(calc.unitCostOps)} EGP</b></div>
-          <div className="rounded-lg bg-brand-light p-2.5 text-brand-dark">Unit selling<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
-          <div className="rounded-lg bg-brand p-2.5 text-white">Total ×{p.qty}<br /><b>{fmtEgp(calc.totalSell)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5">Enclosure<br /><b>{fmtEgp(calc.enclCost)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5">Kits<br /><b>{fmtEgp(calc.kits)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5">Main Busbar ({calc.busbarKg.toFixed(1)} KG)<br /><b>{fmtEgp(calc.busbarCost)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5">Cu Connections ({calc.cuWeight.toFixed(1)} KG)<br /><b>{fmtEgp(calc.cuConnCost)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5">Total Copper (KG)<br /><b>{(calc.cuWeight + calc.busbarKg).toFixed(1)} KG</b></div>
+          <div className="rounded-lg bg-surface p-2.5">Unit Cost<br /><b>{fmtEgp(calc.unitCostOps)} EGP</b></div>
+          <div className="rounded-lg bg-brand-light p-2.5 text-brand-dark">Unit Selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
+          <div className="rounded-lg bg-brand p-2.5 text-white">Unit Selling (USD)<br /><b>{fmtEgp(s.factors.usd > 0 ? calc.sellUnit / s.factors.usd : 0)} USD</b></div>
         </div>
       </div>
 
@@ -1197,12 +1203,40 @@ function PanelEditor({ s, p, upPanel }: {
           <div><L>Copper</L><Sel value={p.copperType as any} onChange={(v) => u({ copperType: v })} options={COPPER_TYPES} /></div>
           <div><L>Incoming cables</L><Sel value={p.incomingCables as any} onChange={(v) => u({ incomingCables: v })} options={INCOMING_CABLES} /></div>
           <div><L>Outgoing cables</L><Sel value={p.outgoingCables as any} onChange={(v) => u({ outgoingCables: v })} options={OUTGOING_CABLES} /></div>
-          <div>
-            <L>Main busbar Cu (kg)</L>
-            <input className="input" type="number" min={0} step={0.5} value={p.mainBusbarKg || ""}
-              placeholder="0" onChange={(e) => u({ mainBusbarKg: parseFloat(e.target.value) || 0 })} />
-            <p className="mt-1 text-[11px] text-muted">auto for panels · manual for cells</p>
-          </div>
+          {(() => {
+            const auto = mainBusbarAuto(p);
+            const isAuto = auto !== null;
+            const area = busbarBarAreaMm2(p.ratingA);
+            return (
+              <>
+                <div>
+                  <L>Main Busbar (KG)</L>
+                  {isAuto ? (
+                    <>
+                      <input className="input bg-surface text-muted" value={auto.toFixed(2)} readOnly tabIndex={-1} />
+                      <p className="mt-1 text-[11px] text-muted">
+                        auto · {area} mm² × height × {p.busbarPoles || 3}P × 0.000009
+                        {p.panelsSizing.layout === "Double" ? " × 2" : ""}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <input className="input" type="number" min={0} step={0.5} value={p.mainBusbarKg || ""}
+                        placeholder="0" onChange={(e) => u({ mainBusbarKg: parseFloat(e.target.value) || 0 })} />
+                      <p className="mt-1 text-[11px] text-muted">
+                        auto for SR-Basic / Unikit / Local · manual otherwise
+                      </p>
+                    </>
+                  )}
+                </div>
+                <div>
+                  <L>Busbar poles</L>
+                  <Sel value={String(p.busbarPoles || 3) as any}
+                    onChange={(v) => u({ busbarPoles: parseInt(v, 10) || 3 })} options={["3", "4"]} />
+                </div>
+              </>
+            );
+          })()}
           <div>
             <L>Designation</L>
             <input className="input" value={p.code} onChange={(e) => u({ code: e.target.value })} />
@@ -2221,7 +2255,7 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
     <div className="mt-4 rounded-lg border border-line p-3">
       <div className="mb-1 flex items-center justify-between">
         <h3 className="text-sm font-bold text-ink">Copper Tool <span className="text-[11px] font-normal text-muted">· {type} · lengths in mm</span></h3>
-        <span className="text-xs font-bold text-brand-dark">Busbar copper: {total.toFixed(1)} kg</span>
+        <span className="text-xs font-bold text-brand-dark">Busbar copper: {total.toFixed(1)} KG</span>
       </div>
       <p className="mb-1 text-[11px] text-muted">Enter the required copper length per rating. Recommended cells are highlighted (all values stay editable):</p>
       {inc > 0 ? (
@@ -2243,7 +2277,7 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
               <th className="px-1 py-1 text-center">Phase L <span className="normal-case">(mm)</span></th>
               <th className="px-1 py-1 text-center">Neutral L <span className="normal-case">(mm)</span></th>
               <th className="px-1 py-1 text-center">Earth L <span className="normal-case">(mm)</span></th>
-              <th className="px-1 py-1 text-right">Weight kg</th>
+              <th className="px-1 py-1 text-right">Weight KG</th>
             </tr>
           </thead>
           <tbody>
@@ -2370,7 +2404,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly }: { s: LvState; qtnNo: str
           ) : (
             <div key={b.title} className="card flex items-center justify-between p-4">
               <h3 className="text-sm font-bold text-brand-dark">{i + 1} · {b.title}</h3>
-              <span className="text-lg font-extrabold text-ink">{b.kg.toFixed(1)} kg</span>
+              <span className="text-lg font-extrabold text-ink">{b.kg.toFixed(1)} KG</span>
             </div>
           ))}
         </>

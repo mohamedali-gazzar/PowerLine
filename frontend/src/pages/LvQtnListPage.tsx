@@ -16,8 +16,8 @@ export default function LvQtnListPage() {
   useEffect(reload, []);
 
   const onNew = () => {
-    // Pre-fill with the year-aware "QTN-26-" prefix; fully editable (prefix included).
-    setNum(`QTN-${String(new Date().getFullYear() % 100).padStart(2, "0")}-`);
+    // Pre-fill with the year-aware "QTN-26-00000" default; fully editable (prefix included).
+    setNum(`QTN-${String(new Date().getFullYear() % 100).padStart(2, "0")}-00000`);
     setErr("");
     setCreating(true);
   };

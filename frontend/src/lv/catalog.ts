@@ -1,6 +1,11 @@
-// LV configurator catalog — data generated from the QTN workbook + Combinations
-// Database by `frontend/scripts/lv-import.cjs` (re-run it when a new QTN arrives),
-// plus the option lists / staff lists specified in RPT-01.
+// LV configurator catalog — data generated from the master price database, plus
+// the option lists / staff lists specified in RPT-01.
+//   • components.json / enclosures.json — from the unified price DB
+//     ("Database DD.M.YYYY.xlsx", Phase-01) via `frontend/scripts/lv-import-flat.cjs`.
+//     Copper connection weight per pole comes from the DB (Weight/Panel/Pole → cuP,
+//     Weight/Cell/Pole → cuC); enclosures carry no H/W/D dimensions (H=W=D=0).
+//   • factors.json / combos.json — pricing factors and ATS/MCC/WD templates,
+//     maintained separately via `frontend/scripts/lv-import.cjs`.
 
 import componentsJson from "./data/components.json";
 import enclosuresJson from "./data/enclosures.json";
@@ -102,7 +107,7 @@ export const DEFAULT_SALES_PEOPLE: SalesPerson[] = [
 ];
 
 // ── Pricing helpers ──────────────────────────────────────────────────────────
-const sane = (kg: number) => (kg > 0 && kg < 50 ? kg : 0); // guard stray codes in Cu columns
+const sane = (kg: number) => (kg > 0 && kg < 200 ? kg : 0); // guard stray codes in Cu columns (cells reach ~86 kg/pole)
 
 /** EGP price of a component at current factors. ABB discount applies to ABB only (RPT-01). */
 export function componentPriceEgp(c: { eur: number; egp: number; brand: string }, f: Factors): number {
@@ -110,8 +115,48 @@ export function componentPriceEgp(c: { eur: number; egp: number; brand: string }
   if (c.eur > 0) return c.eur * f.euro * disc;
   return c.egp * disc;
 }
-export function enclosurePriceEgp(e: DbEnclosure, f: Factors): number {
+export function enclosurePriceEgp(e: { eur: number; egp: number }, f: Factors): number {
   return e.eur > 0 ? e.eur * f.euro : e.egp;
+}
+
+// ── Cell-system pricing (Pro-E / IS2 / PLP) ──────────────────────────────────
+// Cell rows are generated algorithmically (see cells.ts); their descriptions map
+// to priced enclosure records. Names differ slightly between UI and DB:
+//   Pro-E thickness prefix "2M" (UI) vs "2mm" (DB);  IP31 = no trailing dot;
+//   PLP UI "2000x400x700" / "LSides_70" vs DB "PLP Cell 2000 x 400 x 700mm".
+// Normalize, then look up; Pro-E falls back across the IP dot (same cell, ≈ price).
+function cellNorm(fam: string, s: string): string {
+  if (fam === "PLP") {
+    if (/sides/i.test(s)) {
+      const d = parseInt((s.match(/(\d+)/) ?? [])[1] ?? "0", 10);
+      return `sides-${d > 0 && d < 200 ? d * 10 : d}`;
+    }
+    return (s.match(/\d+/g) ?? []).join("-");
+  }
+  return s.replace(/\s+/g, "").toLowerCase().replace(/2mm/g, "2m");
+}
+const CELL_DB: Record<string, Map<string, DbEnclosure>> = {};
+for (const fam of ["Pro-E", "IS2", "PLP"]) {
+  const m = new Map<string, DbEnclosure>();
+  ENCLOSURES.filter((e) => e.fam === fam).forEach((e) => m.set(cellNorm(fam, e.name), e));
+  CELL_DB[fam] = m;
+}
+/** Find the priced enclosure for a cell-table row (by family + description). */
+export function findCellEnclosure(type: string, desc: string): DbEnclosure | undefined {
+  const m = CELL_DB[type];
+  if (!m) return undefined;
+  const key = cellNorm(type, desc);
+  if (m.has(key)) return m.get(key);
+  if (type === "Pro-E") {
+    const alt = key.endsWith(".") ? key.slice(0, -1) : key + ".";
+    if (m.has(alt)) return m.get(alt);
+  }
+  return undefined;
+}
+/** EGP price of a single cell-table row (0 if it can't be matched). */
+export function cellPriceEgp(type: string, desc: string, f: Factors): number {
+  const e = findCellEnclosure(type, desc);
+  return e ? enclosurePriceEgp(e, f) : 0;
 }
 export const cuPanelKg = (c: { cuP: number; poles: number }) => sane(c.cuP) * (c.poles || 0);
 export const cuCellKg = (c: { cuC: number; poles: number }) => sane(c.cuC) * (c.poles || 0);

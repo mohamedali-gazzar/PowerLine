@@ -11,6 +11,8 @@ import {
   SALES_MANAGER,
   componentPriceEgp,
   cuPanelKg,
+  cuCellKg,
+  cellPriceEgp,
   type DbComponent,
   type DbEnclosure,
   type Factors,
@@ -86,7 +88,8 @@ export interface LvPanel {
   form: string;
   encFam: string;        // legacy — superseded by panelItems
   encKey: string;        // legacy — superseded by panelItems
-  mainBusbarKg: number;  // auto for panels / manual for cells (Phase 1: editable)
+  mainBusbarKg: number;  // manual fallback (cells / families without an auto rule)
+  busbarPoles: number;   // main-busbar bar count (3 = 3P, 4 = 4P) for the auto rule
   copperTool: CopperTool; // RPT-1: per-rating copper lengths (Cells → Copper Tool)
   draft: string;          // RPT-1: per-panel scratchpad — never included in outputs
   sections: string[];
@@ -260,6 +263,7 @@ export function newPanel(_n?: number): LvPanel {
     encFam: "SR-Basic",
     encKey: "",
     mainBusbarKg: 0,
+    busbarPoles: 3,
     copperTool: {},
     draft: "",
     sections: [...DEFAULT_SECTIONS],
@@ -275,7 +279,7 @@ export function newPanel(_n?: number): LvPanel {
 export function initialState(): LvState {
   return {
     project: {
-      optyNo: "OPTY-", revisionNo: "", name: "", customer: "",
+      optyNo: "OPTY-00000", revisionNo: "", name: "", customer: "",
       date: new Date().toISOString().slice(0, 10),
       salesPerson: "", salesMobile: "", salesEmail: "",
       supportEngineer: "", salesManager: SALES_MANAGER,
@@ -371,12 +375,47 @@ export function duplicatePanel(p: LvPanel, name: string): LvPanel {
   };
 }
 
+// ── Main-busbar copper (kg) — auto rule for sheet-metal panel systems ─────────
+// Ref "Main busbar Cu (kg).xlsx": bar cross-section sized by the incomer rating,
+// run the full panel height, one bar per pole. Copper density ≈ 9e-6 kg/mm³.
+//   KG = Area(mm²) × PanelHeight(mm) × Poles × 0.000009   (× 2 for a Double panel)
+const BUSBAR_AUTO_FAMILIES = new Set(["SR-Basic", "Unikit", "Local (Sheet Metal)"]);
+/** Bar cross-section area (mm²) for an incomer rating, per the reference table. */
+export function busbarBarAreaMm2(ratingA: number): number {
+  if (ratingA <= 0) return 0;
+  if (ratingA <= 160) return 20 * 5;   // 100 — up to 160 A
+  if (ratingA <= 250) return 20 * 10;  // 200 — 200 / 250 A
+  if (ratingA <= 300) return 25 * 10;  // 250 — 300 A
+  if (ratingA <= 400) return 30 * 10;  // 300 — 400 A
+  if (ratingA <= 630) return 40 * 10;  // 400 — 500 / 630 A
+  if (ratingA <= 800) return 50 * 10;  // 500 — 800 A
+  return 0; // > 800 A → panels not allowed (cells only)
+}
+/** Panel height (mm) = first dimension of the slot-1 enclosure name (H×W×D, opt. "L" prefix). */
+function panelHeightMm(p: LvPanel): number {
+  const slot1 = (p.panelItems ?? []).find((it) => (it.slot ?? 1) === 1);
+  const m = slot1?.name.match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+/** Auto main-busbar copper weight (kg), or null when the rule doesn't apply / inputs missing. */
+export function mainBusbarAuto(p: LvPanel): number | null {
+  if (p.sizingMode !== "panels") return null;
+  if (!BUSBAR_AUTO_FAMILIES.has(p.panelsSizing?.family ?? "")) return null;
+  const area = busbarBarAreaMm2(p.ratingA);
+  const height = panelHeightMm(p);
+  if (!area || !height) return null;
+  const poles = p.busbarPoles || 3;
+  const dbl = p.panelsSizing.layout === "Double" ? 2 : 1;
+  return area * height * poles * 0.000009 * dbl;
+}
+
 // ── Calculation engine (mirrors the validated sample tool) ───────────────────
 export interface PanelCalc {
   compCost: number;
   enclCost: number;
   cuConnCost: number;
   busbarCost: number;
+  busbarKg: number;
   kits: number;
   cuWeight: number;
   unitCost: number;
@@ -387,28 +426,60 @@ export interface PanelCalc {
 export function findEnclosure(p: LvPanel): DbEnclosure | undefined {
   return ENCLOSURES.find((e) => e.fam === p.encFam && `${e.name}|${e.ref}` === p.encKey);
 }
+/** Assembly-kit rate as a fraction of the enclosure cost, per the enclosure / cell
+ *  system (owner's rule):
+ *    Minicenter · Primo · Pillars · Coffree → 0
+ *    SR-Basic · Unikit · Local · PLP · IS2   → 10 %
+ *    Pro-E                                   → 3 %
+ *  Resolved from the panel family (Panels mode) or the cell type (Cells mode). */
+export function kitRate(p: LvPanel): number {
+  const fam =
+    p.sizingMode === "cells" ? p.cellConfig.type :
+    p.sizingMode === "panels" ? (p.panelsSizing?.family ?? "") : "";
+  switch (fam) {
+    case "SR-Basic":
+    case "Unikit":
+    case "Local (Sheet Metal)":
+    case "PLP":
+    case "IS2":
+      return 0.10;
+    case "Pro-E":
+      return 0.03;
+    default: // Minicenter, Primo, Pillars, Coffree, none
+      return 0;
+  }
+}
 export function calcPanel(p: LvPanel, f: Factors): PanelCalc {
   let compCost = 0;
   let cuWeight = 0;
+  // Cu connections use the cell copper column (cuC) in Cells mode, else the panel column (cuP).
+  const cuKg = p.sizingMode === "cells" ? cuCellKg : cuPanelKg;
   for (const c of p.components) {
     if (isSpacer(c)) continue; // blank separator — no cost/copper
     compCost += componentPriceEgp(c, f) * c.qty;
-    cuWeight += cuPanelKg(c) * c.qty;
+    cuWeight += cuKg(c) * c.qty;
   }
-  // Panel Type items (enclosure sizings added like components)
+  // Enclosure cost: Panels mode → the chosen sizing items; Cells mode → the
+  // priced cell rows (Pro-E/IS2/PLP). Either way it feeds the kit % below.
   let enclCost = 0;
   for (const it of p.panelItems ?? []) {
     enclCost += (it.eur > 0 ? it.eur * f.euro : it.egp) * it.qty;
   }
+  if (p.sizingMode === "cells") {
+    for (const r of p.cellConfig.rows) {
+      if (r.qty > 0) enclCost += cellPriceEgp(p.cellConfig.type, r.desc, f) * r.qty;
+    }
+  }
   const cuConnCost = cuWeight * f.copper;
-  const busbarCost = (p.mainBusbarKg || 0) * f.copper;
-  const fam = p.panelsSizing?.family ?? "";
-  const noKit = fam === "Minicenter" || fam === "Primo";
-  const kits = noKit ? 0 : enclCost * (0.02 + (f.forms[p.form] || 0));
+  // Main busbar: auto rule for sheet-metal panels, else the manual entry.
+  const busbarKg = mainBusbarAuto(p) ?? (p.mainBusbarKg || 0);
+  const busbarCost = busbarKg * f.copper;
+  // Kit = a % of the enclosure cost, per system (see kitRate).
+  const kits = enclCost * kitRate(p);
   const unitCost = compCost + enclCost + cuConnCost + busbarCost + kits;
   const unitCostOps = unitCost * (1 + f.operations);
   const sellUnit = f.factor > 0 ? unitCostOps / f.factor : unitCostOps;
-  return { compCost, enclCost, cuConnCost, busbarCost, kits, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
+  return { compCost, enclCost, cuConnCost, busbarCost, busbarKg, kits, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
 }
 export function grandTotals(s: LvState) {
   let sell = 0;
@@ -448,6 +519,7 @@ export function buildMaterialList(s: LvState): MaterialList {
 
   for (const p of s.panels) {
     const mult = p.qty || 1;
+    const cuKg = p.sizingMode === "cells" ? cuCellKg : cuPanelKg; // cell vs panel copper column
     for (const c of p.components) {
       if (isSpacer(c)) continue; // blank separator — never a material line
       add(`c|${c.ref || c.name}`, {
@@ -457,7 +529,7 @@ export function buildMaterialList(s: LvState): MaterialList {
         stock: c.stock,
         qty: c.qty * mult,
       });
-      copperKg += cuPanelKg(c) * c.qty * mult;
+      copperKg += cuKg(c) * c.qty * mult;
     }
     for (const it of p.panelItems ?? []) {
       add(`e|${it.ref || it.name}`, {
@@ -468,7 +540,7 @@ export function buildMaterialList(s: LvState): MaterialList {
         qty: it.qty * mult,
       });
     }
-    copperKg += (p.mainBusbarKg || 0) * mult;
+    copperKg += (mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) * mult;
     // Sizing & Copper cell tables → their own supplier buckets
     if (p.sizingMode === "cells") {
       for (const r of p.cellConfig.rows) {
