@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listQtns, createQtn, deleteQtn, duplicateQtn, nextQtnNumber, type QtnListItem } from "../lv/qtns";
 import { fmtEgp } from "../lv/catalog";
-import { QtnNumberInput, qtnPrefix, composeQtn, qtnSuffix } from "../components/QtnNumberInput";
+import { QtnNumberInput, qtnPrefix, qtnSuffix } from "../components/QtnNumberInput";
 
 /** LV landing page — the list of quotations. "+ New QTN" opens a fresh
  *  workspace (Project / Pricing / Panels / Technical / Commercial / Material). */
@@ -10,7 +10,7 @@ export default function LvQtnListPage() {
   const navigate = useNavigate();
   const [qtns, setQtns] = useState<QtnListItem[]>([]);
   const [creating, setCreating] = useState(false);
-  const [suffix, setSuffix] = useState("");
+  const [num, setNum] = useState(qtnPrefix());
   const [suggestion, setSuggestion] = useState("");
   const [err, setErr] = useState("");
 
@@ -26,15 +26,15 @@ export default function LvQtnListPage() {
   }, []);
 
   const onNew = () => {
-    setSuffix(""); // QTN-YY- prefix is fixed; the user types only the suffix
+    setNum(qtnPrefix()); // QTN-YY- prefix shown; year is a dropdown, suffix typed
     setErr("");
     setCreating(true);
     nextQtnNumber().then(setSuggestion).catch(() => {});
   };
   const confirmNew = async () => {
-    if (!suffix.trim()) { setErr("Quotation number is required."); return; }
+    if (!qtnSuffix(num).trim()) { setErr("Quotation number is required."); return; }
     try {
-      const rec = await createQtn(composeQtn(suffix));
+      const rec = await createQtn(num);
       navigate(`/lv/qtn/${rec.id}`);
     } catch (e) {
       setErr((e as Error).message || "Could not create the quotation.");
@@ -114,11 +114,11 @@ export default function LvQtnListPage() {
 
       {creating && (
         <NewQtnModal
-          value={suffix}
+          value={num}
           error={err}
           suggestion={suggestion}
-          onChange={(v) => { setSuffix(v); if (err) setErr(""); }}
-          onUseSuggestion={(s) => { setSuffix(qtnSuffix(s)); setErr(""); }}
+          onChange={(v) => { setNum(v); if (err) setErr(""); }}
+          onUseSuggestion={(s) => { setNum(s); setErr(""); }}
           onCancel={() => setCreating(false)}
           onConfirm={confirmNew}
         />
@@ -164,7 +164,7 @@ function NewQtnModal({ value, error, suggestion, onChange, onUseSuggestion, onCa
         )}
         <div className="mt-5 flex justify-end gap-2">
           <button className="btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className="btn-primary" onClick={onConfirm} disabled={!value.trim()}>Create QTN</button>
+          <button className="btn-primary" onClick={onConfirm} disabled={!qtnSuffix(value).trim()}>Create QTN</button>
         </div>
       </div>
     </div>
