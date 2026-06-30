@@ -19,6 +19,7 @@ export interface QtnRecord {
   number: string; // e.g. "QTN-26-0001"
   createdAt: string;
   updatedAt: string;
+  submitted: boolean;
   state: LvState;
 }
 
@@ -72,12 +73,14 @@ const toRecord = (r: {
   number: string;
   createdAt: string;
   updatedAt: string;
+  submitted: boolean;
   state: unknown;
 }): QtnRecord => ({
   id: r.id,
   number: r.number,
   createdAt: r.createdAt,
   updatedAt: r.updatedAt,
+  submitted: r.submitted,
   state: normalize(r.state as LvState),
 });
 

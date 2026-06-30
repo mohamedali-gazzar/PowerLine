@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getQtn, saveQtn, renameQtn, type QtnRecord } from "../lv/qtns";
+import { getQtn, saveQtn, renameQtn, submitQtn, type QtnRecord } from "../lv/qtns";
 import { useStaff, SALES_MANAGER } from "../staff";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
@@ -160,6 +160,9 @@ export default function LvConfiguratorPage() {
   const [matAbbOnly, setMatAbbOnly] = useState(false);
   // RPT-1: the QTN number is editable after creation (kept unique per user).
   const [qtnNum, setQtnNum] = useState("");
+  // Submitted = the QTN is marked complete; it then counts in the team's weekly chart.
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Load the quotation from the backend on mount (redirect to the list if gone).
   useEffect(() => {
@@ -172,6 +175,7 @@ export default function LvConfiguratorPage() {
         setRec(r);
         setHist({ past: [], present: r.state, future: [] });
         setQtnNum(r.number);
+        setSubmitted(r.submitted);
         if (!localStorage.getItem(tabKey) && r.state.panels.length) setTab("panels");
         setLoading(false);
       })
@@ -185,6 +189,15 @@ export default function LvConfiguratorPage() {
     const res = await renameQtn(rec.id, n);
     if (res.ok) setQtnNum(n.trim());
     return res;
+  };
+  // Mark the QTN submitted (complete) — it then counts in the team's weekly chart.
+  const doSubmit = async () => {
+    if (!rec || submitted) return;
+    if (!confirm("Mark this QTN as submitted? It will count in the team's weekly submissions.")) return;
+    setSubmitting(true);
+    try { await submitQtn(rec.id); setSubmitted(true); }
+    catch { /* ignore */ }
+    finally { setSubmitting(false); }
   };
 
   const apply = (updater: (old: LvState) => LvState) =>
@@ -348,9 +361,20 @@ export default function LvConfiguratorPage() {
             {totals.sell > 0 && <> · <strong className="text-ink">{fmtEgp(totals.incl)}</strong> incl. {Math.round(s.factors.vat * 100)}% VAT</>}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button className="btn-ghost" disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)">↶ Undo</button>
           <button className="btn-ghost" disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+          {submitted ? (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-100 px-3 py-2 text-sm font-bold text-green-700"
+              title="This QTN is submitted and counts in the team's weekly chart">
+              ✓ Submitted
+            </span>
+          ) : (
+            <button className="btn-primary" disabled={submitting} onClick={doSubmit}
+              title="Mark this QTN as submitted (counts in the dashboard chart)">
+              {submitting ? "Submitting…" : "✓ Submit"}
+            </button>
+          )}
         </div>
       </div>
 
