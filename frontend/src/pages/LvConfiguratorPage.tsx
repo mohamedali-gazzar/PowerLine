@@ -1486,17 +1486,6 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
       ...x, name: c.n, desc: c.d, ref: c.ref, type: c.t, brand: c.brand, rating: c.r,
       eur: c.eur, egp: c.egp, poles: c.poles, cuP: c.cuP, cuC: c.cuC, stock: c.stock,
     } : x)) });
-  const move = (id: string, dir: -1 | 1) => {
-    const arr = [...p.components];
-    const i = arr.findIndex((c) => c.id === id);
-    // swap with previous/next row in the SAME section (order is reflected in the Technical offer)
-    const sec = arr[i].section;
-    let j = i + dir;
-    while (j >= 0 && j < arr.length && arr[j].section !== sec) j += dir;
-    if (j < 0 || j >= arr.length) return;
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-    u({ components: arr });
-  };
   // Reorder whole sections — swaps with the adjacent VISIBLE section; the new
   // order flows straight into the Technical offer (which iterates p.sections).
   const moveSection = (sec: string, dir: -1 | 1) => {
@@ -1762,8 +1751,6 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                       </td>
                       <td className="py-1 pr-2" />
                       <td className="whitespace-nowrap py-1 text-right">
-                        <button className="px-1 text-muted hover:text-ink" title="Move up" onClick={() => move(c.id, -1)}>↑</button>
-                        <button className="px-1 text-muted hover:text-ink" title="Move down" onClick={() => move(c.id, 1)}>↓</button>
                         <button className="px-1 text-red-500" title="Remove" onClick={() => delComp(c.id)}>✕</button>
                       </td>
                     </tr>
@@ -1809,8 +1796,6 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                       <td className="py-1 pr-2 text-right font-semibold">{fmtEgp(itemPriceEgp(c, s) * c.qty)}</td>
                       <td className="whitespace-nowrap py-1 text-right">
                         <button className="px-1 text-muted hover:text-brand-dark" title="Change component" onClick={() => setEditComp(c.id)}>✎</button>
-                        <button className="px-1 text-muted hover:text-ink" title="Move up" onClick={() => move(c.id, -1)}>↑</button>
-                        <button className="px-1 text-muted hover:text-ink" title="Move down" onClick={() => move(c.id, 1)}>↓</button>
                         <button className="px-1 text-red-500" title="Remove" onClick={() => delComp(c.id)}>✕</button>
                       </td>
                     </tr>
