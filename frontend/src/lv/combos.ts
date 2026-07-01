@@ -38,6 +38,42 @@ export function atsBreakerPool(): DbComponent[] {
   return COMPONENTS.filter((c) => (c.t === "MCCB" || c.t === "ACB") && frameOf(c));
 }
 
+// ATS accessory aliases — the Combinations file names accessories verbosely while
+// the Phase-01 component DB uses terser names, so findByName can't match them.
+// Each verbose description maps to its exact component name (verified 2026-07).
+const ATS_ACCESSORY_ALIAS: Record<string, string> = {
+  "UVR - Under Voltage Release Uncabled 220-240Vac-220-250Vdc- XT1..XT4 F/P": "UVR-C XT1..XT4 F/P 220-240Vac-220-250Vdc",
+  "MOD - Motor Operator with Direct Action 220...250V ac/dc- XT1-XT3": "MOD XT1-XT3 220...250V ac/dc",
+  "MIR-H - Frame unit horizontal interlock- XT1..XT4": "MIR-HR XT1..XT4",
+  "MIR-P - Mechanical Interlock plate for- XT1 Fixed": "MIR-P x XT1 F",
+  "MOE - Stored energy motor operator 220…250Vac/dc- XT2-XT4 F/P/W*": "MOE XT2-XT4 220...250V ac/dc",
+  "MIR-P - Mechanical Interlock plate- XT2 Fixed": "MIR-P x XT2 F",
+  "MIR-P - Mechanical Interlock plate for- XT3 Fixed": "MIR-P x XT3 F",
+  "Plate for mechanical interlock of XT4 F": "MIR-P x XT4 F",
+  "YU (Under Voltage Release Uncabled) 220-240Vac -220-250Vdc-XT5-XT6 F/P": "YU-C XT5-XT6 F/P 220..240Vac-220..250Vdc",
+  "MOE (Stored Energy Motor Operator) 220-250Vac/dc-XT5": "MOE XT5 220...250V AC/DC",
+  "MIR-H XT5 Chassis for interlocking between XT4-XT5 & XT5-XT5": "MIR-H XT5 MECH,LOCK REAR HO. 2 C.BREAKER",
+  "Plate for mechanical interlock of XT5 F with XT5 F": "MIR-P x XT5 F",
+  "MOE (Stored Energy Motor Operator) 220-250Vac/dc-XT6": "MOE XT6 220...250V AC/DC",
+  "MIR-H XT6 Chassis for interlocking between XT5-XT6 & XT6-XT6": "MIR-H XT6 MECH,LOCK REAR HO. 2 C.BREAKER",
+  "YU (Under Voltage Release Uncabled) 220-240Vac/Vdc-XT7-XT7M-E1.2…E6.2": "YU E1.2..E6.2-XT7-XT7M 220-240 VAC/DC",
+  "YC - Shunt Closing release Uncabled 220-240 Vac/dc- XT7-XT7M-E1.2..E6.2": "YC E1.2..E6.2-XT7M 220-240 VAC/DC",
+  "AUX 4Q (Aux. Contact Uncabled) 400Vac-4 Op/Cls C/O-XT7-XT7M-E1.2 F/W": "AUX 4Q 400V E1.2-XT7-XT7M",
+  "M (Spring Charging Motor Operator) 220-250 Vac/dc-XT7M": "M XT7M 220-250 V AC/DC",
+  "Cables for mechanical interlock Type A horizontal- XT7-E1.2...E6.2 [Group 1]": "Cable interlock A - HR E1.2..E6.2-XT7/M",
+  "Sup. fixed Type A E1.2-XT7/M floor mount": "Support fixed Type A E1.2-XT7/M floor mount",
+  "M - Motor operator 220-250 Vac/dc- E1.2": "M  E1.2 220-250 VAC/DC",
+  "M - Motor operator 220-250 Vac/dc- E2.2...E6.2": "M  E2.2...E6.2 220-250 VAC/DC",
+  "Lever for mechanical interlock of fixed circuit-breaker or mobile part- E2.2 3P[Group 2]*": "Lever interlock E2.2",
+  "Lever for mechanical interlock of fixed circuit-breaker or mobile part- E4.2 3P [Group 2]*": "Lever interlock E4.2",
+};
+const _atsAliasNorm: Record<string, string> = {};
+for (const [k, v] of Object.entries(ATS_ACCESSORY_ALIAS)) _atsAliasNorm[k.replace(/\s+/g, " ").trim().toLowerCase()] = v;
+/** Map a verbose ATS accessory description to its component name (unchanged if none). */
+function atsAlias(desc: string): string {
+  return _atsAliasNorm[desc.replace(/\s+/g, " ").trim().toLowerCase()] ?? desc;
+}
+
 /** Build the full ATS BOM for a frame: per-incomer accessories + interlock + control. */
 export function buildAts(type: AtsTypeId, frame: string, breakers: DbComponent[]): ComboLine[] {
   const tpl = (COMBOS.ats as any)[type]?.[frame] as { group: string; items: { qty: number; desc: string }[] }[] | undefined;
@@ -61,7 +97,7 @@ export function buildAts(type: AtsTypeId, frame: string, breakers: DbComponent[]
         if (b) out.push({ qty: it.qty, desc: b.n, comp: b, groupLabel: atsGroup(g.group) });
         return;
       }
-      out.push({ qty: it.qty, desc: it.desc, comp: findByName(it.desc), groupLabel: atsGroup(g.group) });
+      out.push({ qty: it.qty, desc: it.desc, comp: findByName(atsAlias(it.desc)), groupLabel: atsGroup(g.group) });
     });
   });
   return out;
