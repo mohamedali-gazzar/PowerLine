@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getQtn, saveQtn, renameQtn, submitQtn, type QtnRecord } from "../lv/qtns";
 import { useStaff, SALES_MANAGER } from "../staff";
@@ -482,10 +483,13 @@ function PrintBar({ label, docTitle, blockers }: { label: string; docTitle?: str
 /** Pre-export validation warning — lists the failing checks; the user can fix them
  *  or accept and export anyway. */
 function ExportWarnModal({ checks, onClose, onProceed }: { checks: ExportCheck[]; onClose: () => void; onProceed: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print"
+  // Portal to <body>: the offer tabs sit inside an animate-fade-up wrapper whose
+  // lingering transform would otherwise capture `position: fixed`, pushing the
+  // dialog down the tall page. Anchored near the top so it's visible without scrolling.
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 pt-[8vh] no-print"
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
-      <div className="absolute inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
+      <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
       <div role="dialog" aria-modal="true" aria-label="Export warnings"
         className="relative w-full max-w-lg rounded-xl2 border border-line bg-white p-6 shadow-lift animate-pop">
         <div className="mb-3 flex items-start gap-3">
@@ -510,7 +514,8 @@ function ExportWarnModal({ checks, onClose, onProceed }: { checks: ExportCheck[]
           <button className="btn-primary" onClick={onProceed}>Export anyway</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
