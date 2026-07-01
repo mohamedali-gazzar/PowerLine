@@ -58,6 +58,7 @@ function normalize(state: LvState): LvState {
     p.code ??= "";
     p.shortCircuit ??= "";
     p.busbarPoles ??= 3;
+    p.sellFactor ??= 0;
     if (Array.isArray(p.sections)) p.sections = meteringBeforeOutgoings(p.sections);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     p.panelItems = ((p as any).panelItems ?? []).map((it: any, i: number) => ({

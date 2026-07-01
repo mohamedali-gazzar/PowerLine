@@ -90,6 +90,7 @@ export interface LvPanel {
   encKey: string;        // legacy — superseded by panelItems
   mainBusbarKg: number;  // manual fallback (cells / families without an auto rule)
   busbarPoles: number;   // main-busbar bar count (3 = 3P, 4 = 4P) for the auto rule
+  sellFactor: number;    // per-panel selling-factor override; 0 = follow the global (Pricing Settings)
   copperTool: CopperTool; // RPT-1: per-rating copper lengths (Cells → Copper Tool)
   draft: string;          // RPT-1: per-panel scratchpad — never included in outputs
   sections: string[];
@@ -267,6 +268,7 @@ export function newPanel(_n?: number): LvPanel {
     encKey: "",
     mainBusbarKg: 0,
     busbarPoles: 3,
+    sellFactor: 0,
     copperTool: {},
     draft: "",
     sections: [...DEFAULT_SECTIONS],
@@ -494,7 +496,9 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   const kits = enclCost * kitRate(p);
   const unitCost = compCost + enclCost + cuConnCost + busbarCost + kits;
   const unitCostOps = unitCost * (1 + f.operations);
-  const sellUnit = f.factor > 0 ? unitCostOps / f.factor : unitCostOps;
+  // Per-panel selling factor overrides the global (Pricing Settings) when set (> 0).
+  const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
+  const sellUnit = factor > 0 ? unitCostOps / factor : unitCostOps;
   return { compCost, enclCost, cuConnCost, busbarCost, busbarKg, kits, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
 }
 export function grandTotals(s: LvState) {

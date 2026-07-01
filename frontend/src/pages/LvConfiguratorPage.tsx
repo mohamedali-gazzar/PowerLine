@@ -1244,6 +1244,16 @@ function PanelEditor({ s, p, upPanel }: {
           <div className="rounded-lg bg-surface p-2.5">Cu Connections ({calc.cuWeight.toFixed(1)} KG)<br /><b>{fmtEgp(calc.cuConnCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Total Copper (KG)<br /><b>{(calc.cuWeight + calc.busbarKg).toFixed(1)} KG</b></div>
           <div className="rounded-lg bg-surface p-2.5">Unit Cost<br /><b>{fmtEgp(calc.unitCostOps)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5">
+            Factor
+            <input type="number" min={0} step={0.01}
+              className={`mt-0.5 block w-full rounded border px-1.5 py-0.5 text-sm font-bold focus:outline-none ${
+                p.sellFactor > 0 ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-ink"
+              }`}
+              value={p.sellFactor > 0 ? p.sellFactor : s.factors.factor}
+              title={p.sellFactor > 0 ? "Custom — clear to follow Pricing Settings" : `Default from Pricing Settings (${s.factors.factor})`}
+              onChange={(e) => u({ sellFactor: parseFloat(e.target.value) || 0 })} />
+          </div>
           <div className="rounded-lg bg-brand-light p-2.5 text-brand-dark">Unit Selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
           <div className="rounded-lg bg-brand p-2.5 text-white">Unit Selling (USD)<br /><b>{fmtEgp(s.factors.usd > 0 ? calc.sellUnit / s.factors.usd : 0)} USD</b></div>
         </div>
