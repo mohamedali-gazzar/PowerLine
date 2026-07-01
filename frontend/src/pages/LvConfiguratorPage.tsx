@@ -11,7 +11,7 @@ import {
 import {
   newPanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, busbarBarAreaMm2,
+  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, busbarBarAreaMm2, abbKey,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection,
 } from "../lv/store";
 import {
@@ -401,7 +401,7 @@ export default function LvConfiguratorPage() {
         )}
         {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} />)}
         {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} />)}
-        {tab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} />)}
+        {tab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
       </div>
     </div>
   );
@@ -875,7 +875,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
   if (!s.panels.length) {
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Commercial Offer is generated from them.</div>;
   }
-  const calcs: [LvPanel, PanelCalc][] = s.panels.map((p) => [p, calcPanel(p, s.factors)]);
+  const calcs: [LvPanel, PanelCalc][] = s.panels.map((p) => [p, calcPanel(p, s.factors, s.abbItemDiscounts)]);
   const subtotal = calcs.reduce((t, [, c]) => t + c.totalSell, 0);
   const vat = subtotal * s.factors.vat;
   const rate = cur === "USD" ? (s.factors.usd || 1) : 1; // EGP per unit of display currency
@@ -1229,7 +1229,7 @@ function PanelEditor({ s, p, upPanel }: {
   upPanel: (id: string, patch: Partial<LvPanel>) => void;
 }) {
   const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
-  const calc = calcPanel(p, s.factors);
+  const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
 
   return (
     <div className="space-y-4">
@@ -2376,7 +2376,13 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
 }
 
 // ── Material List tab (RPT-04) ───────────────────────────────────────────────
-function MatTable({ title, rows, withSupplier, note }: { title: string; rows: MatRow[]; withSupplier?: boolean; note?: string }) {
+interface AbbDiscCtl {
+  globalPct: number;
+  valueFor: (r: MatRow) => number;
+  isOverride: (r: MatRow) => boolean;
+  onChange: (r: MatRow, pct: number) => void;
+}
+function MatTable({ title, rows, withSupplier, note, abbDisc }: { title: string; rows: MatRow[]; withSupplier?: boolean; note?: string; abbDisc?: AbbDiscCtl }) {
   if (!rows.length) return null;
   return (
     <div className="card overflow-hidden">
@@ -2389,6 +2395,7 @@ function MatTable({ title, rows, withSupplier, note }: { title: string; rows: Ma
           <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
             <th className="px-4 py-1.5">Description</th>
             <th className="px-2 py-1.5">Reference</th>
+            {abbDisc && <th className="px-2 py-1.5 text-right">ABB discount (%)</th>}
             {withSupplier && <th className="px-2 py-1.5">Supplier</th>}
             <th className="px-2 py-1.5">Stock</th>
             <th className="px-4 py-1.5 text-right">Qty</th>
@@ -2399,6 +2406,17 @@ function MatTable({ title, rows, withSupplier, note }: { title: string; rows: Ma
             <tr key={i} className="border-t border-line/70">
               <td className="px-4 py-1">{r.description}</td>
               <td className="px-2 py-1 text-[11px] text-muted">{r.reference || "—"}</td>
+              {abbDisc && (
+                <td className="px-2 py-1 text-right">
+                  <input type="number" min={0} max={100} step={0.5}
+                    className={`w-16 rounded border px-1.5 py-0.5 text-right text-[12px] focus:outline-none ${
+                      abbDisc.isOverride(r) ? "border-brand bg-brand-light font-bold text-brand-dark" : "border-line bg-white text-ink"
+                    }`}
+                    value={abbDisc.valueFor(r)}
+                    title={abbDisc.isOverride(r) ? "Custom — click and clear to follow the Pricing-Settings default" : `Default from Pricing Settings (${abbDisc.globalPct}%)`}
+                    onChange={(e) => abbDisc.onChange(r, Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))} />
+                </td>
+              )}
               {withSupplier && <td className="px-2 py-1 text-muted">{r.supplier}</td>}
               <td className="px-2 py-1 text-[11px] text-muted">{r.stock || "—"}</td>
               <td className="px-4 py-1 text-right font-bold">{r.qty}</td>
@@ -2410,17 +2428,24 @@ function MatTable({ title, rows, withSupplier, note }: { title: string; rows: Ma
   );
 }
 
-function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly }: { s: LvState; qtnNo: string; abbOnly: boolean; setAbbOnly: (v: boolean) => void }) {
+function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo: string; abbOnly: boolean; setAbbOnly: (v: boolean) => void; up: (patch: Partial<LvState>) => void }) {
   const ml = useMemo(() => buildMaterialList(s), [s]);
   const empty = !s.panels.length || (!ml.abb.length && !ml.other.length && !ml.abbEnclosures.length && !ml.proE.length && !ml.is2.length && !ml.plpCells.length);
+  // Per-item ABB discount (%) — defaults to the Pricing-Settings global, editable
+  // per item. Stored by reference||name; drives each ABB item's price in the quote.
+  const globalPct = Math.round(s.factors.abbDiscount * 100);
+  const abbDisc: AbbDiscCtl = {
+    globalPct,
+    valueFor: (r) => s.abbItemDiscounts[abbKey(r)] ?? globalPct,
+    isOverride: (r) => abbKey(r) in s.abbItemDiscounts,
+    onChange: (r, pct) => up({ abbItemDiscounts: { ...s.abbItemDiscounts, [abbKey(r)]: pct } }),
+  };
   // RPT-1: number report tables sequentially by display order, skipping any
   // hidden/empty section — subsequent sections renumber automatically.
   type Block =
     | { kind: "table"; title: string; rows: MatRow[]; withSupplier?: boolean; note?: string }
     | { kind: "copper"; title: string; kg: number };
-  const abbNote = s.factors.abbDiscount > 0
-    ? `ABB discount ${Math.round(s.factors.abbDiscount * 100)}% applies to this table only`
-    : "ABB discount applies to this table only";
+  const abbNote = "ABB discount (%) is editable per item · defaults from Pricing Settings";
   const candidates: (Block | false)[] = [
     { kind: "table", title: "ABB Products", rows: ml.abb, note: abbNote },
     !abbOnly && { kind: "table", title: "Other Suppliers", rows: ml.other, withSupplier: true },
@@ -2439,7 +2464,11 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly }: { s: LvState; qtnNo: str
     const def = offerTitle("ML", qtnNo, s.project.revisionNo);
     const name = window.prompt("Excel file name:", def);
     if (name === null) return; // cancelled
-    const ws = XLSX.utils.aoa_to_sheet(materialAoa(visible as MatBlock[]));
+    const exportBlocks = visible.map((b) =>
+      b.kind === "table" && b.title === "ABB Products"
+        ? { ...b, abbDiscPct: b.rows.map((r) => abbDisc.valueFor(r)) }
+        : b);
+    const ws = XLSX.utils.aoa_to_sheet(materialAoa(exportBlocks as MatBlock[]));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Material List");
     const trimmed = name.trim() || def;
@@ -2468,7 +2497,8 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly }: { s: LvState; qtnNo: str
       ) : (
         <>
           {visible.map((b, i) => b.kind === "table" ? (
-            <MatTable key={b.title} title={`${i + 1} · ${b.title}`} rows={b.rows} withSupplier={b.withSupplier} note={b.note} />
+            <MatTable key={b.title} title={`${i + 1} · ${b.title}`} rows={b.rows} withSupplier={b.withSupplier} note={b.note}
+              abbDisc={b.title === "ABB Products" ? abbDisc : undefined} />
           ) : (
             <div key={b.title} className="card flex items-center justify-between p-4">
               <h3 className="text-sm font-bold text-brand-dark">{i + 1} · {b.title}</h3>

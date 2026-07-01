@@ -129,6 +129,9 @@ export interface LvState {
   notesAdditional: string[];       // editable "Additional Notes" page
   commercialTerms: TermsSection[];   // editable "General Terms & Conditions" — English
   commercialTermsAr: TermsSection[]; // editable Arabic terms (shown after the English)
+  // Per-item ABB discount % override (edited on the Material List), keyed by
+  // reference||name. Absent → the item uses the global factors.abbDiscount.
+  abbItemDiscounts: Record<string, number>;
 }
 
 /** Default General Terms & Conditions shown at the end of the commercial offer — editable.
@@ -294,8 +297,12 @@ export function initialState(): LvState {
     notesAdditional: [],
     commercialTerms: DEFAULT_COMMERCIAL_TERMS.map((s) => ({ ...s })),
     commercialTermsAr: DEFAULT_COMMERCIAL_TERMS_AR.map((s) => ({ ...s })),
+    abbItemDiscounts: {},
   };
 }
+/** Effective ABB-discount key for a component / material row (reference, else name). */
+export const abbKey = (refOrName: { ref?: string; name?: string; reference?: string; description?: string }): string =>
+  refOrName.ref || refOrName.reference || refOrName.name || refOrName.description || "";
 
 // ── Persistence ──────────────────────────────────────────────────────────────
 const LS_KEY = "powerline-lv-v1";
@@ -449,14 +456,16 @@ export function kitRate(p: LvPanel): number {
       return 0;
   }
 }
-export function calcPanel(p: LvPanel, f: Factors): PanelCalc {
+export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, number>): PanelCalc {
   let compCost = 0;
   let cuWeight = 0;
   // Cu connections use the cell copper column (cuC) in Cells mode, else the panel column (cuP).
   const cuKg = p.sizingMode === "cells" ? cuCellKg : cuPanelKg;
   for (const c of p.components) {
     if (isSpacer(c)) continue; // blank separator — no cost/copper
-    compCost += componentPriceEgp(c, f) * c.qty;
+    // Per-item ABB discount override (Material List) wins over the global factor.
+    const ov = abbDiscounts?.[abbKey(c)];
+    compCost += componentPriceEgp(c, f, ov != null ? ov / 100 : undefined) * c.qty;
     cuWeight += cuKg(c) * c.qty;
   }
   // Enclosure cost: Panels mode → the chosen sizing items; Cells mode → the
@@ -483,7 +492,7 @@ export function calcPanel(p: LvPanel, f: Factors): PanelCalc {
 }
 export function grandTotals(s: LvState) {
   let sell = 0;
-  s.panels.forEach((p) => (sell += calcPanel(p, s.factors).totalSell));
+  s.panels.forEach((p) => (sell += calcPanel(p, s.factors, s.abbItemDiscounts).totalSell));
   const vat = sell * s.factors.vat;
   return { sell, vat, incl: sell + vat };
 }

@@ -5,7 +5,7 @@
 import type { MatRow } from "./store";
 
 export type MatBlock =
-  | { kind: "table"; title: string; rows: MatRow[]; withSupplier?: boolean }
+  | { kind: "table"; title: string; rows: MatRow[]; withSupplier?: boolean; abbDiscPct?: number[] }
   | { kind: "copper"; title: string; kg: number };
 
 export function materialAoa(blocks: MatBlock[]): (string | number)[][] {
@@ -16,12 +16,19 @@ export function materialAoa(blocks: MatBlock[]): (string | number)[][] {
       aoa.push([title]);
       aoa.push(["Total project weight (KG)", Number(b.kg.toFixed(1))]);
     } else {
+      const withDisc = Array.isArray(b.abbDiscPct);
       aoa.push([title]);
-      aoa.push(["Description", "Reference", ...(b.withSupplier ? ["Supplier"] : []), "Stock", "Qty"]);
-      b.rows.forEach((r) =>
+      aoa.push([
+        "Description", "Reference",
+        ...(withDisc ? ["ABB discount (%)"] : []),
+        ...(b.withSupplier ? ["Supplier"] : []),
+        "Stock", "Qty",
+      ]);
+      b.rows.forEach((r, ri) =>
         aoa.push([
           r.description,
           r.reference || "—",
+          ...(withDisc ? [b.abbDiscPct![ri] ?? 0] : []),
           ...(b.withSupplier ? [r.supplier] : []),
           r.stock || "—",
           r.qty,

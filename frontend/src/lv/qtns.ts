@@ -49,6 +49,7 @@ function summaryOf(state: LvState): QtnSummaryInput {
 function normalize(state: LvState): LvState {
   state.notesGeneral ??= [...DEFAULT_GENERAL_NOTES];
   state.notesAdditional ??= [];
+  state.abbItemDiscounts ??= {};
   if (!Array.isArray(state.commercialTerms))
     state.commercialTerms = DEFAULT_COMMERCIAL_TERMS.map((x) => ({ ...x }));
   if (!Array.isArray(state.commercialTermsAr))

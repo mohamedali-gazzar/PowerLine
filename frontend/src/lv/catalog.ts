@@ -109,9 +109,12 @@ export const DEFAULT_SALES_PEOPLE: SalesPerson[] = [
 // ── Pricing helpers ──────────────────────────────────────────────────────────
 const sane = (kg: number) => (kg > 0 && kg < 200 ? kg : 0); // guard stray codes in Cu columns (cells reach ~86 kg/pole)
 
-/** EGP price of a component at current factors. ABB discount applies to ABB only (RPT-01). */
-export function componentPriceEgp(c: { eur: number; egp: number; brand: string }, f: Factors): number {
-  const disc = c.brand === "ABB" ? 1 - f.abbDiscount : 1;
+/** EGP price of a component at current factors. ABB discount applies to ABB only (RPT-01).
+ *  `abbFraction` overrides the global ABB discount for this item (per-item, from the
+ *  Material List) when provided; otherwise the global factors.abbDiscount is used. */
+export function componentPriceEgp(c: { eur: number; egp: number; brand: string }, f: Factors, abbFraction?: number): number {
+  const abbFrac = abbFraction != null ? abbFraction : f.abbDiscount;
+  const disc = c.brand === "ABB" ? 1 - abbFrac : 1;
   if (c.eur > 0) return c.eur * f.euro * disc;
   return c.egp * disc;
 }
