@@ -1682,8 +1682,8 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                     <th className="py-1 pr-2">Ref</th>
                     <th className="w-16 py-1 pr-2">Qty</th>
                     <th className="w-20 py-1 pr-2">Adj.</th>
-                    <th className="w-28 py-1 pr-2">Comment</th>
                     <th className="w-28 py-1 pr-2">Note</th>
+                    <th className="py-1 pr-2 text-right">Unit cost</th>
                     <th className="py-1 pr-2 text-right">Total</th>
                     <th className="w-20 py-1"></th>
                   </tr>
@@ -1755,10 +1755,9 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                       </td>
                       <td className="py-1 pr-2"><input className="input h-7 px-1.5 text-xs" value={c.adj} placeholder="—"
                         onChange={(e) => setComp(c.id, { adj: e.target.value })} /></td>
-                      <td className="py-1 pr-2"><input className="input h-7 px-1.5 text-xs" value={c.comment} placeholder="—"
-                        onChange={(e) => setComp(c.id, { comment: e.target.value })} /></td>
                       <td className="py-1 pr-2"><input className="input h-7 px-1.5 text-xs" value={c.note} placeholder="—"
                         onChange={(e) => setComp(c.id, { note: e.target.value })} /></td>
+                      <td className="py-1 pr-2 text-right text-muted">{fmtEgp(itemPriceEgp(c, s))}</td>
                       <td className="py-1 pr-2 text-right font-semibold">{fmtEgp(itemPriceEgp(c, s) * c.qty)}</td>
                       <td className="whitespace-nowrap py-1 text-right">
                         <button className="px-1 text-muted hover:text-brand-dark" title="Change component" onClick={() => setEditComp(c.id)}>✎</button>
