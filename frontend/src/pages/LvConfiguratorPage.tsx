@@ -2529,6 +2529,14 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
     isOverride: (r) => abbKey(r) in s.abbItemDiscounts,
     onChange: (r, pct) => up({ abbItemDiscounts: { ...s.abbItemDiscounts, [abbKey(r)]: pct } }),
   };
+  const overrideCount = Object.keys(s.abbItemDiscounts).length;
+  // "Default Discount" — drop every per-item override so all items follow the
+  // Pricing-Settings ABB discount again.
+  const resetAbbDiscounts = () => {
+    if (!overrideCount) return;
+    if (!confirm(`Reset the ABB discount on ${overrideCount} item${overrideCount > 1 ? "s" : ""} back to the Pricing-Settings default (${globalPct}%)?`)) return;
+    up({ abbItemDiscounts: {} });
+  };
   // RPT-1: number report tables sequentially by display order, skipping any
   // hidden/empty section — subsequent sections renumber automatically.
   type Block =
@@ -2573,12 +2581,19 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
             }`}>{label}</button>
         ))}
         <span className="text-[11px] text-muted">ABB M.L → for ABB discount · Full M.L → supply chain &amp; stock</span>
-        {!empty && (
-          <button onClick={exportExcel} title="Download the current Material List as an .xlsx file"
-            className="ml-auto rounded-full border border-brand bg-white px-4 py-1.5 text-xs font-bold text-brand-dark hover:bg-brand-light no-print">
-            ⬇ Export to Excel
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={resetAbbDiscounts} disabled={!overrideCount}
+            title={`Reset every item's ABB discount to the Pricing-Settings default (${globalPct}%)`}
+            className="rounded-full border border-line bg-white px-4 py-1.5 text-xs font-bold text-muted hover:border-brand/40 disabled:opacity-40 no-print">
+            ↺ Default Discount{overrideCount ? ` (${overrideCount})` : ""}
           </button>
-        )}
+          {!empty && (
+            <button onClick={exportExcel} title="Download the current Material List as an .xlsx file"
+              className="rounded-full border border-brand bg-white px-4 py-1.5 text-xs font-bold text-brand-dark hover:bg-brand-light no-print">
+              ⬇ Export to Excel
+            </button>
+          )}
+        </div>
       </div>
 
       {empty ? (
