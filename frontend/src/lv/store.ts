@@ -304,6 +304,13 @@ export function initialState(): LvState {
 export const abbKey = (refOrName: { ref?: string; name?: string; reference?: string; description?: string }): string =>
   refOrName.ref || refOrName.reference || refOrName.name || refOrName.description || "";
 
+/** Per-item EGP price of a component, honoring its Material-List ABB discount
+ *  override (which takes priority over the global Pricing-Settings discount). */
+export function itemPriceEgp(c: PanelComponent, s: LvState): number {
+  const o = s.abbItemDiscounts[abbKey(c)];
+  return componentPriceEgp(c, s.factors, o != null ? o / 100 : undefined);
+}
+
 // ── Persistence ──────────────────────────────────────────────────────────────
 const LS_KEY = "powerline-lv-v1";
 export function loadState(): LvState {

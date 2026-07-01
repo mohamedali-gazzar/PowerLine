@@ -11,7 +11,7 @@ import {
 import {
   newPanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, busbarBarAreaMm2, abbKey,
+  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, busbarBarAreaMm2, abbKey, itemPriceEgp,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection,
 } from "../lv/store";
 import {
@@ -1690,7 +1690,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                         onChange={(e) => setComp(c.id, { comment: e.target.value })} /></td>
                       <td className="py-1 pr-2"><input className="input h-7 px-1.5 text-xs" value={c.note} placeholder="—"
                         onChange={(e) => setComp(c.id, { note: e.target.value })} /></td>
-                      <td className="py-1 pr-2 text-right font-semibold">{fmtEgp(componentPriceEgp(c, s.factors) * c.qty)}</td>
+                      <td className="py-1 pr-2 text-right font-semibold">{fmtEgp(itemPriceEgp(c, s) * c.qty)}</td>
                       <td className="whitespace-nowrap py-1 text-right">
                         <button className="px-1 text-muted hover:text-brand-dark" title="Change component" onClick={() => setEditComp(c.id)}>✎</button>
                         <button className="px-1 text-muted hover:text-ink" title="Move up" onClick={() => move(c.id, -1)}>↑</button>
