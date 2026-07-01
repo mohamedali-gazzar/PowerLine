@@ -1292,6 +1292,8 @@ function PanelEditor({ s, p, upPanel }: {
   // Collapsible cost summary — the open/closed state is remembered across panels.
   const [costOpen, setCostOpen] = useState(() => { try { return localStorage.getItem("lv-costcard-open") !== "0"; } catch { return true; } });
   const toggleCost = () => setCostOpen((o) => { try { localStorage.setItem("lv-costcard-open", o ? "0" : "1"); } catch { /* ignore */ } return !o; });
+  const [detailsOpen, setDetailsOpen] = useState(() => { try { return localStorage.getItem("lv-detailscard-open") !== "0"; } catch { return true; } });
+  const toggleDetails = () => setDetailsOpen((o) => { try { localStorage.setItem("lv-detailscard-open", o ? "0" : "1"); } catch { /* ignore */ } return !o; });
 
   return (
     <div className="space-y-4">
@@ -1331,8 +1333,15 @@ function PanelEditor({ s, p, upPanel }: {
 
       {/* Panel details */}
       <div className="card p-5">
-        <h2 className="sec-head">Panel details</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <button type="button" onClick={toggleDetails} className="flex w-full items-center justify-between gap-3 text-left">
+          <h2 className="sec-head mb-0 flex items-center gap-1.5">
+            <span className={`text-[11px] text-muted transition-transform ${detailsOpen ? "rotate-90" : ""}`}>▶</span>
+            Panel details
+          </h2>
+          {p.name.trim() && <span className="truncate text-sm font-semibold text-muted">{p.name.trim()}</span>}
+        </button>
+        {detailsOpen && (
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <div><L>Panel name <span className="text-brand">*</span></L>
             <input className={`input ${!p.name.trim() ? "border-red-400 bg-red-50/40" : ""}`} value={p.name}
               placeholder="required" onChange={(e) => u({ name: e.target.value })} /></div>
@@ -1390,6 +1399,7 @@ function PanelEditor({ s, p, upPanel }: {
             <input className="input" value={p.code} onChange={(e) => u({ code: e.target.value })} />
           </div>
         </div>
+        )}
       </div>
 
       {/* Circuit combinations */}
