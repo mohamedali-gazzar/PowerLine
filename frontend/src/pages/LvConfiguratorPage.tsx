@@ -1667,7 +1667,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                 className={`flex w-full items-center gap-3 px-3 py-1.5 text-left text-sm ${i === activeIdx ? "bg-brand-light" : "hover:bg-brand-tint"}`}
                 onMouseEnter={() => setActiveIdx(i)}
                 onMouseDown={() => { setPending(c); setPendQty(""); }}>
-                <b className="w-20 shrink-0 text-right text-brand-dark">{fmtEgp(componentPriceEgp(c, s.factors))}</b>
+                <b className="w-28 shrink-0 whitespace-nowrap text-right text-brand-dark">EGP {fmtEgp(componentPriceEgp(c, s.factors))}</b>
                 <span className="min-w-0 flex-1 truncate">
                   <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{c.t}</span>
                   {c.n}
