@@ -868,9 +868,10 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                         byG.get(k)!.push(c);
                       });
                       const rows: JSX.Element[] = [];
-                      // Section header only when there's MORE THAN ONE section; the orange
-                      // group sub-labels (Circuit Breaker, Contactor…) are never shown here.
-                      if (multiSection)
+                      // Section header shows for multi-section panels, and whenever the
+                      // section has combination sub-groups (Source 1 / 2 …) so the section
+                      // context (e.g. Main Incoming) is never lost above the sub-headers.
+                      if (multiSection || order.some((g) => g))
                         rows.push(
                           <tr key={`s-${sec}`}>
                             <td colSpan={5} className="border px-2 text-center font-display text-[12px] font-bold uppercase tracking-wide leading-[20px]" style={{ background: "#f3f3f5", borderColor: "#f1d3c4" }}>{sec}</td>
@@ -1663,15 +1664,15 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
             {hits.length === 0 && <div className="px-3 py-2 text-xs text-muted">No matches</div>}
             {hits.map((c, i) => (
               <button key={c.ref + c.n} type="button"
-                className={`flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-sm ${i === activeIdx ? "bg-brand-light" : "hover:bg-brand-tint"}`}
+                className={`flex w-full items-center gap-3 px-3 py-1.5 text-left text-sm ${i === activeIdx ? "bg-brand-light" : "hover:bg-brand-tint"}`}
                 onMouseEnter={() => setActiveIdx(i)}
                 onMouseDown={() => { setPending(c); setPendQty(""); }}>
-                <span>
+                <b className="w-20 shrink-0 text-right text-brand-dark">{fmtEgp(componentPriceEgp(c, s.factors))}</b>
+                <span className="min-w-0 flex-1 truncate">
                   <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{c.t}</span>
                   {c.n}
                   <span className="ml-1 text-[11px] text-muted">{c.ref} · {c.brand}</span>
                 </span>
-                <b className="shrink-0 text-brand-dark">{fmtEgp(componentPriceEgp(c, s.factors))}</b>
               </button>
             ))}
           </div>
