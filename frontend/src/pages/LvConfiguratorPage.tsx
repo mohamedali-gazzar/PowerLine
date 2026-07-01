@@ -487,7 +487,7 @@ function ExportWarnModal({ checks, onClose, onProceed }: { checks: ExportCheck[]
   // lingering transform would otherwise capture `position: fixed`, pushing the
   // dialog down the tall page. Anchored near the top so it's visible without scrolling.
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 pt-[8vh] no-print"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print"
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
       <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
       <div role="dialog" aria-modal="true" aria-label="Export warnings"
@@ -1302,7 +1302,7 @@ function PanelEditor({ s, p, upPanel }: {
           <div className="rounded-lg bg-surface p-2.5">Main Busbar ({calc.busbarKg.toFixed(1)} KG)<br /><b>{fmtEgp(calc.busbarCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Cu Connections ({calc.cuWeight.toFixed(1)} KG)<br /><b>{fmtEgp(calc.cuConnCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Total Copper (KG)<br /><b>{(calc.cuWeight + calc.busbarKg).toFixed(1)} KG</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Unit Cost<br /><b>{fmtEgp(calc.unitCostOps)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5">Unit Cost<br /><b>{fmtEgp(calc.unitCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">
             Factor
             <input type="number" min={0} step={0.01}
