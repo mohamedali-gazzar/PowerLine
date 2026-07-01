@@ -11,8 +11,8 @@ import {
 import {
   newPanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, busbarBarAreaMm2, abbKey, itemPriceEgp,
-  type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection,
+  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, busbarBarAreaMm2, abbKey, itemPriceEgp, exportBlockers,
+  type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck,
 } from "../lv/store";
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
@@ -441,10 +441,11 @@ function offerTitle(kind: "TO" | "CO" | "ML", qtnNo: string, rev: string): strin
   return `${kind}-${qtnNo} Rev ${String(rev ?? "").padStart(2, "0")}`;
 }
 
-function PrintBar({ label, docTitle }: { label: string; docTitle?: string }) {
+function PrintBar({ label, docTitle, blockers }: { label: string; docTitle?: string; blockers?: ExportCheck[] }) {
   // Set the document title right before printing so the saved PDF / print job is
   // named after the offer; restore it once the dialog closes (afterprint).
-  const print = () => {
+  const [blocked, setBlocked] = useState<ExportCheck[] | null>(null);
+  const doPrint = () => {
     if (!docTitle) return window.print();
     const prev = document.title;
     document.title = docTitle;
@@ -452,10 +453,46 @@ function PrintBar({ label, docTitle }: { label: string; docTitle?: string }) {
     window.addEventListener("afterprint", restore);
     window.print();
   };
+  // Pre-export gate: block with a modal if any check fails.
+  const onExport = () => (blockers && blockers.length ? setBlocked(blockers) : doPrint());
   return (
     <div className="mb-3 flex items-center justify-between no-print">
       <p className="text-xs text-muted">{label}</p>
-      <button className="btn-primary" onClick={print}>⬇ PDF / Print</button>
+      <button className="btn-primary" onClick={onExport}>⬇ PDF / Print</button>
+      {blocked && <ExportBlockModal checks={blocked} onClose={() => setBlocked(null)} />}
+    </div>
+  );
+}
+
+/** Pre-export validation modal — lists the failing checks and blocks the export. */
+function ExportBlockModal({ checks, onClose }: { checks: ExportCheck[]; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
+      <div className="absolute inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-label="Export blocked"
+        className="relative w-full max-w-lg rounded-xl2 border border-line bg-white p-6 shadow-lift animate-pop">
+        <div className="mb-3 flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-xl">⚠</div>
+          <div>
+            <h2 className="text-lg font-extrabold tracking-tight text-ink">Can't export yet</h2>
+            <p className="text-sm text-muted">Resolve the following before generating the offer:</p>
+          </div>
+        </div>
+        <div className="max-h-[50vh] space-y-3 overflow-auto">
+          {checks.map((c) => (
+            <div key={c.title} className="rounded-lg border border-red-200 bg-red-50/60 p-3">
+              <p className="text-sm font-bold text-red-700">{c.title} <span className="font-normal text-red-500">· {c.items.length}</span></p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[13px] text-ink">
+                {c.items.map((it, i) => <li key={i}>{it}</li>)}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 flex justify-end">
+          <button className="btn-primary" onClick={onClose}>Got it</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -674,7 +711,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
   return (
     <div className="animate-fade-up">
       <PrintBar label={`${s.panels.length} panel${s.panels.length > 1 ? "s" : ""} → ${s.panels.length} technical page${s.panels.length > 1 ? "s" : ""} in one PDF.`}
-        docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} />
+        docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} />
       <div className="offer-workspace">
       <div className="print-area space-y-6">
         {/* Cover page (shared branded title page) */}
@@ -885,7 +922,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
   return (
     <div className="animate-fade-up">
       <PrintBar label="Prices follow the Pricing Settings tab (rates, ABB discount, factor) live."
-        docTitle={offerTitle("CO", qtnNo, s.project.revisionNo)} />
+        docTitle={offerTitle("CO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} />
       <div className="mb-3 flex items-center gap-2 no-print">
         <span className="text-xs font-semibold text-muted">Currency</span>
         <div className="inline-flex rounded-lg border border-line bg-white p-0.5">

@@ -19,7 +19,7 @@ import {
   type SalesPerson,
 } from "./catalog";
 import { defaultCellConfig, type CellConfig } from "./cells";
-import type { CopperTool } from "./copper";
+import { roundUpRating, pctOf, type CopperTool } from "./copper";
 
 let uidCtr = 0;
 export const uid = () => `u${++uidCtr}_${Math.random().toString(36).slice(2, 7)}`;
@@ -587,6 +587,52 @@ export function buildMaterialList(s: LvState): MaterialList {
     proE: rows.filter((r) => r.supplier === "Pro-E"),
     copperKg,
   };
+}
+
+// ── Pre-export validation (Technical / Commercial offers) ────────────────────
+export interface ExportCheck { title: string; items: string[] }
+/** Runs the pre-export checks across all panels. Returns the FAILING checks
+ *  (empty array = clear to export):
+ *   1. Zero price   — a real component priced at 0 (spare "Space" items excluded).
+ *   2. No cells     — a Cells-mode panel with no editable cell qty (fixed Sides ignored).
+ *   3. Missing copper — recommended Phase/Neutral/Earth (per the incomer) not entered
+ *                       in the Copper Tool, or the panel's busbar weight is 0. */
+export function exportBlockers(s: LvState): ExportCheck[] {
+  const zeroPrice: string[] = [];
+  const noCells: string[] = [];
+  const missingCopper: string[] = [];
+  s.panels.forEach((p, i) => {
+    const tag = `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}`;
+    // 1) Zero price
+    for (const c of p.components) {
+      if (isSpacer(c) || c.type === "Space") continue;
+      if (itemPriceEgp(c, s) <= 0) zeroPrice.push(`${tag}: ${c.name || c.ref || "item"} — 0 EGP`);
+    }
+    // 2) No cells (Cells mode, ignoring the fixed Sides row)
+    if (p.sizingMode === "cells" && !p.cellConfig.rows.some((r) => r.qty > 0 && !r.locked)) {
+      noCells.push(`${tag}: no cell quantity selected`);
+    }
+    // 3) Missing copper
+    const reasons: string[] = [];
+    if (p.sizingMode === "cells" && (p.ratingA || 0) > 0) {
+      const inc = p.ratingA;
+      const t = p.copperTool ?? {};
+      const need: [string, "p" | "n" | "e", number][] = [
+        ["Phase", "p", roundUpRating(inc)],
+        ["Neutral", "n", roundUpRating(inc * pctOf(p.neutral))],
+        ["Earth", "e", roundUpRating(inc * pctOf(p.earth))],
+      ];
+      const unfilled = need.filter(([, k, r]) => !((t[String(r)]?.[k] || 0) > 0)).map(([lbl]) => lbl);
+      if (unfilled.length) reasons.push(`${unfilled.join(" / ")} length not entered`);
+    }
+    if ((mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) <= 0) reasons.push("busbar weight is 0");
+    if (reasons.length) missingCopper.push(`${tag}: ${reasons.join("; ")}`);
+  });
+  const out: ExportCheck[] = [];
+  if (zeroPrice.length) out.push({ title: "Zero price", items: zeroPrice });
+  if (noCells.length) out.push({ title: "No cells selected", items: noCells });
+  if (missingCopper.length) out.push({ title: "Missing copper", items: missingCopper });
+  return out;
 }
 
 // ── Search ───────────────────────────────────────────────────────────────────
