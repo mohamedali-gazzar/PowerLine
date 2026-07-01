@@ -38,6 +38,22 @@ import {
 type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material";
 const TABS: Tab[] = ["project", "pricing", "panels", "technical", "commercial", "material"];
 
+/** Effective combination group per component (id → group). A component keeps its
+ *  own group; an ungrouped one sitting between two same-group items (in the same
+ *  section) inherits that group — so moving an item into a Source 1 run joins it. */
+function effectiveGroups(comps: PanelComponent[]): Map<string, string> {
+  const out = new Map<string, string>();
+  comps.forEach((c, i) => {
+    if (isSpacer(c)) { out.set(c.id, ""); return; }
+    if (c.group) { out.set(c.id, c.group); return; }
+    let prev = "", next = "";
+    for (let j = i - 1; j >= 0; j--) { if (comps[j].section !== c.section) break; const g = comps[j].group; if (g) { prev = g; break; } }
+    for (let j = i + 1; j < comps.length; j++) { if (comps[j].section !== c.section) break; const g = comps[j].group; if (g) { next = g; break; } }
+    out.set(c.id, prev && prev === next ? prev : "");
+  });
+  return out;
+}
+
 // ── Keyboard field navigation (arrow keys move between fields by layout) ───────
 type ArrowKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
 /** Visible, enabled input/select fields within a container. */
@@ -841,12 +857,13 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                     // appear when the panel has MORE THAN ONE section; a single-section
                     // panel prints a clean flat component list under its section header.
                     const multiSection = secs.length > 1;
+                    const effGroup = effectiveGroups(p.components);
                     return secs.flatMap((sec) => {
                       const comps = p.components.filter((c) => c.section === sec);
                       const order: string[] = [];
                       const byG = new Map<string, PanelComponent[]>();
                       comps.forEach((c) => {
-                        const k = c.group || "";
+                        const k = effGroup.get(c.id) || "";
                         if (!byG.has(k)) { byG.set(k, []); order.push(k); }
                         byG.get(k)!.push(c);
                       });
@@ -860,6 +877,13 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                           </tr>
                         );
                       for (const g of order) {
+                        // Combination sub-header (Source 1 / Source 2 / …) under the section.
+                        if (g)
+                          rows.push(
+                            <tr key={`g-${sec}-${g}`}>
+                              <td colSpan={5} className="border px-2 font-display text-[11.5px] font-bold uppercase leading-[19px]" style={{ background: "#fdf0e9", color: TRED, borderColor: "#f1d3c4" }}>{g}</td>
+                            </tr>
+                          );
                         for (const c of byG.get(g)!)
                           rows.push(isSpacer(c) ? (
                             <tr key={c.id}>
@@ -1426,6 +1450,8 @@ function PanelEditor({ s, p, upPanel }: {
 function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void }) {
   const [q, setQ] = useState("");
   const hits = useMemo(() => searchComponents(q, 40), [q]);
+  const effGroup = effectiveGroups(p.components); // group badge incl. inherited groups
+
   const [newSection, setNewSection] = useState("");
   const [editingSec, setEditingSec] = useState<string | null>(null); // custom-section rename
   const [editVal, setEditVal] = useState("");
@@ -1761,7 +1787,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                         </svg>
                       </td>
                       <td className="max-w-[330px] py-1 pr-2">
-                        {c.group && <span className="mr-1 rounded bg-brand-light px-1 text-[9px] font-bold text-brand-dark">{c.group}</span>}
+                        {effGroup.get(c.id) && <span className="mr-1 rounded bg-brand-light px-1 text-[9px] font-bold text-brand-dark">{effGroup.get(c.id)}</span>}
                         {c.name}
                         {editComp === c.id && (
                           <ComponentEditSelect current={c}
