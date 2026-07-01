@@ -1289,13 +1289,23 @@ function PanelEditor({ s, p, upPanel }: {
 }) {
   const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
   const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
+  // Collapsible cost summary — the open/closed state is remembered across panels.
+  const [costOpen, setCostOpen] = useState(() => { try { return localStorage.getItem("lv-costcard-open") !== "0"; } catch { return true; } });
+  const toggleCost = () => setCostOpen((o) => { try { localStorage.setItem("lv-costcard-open", o ? "0" : "1"); } catch { /* ignore */ } return !o; });
 
   return (
     <div className="space-y-4">
       {/* Cost summary (RPT-1: shown first, above the panel name & details) */}
       <div className="card p-5">
-        <h2 className="sec-head">Panel cost (live)</h2>
-        <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
+        <button type="button" onClick={toggleCost} className="flex w-full items-center justify-between gap-3 text-left">
+          <h2 className="sec-head mb-0 flex items-center gap-1.5">
+            <span className={`text-[11px] text-muted transition-transform ${costOpen ? "rotate-90" : ""}`}>▶</span>
+            Panel cost (live)
+          </h2>
+          <span className="whitespace-nowrap text-sm font-bold text-brand-dark">{fmtEgp(calc.sellUnit)} EGP</span>
+        </button>
+        {costOpen && (
+        <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
           <div className="rounded-lg bg-surface p-2.5">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Enclosure<br /><b>{fmtEgp(calc.enclCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Kits<br /><b>{fmtEgp(calc.kits)} EGP</b></div>
@@ -1316,6 +1326,7 @@ function PanelEditor({ s, p, upPanel }: {
           <div className="rounded-lg bg-brand-light p-2.5 text-brand-dark">Unit Selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
           <div className="rounded-lg bg-brand p-2.5 text-white">Unit Selling (USD)<br /><b>{fmtEgp(s.factors.usd > 0 ? calc.sellUnit / s.factors.usd : 0)} USD</b></div>
         </div>
+        )}
       </div>
 
       {/* Panel details */}
