@@ -2526,8 +2526,14 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   const abbDisc: AbbDiscCtl = {
     globalPct,
     valueFor: (r) => s.abbItemDiscounts[abbKey(r)] ?? globalPct,
-    isOverride: (r) => abbKey(r) in s.abbItemDiscounts,
-    onChange: (r, pct) => up({ abbItemDiscounts: { ...s.abbItemDiscounts, [abbKey(r)]: pct } }),
+    // Highlight only when the value differs from the Pricing-Settings default.
+    isOverride: (r) => (s.abbItemDiscounts[abbKey(r)] ?? globalPct) !== globalPct,
+    onChange: (r, pct) => {
+      const next = { ...s.abbItemDiscounts };
+      if (pct === globalPct) delete next[abbKey(r)]; // back to default → follow the global (no highlight)
+      else next[abbKey(r)] = pct;
+      up({ abbItemDiscounts: next });
+    },
   };
   const overrideCount = Object.keys(s.abbItemDiscounts).length;
   // "Default Discount" — drop every per-item override so all items follow the
