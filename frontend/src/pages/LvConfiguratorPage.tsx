@@ -444,7 +444,10 @@ function offerTitle(kind: "TO" | "CO" | "ML", qtnNo: string, rev: string): strin
 function PrintBar({ label, docTitle, blockers }: { label: string; docTitle?: string; blockers?: ExportCheck[] }) {
   // Set the document title right before printing so the saved PDF / print job is
   // named after the offer; restore it once the dialog closes (afterprint).
-  const [blocked, setBlocked] = useState<ExportCheck[] | null>(null);
+  const [modal, setModal] = useState(false);
+  const [acked, setAcked] = useState(false); // remember the user accepted the warning
+  const issues = blockers ?? [];
+  const count = issues.reduce((n, c) => n + c.items.length, 0);
   const doPrint = () => {
     if (!docTitle) return window.print();
     const prev = document.title;
@@ -453,44 +456,58 @@ function PrintBar({ label, docTitle, blockers }: { label: string; docTitle?: str
     window.addEventListener("afterprint", restore);
     window.print();
   };
-  // Pre-export gate: block with a modal if any check fails.
-  const onExport = () => (blockers && blockers.length ? setBlocked(blockers) : doPrint());
+  // Pre-export gate: warn (once) if any check fails; the user can accept and proceed.
+  const onExport = () => (count > 0 && !acked ? setModal(true) : doPrint());
+  const proceed = () => { setAcked(true); setModal(false); doPrint(); };
   return (
-    <div className="mb-3 flex items-center justify-between no-print">
-      <p className="text-xs text-muted">{label}</p>
-      <button className="btn-primary" onClick={onExport}>⬇ PDF / Print</button>
-      {blocked && <ExportBlockModal checks={blocked} onClose={() => setBlocked(null)} />}
-    </div>
+    <>
+      <div className="mb-3 flex items-center justify-between gap-2 no-print">
+        <p className="text-xs text-muted">{label}</p>
+        <div className="flex items-center gap-2">
+          {count > 0 && (
+            <button type="button" onClick={() => setModal(true)}
+              className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700 hover:bg-amber-200"
+              title="Review the export warnings">
+              ⚠ {count} warning{count > 1 ? "s" : ""}
+            </button>
+          )}
+          <button className="btn-primary" onClick={onExport}>⬇ PDF / Print</button>
+        </div>
+      </div>
+      {modal && <ExportWarnModal checks={issues} onClose={() => setModal(false)} onProceed={proceed} />}
+    </>
   );
 }
 
-/** Pre-export validation modal — lists the failing checks and blocks the export. */
-function ExportBlockModal({ checks, onClose }: { checks: ExportCheck[]; onClose: () => void }) {
+/** Pre-export validation warning — lists the failing checks; the user can fix them
+ *  or accept and export anyway. */
+function ExportWarnModal({ checks, onClose, onProceed }: { checks: ExportCheck[]; onClose: () => void; onProceed: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print"
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
       <div className="absolute inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-label="Export blocked"
+      <div role="dialog" aria-modal="true" aria-label="Export warnings"
         className="relative w-full max-w-lg rounded-xl2 border border-line bg-white p-6 shadow-lift animate-pop">
         <div className="mb-3 flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-xl">⚠</div>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xl">⚠</div>
           <div>
-            <h2 className="text-lg font-extrabold tracking-tight text-ink">Can't export yet</h2>
-            <p className="text-sm text-muted">Resolve the following before generating the offer:</p>
+            <h2 className="text-lg font-extrabold tracking-tight text-ink">Review before exporting</h2>
+            <p className="text-sm text-muted">These issues were found. Fix them, or export anyway.</p>
           </div>
         </div>
         <div className="max-h-[50vh] space-y-3 overflow-auto">
           {checks.map((c) => (
-            <div key={c.title} className="rounded-lg border border-red-200 bg-red-50/60 p-3">
-              <p className="text-sm font-bold text-red-700">{c.title} <span className="font-normal text-red-500">· {c.items.length}</span></p>
+            <div key={c.title} className="rounded-lg border border-amber-200 bg-amber-50/70 p-3">
+              <p className="text-sm font-bold text-amber-800">{c.title} <span className="font-normal text-amber-600">· {c.items.length}</span></p>
               <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[13px] text-ink">
                 {c.items.map((it, i) => <li key={i}>{it}</li>)}
               </ul>
             </div>
           ))}
         </div>
-        <div className="mt-5 flex justify-end">
-          <button className="btn-primary" onClick={onClose}>Got it</button>
+        <div className="mt-5 flex justify-end gap-2">
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={onProceed}>Export anyway</button>
         </div>
       </div>
     </div>
