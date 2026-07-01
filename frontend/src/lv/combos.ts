@@ -173,7 +173,7 @@ export const PFC_DEFAULT: PfcInput = {
 };
 
 const CAP_25 = "25 KVAR";
-const fuseFor = (k: 25 | 50) => (k === 25 ? "HRC 63A" : "HRC 125A");
+const fuseFor = (k: 25 | 50) => (k === 25 ? "HRC Fuse 63A" : "HRC Fuse 125A");
 const contactorFor = (k: 25 | 50) =>
   k === 25 ? "CONTACTOR FOR CAPACITOR- 30 KVAR 220-230V 50Hz" : "CONTACTOR FOR CAPACITOR- 50 KVAR  220-230V 50Hz";
 
