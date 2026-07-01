@@ -21,14 +21,14 @@ export type AtsTypeId = (typeof ATS_TYPES)[number]["id"];
 /** Frames that have an ATS template, in selector order. */
 export const ATS_FRAMES = ["XT1", "XT2", "XT3", "XT4", "XT5", "XT6", "XT7", "E1.2", "E2.2", "E4.2", "E6.2"];
 
-/** Detect the ATS frame key from a chosen breaker's family. */
+/** Detect the ATS frame key from a chosen breaker. On the flat Phase-01 database
+ *  the family field is just the type word ("MCCB"/"ACB"), so the frame is read
+ *  from the name — e.g. "MCCB XT1B 16A…" → XT1, "ACB E1.2B 800A…" → E1.2. */
 export function frameOf(c: DbComponent): string | null {
-  const f = (c.f || "").toUpperCase().replace(/\s/g, "");
-  for (const fr of ATS_FRAMES) if (f === fr.toUpperCase() || f.startsWith(fr.toUpperCase())) return fr;
-  // families like "E2.2N" → E2.2
-  const m = /^E(\d)\.2/.exec(f);
-  if (m) return `E${m[1]}.2`;
-  const x = /^XT(\d)/.exec(f);
+  const hay = ` ${c.f || ""} ${c.n || ""} `.toUpperCase();
+  const e = /\bE([1246])\.2/.exec(hay); // ACB E1.2 / E2.2 / E4.2 / E6.2
+  if (e) return `E${e[1]}.2`;
+  const x = /\bXT([1-7])/.exec(hay); // MCCB XT1 … XT7
   if (x) return `XT${x[1]}`;
   return null;
 }
