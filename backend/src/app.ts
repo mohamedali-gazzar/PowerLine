@@ -21,7 +21,15 @@ import {
 export function createApp() {
   const app = express();
 
-  app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") ?? "*" }));
+  // CORS: use the configured allowlist. If none is set, allow all in dev but
+  // DISABLE cross-origin in production (the frontend is same-origin on Vercel, so
+  // it still works) rather than defaulting to "*".
+  const corsOrigin = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(",")
+    : process.env.NODE_ENV === "production"
+    ? false
+    : "*";
+  app.use(cors({ origin: corsOrigin }));
   // Generous limit: profile photos (base64) + large LV quotation states.
   app.use(express.json({ limit: "8mb" }));
 

@@ -51,70 +51,94 @@ export function postPreview(req: Request, res: Response) {
 }
 
 export async function getOffers(req: Request, res: Response) {
-  res.json(await listOffers(req.userId));
+  try {
+    res.json(await listOffers(req.userId));
+  } catch (err) {
+    handleError(err, res);
+  }
 }
 
 export async function getOfferById(req: Request, res: Response) {
-  const offer = await getOffer(req.params.id);
-  // Only the owner can view it (hides legacy/other-user offers).
-  if (!offer || offer.ownerId !== req.userId) {
-    return res.status(404).json({ error: "Offer not found" });
+  try {
+    const offer = await getOffer(req.params.id);
+    // Only the owner can view it (hides legacy/other-user offers).
+    if (!offer || offer.ownerId !== req.userId) {
+      return res.status(404).json({ error: "Offer not found" });
+    }
+    res.json(offer);
+  } catch (err) {
+    handleError(err, res);
   }
-  res.json(offer);
 }
 
 export async function deleteOfferById(req: Request, res: Response) {
-  const offer = await getOfferRaw(req.params.id);
-  if (!offer || offer.ownerId !== req.userId) {
-    return res.status(404).json({ error: "Offer not found" });
+  try {
+    const offer = await getOfferRaw(req.params.id);
+    if (!offer || offer.ownerId !== req.userId) {
+      return res.status(404).json({ error: "Offer not found" });
+    }
+    await deleteOffer(req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    handleError(err, res);
   }
-  await deleteOffer(req.params.id);
-  res.status(204).end();
 }
 
 export async function getOfferPdf(req: Request, res: Response) {
-  const offer = await getOfferRaw(req.params.id);
-  if (!offer || !offer.rmu) {
-    return res.status(404).json({ error: "Offer not found" });
+  try {
+    const offer = await getOfferRaw(req.params.id);
+    if (!offer || !offer.rmu) {
+      return res.status(404).json({ error: "Offer not found" });
+    }
+    const generated = assembleOffer(toConfigInput(offer.rmu));
+    const pdf = await generateOfferPdf(offer, generated);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `${req.query.dl ? "attachment" : "inline"}; filename="${offer.offerNumber}-${generated.panelCode}-technical.pdf"`
+    );
+    res.send(pdf);
+  } catch (err) {
+    handleError(err, res);
   }
-  const generated = assembleOffer(toConfigInput(offer.rmu));
-  const pdf = await generateOfferPdf(offer, generated);
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader(
-    "Content-Disposition",
-    `${req.query.dl ? "attachment" : "inline"}; filename="${offer.offerNumber}-${generated.panelCode}-technical.pdf"`
-  );
-  res.send(pdf);
 }
 
 export async function getCommercialPdf(req: Request, res: Response) {
-  const offer = await getOfferRaw(req.params.id);
-  if (!offer || !offer.rmu) {
-    return res.status(404).json({ error: "Offer not found" });
+  try {
+    const offer = await getOfferRaw(req.params.id);
+    if (!offer || !offer.rmu) {
+      return res.status(404).json({ error: "Offer not found" });
+    }
+    const config = toConfigInput(offer.rmu);
+    const generated = assembleOffer(config);
+    const data = buildCommercial(offer, generated, priceForConfig(config));
+    const pdf = await generateCommercialPdf(data);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `${req.query.dl ? "attachment" : "inline"}; filename="${offer.offerNumber}-commercial.pdf"`
+    );
+    res.send(pdf);
+  } catch (err) {
+    handleError(err, res);
   }
-  const config = toConfigInput(offer.rmu);
-  const generated = assembleOffer(config);
-  const data = buildCommercial(offer, generated, priceForConfig(config));
-  const pdf = await generateCommercialPdf(data);
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader(
-    "Content-Disposition",
-    `${req.query.dl ? "attachment" : "inline"}; filename="${offer.offerNumber}-commercial.pdf"`
-  );
-  res.send(pdf);
 }
 
 export async function getSldPdf(req: Request, res: Response) {
-  const offer = await getOfferRaw(req.params.id);
-  if (!offer || !offer.rmu) return res.status(404).json({ error: "Offer not found" });
-  const generated = assembleOffer(toConfigInput(offer.rmu));
-  const pdf = await generateSldPdf(offer, generated);
-  res.setHeader("Content-Type", "application/pdf");
-  res.setHeader(
-    "Content-Disposition",
-    `${req.query.dl ? "attachment" : "inline"}; filename="${offer.offerNumber}-${generated.panelCode}-SLD.pdf"`
-  );
-  res.send(pdf);
+  try {
+    const offer = await getOfferRaw(req.params.id);
+    if (!offer || !offer.rmu) return res.status(404).json({ error: "Offer not found" });
+    const generated = assembleOffer(toConfigInput(offer.rmu));
+    const pdf = await generateSldPdf(offer, generated);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `${req.query.dl ? "attachment" : "inline"}; filename="${offer.offerNumber}-${generated.panelCode}-SLD.pdf"`
+    );
+    res.send(pdf);
+  } catch (err) {
+    handleError(err, res);
+  }
 }
 
 function handleError(err: unknown, res: Response) {

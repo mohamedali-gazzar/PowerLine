@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { ZodError } from "zod";
 import { prisma } from "../lib/prisma";
 import { createQtnSchema, updateQtnSchema, numberSchema } from "../validation/qtn.schema";
+import { fail } from "../lib/http";
 
 type Summary = {
   projectName?: string;
@@ -23,22 +24,22 @@ type QtnRow = {
   totalEgp: number;
 };
 
-function fail(res: Response, err: unknown) {
-  if (err instanceof ZodError) {
-    return res.status(400).json({ error: err.issues[0]?.message || "Invalid input." });
+const record = (q: QtnRow) => {
+  let state: unknown = {};
+  try {
+    state = JSON.parse(q.state);
+  } catch {
+    // A corrupt/legacy state row shouldn't crash the request — return an empty state.
   }
-  console.error(err);
-  return res.status(500).json({ error: "Server error." });
-}
-
-const record = (q: QtnRow) => ({
-  id: q.id,
-  number: q.number,
-  createdAt: q.createdAt,
-  updatedAt: q.updatedAt,
-  submitted: q.submitted,
-  state: JSON.parse(q.state),
-});
+  return {
+    id: q.id,
+    number: q.number,
+    createdAt: q.createdAt,
+    updatedAt: q.updatedAt,
+    submitted: q.submitted,
+    state,
+  };
+};
 
 const listItem = (q: QtnRow) => ({
   id: q.id,
@@ -80,22 +81,34 @@ async function nextNumber(ownerId: string): Promise<string> {
 
 // GET /api/qtns
 export async function list(req: Request, res: Response) {
-  const ownerId = req.userId as string;
-  const rows = await prisma.lvQtn.findMany({ where: { ownerId }, orderBy: { updatedAt: "desc" } });
-  res.json(rows.map(listItem));
+  try {
+    const ownerId = req.userId as string;
+    const rows = await prisma.lvQtn.findMany({ where: { ownerId }, orderBy: { updatedAt: "desc" } });
+    res.json(rows.map(listItem));
+  } catch (e) {
+    fail(res, e);
+  }
 }
 
 // GET /api/qtns/next-number
 export async function getNextNumber(req: Request, res: Response) {
-  res.json({ suggestion: await nextNumber(req.userId as string) });
+  try {
+    res.json({ suggestion: await nextNumber(req.userId as string) });
+  } catch (e) {
+    fail(res, e);
+  }
 }
 
 // GET /api/qtns/:id
 export async function getOne(req: Request, res: Response) {
-  const ownerId = req.userId as string;
-  const q = await prisma.lvQtn.findFirst({ where: { id: req.params.id, ownerId } });
-  if (!q) return res.status(404).json({ error: "Quotation not found." });
-  res.json(record(q));
+  try {
+    const ownerId = req.userId as string;
+    const q = await prisma.lvQtn.findFirst({ where: { id: req.params.id, ownerId } });
+    if (!q) return res.status(404).json({ error: "Quotation not found." });
+    res.json(record(q));
+  } catch (e) {
+    fail(res, e);
+  }
 }
 
 // POST /api/qtns  { number, state, summary }
@@ -159,38 +172,50 @@ export async function rename(req: Request, res: Response) {
 
 // DELETE /api/qtns/:id
 export async function remove(req: Request, res: Response) {
-  const ownerId = req.userId as string;
-  await prisma.lvQtn.deleteMany({ where: { id: req.params.id, ownerId } });
-  res.status(204).end();
+  try {
+    const ownerId = req.userId as string;
+    await prisma.lvQtn.deleteMany({ where: { id: req.params.id, ownerId } });
+    res.status(204).end();
+  } catch (e) {
+    fail(res, e);
+  }
 }
 
 // POST /api/qtns/:id/duplicate
 export async function duplicate(req: Request, res: Response) {
-  const ownerId = req.userId as string;
-  const src = await prisma.lvQtn.findFirst({ where: { id: req.params.id, ownerId } });
-  if (!src) return res.status(404).json({ error: "Quotation not found." });
-  const q = await prisma.lvQtn.create({
-    data: {
-      ownerId,
-      number: await nextNumber(ownerId),
-      state: src.state,
-      projectName: src.projectName,
-      customer: src.customer,
-      panelsCount: src.panelsCount,
-      totalEgp: src.totalEgp,
-    },
-  });
-  res.status(201).json(record(q));
+  try {
+    const ownerId = req.userId as string;
+    const src = await prisma.lvQtn.findFirst({ where: { id: req.params.id, ownerId } });
+    if (!src) return res.status(404).json({ error: "Quotation not found." });
+    const q = await prisma.lvQtn.create({
+      data: {
+        ownerId,
+        number: await nextNumber(ownerId),
+        state: src.state,
+        projectName: src.projectName,
+        customer: src.customer,
+        panelsCount: src.panelsCount,
+        totalEgp: src.totalEgp,
+      },
+    });
+    res.status(201).json(record(q));
+  } catch (e) {
+    fail(res, e);
+  }
 }
 
 // POST /api/qtns/:id/submit  — marks the quotation submitted (feeds the charts)
 export async function submit(req: Request, res: Response) {
-  const ownerId = req.userId as string;
-  const q = await prisma.lvQtn.findFirst({ where: { id: req.params.id, ownerId } });
-  if (!q) return res.status(404).json({ error: "Quotation not found." });
-  await prisma.lvQtn.update({
-    where: { id: q.id },
-    data: { submitted: true, submittedAt: new Date() },
-  });
-  res.json({ ok: true });
+  try {
+    const ownerId = req.userId as string;
+    const q = await prisma.lvQtn.findFirst({ where: { id: req.params.id, ownerId } });
+    if (!q) return res.status(404).json({ error: "Quotation not found." });
+    await prisma.lvQtn.update({
+      where: { id: q.id },
+      data: { submitted: true, submittedAt: new Date() },
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    fail(res, e);
+  }
 }

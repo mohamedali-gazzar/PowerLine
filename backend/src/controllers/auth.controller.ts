@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
-import { ZodError } from "zod";
 import { timingSafeEqual } from "crypto";
 import { prisma } from "../lib/prisma";
+import { pub, fail } from "../lib/http";
 import {
   hashPassword,
   comparePassword,
@@ -23,18 +23,6 @@ const MAX_ATTEMPTS = 6;
 // The code is only echoed back in the response when there's no real email AND we
 // aren't in production — so production never leaks codes even if misconfigured.
 const DEV = process.env.NODE_ENV !== "production";
-
-function pub(u: { id: string; email: string; name: string; photo: string | null }) {
-  return { id: u.id, email: u.email, name: u.name, photo: u.photo };
-}
-
-function fail(res: Response, err: unknown) {
-  if (err instanceof ZodError) {
-    return res.status(400).json({ error: err.issues[0]?.message || "Invalid input." });
-  }
-  console.error(err);
-  return res.status(500).json({ error: "Server error." });
-}
 
 /** Create + "send" a fresh code, replacing any prior one for this email+purpose. */
 async function issueCode(email: string, purpose: "signup" | "reset"): Promise<string> {

@@ -1,19 +1,7 @@
 import type { Request, Response } from "express";
-import { ZodError } from "zod";
 import { prisma } from "../lib/prisma";
 import { profileSchema } from "../validation/account.schema";
-
-function pub(u: { id: string; email: string; name: string; photo: string | null }) {
-  return { id: u.id, email: u.email, name: u.name, photo: u.photo };
-}
-
-function fail(res: Response, err: unknown) {
-  if (err instanceof ZodError) {
-    return res.status(400).json({ error: err.issues[0]?.message || "Invalid input." });
-  }
-  console.error(err);
-  return res.status(500).json({ error: "Server error." });
-}
+import { pub, fail } from "../lib/http";
 
 // PUT /api/profile  { name?, photo? }
 export async function updateProfile(req: Request, res: Response) {
@@ -31,6 +19,7 @@ export async function updateProfile(req: Request, res: Response) {
 
 // GET /api/account/history → the user's LV quotations + RMU offers, newest first
 export async function history(req: Request, res: Response) {
+  try {
   const ownerId = req.userId as string;
   const [lv, rmu] = await Promise.all([
     prisma.lvQtn.findMany({ where: { ownerId }, orderBy: { updatedAt: "desc" } }),
@@ -59,11 +48,15 @@ export async function history(req: Request, res: Response) {
     })),
   ].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
   res.json({ items });
+  } catch (e) {
+    fail(res, e);
+  }
 }
 
 // GET /api/stats/weekly → submitted-QTN counts per week (LV submitted + RMU
 // created), total across all users plus the current user's share.
 export async function weeklyStats(req: Request, res: Response) {
+  try {
   const ownerId = req.userId as string;
   const WEEKS = 8;
 
@@ -116,4 +109,7 @@ export async function weeklyStats(req: Request, res: Response) {
   tally(rmu);
 
   res.json({ weeks: buckets });
+  } catch (e) {
+    fail(res, e);
+  }
 }
