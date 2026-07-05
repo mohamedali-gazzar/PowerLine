@@ -887,12 +887,18 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                         );
                       for (const g of order) {
                         // Combination sub-header (Source 1 / Source 2 / …) under the section.
-                        if (g)
+                        if (g) {
+                          // Derive the combination multiplier (qty ÷ baseQty) so the offer
+                          // sub-header still shows ×N, in sync with the editor.
+                          const gf = byG.get(g)!.find((c) => !isSpacer(c));
+                          const gbase = gf ? (gf.baseQty ?? gf.qty) : 0;
+                          const gcq = gf && gbase > 0 ? Math.max(1, Math.round(gf.qty / gbase)) : 1;
                           rows.push(
                             <tr key={`g-${sec}-${g}`}>
-                              <td colSpan={5} className="border px-2 font-display text-[11.5px] font-bold uppercase leading-[19px]" style={{ background: "#fdf0e9", color: TRED, borderColor: "#f1d3c4" }}>{g}</td>
+                              <td colSpan={5} className="border px-2 font-display text-[11.5px] font-bold uppercase leading-[19px]" style={{ background: "#fdf0e9", color: TRED, borderColor: "#f1d3c4" }}>{g}{gcq > 1 ? ` ×${gcq}` : ""}</td>
                             </tr>
                           );
+                        }
                         for (const c of byG.get(g)!)
                           rows.push(isSpacer(c) ? (
                             <tr key={c.id}>
@@ -1851,16 +1857,24 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                       const g = effGroup.get(c.id) || "";
                       if (g !== curGroup) {
                         curGroup = g;
-                        if (g)
+                        if (g) {
+                          // Single source of truth for the multiplier: qty ÷ baseQty.
+                          // The header ×N badge and the "Combination qty" field both read it.
+                          const cq = comboQtyOf(secComps, g);
                           rows.push(
                             <tr key={`grp-${sec}-${g}`} className="border-t border-brand/20 bg-brand-tint/40">
                               <td className="py-1" />
                               <td colSpan={8} className="py-1 pr-2">
                                 <div className="flex items-center gap-4">
-                                  <span className="text-[11px] font-bold uppercase tracking-wide text-brand-dark">{g}</span>
+                                  <span className="flex items-center gap-2">
+                                    <span className="text-[11px] font-bold uppercase tracking-wide text-brand-dark">{g}</span>
+                                    {cq > 1 && (
+                                      <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[11px] font-bold text-brand-dark">×{cq}</span>
+                                    )}
+                                  </span>
                                   <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
                                     Combination qty
-                                    <input type="number" min={1} value={comboQtyOf(secComps, g)}
+                                    <input type="number" min={1} value={cq}
                                       onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
                                       className="h-6 w-14 rounded border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
                                       title="Quantity of the whole combination — scales all its items" />
@@ -1869,6 +1883,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                               </td>
                             </tr>
                           );
+                        }
                       }
                       rows.push(renderRow(c));
                     });
@@ -1947,7 +1962,7 @@ function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void
       const c = l.comp
         ? toPanelComponent(l.comp, p.activeSection, l.qty, l.groupLabel || tag)
         : freeComponent(l.desc, p.activeSection, l.qty, l.groupLabel || tag);
-      return { ...c, baseQty: l.qty }; // per-combination base — lets the combo qty scale it later
+      return { ...c, baseQty: l.baseQty ?? l.qty }; // per-unit base — combo qty (qty ÷ base) scales it later
     });
     u({ components: [...p.components, ...items] });
     setPreview([]);
@@ -2128,7 +2143,7 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
         <label className="flex items-center gap-1.5 pb-2 text-xs font-semibold text-ink">
           <input type="checkbox" checked={withCtl} onChange={(e) => setWithCtl(e.target.checked)} /> + control acc.
         </label>
-        <button className="btn-ghost" onClick={() => onPreview(buildMcc(kind, kw, type, withCtl, qty), `MCC ${kind} ${kw}${qty > 1 ? ` ×${qty}` : ""}`)}>Generate combination</button>
+        <button className="btn-ghost" onClick={() => onPreview(buildMcc(kind, kw, type, withCtl, qty), `MCC ${kind} ${kw}`)}>Generate combination</button>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import { COMBOS, COMPONENTS, findByName, type DbComponent } from "./catalog";
 
 export interface ComboLine {
   qty: number;
+  baseQty?: number;      // per-unit qty (before the combination multiplier); defaults to qty
   desc: string;          // template description (display)
   comp?: DbComponent;    // resolved DB component (price/ref) when found
   groupLabel: string;    // e.g. "Source (1)"
@@ -142,16 +143,19 @@ export function buildMcc(kind: string, kw: string, type: number, withControl: bo
   const row = COMBOS.mcc.combos.find((m) => m.kind === kind && m.kw === kw && m.type === type);
   if (!row) return [];
   const n = Math.max(1, qty); // RPT-1: combination quantity multiplies every part
-  const label = `${kind} ${kw} (Type ${type})${n > 1 ? ` ×${n}` : ""}`;
+  // The multiplier lives in the combination qty (qty ÷ baseQty), NOT in the label —
+  // so the header ×N, the "Combination qty" field, and item qtys stay in sync.
+  const label = `${kind} ${kw} (Type ${type})`;
   const out: ComboLine[] = row.parts.map((p) => ({
     qty: n,
+    baseQty: 1, // per-unit = 1 → combination qty = n
     desc: p,
     comp: findByName(p),
     groupLabel: label,
   }));
   if (withControl) {
     COMBOS.mcc.control.forEach((c) =>
-      out.push({ qty: c.qty * n, desc: c.desc, comp: findByName(c.desc), groupLabel: label })
+      out.push({ qty: c.qty * n, baseQty: c.qty, desc: c.desc, comp: findByName(c.desc), groupLabel: label })
     );
   }
   return out;
