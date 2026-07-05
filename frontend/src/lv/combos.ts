@@ -139,6 +139,23 @@ export const mccKws = (kind: string) => [...new Set(COMBOS.mcc.combos.filter((m)
 export const mccTypes = (kind: string, kw: string) =>
   [...new Set(COMBOS.mcc.combos.filter((m) => m.kind === kind && m.kw === kw).map((m) => m.type))].sort();
 
+// Some MCC template descriptions don't match the component-DB names verbatim
+// (verbose contactor names, "Signal" vs "Signaling", the CAL side block). Map them
+// for the price lookup ONLY — the clean template text stays as the display name.
+const MCC_ALIAS: Record<string, string> = {
+  "SK1-11 Signal contact": "SK1-11 Signaling Contact",
+  "CAL4-11 (1 N.O+1 N.C) - Side": "CAL4-11 Auxiliary Contact Block - Side (AF09..96)",
+};
+/** Resolve an MCC part description to a DB-matchable name (price lookup only). */
+export function mccAlias(desc: string): string {
+  const d = desc.trim();
+  if (MCC_ALIAS[d]) return MCC_ALIAS[d];
+  // "Contactor# AF09-30-10-13" → "AF09-30-10-13" (the DB contactor name contains the code).
+  const m = /^contactor#\s*(.+)$/i.exec(d);
+  if (m) return m[1].trim();
+  return d;
+}
+
 export function buildMcc(kind: string, kw: string, type: number, withControl: boolean, qty = 1): ComboLine[] {
   const row = COMBOS.mcc.combos.find((m) => m.kind === kind && m.kw === kw && m.type === type);
   if (!row) return [];
@@ -150,12 +167,12 @@ export function buildMcc(kind: string, kw: string, type: number, withControl: bo
     qty: n,
     baseQty: 1, // per-unit = 1 → combination qty = n
     desc: p,
-    comp: findByName(p),
+    comp: findByName(mccAlias(p)),
     groupLabel: label,
   }));
   if (withControl) {
     COMBOS.mcc.control.forEach((c) =>
-      out.push({ qty: c.qty * n, baseQty: c.qty, desc: c.desc, comp: findByName(c.desc), groupLabel: label })
+      out.push({ qty: c.qty * n, baseQty: c.qty, desc: c.desc, comp: findByName(mccAlias(c.desc)), groupLabel: label })
     );
   }
   return out;
