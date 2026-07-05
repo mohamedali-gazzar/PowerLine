@@ -1682,6 +1682,9 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
     <div className="card p-5">
       <h2 className="sec-head">Components</h2>
 
+      {/* Sticky header: section tabs + search bar stay pinned below the tab bar while
+          the component list scrolls; unpins automatically when this card ends. */}
+      <div className="sticky top-16 z-10 -mx-5 mb-3 border-b border-line/60 bg-white px-5 pb-3 pt-1">
       {/* sections */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         {p.sections.map((sec) => {
@@ -1746,7 +1749,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
       </div>
 
       {/* search */}
-      <div ref={searchWrapRef} className="relative mb-3">
+      <div ref={searchWrapRef} className="relative">
         <input ref={searchRef} className="input" placeholder={`Search 2,124 components (name / reference / type / rating) → adds to “${p.activeSection}”`}
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
@@ -1793,6 +1796,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
           </div>
         )}
       </div>
+      </div>{/* /sticky header */}
 
       {/* table grouped by section */}
       {p.components.length === 0 ? (
