@@ -1619,6 +1619,21 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
       activeSection: p.activeSection === sec ? fallback : p.activeSection,
     });
   };
+  // Duplicate a whole section together with its components (fresh ids, unique name).
+  const duplicateSection = (sec: string) => {
+    if (!p.sections.includes(sec)) return;
+    const base = sec.replace(/\s*-\s*\d+\s*$/, "").trim(); // continue an existing "-N" series
+    const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`^${esc}\\s*-\\s*(\\d+)$`);
+    let max = 0;
+    for (const x of p.sections) { const m = x.match(re); if (m) max = Math.max(max, parseInt(m[1], 10)); }
+    const newName = `${base}-${max + 1}`;
+    // Clone this section's rows in order, preserving group / qty / notes, with new ids.
+    const clones = p.components.filter((c) => c.section === sec).map((c) => ({ ...c, id: uid(), section: newName }));
+    const idx = p.sections.indexOf(sec);
+    const sections = [...p.sections.slice(0, idx + 1), newName, ...p.sections.slice(idx + 1)];
+    u({ sections, components: [...p.components, ...clones], activeSection: newName });
+  };
 
   // Drop a dragged row onto another row: it takes the target's section (move
   // across sections) and is inserted just before it (reorder).
@@ -1702,14 +1717,18 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                   requestAnimationFrame(() => (document.querySelector(`button[data-section="${CSS.escape(next)}"]`) as HTMLElement | null)?.focus());
                 }}
                 title={dragId ? `Move component to “${sec}”` : undefined}>{sec}</button>
-              {!isFixed(sec) && (
-                <span className="ml-1 inline-flex items-center gap-0.5 border-l border-line/70 pl-1">
-                  <button type="button" title="Rename section" onClick={() => { setEditVal(sec); setEditingSec(sec); }}
-                    className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">✎</button>
-                  <button type="button" title="Remove section" onClick={() => removeSection(sec)}
-                    className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-red-500 hover:bg-red-100 hover:text-red-600">✕</button>
-                </span>
-              )}
+              <span className="ml-1 inline-flex items-center gap-0.5 border-l border-line/70 pl-1">
+                <button type="button" title="Duplicate section with its components" onClick={() => duplicateSection(sec)}
+                  className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">⧉</button>
+                {!isFixed(sec) && (
+                  <>
+                    <button type="button" title="Rename section" onClick={() => { setEditVal(sec); setEditingSec(sec); }}
+                      className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">✎</button>
+                    <button type="button" title="Remove section" onClick={() => removeSection(sec)}
+                      className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-red-500 hover:bg-red-100 hover:text-red-600">✕</button>
+                  </>
+                )}
+              </span>
             </span>
           );
         })}
