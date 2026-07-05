@@ -2023,27 +2023,37 @@ function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void
   const [kind, setKind] = useState<"ats" | "photocell" | "mcc" | "pfc" | "wd" | "lamps" | null>(null);
   const [preview, setPreview] = useState<ComboLine[]>([]);
   const [tag, setTag] = useState("");
+  const [dest, setDest] = useState("");        // target section; "" → active, "__new__" → new section
+  const [newSecName, setNewSecName] = useState(""); // name for a new section (defaults to the combo name)
+  const NEW = "__new__";
 
   const commit = () => {
     if (!preview.length) return;
-    // Each generated combination becomes its OWN section (rename / duplicate / delete /
-    // add items). Its internal sub-groups stay as groups inside — ATS → Source 1 / 2 /
-    // Interlock / Control CT; MCC / P.F.C keep their header (and its Combination qty).
-    const base = (tag || "Combination").trim();
-    const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`^${esc}(?:\\s*-\\s*(\\d+))?$`); // unique "<name>" or "<name>-N"
-    let exists = false, max = 0;
-    for (const sname of p.sections) { const m = sname.match(re); if (m) { exists = true; if (m[1]) max = Math.max(max, parseInt(m[1], 10)); } }
-    const section = exists ? `${base}-${max + 1}` : base;
+    // The combination goes into an existing section, or into its own new section. Its
+    // internal sub-groups stay as groups inside — ATS → Source 1 / 2 / Interlock /
+    // Control CT; MCC / P.F.C keep their header (and its Combination qty).
+    const target = dest || p.activeSection;
+    let section = target;
+    let sections = p.sections;
+    if (target === NEW) {
+      const base = (newSecName.trim() || tag || "Combination").trim();
+      const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(`^${esc}(?:\\s*-\\s*(\\d+))?$`); // unique "<name>" or "<name>-N"
+      let exists = false, max = 0;
+      for (const sname of p.sections) { const m = sname.match(re); if (m) { exists = true; if (m[1]) max = Math.max(max, parseInt(m[1], 10)); } }
+      section = exists ? `${base}-${max + 1}` : base;
+      sections = [...p.sections, section];
+    } else if (!p.sections.includes(section)) {
+      section = p.activeSection; // stale selection → fall back to the active section
+    }
     const items = preview.map((l) => {
       const c = l.comp
         ? toPanelComponent(l.comp, section, l.qty, l.groupLabel || tag)
         : freeComponent(l.desc, section, l.qty, l.groupLabel || tag);
       return { ...c, baseQty: l.baseQty ?? l.qty }; // per-unit base — combo qty (qty ÷ base) scales it later
     });
-    u({ sections: [...p.sections, section], components: [...p.components, ...items], activeSection: section });
-    setPreview([]);
-    setKind(null);
+    u({ sections, components: [...p.components, ...items], activeSection: section });
+    setPreview([]); setKind(null); setDest(""); setNewSecName("");
   };
 
   return (
@@ -2108,7 +2118,20 @@ function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void
               </div>
             ))}
           </div>
-          <button className="btn-primary mt-2" onClick={commit}>Add as section “{tag}” ({preview.length} items)</button>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <label className="text-xs font-semibold text-muted">Add to</label>
+            <select value={dest || p.activeSection} onChange={(e) => setDest(e.target.value)}
+              className="input h-8 w-auto cursor-pointer text-xs" title="Put this combination into an existing section, or its own new one">
+              {p.sections.map((s) => <option key={s} value={s}>{s}</option>)}
+              <option value={NEW}>＋ New section…</option>
+            </select>
+            {(dest || p.activeSection) === NEW && (
+              <input className="input h-8 w-44 text-xs" placeholder={tag || "New section name"}
+                value={newSecName} onChange={(e) => setNewSecName(e.target.value)}
+                title={`Blank uses the combination name (“${tag}”)`} />
+            )}
+            <button className="btn-primary h-8" onClick={commit}>Add {preview.length} items</button>
+          </div>
         </div>
       )}
     </div>
