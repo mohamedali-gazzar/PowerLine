@@ -1730,16 +1730,16 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
               onDragOver={(e) => { if (dragId) { e.preventDefault(); if (overSec !== sec) setOverSec(sec); } }}
               onDragLeave={() => setOverSec((x) => (x === sec ? null : x))}
               onDrop={(e) => { e.preventDefault(); dropOnSection(sec); }}
-              className={`mb-1 flex items-center justify-between rounded px-1 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-dark transition ${overSec === sec ? "bg-brand-tint ring-1 ring-brand/40" : ""}`}
+              className={`mb-1.5 flex items-center justify-between rounded-md border bg-brand-light py-1.5 pl-6 pr-2 text-[13px] font-bold uppercase tracking-wide text-brand-dark transition ${overSec === sec ? "border-brand ring-2 ring-brand/50" : "border-brand/20"}`}
             >
               <span>{sec}</span>
               <span className="flex items-center gap-0.5">
                 <button type="button" title="Move section up" disabled={si === 0}
                   onClick={() => moveSection(sec, -1)}
-                  className="rounded px-1 text-sm leading-none text-muted hover:bg-white hover:text-brand-dark disabled:opacity-25">↑</button>
+                  className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark disabled:opacity-25">↑</button>
                 <button type="button" title="Move section down" disabled={si === arr.length - 1}
                   onClick={() => moveSection(sec, 1)}
-                  className="rounded px-1 text-sm leading-none text-muted hover:bg-white hover:text-brand-dark disabled:opacity-25">↓</button>
+                  className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark disabled:opacity-25">↓</button>
               </span>
             </div>
             <div className="overflow-x-auto">
