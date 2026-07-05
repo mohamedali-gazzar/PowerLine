@@ -1451,7 +1451,23 @@ function PanelEditor({ s, p, upPanel }: {
 function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void }) {
   const [q, setQ] = useState("");
   const hits = useMemo(() => searchComponents(q, 40), [q]);
-  const effGroup = effectiveGroups(p.components); // group badge incl. inherited groups
+  const effGroup = effectiveGroups(p.components); // combination grouping incl. inherited groups
+  // Current combination multiplier for a group (from an item's qty ÷ its base qty).
+  const comboQtyOf = (secComps: PanelComponent[], group: string): number => {
+    const first = secComps.find((x) => !isSpacer(x) && (effGroup.get(x.id) || "") === group);
+    if (!first) return 1;
+    const base = first.baseQty ?? first.qty;
+    return base > 0 ? Math.max(1, Math.round(first.qty / base)) : 1;
+  };
+  // Scale every item of a combination group to N units (qty = base × N).
+  const setComboQty = (group: string, sec: string, n: number) => {
+    const qn = Math.max(1, Math.round(n) || 1);
+    u({ components: p.components.map((c) => {
+      if (c.section !== sec || isSpacer(c) || (effGroup.get(c.id) || "") !== group) return c;
+      const base = c.baseQty ?? c.qty;
+      return { ...c, baseQty: base, qty: base * qn };
+    }) });
+  };
 
   const [newSection, setNewSection] = useState("");
   const [editingSec, setEditingSec] = useState<string | null>(null); // custom-section rename
@@ -1656,7 +1672,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                 className={`flex w-full items-center gap-3 px-3 py-1.5 text-left text-sm ${i === activeIdx ? "bg-brand-light" : "hover:bg-brand-tint"}`}
                 onMouseEnter={() => setActiveIdx(i)}
                 onMouseDown={() => { setPending(c); setPendQty(""); }}>
-                <b className="w-28 shrink-0 whitespace-nowrap text-right text-brand-dark">EGP {fmtEgp(componentPriceEgp(c, s.factors))}</b>
+                <b className="w-24 shrink-0 whitespace-nowrap text-left text-brand-dark">EGP {fmtEgp(componentPriceEgp(c, s.factors))}</b>
                 <span className="min-w-0 flex-1 truncate">
                   <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{c.t}</span>
                   {c.n}
@@ -1726,7 +1742,9 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                   </tr>
                 </thead>
                 <tbody>
-                  {p.components.filter((c) => c.section === sec).map((c) => isSpacer(c) ? (
+                  {(() => {
+                    const secComps = p.components.filter((c) => c.section === sec);
+                    const renderRow = (c: PanelComponent) => isSpacer(c) ? (
                     <tr key={c.id}
                       onDragOver={(e) => { if (dragId && dragId !== c.id) { e.preventDefault(); if (overRow !== c.id) setOverRow(c.id); } }}
                       onDragLeave={() => setOverRow((r) => (r === c.id ? null : r))}
@@ -1775,7 +1793,6 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                         </svg>
                       </td>
                       <td className="max-w-[330px] py-1 pr-2">
-                        {effGroup.get(c.id) && <span className="mr-1 rounded bg-brand-light px-1 text-[9px] font-bold text-brand-dark">{effGroup.get(c.id)}</span>}
                         {c.name}
                         {editComp === c.id && (
                           <ComponentEditSelect current={c}
@@ -1799,7 +1816,33 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                         <button className="px-1 text-red-500" title="Remove" onClick={() => delComp(c.id)}>✕</button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                    const rows: JSX.Element[] = [];
+                    let curGroup = " ";
+                    secComps.forEach((c) => {
+                      const g = effGroup.get(c.id) || "";
+                      if (g !== curGroup) {
+                        curGroup = g;
+                        if (g)
+                          rows.push(
+                            <tr key={`grp-${sec}-${g}`} className="border-t border-brand/20 bg-brand-tint/40">
+                              <td className="py-1" />
+                              <td colSpan={2} className="py-1 pr-2 text-[11px] font-bold uppercase tracking-wide text-brand-dark">{g}</td>
+                              <td colSpan={5} className="py-1 pr-2">
+                                <span className="text-[11px] text-muted">Combination qty</span>
+                                <input type="number" min={1} value={comboQtyOf(secComps, g)}
+                                  onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
+                                  className="ml-2 h-6 w-14 rounded border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
+                                  title="Quantity of the whole combination — scales all its items" />
+                              </td>
+                              <td className="py-1" />
+                            </tr>
+                          );
+                      }
+                      rows.push(renderRow(c));
+                    });
+                    return rows;
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -1869,11 +1912,12 @@ function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void
     if (!preview.length) return;
     // RPT-1: each line keeps its own group header (e.g. ATS → Source 1 / Source 2
     // / Interlock / Control CT; P.F.C → the generated formula header).
-    const items = preview.map((l) =>
-      l.comp
+    const items = preview.map((l) => {
+      const c = l.comp
         ? toPanelComponent(l.comp, p.activeSection, l.qty, l.groupLabel || tag)
-        : freeComponent(l.desc, p.activeSection, l.qty, l.groupLabel || tag)
-    );
+        : freeComponent(l.desc, p.activeSection, l.qty, l.groupLabel || tag);
+      return { ...c, baseQty: l.qty }; // per-combination base — lets the combo qty scale it later
+    });
     u({ components: [...p.components, ...items] });
     setPreview([]);
     setKind(null);

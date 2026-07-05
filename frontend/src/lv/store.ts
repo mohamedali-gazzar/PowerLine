@@ -41,6 +41,7 @@ export interface PanelComponent {
   cuC: number;
   stock: string;
   qty: number;
+  baseQty?: number; // per-combination base qty — combo qty = qty / baseQty (combination scaling)
   adj: string;      // RPT-01: adjustable rating (free text)
   comment: string;  // RPT-01: free text
   note: string;     // RPT-01: free text
