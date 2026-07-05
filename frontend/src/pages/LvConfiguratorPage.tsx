@@ -1730,7 +1730,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
               onDragOver={(e) => { if (dragId) { e.preventDefault(); if (overSec !== sec) setOverSec(sec); } }}
               onDragLeave={() => setOverSec((x) => (x === sec ? null : x))}
               onDrop={(e) => { e.preventDefault(); dropOnSection(sec); }}
-              className={`mb-1.5 flex items-center justify-between rounded-md border bg-brand-light py-1.5 pl-6 pr-2 text-[13px] font-bold uppercase tracking-wide text-brand-dark transition ${overSec === sec ? "border-brand ring-2 ring-brand/50" : "border-brand/20"}`}
+              className={`mb-1.5 flex items-center justify-between rounded-md border bg-brand-light py-1.5 pl-6 pr-2 text-[13px] font-bold capitalize tracking-wide text-brand-dark transition ${overSec === sec ? "border-brand ring-2 ring-brand/50" : "border-brand/20"}`}
             >
               <span>{sec}</span>
               <span className="flex items-center gap-0.5">
