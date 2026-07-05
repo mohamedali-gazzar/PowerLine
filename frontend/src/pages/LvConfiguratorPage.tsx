@@ -1359,15 +1359,23 @@ function PanelEditor({ s, p, upPanel }: {
 }) {
   const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
   const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
-  // Incoming C.B rating — predicted from the incomer breaker, dropdown-selectable.
+  // Busbar Rating — predicted from the incomer breaker as a grey DRAFT (a guide only).
   const predictedRating = predictIncomerRating(p);
+  const ratingIsDraft = !!p.ratingADraft && p.ratingA > 0; // shown grey; not a user pick yet
   const ratingOptions = p.ratingA && !INCOMER_RATINGS.includes(p.ratingA)
     ? [...INCOMER_RATINGS, p.ratingA].sort((a, b) => a - b) // keep a legacy custom value
     : INCOMER_RATINGS;
-  // Autofill the prediction as a draft the first time a breaker is detected (only while
-  // unset — a value the user picked or already drafted is never overwritten).
+  // Keep the draft in sync with the incoming C.B: fill/refresh it while the value is
+  // still a draft (or unset), and clear it back to "— Select —" once the incomer is
+  // removed. A value the user actually picked (ratingADraft === false) is left alone.
   useEffect(() => {
-    if (!p.ratingA && predictedRating > 0) u({ ratingA: predictedRating });
+    if (predictedRating > 0) {
+      if (!p.ratingA || p.ratingADraft) {
+        if (p.ratingA !== predictedRating || !p.ratingADraft) u({ ratingA: predictedRating, ratingADraft: true });
+      }
+    } else if (p.ratingADraft) {
+      u({ ratingA: 0, ratingADraft: false }); // incomer gone → back to "— Select —"
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [predictedRating]);
   // Collapsible cost summary — the open/closed state is remembered across panels.
@@ -1430,19 +1438,19 @@ function PanelEditor({ s, p, upPanel }: {
           <div><L>Quantity</L><input className="input" inputMode="numeric" value={p.qty}
             onChange={(e) => u({ qty: Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1) })} /></div>
           <div><L>Busbar Rating <span className="text-brand">*</span></L>
-            <select className={`input cursor-pointer ${!p.ratingA ? "border-red-400 bg-red-50/40" : ""}`}
+            <select className={`input cursor-pointer ${!p.ratingA ? "border-red-400 bg-red-50/40" : ""} ${ratingIsDraft ? "text-muted" : ""}`}
               value={p.ratingA || ""}
-              onChange={(e) => u({ ratingA: parseInt(e.target.value, 10) || 0 })}>
-              <option value="">— select —</option>
+              onChange={(e) => u({ ratingA: parseInt(e.target.value, 10) || 0, ratingADraft: false })}>
+              <option value="">— Select —</option>
               {ratingOptions.map((r) => <option key={r} value={r}>{r} A</option>)}
             </select>
-            {predictedRating > 0 && predictedRating !== p.ratingA ? (
-              <button type="button" onClick={() => u({ ratingA: predictedRating })}
+            {ratingIsDraft ? (
+              <p className="mt-1 text-[11px] text-muted">draft · predicted from incoming C.B — pick to confirm</p>
+            ) : predictedRating > 0 && predictedRating !== p.ratingA ? (
+              <button type="button" onClick={() => u({ ratingA: predictedRating, ratingADraft: true })}
                 className="mt-1 text-left text-[11px] font-semibold text-brand-dark hover:underline">
                 ↺ Use incoming C.B rating ({predictedRating} A)
               </button>
-            ) : predictedRating > 0 ? (
-              <p className="mt-1 text-[11px] text-muted">auto from incoming C.B</p>
             ) : null}
           </div>
           <div><L>Short circuit</L><input className="input" value={p.shortCircuit}

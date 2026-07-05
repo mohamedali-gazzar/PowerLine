@@ -79,7 +79,8 @@ export interface LvPanel {
   fedFrom: string;   // RPT-01: next to panel name
   shortCircuit: string; // short-circuit withstand (e.g. "50 kA") — shown on the technical offer
   qty: number;
-  ratingA: number;   // incoming breaker rating (drives the 800 A rule)
+  ratingA: number;   // incoming breaker rating / busbar rating (drives the 800 A rule)
+  ratingADraft?: boolean; // true when ratingA is an auto-prediction (grey draft) not a user pick
   ambTemp: string;
   neutral: string;
   earth: string;
