@@ -1855,15 +1855,18 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                           rows.push(
                             <tr key={`grp-${sec}-${g}`} className="border-t border-brand/20 bg-brand-tint/40">
                               <td className="py-1" />
-                              <td colSpan={2} className="py-1 pr-2 text-[11px] font-bold uppercase tracking-wide text-brand-dark">{g}</td>
-                              <td colSpan={5} className="py-1 pr-2">
-                                <span className="text-[11px] text-muted">Combination qty</span>
-                                <input type="number" min={1} value={comboQtyOf(secComps, g)}
-                                  onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
-                                  className="ml-2 h-6 w-14 rounded border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
-                                  title="Quantity of the whole combination — scales all its items" />
+                              <td colSpan={8} className="py-1 pr-2">
+                                <div className="flex items-center gap-4">
+                                  <span className="text-[11px] font-bold uppercase tracking-wide text-brand-dark">{g}</span>
+                                  <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
+                                    Combination qty
+                                    <input type="number" min={1} value={comboQtyOf(secComps, g)}
+                                      onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
+                                      className="h-6 w-14 rounded border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
+                                      title="Quantity of the whole combination — scales all its items" />
+                                  </span>
+                                </div>
                               </td>
-                              <td className="py-1" />
                             </tr>
                           );
                       }
