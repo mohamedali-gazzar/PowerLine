@@ -1331,14 +1331,24 @@ const INCOMER_RATINGS = [80, 100, 125, 160, 250, 400, 630, 800, 1000, 1250, 1600
 // Returns 0 when no breaker has been added yet.
 function predictIncomerRating(p: LvPanel): number {
   const isBreaker = (c: PanelComponent) => /\b(ACB|MCCB|MCB)\b/i.test(c.type || "");
-  const ampsOf = (c: PanelComponent) => {
-    const m = `${c.rating || ""} ${c.name || ""}`.match(/(\d+)\s*A\b/i);
-    return m ? parseInt(m[1], 10) : 0;
+  // Busbar rating follows the C.B's ampere FRAME ("… 160 AF …"), e.g.
+  //   MCCB XT2N 63A-36kA 160 AF …  → 160   (frame, not the 63 A rated current)
+  //   MCCB XT4N 200A-36kA 250 AF … → 250
+  //   ACB  E2.2B 1600A-42kA 1600 AF → 1600
+  // Fall back to the rated current only if a breaker has no frame in its name.
+  const frameAmps = (c: PanelComponent) => {
+    const hay = `${c.rating || ""} ${c.name || ""}`;
+    const af = hay.match(/(\d+)\s*AF\b/i); // ABB "… 160 AF …" ampere frame
+    if (af) return parseInt(af[1], 10);
+    const t = hay.match(/\bT\d[A-Z]?\s+(\d{2,4})\b/i); // Tmax "T5H 400 …" — frame after the type
+    if (t) return parseInt(t[1], 10);
+    const inA = hay.match(/In\s*=?\s*(\d+)/i) || hay.match(/(\d+)\s*A\b/i); // last resort: rated current
+    return inA ? parseInt(inA[1], 10) : 0;
   };
   const breakers = p.components.filter((c) => !isSpacer(c) && isBreaker(c));
   const incoming = breakers.filter((c) => /incom/i.test(c.section || ""));
   const pool = incoming.length ? incoming : breakers;
-  const a = pool.reduce((mx, c) => Math.max(mx, ampsOf(c)), 0);
+  const a = pool.reduce((mx, c) => Math.max(mx, frameAmps(c)), 0);
   if (!a) return 0;
   return INCOMER_RATINGS.find((r) => r >= a) ?? INCOMER_RATINGS[INCOMER_RATINGS.length - 1];
 }
