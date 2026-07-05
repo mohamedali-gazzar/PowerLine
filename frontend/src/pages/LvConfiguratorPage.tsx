@@ -1743,18 +1743,30 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
               </span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
+              <table className="w-full table-fixed text-[13px]">
+                {/* Shared column widths so every per-section table lines up (RPT-1) */}
+                <colgroup>
+                  <col style={{ width: 24 }} />
+                  <col />
+                  <col style={{ width: 132 }} />
+                  <col style={{ width: 64 }} />
+                  <col style={{ width: 80 }} />
+                  <col style={{ width: 112 }} />
+                  <col style={{ width: 92 }} />
+                  <col style={{ width: 92 }} />
+                  <col style={{ width: 76 }} />
+                </colgroup>
                 <thead>
                   <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
-                    <th className="w-5 py-1"></th>
+                    <th className="py-1"></th>
                     <th className="py-1 pr-2">Description</th>
                     <th className="py-1 pr-2">Ref</th>
-                    <th className="w-16 py-1 pr-2">Qty</th>
-                    <th className="w-20 py-1 pr-2">Adj.</th>
-                    <th className="w-28 py-1 pr-2">Note</th>
+                    <th className="py-1 pr-2">Qty</th>
+                    <th className="py-1 pr-2">Adj.</th>
+                    <th className="py-1 pr-2">Note</th>
                     <th className="py-1 pr-2 text-right">Unit cost</th>
                     <th className="py-1 pr-2 text-right">Total</th>
-                    <th className="w-20 py-1"></th>
+                    <th className="py-1"></th>
                   </tr>
                 </thead>
                 <tbody>
