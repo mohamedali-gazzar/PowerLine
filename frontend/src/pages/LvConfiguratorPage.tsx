@@ -2241,8 +2241,9 @@ function PfcBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {num("kvar", "Required kVAR")}
         <div />
-        {num("fixedSteps", "Fixed steps")}{kvarSel("fixedKvar", "Fixed step kVAR")}
+        {/* Fixed part on the left column, variable steps on the right */}
         {num("var1Steps", "Var. steps 1")}{kvarSel("var1Kvar", "Var.1 step kVAR")}
+        {num("fixedSteps", "Fixed steps")}{kvarSel("fixedKvar", "Fixed step kVAR")}
         {num("var2Steps", "Var. steps 2")}{kvarSel("var2Kvar", "Var.2 step kVAR")}
       </div>
       <p className={`mt-2 text-xs font-semibold ${tot >= i.kvar ? "text-green-700" : "text-amber-700"}`}>
