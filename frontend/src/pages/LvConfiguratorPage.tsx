@@ -1322,12 +1322,44 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
   );
 }
 
+// Standard incoming C.B ratings (A) — the panel rating snaps to one of these.
+const INCOMER_RATINGS = [80, 100, 125, 160, 250, 400, 630, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000, 5000, 6300];
+
+// Predict the incoming C.B rating from the panel's incomer breaker: take the largest
+// breaker (ACB / MCCB / MCB) in the "Main Incoming" section (or any breaker if none is
+// there), parse its ampere rating, and snap UP to the nearest standard rating.
+// Returns 0 when no breaker has been added yet.
+function predictIncomerRating(p: LvPanel): number {
+  const isBreaker = (c: PanelComponent) => /\b(ACB|MCCB|MCB)\b/i.test(c.type || "");
+  const ampsOf = (c: PanelComponent) => {
+    const m = `${c.rating || ""} ${c.name || ""}`.match(/(\d+)\s*A\b/i);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  const breakers = p.components.filter((c) => !isSpacer(c) && isBreaker(c));
+  const incoming = breakers.filter((c) => /incom/i.test(c.section || ""));
+  const pool = incoming.length ? incoming : breakers;
+  const a = pool.reduce((mx, c) => Math.max(mx, ampsOf(c)), 0);
+  if (!a) return 0;
+  return INCOMER_RATINGS.find((r) => r >= a) ?? INCOMER_RATINGS[INCOMER_RATINGS.length - 1];
+}
+
 function PanelEditor({ s, p, upPanel }: {
   s: LvState; p: LvPanel;
   upPanel: (id: string, patch: Partial<LvPanel>) => void;
 }) {
   const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
   const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
+  // Incoming C.B rating — predicted from the incomer breaker, dropdown-selectable.
+  const predictedRating = predictIncomerRating(p);
+  const ratingOptions = p.ratingA && !INCOMER_RATINGS.includes(p.ratingA)
+    ? [...INCOMER_RATINGS, p.ratingA].sort((a, b) => a - b) // keep a legacy custom value
+    : INCOMER_RATINGS;
+  // Autofill the prediction as a draft the first time a breaker is detected (only while
+  // unset — a value the user picked or already drafted is never overwritten).
+  useEffect(() => {
+    if (!p.ratingA && predictedRating > 0) u({ ratingA: predictedRating });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [predictedRating]);
   // Collapsible cost summary — the open/closed state is remembered across panels.
   const [costOpen, setCostOpen] = useState(() => { try { return localStorage.getItem("lv-costcard-open") !== "0"; } catch { return true; } });
   const toggleCost = () => setCostOpen((o) => { try { localStorage.setItem("lv-costcard-open", o ? "0" : "1"); } catch { /* ignore */ } return !o; });
@@ -1388,8 +1420,21 @@ function PanelEditor({ s, p, upPanel }: {
           <div><L>Quantity</L><input className="input" inputMode="numeric" value={p.qty}
             onChange={(e) => u({ qty: Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1) })} /></div>
           <div><L>Incoming C.B rating (A) <span className="text-brand">*</span></L>
-            <input className={`input ${!p.ratingA ? "border-red-400 bg-red-50/40" : ""}`} inputMode="numeric" value={p.ratingA || ""}
-              placeholder="e.g. 630" onChange={(e) => u({ ratingA: parseInt(e.target.value.replace(/[^\d]/g, "")) || 0 })} /></div>
+            <select className={`input cursor-pointer ${!p.ratingA ? "border-red-400 bg-red-50/40" : ""}`}
+              value={p.ratingA || ""}
+              onChange={(e) => u({ ratingA: parseInt(e.target.value, 10) || 0 })}>
+              <option value="">— select —</option>
+              {ratingOptions.map((r) => <option key={r} value={r}>{r} A</option>)}
+            </select>
+            {predictedRating > 0 && predictedRating !== p.ratingA ? (
+              <button type="button" onClick={() => u({ ratingA: predictedRating })}
+                className="mt-1 text-left text-[11px] font-semibold text-brand-dark hover:underline">
+                ↺ Use incoming C.B rating ({predictedRating} A)
+              </button>
+            ) : predictedRating > 0 ? (
+              <p className="mt-1 text-[11px] text-muted">auto from incoming C.B</p>
+            ) : null}
+          </div>
           <div><L>Short circuit</L><input className="input" value={p.shortCircuit}
             placeholder="e.g. 50 kA" onChange={(e) => u({ shortCircuit: e.target.value })} /></div>
           <div><L>Amb. temp</L><Sel value={p.ambTemp as any} onChange={(v) => u({ ambTemp: v })} options={AMB_TEMPS} /></div>
