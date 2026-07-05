@@ -115,10 +115,18 @@ function SearchSelect({ value, placeholder, options, onPick }: {
   // Keyboard nav: first option auto-highlighted; ↑/↓ move, Enter picks the highlight.
   const [activeIdx, setActiveIdx] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => { setActiveIdx(0); }, [q, open]);
   useEffect(() => { (listRef.current?.children[activeIdx] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" }); }, [activeIdx]);
+  // Close when a click lands outside the dropdown (input + list).
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <input
         className="input"
         placeholder={placeholder}
@@ -1478,6 +1486,14 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
   const [pendQty, setPendQty] = useState(""); // empty box — typed number becomes the qty (blank = 1)
   const qtyRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const searchWrapRef = useRef<HTMLDivElement>(null);
+  // Close the search results (clear the query) when a click lands outside the box.
+  useEffect(() => {
+    if (!q || pending) return;
+    const onDown = (e: MouseEvent) => { if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) setQ(""); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [q, pending]);
   // When the qty popup opens, focus + select the field so the quantity can be typed
   // straight from the keyboard (type the number, then Enter to add).
   useEffect(() => { if (pending) { qtyRef.current?.focus(); qtyRef.current?.select(); } }, [pending]);
@@ -1654,7 +1670,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
       </div>
 
       {/* search */}
-      <div className="relative mb-3">
+      <div ref={searchWrapRef} className="relative mb-3">
         <input ref={searchRef} className="input" placeholder={`Search 2,124 components (name / reference / type / rating) → adds to “${p.activeSection}”`}
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
