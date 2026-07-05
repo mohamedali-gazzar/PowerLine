@@ -443,7 +443,7 @@ function fmtDate(iso: string): string {
 function panelInvalid(p: LvPanel): string[] {
   const out: string[] = [];
   if (!p.name.trim()) out.push("Panel name is required");
-  if (!p.ratingA || p.ratingA <= 0) out.push("Incoming C.B rating is required");
+  if (!p.ratingA || p.ratingA <= 0) out.push("Busbar Rating is required");
   return out;
 }
 function OfferBlocked({ issues }: { issues: string[] }) {
@@ -1419,7 +1419,7 @@ function PanelEditor({ s, p, upPanel }: {
           <div><L>Fed from</L><input className="input" value={p.fedFrom} onChange={(e) => u({ fedFrom: e.target.value })} /></div>
           <div><L>Quantity</L><input className="input" inputMode="numeric" value={p.qty}
             onChange={(e) => u({ qty: Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1) })} /></div>
-          <div><L>Incoming C.B rating (A) <span className="text-brand">*</span></L>
+          <div><L>Busbar Rating <span className="text-brand">*</span></L>
             <select className={`input cursor-pointer ${!p.ratingA ? "border-red-400 bg-red-50/40" : ""}`}
               value={p.ratingA || ""}
               onChange={(e) => u({ ratingA: parseInt(e.target.value, 10) || 0 })}>
