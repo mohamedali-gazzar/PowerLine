@@ -1717,18 +1717,16 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                   requestAnimationFrame(() => (document.querySelector(`button[data-section="${CSS.escape(next)}"]`) as HTMLElement | null)?.focus());
                 }}
                 title={dragId ? `Move component to “${sec}”` : undefined}>{sec}</button>
-              <span className="ml-1 inline-flex items-center gap-0.5 border-l border-line/70 pl-1">
-                <button type="button" title="Duplicate section with its components" onClick={() => duplicateSection(sec)}
-                  className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">⧉</button>
-                {!isFixed(sec) && (
-                  <>
-                    <button type="button" title="Rename section" onClick={() => { setEditVal(sec); setEditingSec(sec); }}
-                      className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">✎</button>
-                    <button type="button" title="Remove section" onClick={() => removeSection(sec)}
-                      className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-red-500 hover:bg-red-100 hover:text-red-600">✕</button>
-                  </>
-                )}
-              </span>
+              {!isFixed(sec) && (
+                <span className="ml-1 inline-flex items-center gap-0.5 border-l border-line/70 pl-1">
+                  <button type="button" title="Duplicate section with its components" onClick={() => duplicateSection(sec)}
+                    className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">⧉</button>
+                  <button type="button" title="Rename section" onClick={() => { setEditVal(sec); setEditingSec(sec); }}
+                    className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">✎</button>
+                  <button type="button" title="Remove section" onClick={() => removeSection(sec)}
+                    className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-red-500 hover:bg-red-100 hover:text-red-600">✕</button>
+                </span>
+              )}
             </span>
           );
         })}
