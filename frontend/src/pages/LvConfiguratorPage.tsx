@@ -1325,10 +1325,10 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
 // Standard incoming C.B ratings (A) — the panel rating snaps to one of these.
 const INCOMER_RATINGS = [80, 100, 125, 160, 250, 400, 630, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000, 5000, 6300];
 
-// Predict the incoming C.B rating from the panel's incomer breaker: take the largest
-// breaker (ACB / MCCB / MCB) in the "Main Incoming" section (or any breaker if none is
-// there), parse its ampere rating, and snap UP to the nearest standard rating.
-// Returns 0 when no breaker has been added yet.
+// Predict the Busbar Rating from the incoming C.B: take the largest breaker
+// (ACB / MCCB / MCB) in the "Main Incoming" section, read its ampere frame, and snap
+// UP to the nearest standard rating. Returns 0 (field stays empty) until an incoming
+// C.B is added.
 function predictIncomerRating(p: LvPanel): number {
   const isBreaker = (c: PanelComponent) => /\b(ACB|MCCB|MCB)\b/i.test(c.type || "");
   // Busbar rating follows the C.B's ampere FRAME ("… 160 AF …"), e.g.
@@ -1345,10 +1345,10 @@ function predictIncomerRating(p: LvPanel): number {
     const inA = hay.match(/In\s*=?\s*(\d+)/i) || hay.match(/(\d+)\s*A\b/i); // last resort: rated current
     return inA ? parseInt(inA[1], 10) : 0;
   };
-  const breakers = p.components.filter((c) => !isSpacer(c) && isBreaker(c));
-  const incoming = breakers.filter((c) => /incom/i.test(c.section || ""));
-  const pool = incoming.length ? incoming : breakers;
-  const a = pool.reduce((mx, c) => Math.max(mx, frameAmps(c)), 0);
+  // Predict only from the incoming C.B (breakers in the "Main Incoming" section), so
+  // the field stays empty by default and only fills once an incomer has been added.
+  const incoming = p.components.filter((c) => !isSpacer(c) && isBreaker(c) && /incom/i.test(c.section || ""));
+  const a = incoming.reduce((mx, c) => Math.max(mx, frameAmps(c)), 0);
   if (!a) return 0;
   return INCOMER_RATINGS.find((r) => r >= a) ?? INCOMER_RATINGS[INCOMER_RATINGS.length - 1];
 }
