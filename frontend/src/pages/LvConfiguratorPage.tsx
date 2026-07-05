@@ -2046,7 +2046,12 @@ function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void
       let exists = false, max = 0;
       for (const sname of p.sections) { const m = sname.match(re); if (m) { exists = true; if (m[1]) max = Math.max(max, parseInt(m[1], 10)); } }
       section = exists ? `${base}-${max + 1}` : base;
-      sections = [...p.sections, section];
+      // Place a new combination section right after "Outgoings" (beside it) — where
+      // P.F.C / MCC / etc. belong — instead of at the very end of the list.
+      const oi = p.sections.indexOf("Outgoings");
+      sections = oi >= 0
+        ? [...p.sections.slice(0, oi + 1), section, ...p.sections.slice(oi + 1)]
+        : [...p.sections, section];
     } else if (!p.sections.includes(section)) {
       section = p.activeSection; // stale selection → fall back to the active section
     }
