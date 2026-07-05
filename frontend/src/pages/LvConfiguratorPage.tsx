@@ -2512,8 +2512,8 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
   };
   return (
     <div className="mt-4 rounded-lg border border-line p-3">
-      <div className="mb-1 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-ink">Copper Tool <span className="text-[11px] font-normal text-muted">· {type} · lengths in mm</span></h3>
+      <div className="-mx-3 -mt-3 mb-3 flex items-center justify-between rounded-t-lg border-b border-brand/20 bg-brand-light px-3 py-2">
+        <h3 className="text-sm font-bold text-brand-dark">Copper Tool <span className="text-[11px] font-normal text-muted">· {type} · lengths in mm</span></h3>
         <span className="text-xs font-bold text-brand-dark">Busbar copper: {total.toFixed(1)} KG</span>
       </div>
       <p className="mb-1 text-[11px] text-muted">Enter the required copper length per rating. Recommended cells are highlighted (all values stay editable):</p>
