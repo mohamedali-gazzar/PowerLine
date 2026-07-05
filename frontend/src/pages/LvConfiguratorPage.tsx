@@ -2026,15 +2026,22 @@ function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void
 
   const commit = () => {
     if (!preview.length) return;
-    // RPT-1: each line keeps its own group header (e.g. ATS → Source 1 / Source 2
-    // / Interlock / Control CT; P.F.C → the generated formula header).
+    // Each generated combination becomes its OWN section (rename / duplicate / delete /
+    // add items). Its internal sub-groups stay as groups inside — ATS → Source 1 / 2 /
+    // Interlock / Control CT; MCC / P.F.C keep their header (and its Combination qty).
+    const base = (tag || "Combination").trim();
+    const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`^${esc}(?:\\s*-\\s*(\\d+))?$`); // unique "<name>" or "<name>-N"
+    let exists = false, max = 0;
+    for (const sname of p.sections) { const m = sname.match(re); if (m) { exists = true; if (m[1]) max = Math.max(max, parseInt(m[1], 10)); } }
+    const section = exists ? `${base}-${max + 1}` : base;
     const items = preview.map((l) => {
       const c = l.comp
-        ? toPanelComponent(l.comp, p.activeSection, l.qty, l.groupLabel || tag)
-        : freeComponent(l.desc, p.activeSection, l.qty, l.groupLabel || tag);
+        ? toPanelComponent(l.comp, section, l.qty, l.groupLabel || tag)
+        : freeComponent(l.desc, section, l.qty, l.groupLabel || tag);
       return { ...c, baseQty: l.baseQty ?? l.qty }; // per-unit base — combo qty (qty ÷ base) scales it later
     });
-    u({ components: [...p.components, ...items] });
+    u({ sections: [...p.sections, section], components: [...p.components, ...items], activeSection: section });
     setPreview([]);
     setKind(null);
   };
@@ -2045,7 +2052,22 @@ function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void
         <h2 className="sec-head mb-0 pb-0 after:hidden">Circuit combinations</h2>
         {p.components.some((c) => c.group) && (
           <button className="text-xs font-semibold text-red-600 hover:underline"
-            onClick={() => { if (confirm("Remove ALL generated combinations from this panel?")) u({ components: p.components.filter((c) => !c.group) }); }}>
+            onClick={() => {
+              if (!confirm("Remove ALL generated combinations from this panel?")) return;
+              // A combination section = a non-fixed section whose rows are all generated.
+              const comboSecs = new Set(p.sections.filter((s) => {
+                if (FIXED_SECTIONS.includes(s)) return false;
+                const cs = p.components.filter((c) => c.section === s && !isSpacer(c));
+                return cs.length > 0 && cs.every((c) => c.group);
+              }));
+              const sections = p.sections.filter((s) => !comboSecs.has(s));
+              // Drop combo sections wholesale; also strip stray grouped rows from other sections.
+              const components = p.components.filter((c) => !comboSecs.has(c.section) && !c.group);
+              const activeSection = comboSecs.has(p.activeSection)
+                ? (sections.find((s) => FIXED_SECTIONS.includes(s)) ?? sections[0] ?? "")
+                : p.activeSection;
+              u({ sections, components, activeSection });
+            }}>
             ✕ Clear all combinations
           </button>
         )}
@@ -2086,7 +2108,7 @@ function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void
               </div>
             ))}
           </div>
-          <button className="btn-primary mt-2" onClick={commit}>Add {preview.length} items to “{p.activeSection}”</button>
+          <button className="btn-primary mt-2" onClick={commit}>Add as section “{tag}” ({preview.length} items)</button>
         </div>
       )}
     </div>
