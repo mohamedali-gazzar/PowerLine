@@ -1816,11 +1816,6 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
             <button type="button" title="Stop adding to this group" onClick={() => setActiveGroup("")} className="ml-0.5 leading-none text-brand-dark/70 hover:text-red-600">✕</button>
           </span>
         )}
-        <button type="button" title={`Insert a blank spacer row in “${p.activeSection}”`}
-          onClick={() => u({ components: [...p.components, spacerComponent(p.activeSection)] })}
-          className="h-8 rounded-full border border-dashed border-line px-3 text-xs font-semibold text-muted hover:border-brand/50 hover:text-brand-dark">
-          + Empty row
-        </button>
       </div>
 
       {/* search */}
