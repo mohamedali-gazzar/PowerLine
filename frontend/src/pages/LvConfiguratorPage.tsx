@@ -1965,6 +1965,7 @@ function ComponentsCard({ s, p, u, onAddPfc }: { s: LvState; p: LvPanel; u: (pat
                           // Single source of truth for the multiplier: qty ÷ baseQty.
                           // The header ×N badge and the "Combination qty" field both read it.
                           const cq = comboQtyOf(secComps, g);
+                          const isMcc = /\(Type \d+\)/.test(g); // Combination qty is MCC-only
                           rows.push(
                             <tr key={`grp-${sec}-${g}`} className="border-t border-brand/20 bg-brand-tint/40">
                               <td className="py-1" />
@@ -1972,17 +1973,19 @@ function ComponentsCard({ s, p, u, onAddPfc }: { s: LvState; p: LvPanel; u: (pat
                                 <div className="flex items-center gap-4">
                                   <span className="flex items-center gap-2">
                                     <span className="text-[11px] font-bold uppercase tracking-wide text-brand-dark">{g}</span>
-                                    {cq > 1 && (
+                                    {isMcc && cq > 1 && (
                                       <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[11px] font-bold text-brand-dark">×{cq}</span>
                                     )}
                                   </span>
-                                  <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
-                                    Combination qty
-                                    <input type="number" min={1} value={cq}
-                                      onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
-                                      className="h-6 w-14 rounded border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
-                                      title="Quantity of the whole combination — scales all its items" />
-                                  </span>
+                                  {isMcc && (
+                                    <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
+                                      Combination qty
+                                      <input type="number" min={1} value={cq}
+                                        onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
+                                        className="h-6 w-14 rounded border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
+                                        title="Quantity of the whole combination — scales all its items" />
+                                    </span>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -2066,14 +2069,15 @@ function CombosCard({ p, u, kind, setKind }: {
 
   const commit = () => {
     if (!preview.length) return;
-    // The combination goes into an existing section, or into its own new section. Its
-    // internal sub-groups stay as groups inside — ATS → Source 1 / 2 / Interlock /
-    // Control CT; MCC / P.F.C keep their header (and its Combination qty).
-    const target = dest || p.activeSection;
+    // The combination goes into an existing section, or its own new section. Sub-groups
+    // stay inside (ATS → Source 1/2 / Interlock / Control CT; MCC keeps its header).
+    // P.F.C is different: it defaults to its own "P.F.C" section with FLAT items (no group).
+    const isPfc = kind === "pfc";
+    const target = dest || (isPfc ? NEW : p.activeSection);
     let section = target;
     let sections = p.sections;
     if (target === NEW) {
-      const base = (newSecName.trim() || tag || "Combination").trim();
+      const base = (newSecName.trim() || (isPfc ? "P.F.C" : tag) || "Combination").trim();
       const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const re = new RegExp(`^${esc}(?:\\s*-\\s*(\\d+))?$`); // unique "<name>" or "<name>-N"
       let exists = false, max = 0;
@@ -2089,9 +2093,10 @@ function CombosCard({ p, u, kind, setKind }: {
       section = p.activeSection; // stale selection → fall back to the active section
     }
     const items = preview.map((l) => {
+      const grp = isPfc ? undefined : (l.groupLabel || tag); // P.F.C: flat items, no group header
       const c = l.comp
-        ? toPanelComponent(l.comp, section, l.qty, l.groupLabel || tag)
-        : freeComponent(l.desc, section, l.qty, l.groupLabel || tag);
+        ? toPanelComponent(l.comp, section, l.qty, grp)
+        : freeComponent(l.desc, section, l.qty, grp);
       return { ...c, baseQty: l.baseQty ?? l.qty }; // per-unit base — combo qty (qty ÷ base) scales it later
     });
     u({ sections, components: [...p.components, ...items], activeSection: section });
