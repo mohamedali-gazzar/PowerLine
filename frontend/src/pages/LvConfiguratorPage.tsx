@@ -1380,6 +1380,14 @@ function PanelEditor({ s, p, upPanel }: {
   const toggleCost = () => setCostOpen((o) => { try { localStorage.setItem("lv-costcard-open", o ? "0" : "1"); } catch { /* ignore */ } return !o; });
   const [detailsOpen, setDetailsOpen] = useState(() => { try { return localStorage.getItem("lv-detailscard-open") !== "0"; } catch { return true; } });
   const toggleDetails = () => setDetailsOpen((o) => { try { localStorage.setItem("lv-detailscard-open", o ? "0" : "1"); } catch { /* ignore */ } return !o; });
+  // Combination builder is owned here so the Components sections bar can open one
+  // (e.g. the "+ P.F.C" quick button) and scroll to it.
+  const [comboKind, setComboKind] = useState<ComboKind | null>(null);
+  const combosRef = useRef<HTMLDivElement>(null);
+  const openCombo = (k: ComboKind) => {
+    setComboKind(k);
+    requestAnimationFrame(() => combosRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
 
   return (
     <div className="space-y-4">
@@ -1495,10 +1503,12 @@ function PanelEditor({ s, p, upPanel }: {
       </div>
 
       {/* Circuit combinations */}
-      <CombosCard p={p} u={u} />
+      <div ref={combosRef}>
+        <CombosCard p={p} u={u} kind={comboKind} setKind={setComboKind} />
+      </div>
 
       {/* Components */}
-      <ComponentsCard s={s} p={p} u={u} />
+      <ComponentsCard s={s} p={p} u={u} onAddPfc={() => openCombo("pfc")} />
 
       {/* Panel type — placed after Components (enclosure sizings as component-like items) */}
       <SizingCard p={p} u={u} factors={s.factors} />
@@ -1515,7 +1525,7 @@ function PanelEditor({ s, p, upPanel }: {
 }
 
 // ── Components card ──────────────────────────────────────────────────────────
-function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void }) {
+function ComponentsCard({ s, p, u, onAddPfc }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void; onAddPfc?: () => void }) {
   const [q, setQ] = useState("");
   const hits = useMemo(() => searchComponents(q, 40), [q]);
   const effGroup = effectiveGroups(p.components); // combination grouping incl. inherited groups
@@ -1735,6 +1745,13 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
             </span>
           );
         })}
+        {onAddPfc && (
+          <button type="button" title="Add a P.F.C combination — opens the builder below"
+            onClick={onAddPfc}
+            className="h-8 rounded-full border border-brand bg-brand-light px-3 text-xs font-bold text-brand-dark hover:bg-brand hover:text-white">
+            + P.F.C
+          </button>
+        )}
         <input className="input h-8 w-36 text-xs" placeholder="New section…" value={newSection}
           onChange={(e) => setNewSection(e.target.value)}
           onKeyDown={(e) => {
@@ -2036,8 +2053,11 @@ function ComponentEditSelect({ current, onPick, onClose }: {
 }
 
 // ── Combination builders (RPT-03) ────────────────────────────────────────────
-function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void }) {
-  const [kind, setKind] = useState<"ats" | "photocell" | "mcc" | "pfc" | "wd" | "lamps" | null>(null);
+type ComboKind = "ats" | "photocell" | "mcc" | "pfc" | "wd" | "lamps";
+function CombosCard({ p, u, kind, setKind }: {
+  p: LvPanel; u: (patch: Partial<LvPanel>) => void;
+  kind: ComboKind | null; setKind: (k: ComboKind | null) => void;
+}) {
   const [preview, setPreview] = useState<ComboLine[]>([]);
   const [tag, setTag] = useState("");
   const [dest, setDest] = useState("");        // target section; "" → active, "__new__" → new section
