@@ -895,7 +895,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                           const gcq = gf && gbase > 0 ? Math.max(1, Math.round(gf.qty / gbase)) : 1;
                           rows.push(
                             <tr key={`g-${sec}-${g}`}>
-                              <td colSpan={5} className="border px-2 font-display text-[11.5px] font-bold uppercase leading-[19px]" style={{ background: "#fdf0e9", color: TRED, borderColor: "#f1d3c4" }}>{g}{gcq > 1 ? ` ×${gcq}` : ""}</td>
+                              <td colSpan={5} className="border px-2 font-display text-[11.5px] font-bold leading-[19px]" style={{ background: "#fdf0e9", color: TRED, borderColor: "#f1d3c4" }}><span className="uppercase">{g}</span>, QTY ({gcq}) each contain:</td>
                             </tr>
                           );
                         }
@@ -906,7 +906,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                             </tr>
                           ) : (
                             <tr key={c.id} className="border-b align-top" style={{ borderColor: "#f3ddd4" }}>
-                              <td className="px-2 text-center text-[12.5px] font-semibold leading-[20px]">{c.qty}</td>
+                              <td className="px-2 text-center text-[12.5px] font-semibold leading-[20px]">{c.baseQty ?? c.qty}</td>
                               <td className="px-2 text-[12.5px] leading-[20px]">
                                 {c.name}
                                 {c.comment && <div className="text-[11px] italic leading-tight text-muted">{c.comment}</div>}
@@ -2062,8 +2062,20 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                       </td>
                       <td className="py-1 pr-2 text-[11px] text-muted">{c.ref}</td>
                       <td className="py-1 pr-2">
-                        <input className="input h-7 px-1.5 text-center text-xs" type="number" min={0} value={c.qty}
-                          onChange={(e) => setComp(c.id, { qty: Math.max(0, parseFloat(e.target.value) || 0) })} />
+                        {c.baseQty != null ? (
+                          // Combo item: the Qty column is the PER-UNIT qty (1 per unit); the group's
+                          // combination qty (×N) multiplies the total, not this number.
+                          <input className="input h-7 px-1.5 text-center text-xs" type="number" min={0} value={c.baseQty}
+                            title="Per-unit qty — the combination qty (×N) multiplies the total"
+                            onChange={(e) => {
+                              const per = Math.max(0, parseFloat(e.target.value) || 0);
+                              const n = comboQtyOf(secComps, effGroup.get(c.id) || "");
+                              setComp(c.id, { baseQty: per, qty: per * n });
+                            }} />
+                        ) : (
+                          <input className="input h-7 px-1.5 text-center text-xs" type="number" min={0} value={c.qty}
+                            onChange={(e) => setComp(c.id, { qty: Math.max(0, parseFloat(e.target.value) || 0) })} />
+                        )}
                       </td>
                       <td className="py-1 pr-2"><input className="input h-7 px-1.5 text-xs" value={c.adj} placeholder="—"
                         onChange={(e) => setComp(c.id, { adj: e.target.value })} /></td>
@@ -2094,11 +2106,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                               <td colSpan={8} className="py-1 pr-2">
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-4">
-                                    <span className="flex items-center gap-2">
-                                      <span className="text-[11px] font-bold uppercase tracking-wide text-brand-dark">{g}</span>
-                                      {cq > 1 && (
-                                        <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[11px] font-bold text-brand-dark">×{cq}</span>
-                                      )}
+                                    <span className="text-[11px] font-bold text-brand-dark">
+                                      <span className="uppercase tracking-wide">{g}</span>, QTY ({cq}) each contain:
                                     </span>
                                     <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
                                       Combination qty
