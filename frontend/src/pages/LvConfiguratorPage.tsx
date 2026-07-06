@@ -1537,6 +1537,8 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
   };
 
   const [newSection, setNewSection] = useState("");
+  const [activeGroup, setActiveGroup] = useState(""); // manual group inside the active section — new items join it
+  const [newGroup, setNewGroup] = useState("");
   const [editingSec, setEditingSec] = useState<string | null>(null); // custom-section rename
   const [editVal, setEditVal] = useState("");
   const [editComp, setEditComp] = useState<string | null>(null); // row being re-selected
@@ -1672,7 +1674,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
   };
 
   const add = (c: DbComponent, qty = 1) => {
-    u({ components: [...p.components, { ...toPanelComponent(c, p.activeSection), qty: Math.max(1, qty) }] });
+    u({ components: [...p.components, toPanelComponent(c, p.activeSection, Math.max(1, qty), activeGroup || undefined)] });
     setQ("");
     // Return focus to the search box so the next component can be typed without the mouse.
     requestAnimationFrame(() => searchRef.current?.focus());
@@ -1709,7 +1711,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
                 overSec === sec ? "border-brand bg-brand-light text-brand-dark ring-2 ring-brand/50"
                 : active ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"
               }`}>
-              <button type="button" data-section={sec} onClick={() => u({ activeSection: sec })}
+              <button type="button" data-section={sec} onClick={() => { u({ activeSection: sec }); setActiveGroup(""); }}
                 onKeyDown={(e) => {
                   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
                   e.preventDefault();
@@ -1741,6 +1743,17 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
               setNewSection("");
             }
           }} />
+        <input className="input h-8 w-32 text-xs" placeholder="New group…" value={newGroup}
+          onChange={(e) => setNewGroup(e.target.value)}
+          title={`Create a group inside “${p.activeSection}” — items you add next go into it`}
+          onKeyDown={(e) => { if (e.key === "Enter" && newGroup.trim()) { setActiveGroup(newGroup.trim()); setNewGroup(""); } }} />
+        {activeGroup && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-brand bg-brand-light px-3 py-1 text-xs font-semibold text-brand-dark"
+            title={`New items go into group “${activeGroup}” of “${p.activeSection}”. Click ✕ to stop adding to it.`}>
+            ▸ {activeGroup}
+            <button type="button" title="Stop adding to this group" onClick={() => setActiveGroup("")} className="ml-0.5 leading-none text-brand-dark/70 hover:text-red-600">✕</button>
+          </span>
+        )}
         <button type="button" title={`Insert a blank spacer row in “${p.activeSection}”`}
           onClick={() => u({ components: [...p.components, spacerComponent(p.activeSection)] })}
           className="h-8 rounded-full border border-dashed border-line px-3 text-xs font-semibold text-muted hover:border-brand/50 hover:text-brand-dark">
@@ -1750,7 +1763,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
 
       {/* search */}
       <div ref={searchWrapRef} className="relative">
-        <input ref={searchRef} className="input" placeholder={`Search 2,124 components (name / reference / type / rating) → adds to “${p.activeSection}”`}
+        <input ref={searchRef} className="input" placeholder={`Search components (name / reference / type / rating) → adds to “${p.activeSection}”${activeGroup ? ` › ${activeGroup}` : ""}`}
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
             if (pending || !q) return;
@@ -1783,7 +1796,7 @@ function ComponentsCard({ s, p, u }: { s: LvState; p: LvPanel; u: (patch: Partia
             <p className="mb-2 text-xs">
               <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{pending.t}</span>
               <span className="font-bold text-ink">{pending.n}</span>
-              <span className="ml-1 text-[11px] text-muted">{pending.ref} · {pending.brand} → “{p.activeSection}”</span>
+              <span className="ml-1 text-[11px] text-muted">{pending.ref} · {pending.brand} → “{p.activeSection}”{activeGroup ? ` › ${activeGroup}` : ""}</span>
             </p>
             <div className="flex items-center gap-2">
               <label className="text-xs font-semibold text-muted">Qty</label>
