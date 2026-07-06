@@ -186,6 +186,16 @@ export default function AuthPage() {
             </button>
           </form>
 
+          {/* DEV ONLY — skips the login wall by signing in as the first account. Removed
+              from the production build (import.meta.env.DEV is statically false there). */}
+          {import.meta.env.DEV && (
+            <button type="button" disabled={busy}
+              onClick={() => run(async () => { const r = await api.auth.devLogin(); signIn(r.token, r.user); })}
+              className="mt-4 w-full rounded-lg border border-dashed border-amber-400 bg-amber-50 py-2 text-sm font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50">
+              ⚡ Skip sign in (dev only)
+            </button>
+          )}
+
           {/* Footer links */}
           <div className="mt-4 flex items-center justify-between text-xs text-muted">
             {mode === "login" ? (

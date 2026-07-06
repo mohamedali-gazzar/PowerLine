@@ -149,6 +149,9 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ email, password }),
       }),
+    // DEV ONLY — the backend 404s this in production; the UI button is also stripped
+    // from the production build (import.meta.env.DEV).
+    devLogin: () => request<AuthResult>("/auth/dev-login", { method: "POST" }),
     forgot: (email: string) =>
       request<{ ok: true; devCode?: string }>("/auth/forgot", {
         method: "POST",

@@ -149,6 +149,29 @@ export async function login(req: Request, res: Response) {
   }
 }
 
+// POST /api/auth/dev-login  — DEV ONLY. Skips the login wall by minting a token for the
+// first (oldest) account, creating a throwaway dev user if the DB is empty. Returns 404 in
+// production (NODE_ENV=production → DEV=false), so it can never bypass auth on the deploy.
+export async function devLogin(_req: Request, res: Response) {
+  if (!DEV) return res.status(404).json({ error: "Not found." });
+  try {
+    let user = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: "dev@powerline.local",
+          name: "Dev User",
+          passwordHash: await hashPassword("dev-skip-login"),
+          emailVerified: true,
+        },
+      });
+    }
+    res.json({ token: signToken({ sub: user.id, email: user.email }), user: pub(user) });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
 // POST /api/auth/forgot  { email } → emails a reset code (always 200, no enumeration)
 export async function forgot(req: Request, res: Response) {
   try {
