@@ -2147,16 +2147,16 @@ function CombosCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void
   );
 }
 
-function BreakerSelect({ label, value, onPick, pool }: {
-  label: string; value: DbComponent | null; onPick: (c: DbComponent) => void; pool: DbComponent[];
+function BreakerSelect({ label, value, onPick, pool, placeholder = "Search breaker…" }: {
+  label: string; value: DbComponent | null; onPick: (c: DbComponent) => void; pool: DbComponent[]; placeholder?: string;
 }) {
   return (
     <div>
       <L>{label}</L>
       <SearchSelect
         value={value ? `${value.ref}|${value.n}` : ""}
-        placeholder="Search breaker…"
-        options={pool.map((c) => ({ key: `${c.ref}|${c.n}`, label: c.n, hint: `${c.f} · ${c.r}` }))}
+        placeholder={placeholder}
+        options={pool.map((c) => ({ key: `${c.ref}|${c.n}`, label: c.n, hint: [c.f || c.t, c.r].filter(Boolean).join(" · ") }))}
         onPick={(k) => {
           const c = pool.find((x) => `${x.ref}|${x.n}` === k);
           if (c) onPick(c);
@@ -2220,14 +2220,14 @@ function AtsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
 }
 
 function PhotocellBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
-  const pool = useMemo(() => breakerPool(), []);
+  const pool = useMemo(() => COMPONENTS, []); // full database — not only breakers
   const [cb, setCb] = useState<DbComponent | null>(null);
   const [manual, setManual] = useState(0); // manual rating override (A)
   const rating = manual > 0 ? manual : cb ? breakerAmps(cb) : 0;
   return (
     <div className="rounded-lg border border-line p-3">
       <div className="grid gap-2 sm:grid-cols-2">
-        <BreakerSelect label="Circuit breaker" value={cb} onPick={(c) => { setCb(c); setManual(0); }} pool={pool} />
+        <BreakerSelect label="Circuit breaker" value={cb} onPick={(c) => { setCb(c); setManual(0); }} pool={pool} placeholder="Search all components…" />
         <div>
           <L>Rating (A) <span className="text-[11px] font-normal text-muted">— auto from C.B, or type manually</span></L>
           <input className="input" inputMode="numeric" value={rating || ""} placeholder="e.g. 160"
