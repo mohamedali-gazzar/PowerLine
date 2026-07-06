@@ -163,9 +163,13 @@ export function buildMcc(kind: string, kw: string, type: number, withControl: bo
   // The multiplier lives in the combination qty (qty ÷ baseQty), NOT in the label —
   // so the header ×N, the "Combination qty" field, and item qtys stay in sync.
   const label = `${kind} ${kw} (Type ${type})`;
+  // One side-mounted auxiliary contact block (CAL…) is fitted per contactor, so its
+  // quantity follows the contactor count — e.g. Star-Delta has 3 contactors → 3 blocks.
+  const contactors = row.parts.filter((p) => /^contactor#/i.test(p.trim())).length;
+  const perUnit = (p: string) => (/^CAL\d/i.test(p.trim()) && contactors > 0 ? contactors : 1);
   const out: ComboLine[] = row.parts.map((p) => ({
-    qty: n,
-    baseQty: 1, // per-unit = 1 → combination qty = n
+    qty: n * perUnit(p),
+    baseQty: perUnit(p), // per-unit qty → combination qty = n
     desc: p,
     comp: findByName(mccAlias(p)),
     groupLabel: label,
