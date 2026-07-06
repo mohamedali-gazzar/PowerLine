@@ -1790,7 +1790,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                 onBlur={() => { renameSection(sec, editVal); setEditingSec(null); }} />
             );
           }
-          const active = p.activeSection === sec; // stays highlighted while a combination builds into it
+          const active = p.activeSection === sec && comboKind !== "pfc"; // + P.F.C makes its own section → deselect sections while it's open
           return (
             <Fragment key={sec}>
             <span
@@ -1801,7 +1801,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                 overSec === sec ? "border-brand bg-brand-light text-brand ring-2 ring-brand/50"
                 : active ? "border-brand bg-brand-light text-brand" : "border-line bg-white text-muted hover:border-brand/40"
               }`}>
-              <button type="button" data-section={sec} onClick={() => u({ activeSection: sec })}
+              <button type="button" data-section={sec} onClick={() => { u({ activeSection: sec }); if (comboKind === "pfc") setComboKind(null); }}
                 onKeyDown={(e) => {
                   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
                   e.preventDefault();
