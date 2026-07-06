@@ -60,6 +60,12 @@ function normalize(state: LvState): LvState {
     p.busbarPoles ??= 3;
     p.sellFactor ??= 0;
     if (Array.isArray(p.sections)) p.sections = meteringBeforeOutgoings(p.sections);
+    // "Other" is no longer a default section — drop it from existing panels when empty.
+    if (Array.isArray(p.sections) && p.sections.includes("Other") &&
+        !p.components?.some((c) => c.section === "Other")) {
+      p.sections = p.sections.filter((s) => s !== "Other");
+      if (p.activeSection === "Other") p.activeSection = p.sections[0] ?? "Main Incoming";
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     p.panelItems = ((p as any).panelItems ?? []).map((it: any, i: number) => ({
       ...it,

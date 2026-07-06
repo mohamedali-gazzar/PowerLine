@@ -234,7 +234,7 @@ export const DEFAULT_GENERAL_NOTES = [
   "Design is based on straight enclosures unless mentioned beforehand",
 ];
 
-export const DEFAULT_SECTIONS = ["Main Incoming", "Metering", "Outgoings", "Other"];
+export const DEFAULT_SECTIONS = ["Main Incoming", "Metering", "Outgoings"];
 /** Migration: move Metering to just before Outgoings on existing panels (the
  *  default order changed). No-op if either is missing or already in order. */
 export function meteringBeforeOutgoings(sections: string[]): string[] {
