@@ -1497,10 +1497,7 @@ function PanelEditor({ s, p, upPanel }: {
         )}
       </div>
 
-      {/* Circuit combinations */}
-      <CombosCard p={p} u={u} kind={comboKind} setKind={setComboKind} />
-
-      {/* Components */}
+      {/* Components (section pills + circuit-combination sub-row live inside this card) */}
       <ComponentsCard s={s} p={p} u={u} comboKind={comboKind} setComboKind={setComboKind} />
 
       {/* Panel type — placed after Components (enclosure sizings as component-like items) */}
@@ -1538,32 +1535,55 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
       return { ...c, baseQty: base, qty: base * qn };
     }) });
   };
+  // Move a whole group (its items) to another section, kept contiguous at the end there.
+  const moveGroupToSection = (group: string, fromSec: string, toSec: string) => {
+    if (toSec === fromSec || !p.sections.includes(toSec)) return;
+    const inGroup = (c: PanelComponent) => c.section === fromSec && (effGroup.get(c.id) || "") === group;
+    const moved = p.components.filter(inGroup).map((c) => ({ ...c, section: toSec }));
+    if (!moved.length) return;
+    const rest = p.components.filter((c) => !inGroup(c));
+    let lastIdx = -1;
+    rest.forEach((c, i) => { if (c.section === toSec) lastIdx = i; });
+    u({ components: [...rest.slice(0, lastIdx + 1), ...moved, ...rest.slice(lastIdx + 1)], activeSection: toSec });
+  };
+  // Sort groups within a section: swap this group's block with the adjacent one.
+  const reorderGroup = (group: string, sec: string, dir: -1 | 1) => {
+    const blocks: { g: string; items: PanelComponent[] }[] = [];
+    p.components.filter((c) => c.section === sec).forEach((c) => {
+      const g = effGroup.get(c.id) || "";
+      const last = blocks[blocks.length - 1];
+      if (last && last.g === g) last.items.push(c);
+      else blocks.push({ g, items: [c] });
+    });
+    const gi = blocks.findIndex((b) => b.g === group);
+    const ti = gi + dir;
+    if (gi < 0 || ti < 0 || ti >= blocks.length) return;
+    [blocks[gi], blocks[ti]] = [blocks[ti], blocks[gi]];
+    const reordered = blocks.flatMap((b) => b.items);
+    let k = 0;
+    u({ components: p.components.map((c) => (c.section === sec ? reordered[k++] : c)) });
+  };
 
   const [newSection, setNewSection] = useState("");
-  const [pfcPreview, setPfcPreview] = useState<ComboLine[]>([]); // inline P.F.C combination preview
-  // Commit the P.F.C combination as its own flat section, named after the header
-  // description (the kVAR formula), placed after Outgoings.
-  const commitPfc = () => {
-    if (!pfcPreview.length) return;
-    // e.g. "P.F.C. [(2 × 25) KVAR Fixed] = 50 KVAR" — the header, not just "P.F.C".
-    const base = (pfcPreview.find((l) => l.groupLabel)?.groupLabel || "P.F.C").trim();
-    const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`^${esc}(?:\\s*-\\s*(\\d+))?$`);
-    let exists = false, max = 0;
-    for (const sname of p.sections) { const m = sname.match(re); if (m) { exists = true; if (m[1]) max = Math.max(max, parseInt(m[1], 10)); } }
-    const section = exists ? `${base}-${max + 1}` : base;
-    const oi = p.sections.indexOf("Outgoings");
-    const sections = oi >= 0 ? [...p.sections.slice(0, oi + 1), section, ...p.sections.slice(oi + 1)] : [...p.sections, section];
-    const items = pfcPreview.map((l) => {
-      const c = l.comp ? toPanelComponent(l.comp, section, l.qty) : freeComponent(l.desc, section, l.qty);
+  const [preview, setPreview] = useState<ComboLine[]>([]); // active circuit-combination preview
+  const [tag, setTag] = useState("");                       // combination name (from the builder)
+  // A circuit combination is a GROUP inside the active section — never its own top-level
+  // section. Each line keeps its sub-group label (ATS → Source 1/2 / Interlock, MCC → its
+  // starter header, P.F.C → the kVAR formula); items carry baseQty (per-unit) so the group's
+  // ×N combination-qty scales every row (item qty = baseQty × ×N).
+  const commitCombo = () => {
+    if (!preview.length) return;
+    const sec = p.activeSection;
+    const items = preview.map((l) => {
+      const grp = l.groupLabel || tag || "Combination";
+      const c = l.comp ? toPanelComponent(l.comp, sec, l.qty, grp) : freeComponent(l.desc, sec, l.qty, grp);
       return { ...c, baseQty: l.baseQty ?? l.qty };
     });
-    u({ sections, components: [...p.components, ...items], activeSection: section });
-    setPfcPreview([]); setComboKind(null);
+    u({ components: [...p.components, ...items] });
+    setPreview([]); setTag(""); setComboKind(null);
   };
-  // Once a P.F.C section exists (named after its header, e.g. "P.F.C. […] = N KVAR"),
-  // drop the "+ P.F.C" quick button — just keep the section.
-  const hasPfcSection = p.sections.some((sname) => sname.startsWith("P.F.C"));
+  // Row-2 circuit combinations (smaller sub-row under the section pills).
+  const COMBOS = [["lamps", "Indication Lamps"], ["ats", "ATS"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"], ["pfc", "P.F.C"]] as const;
   // Word-style row inserter: drop an empty row (spacer) after a given component, or at
   // the top of the section when afterId is null.
   const insertSpacerAfter = (sec: string, afterId: string | null) => {
@@ -1752,17 +1772,17 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                 onBlur={() => { renameSection(sec, editVal); setEditingSec(null); }} />
             );
           }
-          const active = p.activeSection === sec && comboKind !== "pfc"; // P.F.C open → deselect sections
+          const active = p.activeSection === sec; // stays highlighted while a combination builds into it
           return (
             <span key={sec}
               onDragOver={(e) => { if (dragId) { e.preventDefault(); if (overSec !== sec) setOverSec(sec); } }}
               onDragLeave={() => setOverSec((x) => (x === sec ? null : x))}
               onDrop={(e) => { e.preventDefault(); dropOnSection(sec); }}
-              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                overSec === sec ? "border-brand bg-brand-light text-brand-dark ring-2 ring-brand/50"
-                : active ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"
+              className={`inline-flex items-center gap-1 rounded-full border px-5 py-2.5 text-sm font-semibold transition ${
+                overSec === sec ? "border-brand bg-brand-light text-brand ring-2 ring-brand/50"
+                : active ? "border-brand bg-brand-light text-brand" : "border-line bg-white text-muted hover:border-brand/40"
               }`}>
-              <button type="button" data-section={sec} onClick={() => { u({ activeSection: sec }); setComboKind(null); }}
+              <button type="button" data-section={sec} onClick={() => u({ activeSection: sec })}
                 onKeyDown={(e) => {
                   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
                   e.preventDefault();
@@ -1786,16 +1806,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
             </span>
           );
         })}
-        {(!hasPfcSection || comboKind === "pfc") && (
-          <button type="button" title="Add a P.F.C combination — builds its own P.F.C section"
-            onClick={() => setComboKind(comboKind === "pfc" ? null : "pfc")}
-            className={`h-8 rounded-full border px-3 text-xs font-bold transition ${
-              comboKind === "pfc" ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40 hover:text-brand-dark"
-            }`}>
-            + P.F.C
-          </button>
-        )}
-        <input className="input h-8 w-36 text-xs" placeholder="New section…" value={newSection}
+        <input className="input h-10 w-40 rounded-full text-sm" placeholder="New section…" value={newSection}
           onChange={(e) => setNewSection(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && newSection.trim()) {
@@ -1805,9 +1816,23 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
           }} />
       </div>
 
+      {/* Row 2 — circuit combinations (smaller, secondary). Each is inserted as a GROUP inside the active section. */}
+      <div className="mb-3 flex flex-wrap items-center gap-1">
+        <span className="mr-1 text-[10px] font-bold uppercase tracking-wide text-muted">Combinations</span>
+        {COMBOS.map(([k, label]) => (
+          <button key={k} type="button" title={`Add a ${label} combination as a group inside “${p.activeSection}”`}
+            onClick={() => { setComboKind(comboKind === k ? null : k); setPreview([]); setTag(""); }}
+            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+              comboKind === k ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-surface text-muted hover:border-brand/40 hover:text-brand-dark"
+            }`}>
+            + {label}
+          </button>
+        ))}
+      </div>
+
       {/* search */}
       <div ref={searchWrapRef} className="relative">
-        <input ref={searchRef} className="input" placeholder={comboKind === "pfc" ? "Building a P.F.C section below — pick a section to add components" : `Search components (name / reference / type / rating) → adds to “${p.activeSection}”`}
+        <input ref={searchRef} className="input" placeholder={`Search components (name / reference / type / rating) → adds to “${p.activeSection}”`}
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
             if (pending || !q) return;
@@ -1855,27 +1880,39 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
       </div>
       </div>{/* /sticky header */}
 
-      {/* Inline P.F.C combination — builds its own flat "P.F.C" section */}
-      {comboKind === "pfc" && (
+      {/* Inline circuit-combination builder — inserted as a GROUP inside the active section */}
+      {comboKind && (
         <div className="mb-3 rounded-lg border border-brand/40 bg-brand-tint/40 p-3">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-bold text-brand-dark">P.F.C combination <span className="text-[11px] font-normal text-muted">— added as its own “P.F.C” section</span></h3>
-            <button type="button" onClick={() => { setComboKind(null); setPfcPreview([]); }}
+            <h3 className="text-sm font-bold text-brand-dark">
+              {COMBOS.find(([k]) => k === comboKind)?.[1] ?? "Combination"} combination
+              <span className="text-[11px] font-normal text-muted"> — added as a group inside “{p.activeSection}”</span>
+            </h3>
+            <button type="button" onClick={() => { setComboKind(null); setPreview([]); setTag(""); }}
               className="text-xs font-semibold text-muted hover:text-red-600">✕ close</button>
           </div>
-          <PfcBuilder onPreview={(l) => setPfcPreview(l)} />
-          {pfcPreview.length > 0 && (
+          {comboKind === "ats" && <AtsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
+          {comboKind === "photocell" && <PhotocellBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
+          {comboKind === "mcc" && <MccBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
+          {comboKind === "wd" && <WdBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
+          {comboKind === "lamps" && <LampsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
+          {comboKind === "pfc" && <PfcBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
+          {preview.length > 0 && (
             <div className="mt-3 rounded-lg border border-line bg-white p-3">
-              <div className="mb-1.5 text-xs font-bold text-ink">Preview — {pfcPreview.length} items</div>
-              <div className="max-h-44 overflow-auto">
-                {pfcPreview.map((l, i) => (
+              <div className="mb-1.5 text-xs font-bold text-ink">Preview — {preview.length} items{tag ? ` (${tag})` : ""}</div>
+              <div className="max-h-52 overflow-auto">
+                {preview.map((l, i) => (
                   <div key={i} className="flex justify-between gap-3 border-t border-line/60 py-0.5 text-xs first:border-0">
-                    <span>{l.desc}{!l.comp && <span className="ml-1 text-amber-600" title="Not matched in component DB — added without price">⚠ no price</span>}</span>
+                    <span>
+                      {l.groupLabel && <span className="mr-1 rounded bg-surface px-1 text-[9px] font-bold text-muted">{l.groupLabel}</span>}
+                      {l.desc}
+                      {!l.comp && <span className="ml-1 text-amber-600" title="Not matched in component DB — added without price">⚠ no price</span>}
+                    </span>
                     <span className="shrink-0 font-semibold">×{l.qty}</span>
                   </div>
                 ))}
               </div>
-              <button type="button" className="btn-primary mt-2" onClick={commitPfc}>Add as “P.F.C” section ({pfcPreview.length} items)</button>
+              <button type="button" className="btn-primary mt-2" onClick={commitCombo}>Add to “{p.activeSection}” ({preview.length} items)</button>
             </div>
           )}
         </div>
@@ -1884,7 +1921,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
       {/* table grouped by section */}
       {p.components.length === 0 ? (
         <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-muted">
-          No components — search above or use the combination builders below.
+          No components — search above, or add a circuit combination from the row above.
         </p>
       ) : (
         p.sections.filter((sec) => p.components.some((c) => c.section === sec)).map((sec, si, arr) => (
@@ -2018,19 +2055,18 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                           // Single source of truth for the multiplier: qty ÷ baseQty.
                           // The header ×N badge and the "Combination qty" field both read it.
                           const cq = comboQtyOf(secComps, g);
-                          const isMcc = /\(Type \d+\)/.test(g); // Combination qty is MCC-only
                           rows.push(
                             <tr key={`grp-${sec}-${g}`} className="border-t border-brand/20 bg-brand-tint/40">
                               <td className="py-1" />
                               <td colSpan={8} className="py-1 pr-2">
-                                <div className="flex items-center gap-4">
-                                  <span className="flex items-center gap-2">
-                                    <span className="text-[11px] font-bold uppercase tracking-wide text-brand-dark">{g}</span>
-                                    {isMcc && cq > 1 && (
-                                      <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[11px] font-bold text-brand-dark">×{cq}</span>
-                                    )}
-                                  </span>
-                                  {isMcc && (
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-4">
+                                    <span className="flex items-center gap-2">
+                                      <span className="text-[11px] font-bold uppercase tracking-wide text-brand-dark">{g}</span>
+                                      {cq > 1 && (
+                                        <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[11px] font-bold text-brand-dark">×{cq}</span>
+                                      )}
+                                    </span>
                                     <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
                                       Combination qty
                                       <input type="number" min={1} value={cq}
@@ -2038,7 +2074,21 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                                         className="h-6 w-14 rounded border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
                                         title="Quantity of the whole combination — scales all its items" />
                                     </span>
-                                  )}
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-1">
+                                    <button type="button" title="Move group up (sort within section)" onClick={() => reorderGroup(g, sec, -1)}
+                                      className="rounded px-1 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">↑</button>
+                                    <button type="button" title="Move group down (sort within section)" onClick={() => reorderGroup(g, sec, 1)}
+                                      className="rounded px-1 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">↓</button>
+                                    {p.sections.length > 1 && (
+                                      <select value="" onChange={(e) => { if (e.target.value) moveGroupToSection(g, sec, e.target.value); }}
+                                        title="Move this group to another section"
+                                        className="h-6 cursor-pointer rounded border border-line bg-white px-1 text-[11px] text-muted focus:border-brand focus:outline-none">
+                                        <option value="">Move to…</option>
+                                        {p.sections.filter((x) => x !== sec).map((x) => <option key={x} value={x}>{x}</option>)}
+                                      </select>
+                                    )}
+                                  </div>
                                 </div>
                               </td>
                             </tr>
@@ -2111,137 +2161,6 @@ function ComponentEditSelect({ current, onPick, onClose }: {
 
 // ── Combination builders (RPT-03) ────────────────────────────────────────────
 type ComboKind = "ats" | "photocell" | "mcc" | "pfc" | "wd" | "lamps";
-function CombosCard({ p, u, kind, setKind }: {
-  p: LvPanel; u: (patch: Partial<LvPanel>) => void;
-  kind: ComboKind | null; setKind: (k: ComboKind | null) => void;
-}) {
-  const [preview, setPreview] = useState<ComboLine[]>([]);
-  const [tag, setTag] = useState("");
-  const [dest, setDest] = useState("");        // target section; "" → active, "__new__" → new section
-  const [newSecName, setNewSecName] = useState(""); // name for a new section (defaults to the combo name)
-  const NEW = "__new__";
-  // kind is shared with ComponentsCard (P.F.C renders there) — drop any stale preview
-  // when it switches to a builder this card doesn't own.
-  useEffect(() => { setPreview([]); }, [kind]);
-
-  const commit = () => {
-    if (!preview.length) return;
-    // The combination goes into an existing section, or its own new section. Sub-groups
-    // stay inside (ATS → Source 1/2 / Interlock / Control CT; MCC keeps its header).
-    // P.F.C is different: it defaults to its own "P.F.C" section with FLAT items (no group).
-    const isPfc = kind === "pfc";
-    const target = dest || (isPfc ? NEW : p.activeSection);
-    let section = target;
-    let sections = p.sections;
-    if (target === NEW) {
-      const base = (newSecName.trim() || (isPfc ? "P.F.C" : tag) || "Combination").trim();
-      const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const re = new RegExp(`^${esc}(?:\\s*-\\s*(\\d+))?$`); // unique "<name>" or "<name>-N"
-      let exists = false, max = 0;
-      for (const sname of p.sections) { const m = sname.match(re); if (m) { exists = true; if (m[1]) max = Math.max(max, parseInt(m[1], 10)); } }
-      section = exists ? `${base}-${max + 1}` : base;
-      // Place a new combination section right after "Outgoings" (beside it) — where
-      // P.F.C / MCC / etc. belong — instead of at the very end of the list.
-      const oi = p.sections.indexOf("Outgoings");
-      sections = oi >= 0
-        ? [...p.sections.slice(0, oi + 1), section, ...p.sections.slice(oi + 1)]
-        : [...p.sections, section];
-    } else if (!p.sections.includes(section)) {
-      section = p.activeSection; // stale selection → fall back to the active section
-    }
-    const items = preview.map((l) => {
-      const grp = isPfc ? undefined : (l.groupLabel || tag); // P.F.C: flat items, no group header
-      const c = l.comp
-        ? toPanelComponent(l.comp, section, l.qty, grp)
-        : freeComponent(l.desc, section, l.qty, grp);
-      return { ...c, baseQty: l.baseQty ?? l.qty }; // per-unit base — combo qty (qty ÷ base) scales it later
-    });
-    u({ sections, components: [...p.components, ...items], activeSection: section });
-    setPreview([]); setKind(null); setDest(""); setNewSecName("");
-  };
-
-  return (
-    <div className="card p-5">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="sec-head mb-0 pb-0 after:hidden">Circuit combinations</h2>
-        {p.components.some((c) => c.group) && (
-          <button className="text-xs font-semibold text-red-600 hover:underline"
-            onClick={() => {
-              if (!confirm("Remove ALL generated combinations from this panel?")) return;
-              // A combination section = a non-fixed section whose rows are all generated.
-              const comboSecs = new Set(p.sections.filter((s) => {
-                if (FIXED_SECTIONS.includes(s)) return false;
-                const cs = p.components.filter((c) => c.section === s && !isSpacer(c));
-                return cs.length > 0 && cs.every((c) => c.group);
-              }));
-              const sections = p.sections.filter((s) => !comboSecs.has(s));
-              // Drop combo sections wholesale; also strip stray grouped rows from other sections.
-              const components = p.components.filter((c) => !comboSecs.has(c.section) && !c.group);
-              const activeSection = comboSecs.has(p.activeSection)
-                ? (sections.find((s) => FIXED_SECTIONS.includes(s)) ?? sections[0] ?? "")
-                : p.activeSection;
-              u({ sections, components, activeSection });
-            }}>
-            ✕ Clear all combinations
-          </button>
-        )}
-      </div>
-      <p className="mb-2 text-xs text-muted">
-        Predefined assemblies — generated from the database, then fully editable in the table above (defaults only).
-      </p>
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        {/* P.F.C is triggered from the Components sections bar ("+ P.F.C"), not here. */}
-        {([["lamps", "Indication Lamps"], ["ats", "ATS"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"]] as const).map(([k, label]) => (
-          <button key={k} onClick={() => { setKind(kind === k ? null : k); setPreview([]); }}
-            className={`rounded-full border px-3.5 py-1.5 text-xs font-bold ${
-              kind === k ? "border-brand bg-brand text-white" : "border-line bg-white text-muted hover:border-brand/40"
-            }`}>
-            + {label}
-          </button>
-        ))}
-      </div>
-
-      {kind === "ats" && <AtsBuilder onPreview={(lines, t) => { setPreview(lines); setTag(t); }} />}
-      {kind === "photocell" && <PhotocellBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
-      {kind === "mcc" && <MccBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
-      {kind === "wd" && <WdBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
-      {kind === "lamps" && <LampsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
-
-      {preview.length > 0 && (
-        <div className="mt-3 rounded-lg border border-line bg-surface p-3">
-          <div className="mb-1.5 text-xs font-bold text-ink">Preview — {preview.length} items ({tag})</div>
-          <div className="max-h-52 overflow-auto">
-            {preview.map((l, i) => (
-              <div key={i} className="flex justify-between gap-3 border-t border-line/60 py-0.5 text-xs first:border-0">
-                <span>
-                  <span className="mr-1 rounded bg-white px-1 text-[9px] font-bold text-muted">{l.groupLabel}</span>
-                  {l.desc}
-                  {!l.comp && <span className="ml-1 text-amber-600" title="Not matched in component DB — added without price">⚠ no price</span>}
-                </span>
-                <span className="shrink-0 font-semibold">×{l.qty}</span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <label className="text-xs font-semibold text-muted">Add to</label>
-            <select value={dest || p.activeSection} onChange={(e) => setDest(e.target.value)}
-              className="input h-8 w-auto cursor-pointer text-xs" title="Put this combination into an existing section, or its own new one">
-              {p.sections.map((s) => <option key={s} value={s}>{s}</option>)}
-              <option value={NEW}>＋ New section…</option>
-            </select>
-            {(dest || p.activeSection) === NEW && (
-              <input className="input h-8 w-44 text-xs" placeholder={tag || "New section name"}
-                value={newSecName} onChange={(e) => setNewSecName(e.target.value)}
-                title={`Blank uses the combination name (“${tag}”)`} />
-            )}
-            <button className="btn-primary h-8" onClick={commit}>Add {preview.length} items</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function BreakerSelect({ label, value, onPick, pool, placeholder = "Search breaker…" }: {
   label: string; value: DbComponent | null; onPick: (c: DbComponent) => void; pool: DbComponent[]; placeholder?: string;
 }) {
