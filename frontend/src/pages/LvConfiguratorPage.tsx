@@ -1825,7 +1825,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
 
       {/* search */}
       <div ref={searchWrapRef} className="relative">
-        <input ref={searchRef} className="input" placeholder={`Search components (name / reference / type / rating) → adds to “${p.activeSection}”${activeGroup ? ` › ${activeGroup}` : ""}`}
+        <input ref={searchRef} className="input" placeholder={comboKind === "pfc" ? "Building a P.F.C section below — pick a section to add components" : `Search components (name / reference / type / rating) → adds to “${p.activeSection}”${activeGroup ? ` › ${activeGroup}` : ""}`}
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
             if (pending || !q) return;
