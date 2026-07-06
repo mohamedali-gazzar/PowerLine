@@ -85,6 +85,12 @@ function normalize(state: LvState): LvState {
           : [...p.sections, ...missing];
       }
     }
+    // Indication Lamps are flat items — drop the "Indication Lamps" group so they show no
+    // header / combination-qty. Only this exact label is flattened; pilot lights inside other
+    // combinations (e.g. ATS's "Control Circuit & Acc.") keep their own group.
+    if (Array.isArray(p.components)) {
+      p.components.forEach((c) => { if (c.group === "Indication Lamps") c.group = undefined; });
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     p.panelItems = ((p as any).panelItems ?? []).map((it: any, i: number) => ({
       ...it,
