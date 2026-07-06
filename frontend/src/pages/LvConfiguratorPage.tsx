@@ -895,7 +895,11 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                           const gcq = gf && gbase > 0 ? Math.max(1, Math.round(gf.qty / gbase)) : 1;
                           rows.push(
                             <tr key={`g-${sec}-${g}`}>
-                              <td colSpan={5} className="border px-2 font-display text-[11.5px] font-bold leading-[19px]" style={{ background: "#fdf0e9", color: TRED, borderColor: "#f1d3c4" }}><span className="uppercase">{g}</span>, QTY ({gcq}) each contain:</td>
+                              <td colSpan={5} className="px-2 py-1.5 font-display text-[11.5px] font-bold leading-[19px]" style={{ color: TRED }}>
+                                <div className="flex items-center justify-center">
+                                  <span className="whitespace-nowrap rounded-full px-3.5 py-0.5" style={{ background: "#fdeee6", border: "1px solid #f1d3c4" }}><span className="uppercase">{g}</span>, QTY ({gcq}) each contain:</span>
+                                </div>
+                              </td>
                             </tr>
                           );
                         }
