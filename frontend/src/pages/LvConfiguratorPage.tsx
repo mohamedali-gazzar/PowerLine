@@ -1560,6 +1560,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     u({ sections, components: [...p.components, ...items], activeSection: section });
     setPfcPreview([]); setComboKind(null);
   };
+  // Once a P.F.C section exists, drop the "+ P.F.C" quick button — just keep the section.
+  const hasPfcSection = p.sections.some((sname) => sname === "P.F.C" || /^P\.F\.C-\d+$/.test(sname));
   const [editingSec, setEditingSec] = useState<string | null>(null); // custom-section rename
   const [editVal, setEditVal] = useState("");
   const [editComp, setEditComp] = useState<string | null>(null); // row being re-selected
@@ -1756,13 +1758,15 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
             </span>
           );
         })}
-        <button type="button" title="Add a P.F.C combination — builds its own P.F.C section"
-          onClick={() => setComboKind(comboKind === "pfc" ? null : "pfc")}
-          className={`h-8 rounded-full border border-brand px-3 text-xs font-bold ${
-            comboKind === "pfc" ? "bg-brand text-white" : "bg-brand-light text-brand-dark hover:bg-brand hover:text-white"
-          }`}>
-          + P.F.C
-        </button>
+        {(!hasPfcSection || comboKind === "pfc") && (
+          <button type="button" title="Add a P.F.C combination — builds its own P.F.C section"
+            onClick={() => setComboKind(comboKind === "pfc" ? null : "pfc")}
+            className={`h-8 rounded-full border border-brand px-3 text-xs font-bold ${
+              comboKind === "pfc" ? "bg-brand text-white" : "bg-brand-light text-brand-dark hover:bg-brand hover:text-white"
+            }`}>
+            + P.F.C
+          </button>
+        )}
         <input className="input h-8 w-36 text-xs" placeholder="New section…" value={newSection}
           onChange={(e) => setNewSection(e.target.value)}
           onKeyDown={(e) => {
