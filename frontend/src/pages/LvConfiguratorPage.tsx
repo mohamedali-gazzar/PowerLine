@@ -1728,7 +1728,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                 onBlur={() => { renameSection(sec, editVal); setEditingSec(null); }} />
             );
           }
-          const active = p.activeSection === sec;
+          const active = p.activeSection === sec && comboKind !== "pfc"; // P.F.C open → deselect sections
           return (
             <span key={sec}
               onDragOver={(e) => { if (dragId) { e.preventDefault(); if (overSec !== sec) setOverSec(sec); } }}
@@ -1738,7 +1738,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                 overSec === sec ? "border-brand bg-brand-light text-brand-dark ring-2 ring-brand/50"
                 : active ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"
               }`}>
-              <button type="button" data-section={sec} onClick={() => { u({ activeSection: sec }); setActiveGroup(""); }}
+              <button type="button" data-section={sec} onClick={() => { u({ activeSection: sec }); setActiveGroup(""); setComboKind(null); }}
                 onKeyDown={(e) => {
                   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
                   e.preventDefault();
