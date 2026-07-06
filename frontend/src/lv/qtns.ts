@@ -85,11 +85,16 @@ function normalize(state: LvState): LvState {
           : [...p.sections, ...missing];
       }
     }
-    // Indication Lamps are flat items — drop the "Indication Lamps" group so they show no
-    // header / combination-qty. Only this exact label is flattened; pilot lights inside other
-    // combinations (e.g. ATS's "Control Circuit & Acc.") keep their own group.
+    // Indication Lamps and Photocell are flat items — drop their groups so they show no
+    // header / combination-qty. These exact labels belong only to those two combinations
+    // (MCC uses "… (Type N)", ATS uses "Source (1)" etc.), so identical part names inside
+    // other combos keep their own group.
     if (Array.isArray(p.components)) {
-      p.components.forEach((c) => { if (c.group === "Indication Lamps") c.group = undefined; });
+      const FLAT_GROUPS = new Set([
+        "Indication Lamps",
+        "Circuit Breaker", "Contactor (auto)", "Aux contact (auto)", "Fixed components",
+      ]);
+      p.components.forEach((c) => { if (c.group && FLAT_GROUPS.has(c.group)) c.group = undefined; });
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     p.panelItems = ((p as any).panelItems ?? []).map((it: any, i: number) => ({

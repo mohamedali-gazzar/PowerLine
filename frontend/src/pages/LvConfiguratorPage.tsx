@@ -1591,8 +1591,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     } else {
       const sec = p.activeSection;
       const items = preview.map((l) => {
-        // Indication Lamps → flat items (no group header / combination qty).
-        if (comboKind === "lamps") {
+        // Indication Lamps + Photocell → flat items (no group header / combination qty).
+        if (comboKind === "lamps" || comboKind === "photocell") {
           return l.comp ? toPanelComponent(l.comp, sec, l.qty) : freeComponent(l.desc, sec, l.qty);
         }
         const grp = l.groupLabel || tag || "Combination";
