@@ -66,6 +66,22 @@ function normalize(state: LvState): LvState {
       p.sections = p.sections.filter((s) => s !== "Other");
       if (p.activeSection === "Other") p.activeSection = p.sections[0] ?? "Main Incoming";
     }
+    // Circuit combinations are groups inside a section now — never their own top-level
+    // section. Fold any leftover "P.F.C…" section (created under the old model, where P.F.C
+    // was its own flat section) into a GROUP inside a real section so old panels self-heal.
+    if (Array.isArray(p.sections) && Array.isArray(p.components)) {
+      const isPfcSec = (s: string) => !!s && /^p\.?f\.?c/i.test(s.replace(/\s+/g, ""));
+      if (p.sections.some(isPfcSec)) {
+        // Home = Outgoings (where P.F.C conventionally sat), else the first non-P.F.C section.
+        const home = (p.sections.includes("Outgoings") ? "Outgoings" : p.sections.find((s) => !isPfcSec(s))) ?? "Outgoings";
+        p.components.forEach((c) => {
+          if (isPfcSec(c.section)) { if (!c.group) c.group = c.section; c.section = home; }
+        });
+        p.sections = p.sections.filter((s) => !isPfcSec(s));
+        if (!p.sections.includes(home)) p.sections = [...p.sections, home];
+        if (isPfcSec(p.activeSection)) p.activeSection = home;
+      }
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     p.panelItems = ((p as any).panelItems ?? []).map((it: any, i: number) => ({
       ...it,
