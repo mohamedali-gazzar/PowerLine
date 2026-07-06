@@ -2593,12 +2593,25 @@ function SizingCard({ p, u, factors }: {
                 <tr key={r.desc} className="border-t border-line/70">
                   <td className="py-1 font-medium">{r.desc}{r.locked && <span className="ml-1.5 text-[10px] text-muted">(fixed)</span>}</td>
                   <td className="py-1">
-                    <input className={`input h-7 w-20 px-1.5 text-center text-xs ${r.locked ? "bg-surface" : ""}`}
-                      type="number" min={0} value={r.qty} disabled={r.locked}
-                      onChange={(e) => {
-                        const rows = cc.rows.map((x, j) => (j === i ? { ...x, qty: Math.max(0, parseInt(e.target.value) || 0) } : x));
+                    {(() => {
+                      const setQty = (v: number) => {
+                        const rows = cc.rows.map((x, j) => (j === i ? { ...x, qty: Math.max(0, Math.round(v) || 0) } : x));
                         u({ cellConfig: { ...cc, rows } });
-                      }} />
+                      };
+                      return (
+                        <div className="inline-flex items-stretch">
+                          <input className={`input h-7 w-12 rounded-r-none px-1.5 text-center text-xs ${r.locked ? "bg-surface" : ""}`}
+                            type="number" min={0} value={r.qty} disabled={r.locked}
+                            onChange={(e) => setQty(parseInt(e.target.value) || 0)} />
+                          <div className="flex flex-col">
+                            <button type="button" title="Increase" disabled={r.locked} onClick={() => setQty(r.qty + 1)}
+                              className="grid h-3.5 w-6 place-items-center rounded-tr-md border border-l-0 border-line text-[8px] leading-none text-muted hover:bg-brand-light hover:text-brand-dark disabled:opacity-30">▲</button>
+                            <button type="button" title="Decrease" disabled={r.locked || r.qty <= 0} onClick={() => setQty(r.qty - 1)}
+                              className="grid h-3.5 w-6 place-items-center rounded-br-md border border-l-0 border-t-0 border-line text-[8px] leading-none text-muted hover:bg-brand-light hover:text-brand-dark disabled:opacity-30">▼</button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}
