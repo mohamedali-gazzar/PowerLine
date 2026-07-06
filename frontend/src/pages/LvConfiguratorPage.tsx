@@ -1567,19 +1567,36 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   const [newSection, setNewSection] = useState("");
   const [preview, setPreview] = useState<ComboLine[]>([]); // active circuit-combination preview
   const [tag, setTag] = useState("");                       // combination name (from the builder)
-  // A circuit combination is a GROUP inside the active section — never its own top-level
-  // section. Each line keeps its sub-group label (ATS → Source 1/2 / Interlock, MCC → its
-  // starter header, P.F.C → the kVAR formula); items carry baseQty (per-unit) so the group's
-  // ×N combination-qty scales every row (item qty = baseQty × ×N).
+  // Most circuit combinations are a GROUP inside the active section — each line keeps its
+  // sub-group label (ATS → Source 1/2 / Interlock, MCC → its starter header); items carry
+  // baseQty (per-unit) so the group's ×N combination-qty scales every row (qty = baseQty × ×N).
+  // P.F.C is the exception: it's its OWN section beside Outgoings (a dedicated cap-bank cubicle),
+  // named after its kVAR header, with flat items.
   const commitCombo = () => {
     if (!preview.length) return;
-    const sec = p.activeSection;
-    const items = preview.map((l) => {
-      const grp = l.groupLabel || tag || "Combination";
-      const c = l.comp ? toPanelComponent(l.comp, sec, l.qty, grp) : freeComponent(l.desc, sec, l.qty, grp);
-      return { ...c, baseQty: l.baseQty ?? l.qty };
-    });
-    u({ components: [...p.components, ...items] });
+    if (comboKind === "pfc") {
+      const base = (preview.find((l) => l.groupLabel)?.groupLabel || tag || "P.F.C").trim();
+      const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(`^${esc}(?:\\s*-\\s*(\\d+))?$`); // unique "<name>" / "<name>-N"
+      let exists = false, max = 0;
+      for (const sname of p.sections) { const m = sname.match(re); if (m) { exists = true; if (m[1]) max = Math.max(max, parseInt(m[1], 10)); } }
+      const section = exists ? `${base}-${max + 1}` : base;
+      const oi = p.sections.indexOf("Outgoings"); // place the P.F.C section right after Outgoings
+      const sections = oi >= 0 ? [...p.sections.slice(0, oi + 1), section, ...p.sections.slice(oi + 1)] : [...p.sections, section];
+      const items = preview.map((l) => {
+        const c = l.comp ? toPanelComponent(l.comp, section, l.qty) : freeComponent(l.desc, section, l.qty);
+        return { ...c, baseQty: l.baseQty ?? l.qty };
+      });
+      u({ sections, components: [...p.components, ...items], activeSection: section });
+    } else {
+      const sec = p.activeSection;
+      const items = preview.map((l) => {
+        const grp = l.groupLabel || tag || "Combination";
+        const c = l.comp ? toPanelComponent(l.comp, sec, l.qty, grp) : freeComponent(l.desc, sec, l.qty, grp);
+        return { ...c, baseQty: l.baseQty ?? l.qty };
+      });
+      u({ components: [...p.components, ...items] });
+    }
     setPreview([]); setTag(""); setComboKind(null);
   };
   // Row-2 circuit combinations (smaller sub-row under the section pills).
@@ -1886,7 +1903,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-bold text-brand-dark">
               {COMBOS.find(([k]) => k === comboKind)?.[1] ?? "Combination"} combination
-              <span className="text-[11px] font-normal text-muted"> — added as a group inside “{p.activeSection}”</span>
+              <span className="text-[11px] font-normal text-muted">{comboKind === "pfc" ? " — added as its own P.F.C section beside Outgoings" : ` — added as a group inside “${p.activeSection}”`}</span>
             </h3>
             <button type="button" onClick={() => { setComboKind(null); setPreview([]); setTag(""); }}
               className="text-xs font-semibold text-muted hover:text-red-600">✕ close</button>
@@ -1912,7 +1929,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                   </div>
                 ))}
               </div>
-              <button type="button" className="btn-primary mt-2" onClick={commitCombo}>Add to “{p.activeSection}” ({preview.length} items)</button>
+              <button type="button" className="btn-primary mt-2" onClick={commitCombo}>{comboKind === "pfc" ? `Add as P.F.C section (${preview.length} items)` : `Add to “${p.activeSection}” (${preview.length} items)`}</button>
             </div>
           )}
         </div>

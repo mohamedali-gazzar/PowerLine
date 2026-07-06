@@ -66,20 +66,23 @@ function normalize(state: LvState): LvState {
       p.sections = p.sections.filter((s) => s !== "Other");
       if (p.activeSection === "Other") p.activeSection = p.sections[0] ?? "Main Incoming";
     }
-    // Circuit combinations are groups inside a section now — never their own top-level
-    // section. Fold any leftover "P.F.C…" section (created under the old model, where P.F.C
-    // was its own flat section) into a GROUP inside a real section so old panels self-heal.
+    // P.F.C is its own section beside Outgoings (a dedicated cap-bank cubicle) — not a group.
+    // Un-fold any P.F.C that was stored as a GROUP inside another section back into a flat
+    // standalone section, and make sure every P.F.C section a component references exists in
+    // the list, inserted right after Outgoings. Existing P.F.C sections keep their position.
     if (Array.isArray(p.sections) && Array.isArray(p.components)) {
-      const isPfcSec = (s: string) => !!s && /^p\.?f\.?c/i.test(s.replace(/\s+/g, ""));
-      if (p.sections.some(isPfcSec)) {
-        // Home = Outgoings (where P.F.C conventionally sat), else the first non-P.F.C section.
-        const home = (p.sections.includes("Outgoings") ? "Outgoings" : p.sections.find((s) => !isPfcSec(s))) ?? "Outgoings";
-        p.components.forEach((c) => {
-          if (isPfcSec(c.section)) { if (!c.group) c.group = c.section; c.section = home; }
-        });
-        p.sections = p.sections.filter((s) => !isPfcSec(s));
-        if (!p.sections.includes(home)) p.sections = [...p.sections, home];
-        if (isPfcSec(p.activeSection)) p.activeSection = home;
+      const isPfc = (s?: string): boolean => !!s && /^p\.?f\.?c/i.test(s.replace(/\s+/g, ""));
+      p.components.forEach((c) => {
+        if (isPfc(c.group)) { c.section = c.group as string; c.group = undefined; }
+      });
+      const missing = Array.from(new Set(
+        p.components.filter((c) => isPfc(c.section) && !p.sections.includes(c.section)).map((c) => c.section)
+      ));
+      if (missing.length) {
+        const oi = p.sections.indexOf("Outgoings");
+        p.sections = oi >= 0
+          ? [...p.sections.slice(0, oi + 1), ...missing, ...p.sections.slice(oi + 1)]
+          : [...p.sections, ...missing];
       }
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
