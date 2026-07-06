@@ -1380,14 +1380,9 @@ function PanelEditor({ s, p, upPanel }: {
   const toggleCost = () => setCostOpen((o) => { try { localStorage.setItem("lv-costcard-open", o ? "0" : "1"); } catch { /* ignore */ } return !o; });
   const [detailsOpen, setDetailsOpen] = useState(() => { try { return localStorage.getItem("lv-detailscard-open") !== "0"; } catch { return true; } });
   const toggleDetails = () => setDetailsOpen((o) => { try { localStorage.setItem("lv-detailscard-open", o ? "0" : "1"); } catch { /* ignore */ } return !o; });
-  // Combination builder is owned here so the Components sections bar can open one
-  // (e.g. the "+ P.F.C" quick button) and scroll to it.
+  // The open combination builder is owned here and shared between the cards — most
+  // combos render in CombosCard; P.F.C renders inline in ComponentsCard.
   const [comboKind, setComboKind] = useState<ComboKind | null>(null);
-  const combosRef = useRef<HTMLDivElement>(null);
-  const openCombo = (k: ComboKind) => {
-    setComboKind(k);
-    requestAnimationFrame(() => combosRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
-  };
 
   return (
     <div className="space-y-4">
@@ -1503,12 +1498,10 @@ function PanelEditor({ s, p, upPanel }: {
       </div>
 
       {/* Circuit combinations */}
-      <div ref={combosRef}>
-        <CombosCard p={p} u={u} kind={comboKind} setKind={setComboKind} />
-      </div>
+      <CombosCard p={p} u={u} kind={comboKind} setKind={setComboKind} />
 
       {/* Components */}
-      <ComponentsCard s={s} p={p} u={u} onAddPfc={() => openCombo("pfc")} />
+      <ComponentsCard s={s} p={p} u={u} comboKind={comboKind} setComboKind={setComboKind} />
 
       {/* Panel type — placed after Components (enclosure sizings as component-like items) */}
       <SizingCard p={p} u={u} factors={s.factors} />
@@ -1525,7 +1518,7 @@ function PanelEditor({ s, p, upPanel }: {
 }
 
 // ── Components card ──────────────────────────────────────────────────────────
-function ComponentsCard({ s, p, u, onAddPfc }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void; onAddPfc?: () => void }) {
+function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void; comboKind: ComboKind | null; setComboKind: (k: ComboKind | null) => void }) {
   const [q, setQ] = useState("");
   const hits = useMemo(() => searchComponents(q, 40), [q]);
   const effGroup = effectiveGroups(p.components); // combination grouping incl. inherited groups
@@ -1549,6 +1542,24 @@ function ComponentsCard({ s, p, u, onAddPfc }: { s: LvState; p: LvPanel; u: (pat
   const [newSection, setNewSection] = useState("");
   const [activeGroup, setActiveGroup] = useState(""); // manual group inside the active section — new items join it
   const [newGroup, setNewGroup] = useState("");
+  const [pfcPreview, setPfcPreview] = useState<ComboLine[]>([]); // inline P.F.C combination preview
+  // Commit the P.F.C combination as its own flat "P.F.C" section (after Outgoings).
+  const commitPfc = () => {
+    if (!pfcPreview.length) return;
+    const esc = "P.F.C".replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`^${esc}(?:\\s*-\\s*(\\d+))?$`);
+    let exists = false, max = 0;
+    for (const sname of p.sections) { const m = sname.match(re); if (m) { exists = true; if (m[1]) max = Math.max(max, parseInt(m[1], 10)); } }
+    const section = exists ? `P.F.C-${max + 1}` : "P.F.C";
+    const oi = p.sections.indexOf("Outgoings");
+    const sections = oi >= 0 ? [...p.sections.slice(0, oi + 1), section, ...p.sections.slice(oi + 1)] : [...p.sections, section];
+    const items = pfcPreview.map((l) => {
+      const c = l.comp ? toPanelComponent(l.comp, section, l.qty) : freeComponent(l.desc, section, l.qty);
+      return { ...c, baseQty: l.baseQty ?? l.qty };
+    });
+    u({ sections, components: [...p.components, ...items], activeSection: section });
+    setPfcPreview([]); setComboKind(null);
+  };
   const [editingSec, setEditingSec] = useState<string | null>(null); // custom-section rename
   const [editVal, setEditVal] = useState("");
   const [editComp, setEditComp] = useState<string | null>(null); // row being re-selected
@@ -1745,13 +1756,13 @@ function ComponentsCard({ s, p, u, onAddPfc }: { s: LvState; p: LvPanel; u: (pat
             </span>
           );
         })}
-        {onAddPfc && (
-          <button type="button" title="Add a P.F.C combination — opens the builder below"
-            onClick={onAddPfc}
-            className="h-8 rounded-full border border-brand bg-brand-light px-3 text-xs font-bold text-brand-dark hover:bg-brand hover:text-white">
-            + P.F.C
-          </button>
-        )}
+        <button type="button" title="Add a P.F.C combination — builds its own P.F.C section"
+          onClick={() => setComboKind(comboKind === "pfc" ? null : "pfc")}
+          className={`h-8 rounded-full border border-brand px-3 text-xs font-bold ${
+            comboKind === "pfc" ? "bg-brand text-white" : "bg-brand-light text-brand-dark hover:bg-brand hover:text-white"
+          }`}>
+          + P.F.C
+        </button>
         <input className="input h-8 w-36 text-xs" placeholder="New section…" value={newSection}
           onChange={(e) => setNewSection(e.target.value)}
           onKeyDown={(e) => {
@@ -1827,6 +1838,32 @@ function ComponentsCard({ s, p, u, onAddPfc }: { s: LvState; p: LvPanel; u: (pat
         )}
       </div>
       </div>{/* /sticky header */}
+
+      {/* Inline P.F.C combination — builds its own flat "P.F.C" section */}
+      {comboKind === "pfc" && (
+        <div className="mb-3 rounded-lg border border-brand/40 bg-brand-tint/40 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-brand-dark">P.F.C combination <span className="text-[11px] font-normal text-muted">— added as its own “P.F.C” section</span></h3>
+            <button type="button" onClick={() => { setComboKind(null); setPfcPreview([]); }}
+              className="text-xs font-semibold text-muted hover:text-red-600">✕ close</button>
+          </div>
+          <PfcBuilder onPreview={(l) => setPfcPreview(l)} />
+          {pfcPreview.length > 0 && (
+            <div className="mt-3 rounded-lg border border-line bg-white p-3">
+              <div className="mb-1.5 text-xs font-bold text-ink">Preview — {pfcPreview.length} items</div>
+              <div className="max-h-44 overflow-auto">
+                {pfcPreview.map((l, i) => (
+                  <div key={i} className="flex justify-between gap-3 border-t border-line/60 py-0.5 text-xs first:border-0">
+                    <span>{l.desc}{!l.comp && <span className="ml-1 text-amber-600" title="Not matched in component DB — added without price">⚠ no price</span>}</span>
+                    <span className="shrink-0 font-semibold">×{l.qty}</span>
+                  </div>
+                ))}
+              </div>
+              <button type="button" className="btn-primary mt-2" onClick={commitPfc}>Add as “P.F.C” section ({pfcPreview.length} items)</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* table grouped by section */}
       {p.components.length === 0 ? (
@@ -2066,6 +2103,9 @@ function CombosCard({ p, u, kind, setKind }: {
   const [dest, setDest] = useState("");        // target section; "" → active, "__new__" → new section
   const [newSecName, setNewSecName] = useState(""); // name for a new section (defaults to the combo name)
   const NEW = "__new__";
+  // kind is shared with ComponentsCard (P.F.C renders there) — drop any stale preview
+  // when it switches to a builder this card doesn't own.
+  useEffect(() => { setPreview([]); }, [kind]);
 
   const commit = () => {
     if (!preview.length) return;
@@ -2133,7 +2173,8 @@ function CombosCard({ p, u, kind, setKind }: {
         Predefined assemblies — generated from the database, then fully editable in the table above (defaults only).
       </p>
       <div className="mb-3 flex flex-wrap gap-1.5">
-        {([["lamps", "Indication Lamps"], ["ats", "ATS"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["pfc", "P.F.C"], ["wd", "WD kit"]] as const).map(([k, label]) => (
+        {/* P.F.C is triggered from the Components sections bar ("+ P.F.C"), not here. */}
+        {([["lamps", "Indication Lamps"], ["ats", "ATS"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"]] as const).map(([k, label]) => (
           <button key={k} onClick={() => { setKind(kind === k ? null : k); setPreview([]); }}
             className={`rounded-full border px-3.5 py-1.5 text-xs font-bold ${
               kind === k ? "border-brand bg-brand text-white" : "border-line bg-white text-muted hover:border-brand/40"
@@ -2146,7 +2187,6 @@ function CombosCard({ p, u, kind, setKind }: {
       {kind === "ats" && <AtsBuilder onPreview={(lines, t) => { setPreview(lines); setTag(t); }} />}
       {kind === "photocell" && <PhotocellBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
       {kind === "mcc" && <MccBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
-      {kind === "pfc" && <PfcBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
       {kind === "wd" && <WdBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
       {kind === "lamps" && <LampsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
 
