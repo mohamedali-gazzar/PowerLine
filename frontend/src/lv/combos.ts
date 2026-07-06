@@ -175,9 +175,16 @@ export function buildMcc(kind: string, kw: string, type: number, withControl: bo
     groupLabel: label,
   }));
   if (withControl) {
-    COMBOS.mcc.control.forEach((c) =>
-      out.push({ qty: c.qty * n, baseQty: c.qty, desc: c.desc, comp: findByName(mccAlias(c.desc)), groupLabel: label })
-    );
+    const isStarDelta = /star\s*delta/i.test(kind);
+    const SD_TIMER = "CT-ERC.12 Time relay, ON-delay 1c/o, 24-48VDC/24-240VAC";
+    COMBOS.mcc.control.forEach((c) => {
+      out.push({ qty: c.qty * n, baseQty: c.qty, desc: c.desc, comp: findByName(mccAlias(c.desc)), groupLabel: label });
+      // Star-Delta needs an ON-delay timer for the Y→Δ transition — placed right after
+      // the 3-position selector (between the selector and Relay 14).
+      if (isStarDelta && /selector 3 position/i.test(c.desc)) {
+        out.push({ qty: n, baseQty: 1, desc: SD_TIMER, comp: findByName(mccAlias(SD_TIMER)), groupLabel: label });
+      }
+    });
   }
   return out;
 }
