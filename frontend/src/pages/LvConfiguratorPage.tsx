@@ -1543,14 +1543,17 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   const [activeGroup, setActiveGroup] = useState(""); // manual group inside the active section — new items join it
   const [newGroup, setNewGroup] = useState("");
   const [pfcPreview, setPfcPreview] = useState<ComboLine[]>([]); // inline P.F.C combination preview
-  // Commit the P.F.C combination as its own flat "P.F.C" section (after Outgoings).
+  // Commit the P.F.C combination as its own flat section, named after the header
+  // description (the kVAR formula), placed after Outgoings.
   const commitPfc = () => {
     if (!pfcPreview.length) return;
-    const esc = "P.F.C".replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // e.g. "P.F.C. [(2 × 25) KVAR Fixed] = 50 KVAR" — the header, not just "P.F.C".
+    const base = (pfcPreview.find((l) => l.groupLabel)?.groupLabel || "P.F.C").trim();
+    const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`^${esc}(?:\\s*-\\s*(\\d+))?$`);
     let exists = false, max = 0;
     for (const sname of p.sections) { const m = sname.match(re); if (m) { exists = true; if (m[1]) max = Math.max(max, parseInt(m[1], 10)); } }
-    const section = exists ? `P.F.C-${max + 1}` : "P.F.C";
+    const section = exists ? `${base}-${max + 1}` : base;
     const oi = p.sections.indexOf("Outgoings");
     const sections = oi >= 0 ? [...p.sections.slice(0, oi + 1), section, ...p.sections.slice(oi + 1)] : [...p.sections, section];
     const items = pfcPreview.map((l) => {
@@ -1560,8 +1563,9 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     u({ sections, components: [...p.components, ...items], activeSection: section });
     setPfcPreview([]); setComboKind(null);
   };
-  // Once a P.F.C section exists, drop the "+ P.F.C" quick button — just keep the section.
-  const hasPfcSection = p.sections.some((sname) => sname === "P.F.C" || /^P\.F\.C-\d+$/.test(sname));
+  // Once a P.F.C section exists (named after its header, e.g. "P.F.C. […] = N KVAR"),
+  // drop the "+ P.F.C" quick button — just keep the section.
+  const hasPfcSection = p.sections.some((sname) => sname.startsWith("P.F.C"));
   const [editingSec, setEditingSec] = useState<string | null>(null); // custom-section rename
   const [editVal, setEditVal] = useState("");
   const [editComp, setEditComp] = useState<string | null>(null); // row being re-selected
