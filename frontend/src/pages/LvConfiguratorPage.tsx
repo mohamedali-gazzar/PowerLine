@@ -1566,6 +1566,32 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   // Once a P.F.C section exists (named after its header, e.g. "P.F.C. […] = N KVAR"),
   // drop the "+ P.F.C" quick button — just keep the section.
   const hasPfcSection = p.sections.some((sname) => sname.startsWith("P.F.C"));
+  // Word-style row inserter: drop an empty row (spacer) after a given component, or at
+  // the top of the section when afterId is null.
+  const insertSpacerAfter = (sec: string, afterId: string | null) => {
+    const next = [...p.components];
+    const spacer = spacerComponent(sec);
+    if (afterId == null) {
+      const firstIdx = next.findIndex((c) => c.section === sec);
+      next.splice(firstIdx < 0 ? next.length : firstIdx, 0, spacer);
+    } else {
+      const idx = next.findIndex((c) => c.id === afterId);
+      next.splice(idx < 0 ? next.length : idx + 1, 0, spacer);
+    }
+    u({ components: next });
+  };
+  // A zero-height row whose thin hit area reveals a centered "+" on hover (Word-style).
+  const insertZone = (sec: string, afterId: string | null, key: string) => (
+    <tr key={key} aria-hidden="true">
+      <td colSpan={9} className="relative h-0 border-0 p-0">
+        <div className="group/ins absolute inset-x-0 -top-1 z-10 flex h-2 items-center justify-start pl-1">
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-muted/30 opacity-0 transition-opacity duration-150 group-hover/ins:opacity-100" />
+          <button type="button" title="Insert an empty row here" onClick={() => insertSpacerAfter(sec, afterId)}
+            className="relative grid h-4 w-4 place-items-center rounded-full border border-line bg-white text-[12px] font-bold leading-none text-muted opacity-0 shadow-sm transition-opacity duration-150 hover:border-muted hover:bg-surface hover:text-ink group-hover/ins:opacity-100">+</button>
+        </div>
+      </td>
+    </tr>
+  );
   const [editingSec, setEditingSec] = useState<string | null>(null); // custom-section rename
   const [editVal, setEditVal] = useState("");
   const [editComp, setEditComp] = useState<string | null>(null); // row being re-selected
@@ -1947,12 +1973,11 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                           <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
                         </svg>
                       </td>
-                      <td colSpan={6} className="py-1 pr-2">
-                        <span className="text-[11px] italic text-muted/50">empty row (spacer)</span>
+                      <td colSpan={7} className="py-0.5">
+                        <div className="h-3 rounded bg-line/25" />
                       </td>
-                      <td className="py-1 pr-2" />
-                      <td className="whitespace-nowrap py-1 text-right">
-                        <button className="px-1 text-red-500" title="Remove" onClick={() => delComp(c.id)}>✕</button>
+                      <td className="whitespace-nowrap py-0.5 text-right">
+                        <button className="px-1 text-red-500" title="Remove empty row" onClick={() => delComp(c.id)}>✕</button>
                       </td>
                     </tr>
                   ) : (
@@ -2002,6 +2027,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                     );
                     const rows: JSX.Element[] = [];
                     let curGroup = " ";
+                    if (secComps.length) rows.push(insertZone(sec, null, `ins-top-${sec}`));
                     secComps.forEach((c) => {
                       const g = effGroup.get(c.id) || "";
                       if (g !== curGroup) {
@@ -2038,6 +2064,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                         }
                       }
                       rows.push(renderRow(c));
+                      rows.push(insertZone(sec, c.id, `ins-${c.id}`));
                     });
                     return rows;
                   })()}
