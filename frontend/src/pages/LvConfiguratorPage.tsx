@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getQtn, saveQtn, renameQtn, submitQtn, type QtnRecord } from "../lv/qtns";
@@ -1599,8 +1599,9 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     }
     setPreview([]); setTag(""); setComboKind(null);
   };
-  // Row-2 circuit combinations (smaller sub-row under the section pills).
-  const COMBOS = [["lamps", "Indication Lamps"], ["ats", "ATS"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"], ["pfc", "P.F.C"]] as const;
+  // Row-2 circuit combinations (smaller sub-row under the section pills). P.F.C is NOT here —
+  // it's triggered from the sections row (beside Outgoings) since it builds its own section.
+  const COMBOS = [["lamps", "Indication Lamps"], ["ats", "ATS"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"]] as const;
   // Word-style row inserter: drop an empty row (spacer) after a given component, or at
   // the top of the section when afterId is null.
   const insertSpacerAfter = (sec: string, afterId: string | null) => {
@@ -1791,7 +1792,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
           }
           const active = p.activeSection === sec; // stays highlighted while a combination builds into it
           return (
-            <span key={sec}
+            <Fragment key={sec}>
+            <span
               onDragOver={(e) => { if (dragId) { e.preventDefault(); if (overSec !== sec) setOverSec(sec); } }}
               onDragLeave={() => setOverSec((x) => (x === sec ? null : x))}
               onDrop={(e) => { e.preventDefault(); dropOnSection(sec); }}
@@ -1821,6 +1823,16 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                 </span>
               )}
             </span>
+            {sec === "Outgoings" && (
+              <button type="button" title="Add a P.F.C combination — its own section beside Outgoings"
+                onClick={() => setComboKind(comboKind === "pfc" ? null : "pfc")}
+                className={`inline-flex items-center gap-1 rounded-full border px-5 py-2.5 text-sm font-semibold transition ${
+                  comboKind === "pfc" ? "border-brand bg-brand-light text-brand" : "border-line bg-white text-muted hover:border-brand/40"
+                }`}>
+                + P.F.C
+              </button>
+            )}
+            </Fragment>
           );
         })}
         <input className="input h-10 w-40 rounded-full text-sm" placeholder="New section…" value={newSection}
@@ -1902,7 +1914,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
         <div className="mb-3 rounded-lg border border-brand/40 bg-brand-tint/40 p-3">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-bold text-brand-dark">
-              {COMBOS.find(([k]) => k === comboKind)?.[1] ?? "Combination"} combination
+              {comboKind === "pfc" ? "P.F.C" : (COMBOS.find(([k]) => k === comboKind)?.[1] ?? "Combination")} combination
               <span className="text-[11px] font-normal text-muted">{comboKind === "pfc" ? " — added as its own P.F.C section beside Outgoings" : ` — added as a group inside “${p.activeSection}”`}</span>
             </h3>
             <button type="button" onClick={() => { setComboKind(null); setPreview([]); setTag(""); }}
