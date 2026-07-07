@@ -793,7 +793,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
               {/* panel-data table — its own bordered frame */}
               <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#dbb4a2" }}>
               {/* item bar */}
-              <table className="w-full table-fixed border-collapse">
+              <table className="w-full table-fixed border-separate border-spacing-0">
                 <colgroup>
                   <col className="w-[18%]" />
                   <col className="w-[51%]" />
@@ -840,7 +840,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
               <div className="h-3" aria-hidden />{/* white space between the two tables */}
               {/* components table — its own bordered frame */}
               <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#dbb4a2" }}>
-              <table className="w-full table-fixed border-collapse">
+              <table className="w-full table-fixed border-separate border-spacing-0">
                 <colgroup>
                   <col className="w-[10%]" />
                   <col className="w-[63%]" />
@@ -885,7 +885,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                       if (multiSection || order.some((g) => g))
                         rows.push(
                           <tr key={`s-${sec}`}>
-                            <td colSpan={5} className="border px-2 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[20px]" style={{ background: "#f3f3f5", borderColor: "#f1d3c4" }}>{sec}</td>
+                            <td colSpan={5} className="border-y px-2 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[20px]" style={{ background: "#f3f3f5", borderColor: "#f1d3c4" }}>{sec}</td>
                           </tr>
                         );
                       for (const g of order) {
@@ -912,7 +912,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                               <td colSpan={5} className="border-y px-2 py-0.5 text-[12.5px]" style={{ borderColor: "#f3ddd4" }}>&nbsp;</td>
                             </tr>
                           ) : (
-                            <tr key={c.id} className="border-b align-top last:border-b-0" style={{ borderColor: "#f3ddd4" }}>
+                            <tr key={c.id} className="align-top [&>td]:border-b [&>td]:border-[#f3ddd4] [&:last-child>td]:border-b-0">
                               <td className="px-2 text-center text-[12.5px] font-semibold leading-[20px]">{c.baseQty ?? c.qty}</td>
                               <td className="px-2 text-[12.5px] leading-[20px]">
                                 {c.name}
