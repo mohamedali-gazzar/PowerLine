@@ -900,7 +900,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                           rows.push(
                             <tr key={`g-${sec}-${g}`}>
                               <td className="py-1" />
-                              <td colSpan={4} className="px-2 py-1 text-left font-display text-[13.5px] font-bold leading-[20px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>, QTY ({gcq}) each contain:</td>
+                              <td colSpan={4} className="px-2 py-1 text-left font-display text-[13.5px] font-normal leading-[20px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>, QTY ({gcq}) each contain:</td>
                             </tr>
                           );
                         }
