@@ -702,7 +702,7 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
 // Running page header on every non-cover offer page (logo + project name + QTN · customer).
 function PageHeader({ s, qtnRef }: { s: LvState; qtnRef: string }) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-4 border-b pb-2" style={{ borderColor: "#f1d3c4" }}>
+    <div className="mb-3 flex items-center justify-between gap-4 border-b pb-2" style={{ borderColor: "#E7E7EB" }}>
       <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-14" />
       <div className="text-right">
         {s.project.name && <div className="text-base font-bold leading-tight text-ink">{s.project.name}</div>}
@@ -746,10 +746,10 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
     };
   };
   const Lbl = ({ children }: { children: React.ReactNode }) => (
-    <td className="whitespace-nowrap border px-2 font-display text-[11px] font-bold leading-[18px]" style={{ color: TRED, background: "#fdf0e9", borderColor: "#f1d3c4" }}>{children}</td>
+    <td className="whitespace-nowrap border px-2 font-display text-[11px] font-bold leading-[18px]" style={{ color: TRED, background: "#fdf0e9", borderColor: "#E7E7EB" }}>{children}</td>
   );
   const Val = ({ children }: { children?: React.ReactNode }) => (
-    <td className="whitespace-nowrap border px-2 text-[12px] leading-[18px]" style={{ borderColor: "#f1d3c4" }}>{children}</td>
+    <td className="whitespace-nowrap border px-2 text-[12px] leading-[18px]" style={{ borderColor: "#E7E7EB" }}>{children}</td>
   );
   // Revision is folded into the QTN number: rev 00 → unchanged, rev 01 → "-1", rev 02 → "-2", …
   const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
@@ -791,7 +791,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
               style={pi < s.panels.length - 1 ? { breakAfter: "page" } : undefined}>
               <PageHeader s={s} qtnRef={qtnRef} />
               {/* panel-data table — its own bordered frame */}
-              <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#dbb4a2" }}>
+              <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
               {/* item bar */}
               <table className="w-full table-fixed border-separate border-spacing-0">
                 <colgroup>
@@ -839,7 +839,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
               </div>{/* /panel-data frame */}
               <div className="h-3" aria-hidden />{/* white space between the two tables */}
               {/* components table — its own bordered frame */}
-              <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#dbb4a2" }}>
+              <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
               <table className="w-full table-fixed border-separate border-spacing-0">
                 <colgroup>
                   <col className="w-[10%]" />
@@ -886,7 +886,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                       if (multiSection || order.some((g) => g))
                         rows.push(
                           <tr key={`s-${sec}`}>
-                            <td colSpan={5} className="border-y px-2 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[20px]" style={{ background: "#f3f3f5", borderColor: "#f1d3c4" }}>{sec}</td>
+                            <td colSpan={5} className="border-y px-2 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[20px]" style={{ background: "#f3f3f5", borderColor: "#E7E7EB" }}>{sec}</td>
                           </tr>
                         );
                       for (const g of order) {
@@ -910,7 +910,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                         for (const c of byG.get(g)!)
                           rows.push(isSpacer(c) ? (
                             <tr key={c.id}>
-                              <td colSpan={5} className="border-y px-2 py-0.5 text-[12.5px]" style={{ borderColor: "#f3ddd4" }}>&nbsp;</td>
+                              <td colSpan={5} className="border-y px-2 py-0.5 text-[12.5px]" style={{ borderColor: "#E7E7EB" }}>&nbsp;</td>
                             </tr>
                           ) : (
                             <tr key={c.id} className={`align-top ${dataRow++ % 2 === 1 ? "bg-[#f4f4f6]" : ""}`}>
@@ -931,7 +931,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                 </tbody>
               </table>
               </div>
-              <div className="mt-auto flex justify-center border-t px-1 pt-3 text-[9px] text-muted" style={{ borderColor: "#f1d3c4" }}>
+              <div className="mt-auto flex justify-center border-t px-1 pt-3 text-[9px] text-muted" style={{ borderColor: "#E7E7EB" }}>
                 <span>Item {pi + 1} of {s.panels.length}</span>
               </div>
             </div>
@@ -1040,7 +1040,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
           <table className="w-full">
             <thead>
               <tr><td className="pb-3">
-                <div className="flex items-center border-b pb-2" style={{ borderColor: "#f1d3c4" }}>
+                <div className="flex items-center border-b pb-2" style={{ borderColor: "#E7E7EB" }}>
                   <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-14" />
                 </div>
               </td></tr>
@@ -1065,7 +1065,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
           <table className="w-full">
             <thead>
               <tr><td className="pb-3">
-                <div className="flex items-center border-b pb-2" style={{ borderColor: "#f1d3c4" }}>
+                <div className="flex items-center border-b pb-2" style={{ borderColor: "#E7E7EB" }}>
                   <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-14" />
                 </div>
               </td></tr>
