@@ -907,7 +907,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                         for (const c of byG.get(g)!)
                           rows.push(isSpacer(c) ? (
                             <tr key={c.id}>
-                              <td colSpan={5} className="border-y px-2 py-0.5 text-[12.5px]" style={{ borderColor: "#E7E7EB" }}>&nbsp;</td>
+                              <td colSpan={5} className="border-y px-2 py-0.5 text-[12.5px] leading-[10.5px]" style={{ borderColor: "#E7E7EB" }}>&nbsp;</td>
                             </tr>
                           ) : (
                             <tr key={c.id} className={`align-top ${dataRow++ % 2 === 1 ? "bg-[#f4f4f6]" : ""}`}>
