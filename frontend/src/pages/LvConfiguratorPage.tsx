@@ -914,7 +914,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                           ) : (
                             <tr key={c.id} className="border-b align-top last:border-b-0" style={{ borderColor: "#f3ddd4" }}>
                               <td className="px-2 text-center text-[12.5px] font-semibold leading-[20px]">{c.baseQty ?? c.qty}</td>
-                              <td className="px-2 text-center text-[12.5px] leading-[20px]">
+                              <td className="px-2 text-[12.5px] leading-[20px]">
                                 {c.name}
                                 {c.comment && <div className="text-[11px] italic leading-tight text-muted">{c.comment}</div>}
                               </td>
