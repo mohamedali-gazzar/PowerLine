@@ -85,16 +85,17 @@ function normalize(state: LvState): LvState {
           : [...p.sections, ...missing];
       }
     }
-    // Indication Lamps and Photocell are flat items — drop their groups so they show no
-    // header / combination-qty. These exact labels belong only to those two combinations
-    // (MCC uses "… (Type N)", ATS uses "Source (1)" etc.), so identical part names inside
-    // other combos keep their own group.
+    // Indication Lamps, Photocell and WD kit are flat items — drop their groups so they show
+    // no header. Named labels below are Lamps/Photocell; WD kit uses dynamic
+    // "WD <frame> fixed/moving part" labels (regex). MCC keeps "… (Type N)", ATS keeps
+    // "Source (1)" etc.
     if (Array.isArray(p.components)) {
       const FLAT_GROUPS = new Set([
         "Indication Lamps",
         "Circuit Breaker", "Contactor (auto)", "Aux contact (auto)", "Fixed components",
       ]);
-      p.components.forEach((c) => { if (c.group && FLAT_GROUPS.has(c.group)) c.group = undefined; });
+      const isWdGroup = (s: string) => /^WD .+ (fixed|moving) part$/i.test(s);
+      p.components.forEach((c) => { if (c.group && (FLAT_GROUPS.has(c.group) || isWdGroup(c.group))) c.group = undefined; });
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     p.panelItems = ((p as any).panelItems ?? []).map((it: any, i: number) => ({

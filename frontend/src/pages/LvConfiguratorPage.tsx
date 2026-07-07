@@ -899,10 +899,11 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                           const gf = byG.get(g)!.find((c) => !isSpacer(c));
                           const gbase = gf ? (gf.baseQty ?? gf.qty) : 0;
                           const gcq = gf && gbase > 0 ? Math.max(1, Math.round(gf.qty / gbase)) : 1;
+                          const gIsMcc = /\(Type \d+\)/.test(g); // "QTY (N) each contain:" is MCC-only
                           rows.push(
                             <tr key={`g-${sec}-${g}`}>
                               <td className="py-1" />
-                              <td colSpan={4} className="px-2 py-1 text-left font-display text-[13.5px] font-normal leading-[20px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>, QTY ({gcq}) each contain:</td>
+                              <td colSpan={4} className="px-2 py-1 text-left font-display text-[13.5px] font-normal leading-[20px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>{gIsMcc ? `, QTY (${gcq}) each contain:` : ""}</td>
                             </tr>
                           );
                         }
@@ -1598,8 +1599,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     } else {
       const sec = p.activeSection;
       const items = preview.map((l) => {
-        // Indication Lamps + Photocell → flat items (no group header / combination qty).
-        if (comboKind === "lamps" || comboKind === "photocell") {
+        // Indication Lamps + Photocell + WD kit → flat items (no group header).
+        if (comboKind === "lamps" || comboKind === "photocell" || comboKind === "wd") {
           return l.comp ? toPanelComponent(l.comp, sec, l.qty) : freeComponent(l.desc, sec, l.qty);
         }
         const grp = l.groupLabel || tag || "Combination";
@@ -2107,6 +2108,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                           // Single source of truth for the multiplier: qty ÷ baseQty.
                           // The header ×N badge and the "Combination qty" field both read it.
                           const cq = comboQtyOf(secComps, g);
+                          const isMcc = /\(Type \d+\)/.test(g); // combination qty (×N) is MCC-only
                           rows.push(
                             <tr key={`grp-${sec}-${g}`} className="border-t border-brand/20 bg-brand-tint/40">
                               <td className="py-1" />
@@ -2114,15 +2116,17 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-4">
                                     <span className="text-[11px] font-bold text-brand-dark">
-                                      <span className="uppercase tracking-wide">{g}</span>, QTY ({cq}) each contain:
+                                      <span className="uppercase tracking-wide">{g}</span>{isMcc ? `, QTY (${cq}) each contain:` : ""}
                                     </span>
-                                    <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
-                                      Combination qty
-                                      <input type="number" min={1} value={cq}
-                                        onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
-                                        className="h-6 w-14 rounded border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
-                                        title="Quantity of the whole combination — scales all its items" />
-                                    </span>
+                                    {isMcc && (
+                                      <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
+                                        Combination qty
+                                        <input type="number" min={1} value={cq}
+                                          onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
+                                          className="h-6 w-14 rounded border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
+                                          title="Quantity of the whole combination — scales all its items" />
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="flex shrink-0 items-center gap-1">
                                     <button type="button" title="Move group up (sort within section)" onClick={() => reorderGroup(g, sec, -1)}
