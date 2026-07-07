@@ -746,10 +746,10 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
     };
   };
   const Lbl = ({ children }: { children: React.ReactNode }) => (
-    <td className="whitespace-nowrap border px-2 font-display text-[11px] font-bold leading-[20px]" style={{ color: TRED, background: "#fdf0e9", borderColor: "#f1d3c4" }}>{children}</td>
+    <td className="whitespace-nowrap border px-2 font-display text-[11px] font-bold leading-[18px]" style={{ color: TRED, background: "#fdf0e9", borderColor: "#f1d3c4" }}>{children}</td>
   );
   const Val = ({ children }: { children?: React.ReactNode }) => (
-    <td className="whitespace-nowrap border px-2 text-[12px] leading-[20px]" style={{ borderColor: "#f1d3c4" }}>{children}</td>
+    <td className="whitespace-nowrap border px-2 text-[12px] leading-[18px]" style={{ borderColor: "#f1d3c4" }}>{children}</td>
   );
   // Revision is folded into the QTN number: rev 00 → unchanged, rev 01 → "-1", rev 02 → "-2", …
   const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
@@ -790,22 +790,22 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
             <div key={p.id} className="a4-sheet flex flex-col px-8 pb-7 pt-14"
               style={pi < s.panels.length - 1 ? { breakAfter: "page" } : undefined}>
               <PageHeader s={s} qtnRef={qtnRef} />
-              {/* item frame — softly rounded corners */}
-              <div className="overflow-hidden rounded-lg">
+              {/* panel-data table — its own bordered frame */}
+              <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#dbb4a2" }}>
               {/* item bar */}
               <table className="w-full table-fixed border-collapse">
                 <colgroup>
                   <col className="w-[18%]" />
-                  <col className="w-[55%]" />
-                  <col className="w-[15%]" />
+                  <col className="w-[51%]" />
+                  <col className="w-[18%]" />
                   <col className="w-[13%]" />
                 </colgroup>
                 <tbody>
                   <tr style={{ background: TRED }} className="text-white font-display">
-                    <td className="border-r border-white/40 px-3 text-sm font-bold leading-[28px]">Item No. {pi + 1}</td>
-                    <td className="px-3 text-center text-sm font-bold leading-[28px]">{p.name}</td>
-                    <td className="border-l border-white/40 px-3 text-center text-sm font-bold leading-[28px]">Item Qty.</td>
-                    <td className="border-l border-white/40 px-3 text-center text-sm font-bold leading-[28px]">{p.qty}</td>
+                    <td className="border-r border-white/40 px-3 text-sm font-bold leading-[26px]">Item No. {pi + 1}</td>
+                    <td className="px-3 text-center text-sm font-bold leading-[26px]">{p.name}</td>
+                    <td className="border-l border-white/40 px-3 text-left text-sm font-bold leading-[26px]">Item Qty.</td>
+                    <td className="border-l border-white/40 px-3 text-center text-sm font-bold leading-[26px]">{p.qty}</td>
                   </tr>
                 </tbody>
               </table>
@@ -813,8 +813,8 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
               <table className="w-full table-fixed border-collapse">
                 <colgroup>
                   <col className="w-[18%]" />
-                  <col className="w-[55%]" />
-                  <col className="w-[15%]" />
+                  <col className="w-[51%]" />
+                  <col className="w-[18%]" />
                   <col className="w-[13%]" />
                 </colgroup>
                 <tbody>
@@ -836,22 +836,25 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                   ))}
                 </tbody>
               </table>
-              {/* components table */}
+              </div>{/* /panel-data frame */}
+              <div className="h-3" aria-hidden />{/* white space between the two tables */}
+              {/* components table — its own bordered frame */}
+              <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#dbb4a2" }}>
               <table className="w-full table-fixed border-collapse">
                 <colgroup>
-                  <col className="w-[18%]" />
-                  <col className="w-[48%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[63%]" />
                   <col className="w-[7%]" />
-                  <col className="w-[15%]" />
-                  <col className="w-[13%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[10%]" />
                 </colgroup>
                 <thead>
                   <tr style={{ background: TRED }} className="text-white font-display">
-                    <th className="px-2 text-center text-[12px] font-bold leading-[23px]">Qty</th>
-                    <th className="px-2 text-left text-[12px] font-bold leading-[23px]">Description</th>
-                    <th className="px-2 text-center text-[12px] font-bold leading-[23px]">ADJ</th>
-                    <th className="px-2 text-left text-[12px] font-bold leading-[23px]">Brand</th>
-                    <th className="px-2 text-left text-[12px] font-bold leading-[23px]">NOTE</th>
+                    <th className="px-2 text-center text-[12px] font-bold leading-[22px]">Qty</th>
+                    <th className="px-2 text-center text-[12px] font-bold leading-[22px]">Description</th>
+                    <th className="px-2 text-center text-[12px] font-bold leading-[22px]">ADJ</th>
+                    <th className="px-2 text-left text-[12px] font-bold leading-[22px]">Brand</th>
+                    <th className="px-2 text-left text-[12px] font-bold leading-[22px]">NOTE</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -909,9 +912,9 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                               <td colSpan={5} className="border-y px-2 py-0.5 text-[12.5px]" style={{ borderColor: "#f3ddd4" }}>&nbsp;</td>
                             </tr>
                           ) : (
-                            <tr key={c.id} className="border-b align-top" style={{ borderColor: "#f3ddd4" }}>
+                            <tr key={c.id} className="border-b align-top last:border-b-0" style={{ borderColor: "#f3ddd4" }}>
                               <td className="px-2 text-center text-[12.5px] font-semibold leading-[20px]">{c.baseQty ?? c.qty}</td>
-                              <td className="px-2 text-[12.5px] leading-[20px]">
+                              <td className="px-2 text-center text-[12.5px] leading-[20px]">
                                 {c.name}
                                 {c.comment && <div className="text-[11px] italic leading-tight text-muted">{c.comment}</div>}
                               </td>
