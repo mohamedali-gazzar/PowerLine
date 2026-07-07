@@ -879,6 +879,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                         byG.get(k)!.push(c);
                       });
                       const rows: JSX.Element[] = [];
+                      let dataRow = 0; // zebra counter — shade every other component row (per section)
                       // Section header shows for multi-section panels, and whenever the
                       // section has combination sub-groups (Source 1 / 2 …) so the section
                       // context (e.g. Main Incoming) is never lost above the sub-headers.
@@ -912,7 +913,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                               <td colSpan={5} className="border-y px-2 py-0.5 text-[12.5px]" style={{ borderColor: "#f3ddd4" }}>&nbsp;</td>
                             </tr>
                           ) : (
-                            <tr key={c.id} className="align-top [&>td]:border-b [&>td]:border-[#f3ddd4] [&:last-child>td]:border-b-0">
+                            <tr key={c.id} className={`align-top ${dataRow++ % 2 === 1 ? "bg-[#f4f4f6]" : ""}`}>
                               <td className="px-2 text-center text-[12.5px] font-semibold leading-[20px]">{c.baseQty ?? c.qty}</td>
                               <td className="px-2 text-[12.5px] leading-[20px]">
                                 {c.name}
