@@ -886,7 +886,9 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                       if (multiSection || order.some((g) => g))
                         rows.push(
                           <tr key={`s-${sec}`}>
-                            <td colSpan={5} className="border-y px-2 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[20px]" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }}>{sec}</td>
+                            <td className="border-y" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }} />
+                            <td className="border-y px-2 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[20px]" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }}>{sec}</td>
+                            <td colSpan={3} className="border-y" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }} />
                           </tr>
                         );
                       for (const g of order) {
