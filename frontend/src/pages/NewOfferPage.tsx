@@ -17,8 +17,11 @@ import {
   AVAILABLE_BRANDS_BY_FAMILY,
   CLIENT_SPECS,
   AVAILABLE_CLIENT_SPECS,
+  LUCY_CONFIGS,
+  lucyKeyOf,
+  isLucyConfig,
 } from "../options";
-import type { GeneratedOffer, OfferInput, RmuConfigInput, LbsBrand } from "../types";
+import type { GeneratedOffer, OfferInput, RmuConfigInput, LbsBrand, ProductType } from "../types";
 
 const initialRmu: RmuConfigInput = {
   productType: "PRAL",
@@ -71,6 +74,15 @@ export default function NewOfferPage() {
   const setR = <K extends keyof RmuConfigInput>(k: K, v: RmuConfigInput[K]) =>
     setRmu((c) => ({ ...c, [k]: v }));
 
+  // Switching product type. Lucy is a fixed catalogue (indoor only) — snap to a
+  // valid Lucy configuration + indoor installation when entering it.
+  const onProductType = (v: ProductType) =>
+    setRmu((c) => {
+      if (v !== "LUCY") return { ...c, productType: v };
+      const counts = isLucyConfig(c) ? {} : { nalCount: 2, nalfCount: 1, hasMetering: false };
+      return { ...c, ...counts, productType: v, installation: "INDOOR" };
+    });
+
   // What to generate (each is independently selectable — e.g. export Commercial
   // or SLD only, without the Technical offer). At least one must be selected.
   const [wantTechnical, setWantTechnical] = useState(true);
@@ -115,6 +127,7 @@ export default function NewOfferPage() {
   // Keep the brand to one we actually have data for (PSEC: ABB/Murge, PRAL: ABB)
   // — reset to ABB if the current brand isn't available for the family.
   useEffect(() => {
+    if (rmu.productType === "LUCY") return; // Lucy has no LBS brand
     const available = AVAILABLE_BRANDS_BY_FAMILY[rmu.productType];
     if (rmu.lbsBrand && !available.includes(rmu.lbsBrand)) {
       setRmu((c) => ({ ...c, lbsBrand: "ABB" }));
@@ -146,7 +159,7 @@ export default function NewOfferPage() {
       })`,
     [rmu]
   );
-  const panelCode = preview?.panelCode ?? "…";
+  const panelCode = preview?.panelCode || preview?.configCode || "…";
   const basePriceUsd = preview?.listPricing?.basePrice ?? null;
   const addOns = preview?.listPricing?.addOns ?? [];
   const rate = currency === "EGP" ? usdRate || 1 : 1;
@@ -415,44 +428,51 @@ export default function NewOfferPage() {
               <Field label="Product type">
                 <Segmented
                   value={rmu.productType}
-                  onChange={(v) => setR("productType", v)}
-                  options={["PRAL", "PSEC"] as const}
-                  renderLabel={(v) => (v === "PRAL" ? "PRAL · Air" : "PSEC · SF6")}
-                />
-              </Field>
-
-              <Field
-                label="LBS brand / type"
-                hint={
-                  rmu.productType === "PSEC"
-                    ? "ABB · Murge available · Schneider locked (no data)"
-                    : "ABB available · JGGY · GRL locked (no data)"
-                }
-              >
-                <Segmented
-                  value={(rmu.lbsBrand ?? "ABB") as LbsBrand}
-                  onChange={(v) => setR("lbsBrand", v)}
-                  options={BRANDS_BY_FAMILY[rmu.productType] as readonly LbsBrand[]}
-                  disabledOptions={
-                    BRANDS_BY_FAMILY[rmu.productType].filter(
-                      (b) => !AVAILABLE_BRANDS_BY_FAMILY[rmu.productType].includes(b)
-                    ) as readonly LbsBrand[]
+                  onChange={onProductType}
+                  options={["PRAL", "PSEC", "LUCY"] as const}
+                  renderLabel={(v) =>
+                    v === "PRAL" ? "PRAL · Air" : v === "PSEC" ? "PSEC · SF6" : "LUCY · GIS"
                   }
                 />
               </Field>
 
-              <Field label="Client specification" hint="EECH available · KAHRABA locked (no technical offer)">
-                <Segmented
-                  value={rmu.clientSpec ?? "EECH"}
-                  onChange={(v) => setR("clientSpec", v)}
-                  options={CLIENT_SPECS}
-                  disabledOptions={
-                    CLIENT_SPECS.filter(
-                      (s) => !AVAILABLE_CLIENT_SPECS.includes(s)
-                    ) as readonly ("EECH" | "KAHRABA")[]
-                  }
-                />
-              </Field>
+              {/* Lucy has no LBS brand or client specification — hidden for it. */}
+              {rmu.productType !== "LUCY" && (
+                <>
+                  <Field
+                    label="LBS brand / type"
+                    hint={
+                      rmu.productType === "PSEC"
+                        ? "ABB · Murge available · Schneider locked (no data)"
+                        : "ABB available · JGGY · GRL locked (no data)"
+                    }
+                  >
+                    <Segmented
+                      value={(rmu.lbsBrand ?? "ABB") as LbsBrand}
+                      onChange={(v) => setR("lbsBrand", v)}
+                      options={BRANDS_BY_FAMILY[rmu.productType] as readonly LbsBrand[]}
+                      disabledOptions={
+                        BRANDS_BY_FAMILY[rmu.productType].filter(
+                          (b) => !AVAILABLE_BRANDS_BY_FAMILY[rmu.productType].includes(b)
+                        ) as readonly LbsBrand[]
+                      }
+                    />
+                  </Field>
+
+                  <Field label="Client specification" hint="EECH available · KAHRABA locked (no technical offer)">
+                    <Segmented
+                      value={rmu.clientSpec ?? "EECH"}
+                      onChange={(v) => setR("clientSpec", v)}
+                      options={CLIENT_SPECS}
+                      disabledOptions={
+                        CLIENT_SPECS.filter(
+                          (s) => !AVAILABLE_CLIENT_SPECS.includes(s)
+                        ) as readonly ("EECH" | "KAHRABA")[]
+                      }
+                    />
+                  </Field>
+                </>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Rated voltage">
@@ -464,45 +484,82 @@ export default function NewOfferPage() {
                   />
                 </Field>
                 <Field label="Installation">
-                  <Segmented
-                    value={rmu.installation}
-                    onChange={(v) => setR("installation", v)}
-                    options={["INDOOR", "OUTDOOR"] as const}
-                    renderLabel={(v) => (v === "INDOOR" ? "Indoor" : "Outdoor")}
-                  />
+                  {rmu.productType === "LUCY" ? (
+                    <input className="input bg-surface" value="Indoor" readOnly />
+                  ) : (
+                    <Segmented
+                      value={rmu.installation}
+                      onChange={(v) => setR("installation", v)}
+                      options={["INDOOR", "OUTDOOR"] as const}
+                      renderLabel={(v) => (v === "INDOOR" ? "Indoor" : "Outdoor")}
+                    />
+                  )}
                 </Field>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Ring feeders (R)" hint="NAL — R0 to R5">
-                  <NumberInput value={rmu.nalCount} min={0} onChange={(v) => setR("nalCount", v)} />
+              {rmu.productType === "LUCY" ? (
+                <Field label="Configuration" hint="Lucy AEGIS PLUS — 8 available configurations (Feeder + Transformer)">
+                  <select
+                    className="input cursor-pointer"
+                    value={lucyKeyOf(rmu)}
+                    onChange={(e) => {
+                      const cfg = LUCY_CONFIGS.find((x) => x.key === e.target.value);
+                      if (cfg)
+                        setRmu((c) => ({
+                          ...c,
+                          nalCount: cfg.nalCount,
+                          nalfCount: cfg.nalfCount,
+                          hasMetering: cfg.hasMetering,
+                        }));
+                    }}
+                  >
+                    {LUCY_CONFIGS.map((x) => (
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
-                <Field label="Transformer feeders (T)" hint="NALF — T0 to T2">
-                  <NumberInput value={rmu.nalfCount} min={0} onChange={(v) => setR("nalfCount", v)} />
-                </Field>
-              </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Ring feeders (R)" hint="NAL — R0 to R5">
+                    <NumberInput value={rmu.nalCount} min={0} onChange={(v) => setR("nalCount", v)} />
+                  </Field>
+                  <Field label="Transformer feeders (T)" hint="NALF — T0 to T2">
+                    <NumberInput value={rmu.nalfCount} min={0} onChange={(v) => setR("nalfCount", v)} />
+                  </Field>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Busbar current">
                   <NumberInput value={rmu.busbarCurrentA} suffix="A" onChange={(v) => setR("busbarCurrentA", v)} />
                 </Field>
-                <Field label="Fuse rating" hint="Blank = catalogue max ('up to')">
-                  <NumberInput
-                    value={rmu.fuseRatingA ?? NaN}
-                    suffix="A"
-                    placeholder="standard"
-                    onChange={(v) => setR("fuseRatingA", Number.isNaN(v) ? null : v)}
-                  />
-                </Field>
+                {/* Lucy has no fuse (transformer feeders are circuit breakers). */}
+                {rmu.productType !== "LUCY" && (
+                  <Field label="Fuse rating" hint="Blank = catalogue max ('up to')">
+                    <NumberInput
+                      value={rmu.fuseRatingA ?? NaN}
+                      suffix="A"
+                      placeholder="standard"
+                      onChange={(v) => setR("fuseRatingA", Number.isNaN(v) ? null : v)}
+                    />
+                  </Field>
+                )}
               </div>
 
-              <Field label="Smart" hint="Smart (with RTU) ⇒ spec ·9; Ready-to-be-smart ⇒ spec ·0">
-                <Select value={rmu.rtuType} onChange={(v) => setR("rtuType", v)} options={RTU_TYPES} />
-              </Field>
+              {/* Smart/RTU levels are a PRAL/PSEC feature — not offered for Lucy. */}
+              {rmu.productType !== "LUCY" && (
+                <Field label="Smart" hint="Smart (with RTU) ⇒ spec ·9; Ready-to-be-smart ⇒ spec ·0">
+                  <Select value={rmu.rtuType} onChange={(v) => setR("rtuType", v)} options={RTU_TYPES} />
+                </Field>
+              )}
             </div>
           </section>
 
-          {/* Metering — toggle reveals CT / VT options */}
+          {/* Metering — toggle reveals CT / VT options. Hidden for Lucy: its
+              metering unit is fixed and chosen via the Configuration dropdown. */}
+          {rmu.productType !== "LUCY" && (
           <section className="card p-5 animate-fade-up" style={{ animationDelay: "0.12s" }}>
             <Toggle
               checked={rmu.hasMetering}
@@ -561,6 +618,7 @@ export default function NewOfferPage() {
               </div>
             )}
           </section>
+          )}
 
           {wantCommercial && (
           <section className="card p-5 animate-fade-up" style={{ animationDelay: "0.16s" }}>

@@ -4,7 +4,7 @@
 // The per-configuration assembly (how many NAL/NALF/metering/RTU) lives in
 // assembly.ts.
 
-export type ProductType = "PRAL" | "PSEC";
+export type ProductType = "PRAL" | "PSEC" | "LUCY";
 export type VoltageKv = 12 | 24;
 // Smart level (replaces the old NONE/TYPE1/TYPE2 RTU options):
 //   READY1/2 = "ready to be smart" (prepared, no RTU yet); SMART1/2 = actual RTU.
@@ -12,7 +12,7 @@ export type VoltageKv = 12 | 24;
 export type RtuType = "READY1" | "READY2" | "SMART1" | "SMART2";
 export type Installation = "INDOOR" | "OUTDOOR";
 
-export const PRODUCT_TYPES: ProductType[] = ["PRAL", "PSEC"];
+export const PRODUCT_TYPES: ProductType[] = ["PRAL", "PSEC", "LUCY"];
 export const VOLTAGES: VoltageKv[] = [12, 24];
 export const RTU_TYPES: RtuType[] = ["READY1", "READY2", "SMART1", "SMART2"];
 export const INSTALLATIONS: Installation[] = ["INDOOR", "OUTDOOR"];
@@ -65,6 +65,21 @@ export const PRODUCTS: Record<ProductType, ProductProfile> = {
     cubicleDims: "554*1070*1700",
     meteringDims: "500*1070*1700",
     switchName: "G-Sec",
+    gasInsulated: true,
+  },
+  // Lucy Electric AEGIS PLUS — SF6 circuit-breaker RMU (separate OEM family).
+  // No Powerline cubicle dimensions are published for it; the technical content
+  // is built from Lucy's own offers in domain/lucy.ts.
+  LUCY: {
+    productType: "LUCY",
+    productName: "AEGIS PLUS",
+    family: "SF6 Circuit-Breaker Ring Main Unit",
+    insulation: "SF6",
+    apparatusType: "SF6 insulated Circuit Breaker / Load Break Switch (Lucy AEGIS PLUS)",
+    protectionIndex: "IP41 on front face",
+    cubicleDims: "",
+    meteringDims: "",
+    switchName: "Lucy",
     gasInsulated: true,
   },
 };
@@ -132,6 +147,33 @@ const RATINGS: Record<string, ElectricalRatings> = {
     shortCircuitDurationS: 1,
     peakCurrentKa: 50,
     defaultFuseRatingA: 80,
+  },
+  // Lucy AEGIS PLUS. From the Lucy technical offers: 21 kA / 3 s, IP41, 630 A.
+  // Service voltage / withstand / BIL / peak are the IEC 62271 standard values
+  // for the voltage class (NOT stated on Lucy's sheet); peak = 2.5 × Isc.
+  "LUCY-12": {
+    ratedVoltageKv: 12,
+    serviceVoltageKv: 11,
+    powerFreqWithstandKv: 28,
+    bilKv: 75,
+    ratedFrequencyHz: 50,
+    ratedBusbarCurrentA: 630,
+    ratedShortCircuitKa: 21,
+    shortCircuitDurationS: 3,
+    peakCurrentKa: 52.5,
+    defaultFuseRatingA: 0,
+  },
+  "LUCY-24": {
+    ratedVoltageKv: 24,
+    serviceVoltageKv: 22,
+    powerFreqWithstandKv: 50,
+    bilKv: 125,
+    ratedFrequencyHz: 50,
+    ratedBusbarCurrentA: 630,
+    ratedShortCircuitKa: 21,
+    shortCircuitDurationS: 3,
+    peakCurrentKa: 52.5,
+    defaultFuseRatingA: 0,
   },
 };
 

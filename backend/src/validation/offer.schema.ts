@@ -43,6 +43,8 @@ export const rmuConfigSchema = z.object({
   })
   .refine(
     (c) => {
+      // Lucy is a separate OEM family with no LBS brand — skip the brand check.
+      if (c.productType === "LUCY") return true;
       // Only brands we have real data for (technical BOM + price). Others are
       // locked until their data is added — we don't fabricate from ABB's data.
       const available = c.productType === "PSEC" ? ["ABB", "MURGE"] : ["ABB"];
@@ -54,7 +56,8 @@ export const rmuConfigSchema = z.object({
       path: ["lbsBrand"],
     }
   )
-  .refine((c) => c.clientSpec === "EECH", {
+  // Lucy has no client specification; PRAL/PSEC only have EECH data today.
+  .refine((c) => c.productType === "LUCY" || c.clientSpec === "EECH", {
     // We only have EECH technical offers; KAHRABA is locked until its data exists.
     message: "No technical offer for KAHRABA yet — locked. Only EECH is available.",
     path: ["clientSpec"],

@@ -16,6 +16,7 @@ import {
   type RtuType,
   type Installation,
 } from "./standards";
+import { assembleLucyOffer } from "./lucy";
 
 export type LbsBrand = "ABB" | "MURGE" | "SCHNEIDER" | "JGGY" | "GRL";
 export type ClientSpec = "EECH" | "KAHRABA";
@@ -43,6 +44,7 @@ const BRAND_WORD: Record<LbsBrand, string> = {
 export const BRANDS_BY_FAMILY: Record<ProductType, LbsBrand[]> = {
   PSEC: ["ABB", "MURGE", "SCHNEIDER"],
   PRAL: ["ABB", "JGGY", "GRL"],
+  LUCY: [], // Lucy is a single-OEM family — no LBS brand choice
 };
 
 /**
@@ -54,6 +56,7 @@ export const BRANDS_BY_FAMILY: Record<ProductType, LbsBrand[]> = {
 export const AVAILABLE_BRANDS_BY_FAMILY: Record<ProductType, LbsBrand[]> = {
   PSEC: ["ABB", "MURGE"],
   PRAL: ["ABB"],
+  LUCY: [],
 };
 
 /** True when we have the data to build a real offer for this brand + family. */
@@ -194,6 +197,7 @@ export function buildPanelCode(c: RmuConfigInput): string {
  *   measuring   = M (with) | W (without)
  */
 export function buildProductCode(c: RmuConfigInput): string {
+  if (c.productType === "LUCY") return ""; // Lucy has no Powerline coding-system code
   const client = (c.clientSpec ?? "EECH") === "KAHRABA" ? "2" : "1";
   const type = rtuHasRtu(c.rtuType) ? "9" : "0"; // Smart (has RTU) vs Standard/Ready
   const brand = BRAND_CODE[(c.lbsBrand ?? "ABB") as LbsBrand];
@@ -226,6 +230,8 @@ export function commercialDescription(c: RmuConfigInput): string {
 }
 
 export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
+  // Lucy is a fixed catalogue with its own (non-algorithmic) technical content.
+  if (c.productType === "LUCY") return assembleLucyOffer(c);
   const p = PRODUCTS[c.productType];
   const r = getRatings(c.productType, c.voltageKv);
   const fuseOverride = c.fuseRatingA != null; // user entered an exact rating

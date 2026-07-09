@@ -15,16 +15,31 @@ export default function OfferView({ g }: { g: GeneratedOffer }) {
         <div className="mt-1 text-xl font-extrabold">{g.titleProduct}</div>
         <div className="text-sm text-white/85">{g.titleFamily}</div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Tag>{s.lbsBrand}</Tag>
-          <Tag>{s.smart ? "Smart" : "Standard"}</Tag>
-          <Tag>{s.clientSpec}</Tag>
-          <Tag>{s.insulation} insulated</Tag>
-          <Tag>{s.voltageKv} kV</Tag>
-          <Tag>R{s.nalCount} ring</Tag>
-          <Tag>T{s.nalfCount} transformer</Tag>
-          {s.hasMetering && <Tag>Metering</Tag>}
-          <Tag>{s.smart ? "Smart" : "Ready"} type {/2$/.test(s.rtuType) ? "2" : "1"}</Tag>
-          <Tag>{s.installation}</Tag>
+          {s.productType === "LUCY" ? (
+            <>
+              <Tag>Lucy Electric</Tag>
+              <Tag>AEGIS PLUS</Tag>
+              <Tag>{s.insulation} insulated</Tag>
+              <Tag>{s.voltageKv} kV</Tag>
+              <Tag>{s.nalCount} feeder</Tag>
+              <Tag>{s.nalfCount} transformer</Tag>
+              {s.hasMetering && <Tag>Metering</Tag>}
+              <Tag>{s.installation}</Tag>
+            </>
+          ) : (
+            <>
+              <Tag>{s.lbsBrand}</Tag>
+              <Tag>{s.smart ? "Smart" : "Standard"}</Tag>
+              <Tag>{s.clientSpec}</Tag>
+              <Tag>{s.insulation} insulated</Tag>
+              <Tag>{s.voltageKv} kV</Tag>
+              <Tag>R{s.nalCount} ring</Tag>
+              <Tag>T{s.nalfCount} transformer</Tag>
+              {s.hasMetering && <Tag>Metering</Tag>}
+              <Tag>{s.smart ? "Smart" : "Ready"} type {/2$/.test(s.rtuType) ? "2" : "1"}</Tag>
+              <Tag>{s.installation}</Tag>
+            </>
+          )}
         </div>
       </div>
 

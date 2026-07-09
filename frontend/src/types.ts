@@ -1,6 +1,6 @@
 // Shape of the data exchanged with the backend API.
 
-export type ProductType = "PRAL" | "PSEC";
+export type ProductType = "PRAL" | "PSEC" | "LUCY";
 export type VoltageKv = 12 | 24;
 export type RtuType = "READY1" | "READY2" | "SMART1" | "SMART2";
 export type Installation = "INDOOR" | "OUTDOOR";

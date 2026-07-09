@@ -7,6 +7,7 @@ import {
   buildPriceKey,
   type RmuConfigInput,
 } from "./assembly";
+import { lucyPrice, lucyKey } from "./lucy";
 
 export const PRICE_LIST: Record<string, number> = {
   // --- P-RAL 12 (air) ---
@@ -92,6 +93,19 @@ function priceEligible(c: RmuConfigInput): boolean {
 
 /** Look up the minimum list price for a configuration, plus applicable add-ons. */
 export function priceForConfig(c: RmuConfigInput): ConfigPricing {
+  // Lucy has its own USD price map keyed by config (same for 12 & 24 kV) and no
+  // add-ons (indoor only). Configs outside the catalogue → price on application.
+  if (c.productType === "LUCY") {
+    const basePrice = lucyPrice(c);
+    return {
+      panelCode: "",
+      priceKey: `LUCY-${lucyKey(c)}`,
+      basePrice,
+      addOns: [],
+      listPrice: basePrice,
+      found: basePrice != null,
+    };
+  }
   const panelCode = buildProductCode(c);
   const priceKey = buildPriceKey(c);
   const basePrice = priceEligible(c) ? PRICE_LIST[priceKey] ?? null : null;
