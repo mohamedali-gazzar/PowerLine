@@ -113,7 +113,7 @@ export interface CubicleItem {
   description: string;
 }
 export interface Cubicle {
-  code: string; // QPSC / QPSF / PMC
+  code: string; // PCC / PFC / PMC
   name: string; // full heading
   qty: number;
   dims: string;
@@ -314,8 +314,8 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
 
   if (c.nalCount > 0) {
     cubicles.push({
-      code: "QPSC",
-      name: `QPSC (Powerline LBS Cubical)-${c.busbarCurrentA}A(${p.cubicleDims})mm²`,
+      code: "PCC",
+      name: `PCC (Powerline LBS Cubical)-${c.busbarCurrentA}A(${p.cubicleDims})mm²`,
       qty: c.nalCount,
       dims: p.cubicleDims,
       items: nalItems(insulWord, mz(nalSwitch), lbsBrand, hasRtu),
@@ -323,8 +323,8 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
   }
   if (c.nalfCount > 0) {
     cubicles.push({
-      code: "QPSF",
-      name: `QPSF (Powerline LBS Cubical)-${c.busbarCurrentA}A(${p.cubicleDims})mm²`,
+      code: "PFC",
+      name: `PFC (Powerline LBS Cubical)-${c.busbarCurrentA}A(${p.cubicleDims})mm²`,
       qty: c.nalfCount,
       dims: p.cubicleDims,
       items: nalfItems(insulWord, mz(nalfSwitch), lbsBrand, c.voltageKv, fuseA, hasRtu, fuseOverride),
