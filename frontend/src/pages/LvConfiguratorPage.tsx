@@ -576,7 +576,7 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
   return (
     <section className="a4-sheet flex flex-col overflow-hidden" style={{ breakAfter: "page" }}>
       <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
-      <div className="flex flex-1 flex-col px-12 pb-8 pt-12">
+      <div className="flex flex-1 flex-col px-12 pb-2 pt-12">
         <div className="flex items-center justify-between">
           <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-32" />
           {s.project.date && (
@@ -711,6 +711,11 @@ function PageHeader({ s, qtnRef }: { s: LvState; qtnRef: string }) {
     </div>
   );
 }
+// Page-number-only footer, centered, no border/label. Pinned to the bottom of the sheet (mt-auto).
+// Browser print can't count pages via CSS, so the number is computed per sheet in React.
+function PageFooter({ n }: { n: number }) {
+  return <div className="mt-auto pt-3 text-center text-[10.5px] font-semibold text-muted">{n}</div>;
+}
 
 type NotesKey = "notesGeneral" | "notesAdditional";
 function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void }) {
@@ -760,10 +765,10 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
         docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} />
       <div className="offer-workspace">
       <div className="print-area space-y-6">
-        {/* Cover page (shared branded title page) */}
+        {/* Cover page (shared branded title page) — no footer on the cover */}
         <OfferCover s={s} qtnNo={qtnNo} kind="Technical" />
         {/* Notes page (editable: edit / add / remove lines) — after the cover */}
-        <section className="a4-sheet flex flex-col px-12 pb-10 pt-14" style={{ breakAfter: "page" }}>
+        <section className="a4-sheet flex flex-col px-8 pb-10 pt-6" style={{ breakAfter: "page" }}>
           <PageHeader s={s} qtnRef={qtnRef} />
           {([["General Notes :-", "notesGeneral"], ["Additional Notes :-", "notesAdditional"]] as [string, NotesKey][]).map(([title, key]) => (
             <div key={key} className="mt-5">
@@ -783,15 +788,16 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                 className="no-print mt-2 ml-8 text-xs font-semibold text-brand hover:underline">+ Add note</button>
             </div>
           ))}
+          <PageFooter n={2} />
         </section>
         {s.panels.map((p, pi) => {
           const sp = specOf(p);
           return (
-            <div key={p.id} className="a4-sheet flex flex-col px-8 pb-7 pt-14"
+            <div key={p.id} className="a4-sheet flex flex-col px-8 pb-7 pt-6"
               style={pi < s.panels.length - 1 ? { breakAfter: "page" } : undefined}>
               <PageHeader s={s} qtnRef={qtnRef} />
-              {/* panel-data table — its own bordered frame */}
-              <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
+              {/* panel-data table — square bordered frame (matches the components table below) */}
+              <div className="border isolate" style={{ borderColor: "#d4d4da" }}>
               {/* item bar */}
               <table className="w-full table-fixed border-separate border-spacing-0">
                 <colgroup>
@@ -838,8 +844,11 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
               </table>
               </div>{/* /panel-data frame */}
               <div className="h-3" aria-hidden />{/* white space between the two tables */}
-              {/* components table — its own bordered frame */}
-              <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
+              {/* components table — square bordered frame. No overflow-hidden/rounded: Chrome only
+                  repeats <thead>/<tfoot> across print pages when the table isn't inside an overflow
+                  clip, so each overflow page gets the header on top and the end-line at the bottom.
+                  (Square corners avoid the orange header poking past a rounded frame.) */}
+              <div className="border isolate" style={{ borderColor: "#d4d4da" }}>
               <table className="w-full table-fixed border-separate border-spacing-0">
                 <colgroup>
                   <col className="w-[10%]" />
@@ -885,7 +894,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                       // context (e.g. Main Incoming) is never lost above the sub-headers.
                       if (multiSection || order.some((g) => g))
                         rows.push(
-                          <tr key={`s-${sec}`}>
+                          <tr key={`s-${sec}`} style={{ breakInside: "avoid", breakAfter: "avoid" }}>
                             <td className="border-y" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }} />
                             <td className="border-y px-2 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[20px]" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }}>{sec}</td>
                             <td colSpan={3} className="border-y" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }} />
@@ -899,11 +908,14 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                           const gf = byG.get(g)!.find((c) => !isSpacer(c));
                           const gbase = gf ? (gf.baseQty ?? gf.qty) : 0;
                           const gcq = gf && gbase > 0 ? Math.max(1, Math.round(gf.qty / gbase)) : 1;
-                          const gIsMcc = /\(Type \d+\)/.test(g); // "QTY (N) each contain:" is MCC-only
+                          // Match the panels editor: MCC (by name) + custom combinations (flagged) show "QTY (N) each contain:".
+                          const gScalable = /\(Type \d+\)/.test(g) || !!byG.get(g)!.find((c) => !isSpacer(c))?.comboScalable;
                           rows.push(
-                            <tr key={`g-${sec}-${g}`}>
+                            // Group sub-header styled like the panels editor. break-after: avoid keeps it
+                            // with its first rows so it's never stranded at the bottom of a page.
+                            <tr key={`g-${sec}-${g}`} style={{ breakInside: "avoid", breakAfter: "avoid" }}>
                               <td className="py-1" />
-                              <td colSpan={4} className="px-2 py-1 text-left font-display text-[13.5px] font-normal leading-[20px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>{gIsMcc ? `, QTY (${gcq}) each contain:` : ""}</td>
+                              <td colSpan={4} className="px-2 py-1 text-left font-display text-[13.5px] font-normal leading-[20px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>{gScalable ? <span className="font-bold">, QTY ({gcq}) each contain:</span> : ""}</td>
                             </tr>
                           );
                         }
@@ -913,7 +925,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                               <td colSpan={5} className="px-2 py-0.5 text-[12.5px] leading-[12.5px]">&nbsp;</td>
                             </tr>
                           ) : (
-                            <tr key={c.id} className={`align-top ${dataRow++ % 2 === 1 ? "bg-[#f4f4f6]" : ""}`}>
+                            <tr key={c.id} style={{ breakInside: "avoid" }} className={`align-top ${dataRow++ % 2 === 1 ? "bg-[#f4f4f6]" : ""}`}>
                               <td className="px-2 text-center text-[12.5px] font-semibold leading-[20px]">{c.baseQty ?? c.qty}</td>
                               <td className="px-2 text-[12.5px] leading-[20px]">
                                 {c.name}
@@ -929,10 +941,14 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                     });
                   })()}
                 </tbody>
+                {/* Page-number-only footer in <tfoot> so Chrome repeats it at the bottom of EVERY page
+                    the table spans (including overflow pages). Centered, no border/label/extra text. */}
+                <tfoot>
+                  <tr>
+                    <td colSpan={5} className="pt-2 pb-0.5 text-center text-[10.5px] font-semibold text-muted">{3 + pi}</td>
+                  </tr>
+                </tfoot>
               </table>
-              </div>
-              <div className="mt-auto flex justify-center border-t px-1 pt-3 text-[9px] text-muted" style={{ borderColor: "#E7E7EB" }}>
-                <span>Item {pi + 1} of {s.panels.length}</span>
               </div>
             </div>
           );
@@ -1605,7 +1621,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
         }
         const grp = l.groupLabel || tag || "Combination";
         const c = l.comp ? toPanelComponent(l.comp, sec, l.qty, grp) : freeComponent(l.desc, sec, l.qty, grp);
-        return { ...c, baseQty: l.baseQty ?? l.qty };
+        // Custom combinations carry a ×N combination-qty control in their group header.
+        return { ...c, baseQty: l.baseQty ?? l.qty, ...(comboKind === "custom" ? { comboScalable: true } : {}) };
       });
       u({ components: [...p.components, ...items] });
     }
@@ -1613,7 +1630,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   };
   // Row-2 circuit combinations (smaller sub-row under the section pills). P.F.C is NOT here —
   // it's triggered from the sections row (beside Outgoings) since it builds its own section.
-  const COMBOS = [["lamps", "Indication Lamps"], ["ats", "ATS"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"]] as const;
+  const COMBOS = [["lamps", "Indication Lamps"], ["ats", "ATS"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"], ["custom", "New Combination"]] as const;
   // Word-style row inserter: drop an empty row (spacer) after a given component, or at
   // the top of the section when afterId is null.
   const insertSpacerAfter = (sec: string, afterId: string | null) => {
@@ -1673,6 +1690,188 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   const setComp = (id: string, patch: Partial<PanelComponent>) =>
     u({ components: p.components.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
   const delComp = (id: string) => u({ components: p.components.filter((c) => c.id !== id) });
+
+  // ── Multi-row selection: checkbox column, running sum, floating action bar ──
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [lastPickId, setLastPickId] = useState<string | null>(null);
+  const [hoverSum, setHoverSum] = useState<{ col: "qty" | "unit" | "total"; x: number; y: number } | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [barTop, setBarTop] = useState<number | null>(null); // action-bar y, just below the lowest selected row (card-relative)
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null); // free viewport position once the bar is dragged
+  const orderedIds = p.components.filter((c) => !isSpacer(c)).map((c) => c.id); // selectable rows in render order
+  const toggleSelect = (id: string, shift: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (shift && lastPickId && lastPickId !== id) {
+        const a = orderedIds.indexOf(lastPickId), b = orderedIds.indexOf(id);
+        if (a >= 0 && b >= 0) { const [lo, hi] = a < b ? [a, b] : [b, a]; for (let i = lo; i <= hi; i++) next.add(orderedIds[i]); }
+      } else if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+    setLastPickId(id);
+  };
+  // Drag-to-select: press-and-hold anywhere on a row body (grip is reserved for reorder) and drag.
+  // The selection tracks the contiguous range between the start row and the row under the cursor —
+  // dragging down grows it, dragging back up shrinks it (rows leaving the range are unchecked).
+  // A press with no cross-row movement is a plain click (checkbox toggles; inputs/buttons act).
+  const dragRef = useRef<{ anchorId: string; moved: boolean; onCheckbox: boolean; shift: boolean } | null>(null);
+  const onRowDown = (id: string, onCheckbox: boolean, shift: boolean) => {
+    dragRef.current = { anchorId: id, moved: false, onCheckbox, shift };
+    const onUp = () => {
+      const d = dragRef.current;
+      if (d && !d.moved && d.onCheckbox) toggleSelect(d.anchorId, d.shift); // quick click on the checkbox → toggle / shift-range
+      dragRef.current = null;
+      document.body.style.userSelect = ""; // re-enable text selection
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mouseup", onUp);
+  };
+  const onRowEnter = (id: string) => {
+    const d = dragRef.current;
+    if (!d) return;
+    if (!d.moved) { d.moved = true; document.body.style.userSelect = "none"; window.getSelection()?.removeAllRanges(); } // drag begins on first cross-row move
+    const a = orderedIds.indexOf(d.anchorId), b = orderedIds.indexOf(id);
+    if (a < 0 || b < 0) return;
+    const [lo, hi] = a < b ? [a, b] : [b, a];
+    setSelected(new Set(orderedIds.slice(lo, hi + 1))); // selection = the contiguous start→cursor range
+    setLastPickId(id);
+  };
+  const setSectionSel = (sec: string, on: boolean) => {
+    const ids = p.components.filter((c) => c.section === sec && !isSpacer(c)).map((c) => c.id);
+    setSelected((prev) => { const next = new Set(prev); ids.forEach((id) => (on ? next.add(id) : next.delete(id))); return next; });
+  };
+  const setGroupSel = (sec: string, group: string, on: boolean) => {
+    const ids = p.components.filter((c) => c.section === sec && !isSpacer(c) && (effGroup.get(c.id) || "") === group).map((c) => c.id);
+    setSelected((prev) => { const next = new Set(prev); ids.forEach((id) => (on ? next.add(id) : next.delete(id))); return next; });
+  };
+  const clearSel = () => { setSelected(new Set()); setLastPickId(null); };
+  const selectedTotal = p.components.reduce((sum, c) => (selected.has(c.id) && !isSpacer(c) ? sum + itemPriceEgp(c, s) * c.qty : sum), 0);
+  // Column-aware sum over the selected rows (QTY / UNIT COST / TOTAL) for the hover tooltip.
+  const colSum = (col: "qty" | "unit" | "total") =>
+    p.components.reduce((acc, c) => {
+      if (!selected.has(c.id) || isSpacer(c)) return acc;
+      if (col === "qty") return acc + (c.baseQty ?? c.qty);
+      if (col === "unit") return acc + itemPriceEgp(c, s);
+      return acc + itemPriceEgp(c, s) * c.qty;
+    }, 0);
+  const duplicateSel = () => {
+    if (!selected.size) return;
+    // A fully-selected group duplicates as a NEW (renamed) group placed after the original.
+    // Loose rows / partially-selected groups copy right below the original (same group) as before.
+    const keyOf = (c: PanelComponent) => `${c.section}::${effGroup.get(c.id) || ""}`;
+    const total = new Map<string, number>(), selCount = new Map<string, number>();
+    for (const c of p.components) {
+      if (isSpacer(c) || !(effGroup.get(c.id) || "")) continue;
+      const k = keyOf(c);
+      total.set(k, (total.get(k) || 0) + 1);
+      if (selected.has(c.id)) selCount.set(k, (selCount.get(k) || 0) + 1);
+    }
+    const fullGroup = new Set<string>();
+    total.forEach((t, k) => { if (selCount.get(k) === t) fullGroup.add(k); });
+    // Existing group names per section → mint unique "<name> copy" labels for the new groups.
+    const usedNames = new Map<string, Set<string>>();
+    for (const c of p.components) {
+      const g = effGroup.get(c.id) || "";
+      if (isSpacer(c) || !g) continue;
+      (usedNames.get(c.section) ?? usedNames.set(c.section, new Set()).get(c.section)!).add(g);
+    }
+    const uniqueName = (base: string, sec: string) => {
+      const used = usedNames.get(sec) ?? usedNames.set(sec, new Set()).get(sec)!;
+      let name = `${base} copy`;
+      for (let k = 2; used.has(name); k++) name = `${base} copy ${k}`;
+      used.add(name);
+      return name;
+    };
+    const lastIdx = new Map<string, number>();
+    p.components.forEach((c, i) => { if (!isSpacer(c) && fullGroup.has(keyOf(c))) lastIdx.set(keyOf(c), i); });
+
+    const newIds = new Set<string>(), newName = new Map<string, string>(), stash = new Map<string, PanelComponent[]>();
+    const out: PanelComponent[] = [];
+    p.components.forEach((c, i) => {
+      out.push(c);
+      if (isSpacer(c) || !selected.has(c.id)) return;
+      const k = keyOf(c);
+      if (fullGroup.has(k)) { // whole group → gather copies, flush as one new group after the original
+        if (!newName.has(k)) newName.set(k, uniqueName(effGroup.get(c.id) || "Combination", c.section));
+        const copy = { ...c, id: uid(), group: newName.get(k)! };
+        newIds.add(copy.id);
+        (stash.get(k) ?? stash.set(k, []).get(k)!).push(copy);
+        if (i === lastIdx.get(k)) stash.get(k)!.forEach((cp) => out.push(cp));
+      } else { // loose / partial-group row → copy right below, same group
+        const copy = { ...c, id: uid() };
+        newIds.add(copy.id); out.push(copy);
+      }
+    });
+    u({ components: out });
+    setSelected(newIds); setLastPickId(null); // the duplicates become the new selection
+  };
+  const deleteSel = () => {
+    if (!selected.size) return;
+    if (selected.size > 3 && !window.confirm(`Delete ${selected.size} selected rows?`)) return;
+    u({ components: p.components.filter((c) => !selected.has(c.id)) });
+    clearSel();
+  };
+  useEffect(() => {
+    if (!selected.size) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null; // ignore while typing in a field
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if ((e.ctrlKey || e.metaKey) && (e.key === "d" || e.key === "D")) { e.preventDefault(); duplicateSel(); }
+      else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSel(); }
+      else if (e.key === "Escape") clearSel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selected, p.components]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!selected.size) return;
+    const onDown = (e: MouseEvent) => { // click outside any selectable row / the action bar → clear
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      if (t.closest("[data-selrow]") || t.closest("[data-selbar]")) return;
+      if (t instanceof HTMLInputElement && t.type === "checkbox") return; // the section header select-all
+      clearSel();
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Anchor the action bar just below the bottom-most selected row (moves with the list on scroll).
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    if (!selected.size) { setBarTop(null); setDragPos(null); return; } // selection cleared → re-anchor next time
+    if (!card) return;
+    const measure = () => {
+      const cardTop = card.getBoundingClientRect().top + card.clientTop;
+      let maxBottom = -Infinity;
+      card.querySelectorAll<HTMLElement>("tr[data-selrow][data-cid]").forEach((el) => {
+        if (selected.has(el.dataset.cid || "")) maxBottom = Math.max(maxBottom, el.getBoundingClientRect().bottom);
+      });
+      setBarTop(maxBottom === -Infinity ? null : maxBottom - cardTop + 8);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [selected, p.components]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Grab the grip and drag the action bar anywhere on the page (switches it to fixed positioning).
+  const startBarDrag = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const bar = (e.currentTarget as HTMLElement).closest("[data-selbar]") as HTMLElement | null;
+    if (!bar) return;
+    const r = bar.getBoundingClientRect();
+    const dx = e.clientX - r.left, dy = e.clientY - r.top, w = r.width, h = r.height;
+    const onMove = (ev: MouseEvent) => {
+      const x = Math.max(4, Math.min(ev.clientX - dx, window.innerWidth - w - 4));
+      const y = Math.max(4, Math.min(ev.clientY - dy, window.innerHeight - h - 4));
+      setDragPos({ x, y });
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
   // Re-select a component from the database, keeping qty / adj / comment / note /
   // section / group; all technical + pricing fields update from the new component.
   const replaceComp = (id: string, c: DbComponent) =>
@@ -1782,12 +1981,12 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   };
 
   return (
-    <div className="card p-5">
+    <div ref={cardRef} className="card relative p-5">
       <h2 className="sec-head">Components</h2>
 
       {/* Sticky header: section tabs + search bar stay pinned below the tab bar while
           the component list scrolls; unpins automatically when this card ends. */}
-      <div className="sticky top-16 z-10 -mx-5 mb-3 border-b border-line/60 bg-white px-5 pb-3 pt-1">
+      <div className="sticky top-16 z-20 -mx-5 mb-3 border-b border-line/60 bg-white px-5 pb-3 pt-1">
       {/* sections */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         {p.sections.map((sec) => {
@@ -1926,7 +2125,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
         <div className="mb-3 rounded-lg border border-brand/40 bg-brand-tint/40 p-3">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-bold text-brand-dark">
-              {comboKind === "pfc" ? "P.F.C" : (COMBOS.find(([k]) => k === comboKind)?.[1] ?? "Combination")} combination
+              {comboKind === "pfc" ? "P.F.C combination" : comboKind === "custom" ? "New Combination" : `${COMBOS.find(([k]) => k === comboKind)?.[1] ?? "Combination"} combination`}
               <span className="text-[11px] font-normal text-muted">{comboKind === "pfc" ? " — added as its own P.F.C section beside Outgoings" : ` — added as a group inside “${p.activeSection}”`}</span>
             </h3>
             <button type="button" onClick={() => { setComboKind(null); setPreview([]); setTag(""); }}
@@ -1938,6 +2137,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
           {comboKind === "wd" && <WdBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "lamps" && <LampsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "pfc" && <PfcBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
+          {comboKind === "custom" && <CustomBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {preview.length > 0 && (
             <div className="mt-3 rounded-lg border border-line bg-white p-3">
               <div className="mb-1.5 text-xs font-bold text-ink">Preview — {preview.length} items{tag ? ` (${tag})` : ""}</div>
@@ -1995,7 +2195,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                   <col style={{ width: 112 }} />
                   <col style={{ width: 92 }} />
                   <col style={{ width: 92 }} />
-                  <col style={{ width: 76 }} />
+                  <col style={{ width: 96 }} />
                 </colgroup>
                 <thead>
                   <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
@@ -2007,7 +2207,20 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                     <th className="py-1 pr-2">Note</th>
                     <th className="py-1 pr-2 text-right">Unit cost</th>
                     <th className="py-1 pr-2 text-right">Total</th>
-                    <th className="py-1"></th>
+                    <th className="py-1 pr-1 text-right">
+                      {sec !== "Outgoings" && (() => {
+                        // Outgoings uses a per-group select-all (in each group header) instead of a section-wide one.
+                        const ids = p.components.filter((c) => c.section === sec && !isSpacer(c)).map((c) => c.id);
+                        const sel = ids.filter((id) => selected.has(id)).length;
+                        return (
+                          <input type="checkbox" className="h-3.5 w-3.5 cursor-pointer accent-brand align-middle"
+                            checked={ids.length > 0 && sel === ids.length}
+                            ref={(el) => { if (el) el.indeterminate = sel > 0 && sel < ids.length; }}
+                            onChange={(e) => setSectionSel(sec, e.target.checked)}
+                            title="Select / clear all in this section" />
+                        );
+                      })()}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2026,7 +2239,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                         onDragStart={(e) => { setDragId(c.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", c.id); } catch {} }}
                         onDragEnd={() => { setDragId(null); setOverRow(null); setOverSec(null); }}
                         title="Drag to reorder or move to another section"
-                        className="cursor-grab select-none py-1 pr-1 text-muted/50 hover:text-brand active:cursor-grabbing">
+                        className="cursor-grab select-none py-1 pl-1 pr-1 text-muted/50 hover:text-brand active:cursor-grabbing">
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                           <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
                           <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
@@ -2041,19 +2254,22 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                       </td>
                     </tr>
                   ) : (
-                    <tr key={c.id}
+                    <tr key={c.id} data-selrow="" data-cid={c.id}
+                      onMouseDown={(e) => { const t = e.target as HTMLElement; if (t.closest("[data-grip]")) return; onRowDown(c.id, !!t.closest("[data-rowcheck]"), e.shiftKey); }}
+                      onMouseEnter={() => onRowEnter(c.id)}
                       onDragOver={(e) => { if (dragId && dragId !== c.id) { e.preventDefault(); if (overRow !== c.id) setOverRow(c.id); } }}
                       onDragLeave={() => setOverRow((r) => (r === c.id ? null : r))}
                       onDrop={(e) => { e.preventDefault(); dropOnRow(c.id); }}
                       className={`border-t align-middle transition-colors ${
-                        overRow === c.id ? "border-brand bg-brand-tint" : "border-line/70"
+                        selected.has(c.id) ? "bg-[#FFF0E8]" : overRow === c.id ? "border-brand bg-brand-tint" : "border-line/70"
                       } ${dragId === c.id ? "opacity-40" : ""}`}>
                       <td
+                        data-grip
                         draggable
                         onDragStart={(e) => { setDragId(c.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", c.id); } catch {} }}
                         onDragEnd={() => { setDragId(null); setOverRow(null); setOverSec(null); }}
                         title="Drag to reorder or move to another section"
-                        className="cursor-grab select-none py-1 pr-1 text-muted/50 hover:text-brand active:cursor-grabbing">
+                        className={`cursor-grab select-none py-1 pl-1 pr-1 text-muted/50 hover:text-brand active:cursor-grabbing ${selected.has(c.id) ? "border-l-[3px] border-[#F16722]" : "border-l-[3px] border-transparent"}`}>
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                           <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
                           <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
@@ -2069,7 +2285,9 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                         )}
                       </td>
                       <td className="py-1 pr-2 text-[11px] text-muted">{c.ref}</td>
-                      <td className="py-1 pr-2">
+                      <td className="py-1 pr-2"
+                        onMouseEnter={(e) => { if (selected.has(c.id)) setHoverSum({ col: "qty", x: e.clientX, y: e.clientY }); }}
+                        onMouseLeave={() => setHoverSum(null)}>
                         {c.baseQty != null ? (
                           // Combo item: the Qty column is the PER-UNIT qty (1 per unit); the group's
                           // combination qty (×N) multiplies the total, not this number.
@@ -2089,9 +2307,16 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                         onChange={(e) => setComp(c.id, { adj: e.target.value })} /></td>
                       <td className="py-1 pr-2"><input className="input h-7 px-1.5 text-xs" value={c.note} placeholder="—"
                         onChange={(e) => setComp(c.id, { note: e.target.value })} /></td>
-                      <td className="py-1 pr-2 text-right text-muted">{fmtEgp(itemPriceEgp(c, s))}</td>
-                      <td className="py-1 pr-2 text-right font-semibold">{fmtEgp(itemPriceEgp(c, s) * c.qty)}</td>
-                      <td className="whitespace-nowrap py-1 text-right">
+                      <td className="py-1 pr-2 text-right text-muted"
+                        onMouseEnter={(e) => { if (selected.has(c.id)) setHoverSum({ col: "unit", x: e.clientX, y: e.clientY }); }}
+                        onMouseLeave={() => setHoverSum(null)}>{fmtEgp(itemPriceEgp(c, s))}</td>
+                      <td className="py-1 pr-2 text-right font-semibold"
+                        onMouseEnter={(e) => { if (selected.has(c.id)) setHoverSum({ col: "total", x: e.clientX, y: e.clientY }); }}
+                        onMouseLeave={() => setHoverSum(null)}>{fmtEgp(itemPriceEgp(c, s) * c.qty)}</td>
+                      <td className="whitespace-nowrap py-1 pr-1 text-right">
+                        <input type="checkbox" data-rowcheck className="mr-1.5 h-3.5 w-3.5 cursor-pointer accent-brand align-middle" checked={selected.has(c.id)} readOnly
+                          onClick={(e) => e.preventDefault()}
+                          title="Click to toggle · drag anywhere on the row to select a range · Shift-click for a range" />
                         <button className="px-1 text-muted hover:text-brand-dark" title="Change component" onClick={() => setEditComp(c.id)}>✎</button>
                         <button className="px-1 text-red-500" title="Remove" onClick={() => delComp(c.id)}>✕</button>
                       </td>
@@ -2108,17 +2333,22 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                           // Single source of truth for the multiplier: qty ÷ baseQty.
                           // The header ×N badge and the "Combination qty" field both read it.
                           const cq = comboQtyOf(secComps, g);
-                          const isMcc = /\(Type \d+\)/.test(g); // combination qty (×N) is MCC-only
+                          // Combination-qty (×N) control: MCC groups (by name) + custom combinations (flagged).
+                          const scalable = /\(Type \d+\)/.test(g) ||
+                            !!secComps.find((x) => !isSpacer(x) && (effGroup.get(x.id) || "") === g)?.comboScalable;
+                          const isOut = sec === "Outgoings"; // Outgoings groups get their own select-all
+                          const gIds = secComps.filter((c) => !isSpacer(c) && (effGroup.get(c.id) || "") === g).map((c) => c.id);
+                          const gSel = gIds.filter((id) => selected.has(id)).length;
                           rows.push(
-                            <tr key={`grp-${sec}-${g}`} className="border-t border-brand/20 bg-brand-tint/40">
+                            <tr key={`grp-${sec}-${g}`}>
                               <td className="py-1" />
-                              <td colSpan={8} className="py-1 pr-2">
+                              <td colSpan={isOut ? 7 : 8} className="py-1 pr-2">
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-4">
-                                    <span className="text-[11px] font-bold text-brand-dark">
-                                      <span className="uppercase tracking-wide">{g}</span>{isMcc ? `, QTY (${cq}) each contain:` : ""}
+                                    <span className="text-[11px] font-normal text-brand-dark underline underline-offset-2">
+                                      <span className="uppercase tracking-wide">{g}</span>{scalable ? `, QTY (${cq}) each contain:` : ""}
                                     </span>
-                                    {isMcc && (
+                                    {scalable && (
                                       <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
                                         Combination qty
                                         <input type="number" min={1} value={cq}
@@ -2144,6 +2374,17 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                                   </div>
                                 </div>
                               </td>
+                              {isOut && (
+                                <td className="py-1 pr-1 text-right">
+                                  {gIds.length > 0 && (
+                                    <input type="checkbox" className="h-3.5 w-3.5 cursor-pointer accent-brand align-middle"
+                                      checked={gSel === gIds.length}
+                                      ref={(el) => { if (el) el.indeterminate = gSel > 0 && gSel < gIds.length; }}
+                                      onChange={(e) => setGroupSel(sec, g, e.target.checked)}
+                                      title="Select / clear all in this group" />
+                                  )}
+                                </td>
+                              )}
                             </tr>
                           );
                         }
@@ -2158,6 +2399,54 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
             </div>
           </div>
         ))
+      )}
+      {/* Selection action bar — starts anchored below the selection; drag the grip to move it anywhere.
+          Once dragged it is position:fixed, so it's portaled to <body> to escape this card's
+          animate-fade-up ancestor whose lingering transform would otherwise capture `fixed`
+          and fling the bar off-screen (same trap the export modal avoids). */}
+      {selected.size > 0 && (dragPos != null || barTop != null) && (() => {
+        const bar = (
+          <div
+            className={`no-print z-40 ${dragPos ? "fixed" : "absolute left-1/2 -translate-x-1/2"}`}
+            style={dragPos ? { left: dragPos.x, top: dragPos.y } : { top: barTop ?? 0 }}>
+            <div data-selbar="" className="flex items-center gap-2.5 rounded-full border border-line bg-white py-2 pl-3 pr-3 shadow-lift animate-pop">
+              <span onMouseDown={startBarDrag} title="Drag to move the bar"
+                className="flex cursor-move select-none items-center gap-2 text-muted/60 hover:text-brand">
+                <svg width="11" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <circle cx="5" cy="3" r="1.4" /><circle cx="11" cy="3" r="1.4" />
+                  <circle cx="5" cy="8" r="1.4" /><circle cx="11" cy="8" r="1.4" />
+                  <circle cx="5" cy="13" r="1.4" /><circle cx="11" cy="13" r="1.4" />
+                </svg>
+                <span className="whitespace-nowrap text-sm font-semibold text-ink">
+                  {selected.size} selected · <span className="text-brand-dark">Total {fmtEgp(selectedTotal)}</span>
+                </span>
+              </span>
+              <span className="h-6 w-px bg-line" />
+              <button type="button" onClick={duplicateSel} title="Duplicate selected rows (Ctrl/Cmd+D)"
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-brand-dark transition hover:bg-brand-light">
+                <span className="text-base leading-none">⧉</span> Duplicate
+              </button>
+              <button type="button" onClick={deleteSel} title="Delete selected rows (Del)"
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-red-600 transition hover:bg-red-50">
+                <span className="text-base leading-none">✕</span> Delete
+              </button>
+              <span className="h-6 w-px bg-line" />
+              <button type="button" onClick={clearSel} title="Close (Esc)" aria-label="Close — clear selection"
+                className="flex h-7 w-7 items-center justify-center rounded-full text-sm leading-none text-muted transition hover:bg-surface hover:text-ink">✕</button>
+            </div>
+          </div>
+        );
+        return dragPos ? createPortal(bar, document.body) : bar;
+      })()}
+      {/* Column-aware running sum — floats by the cursor over the Qty / Unit cost / Total cells of
+          selected rows. Portaled to <body> for the same reason as the action bar: it's fixed and
+          would otherwise be captured by the animate-fade-up wrapper's transform. */}
+      {hoverSum && selected.size > 0 && createPortal(
+        <div className="no-print pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-md bg-ink px-2.5 py-1 text-[11px] font-semibold text-white shadow-lift"
+          style={{ left: hoverSum.x, top: hoverSum.y - 10 }}>
+          <span className="text-white/60">{hoverSum.col === "qty" ? "Σ Qty" : hoverSum.col === "unit" ? "Σ Unit cost" : "Σ Total"}</span>{" "}
+          {fmtEgp(colSum(hoverSum.col))}
+        </div>, document.body
       )}
     </div>
   );
@@ -2181,7 +2470,10 @@ function ComponentEditSelect({ current, onPick, onClose }: {
     });
   }, [q]);
   useEffect(() => { curRef.current?.scrollIntoView({ block: "center" }); }, []);
-  return (
+  // Portal to <body>: rendered inline in a table row, this fixed overlay would otherwise be
+  // captured by the panels tab's animate-fade-up transform — placing it near the top of the tall
+  // wrapper instead of the viewport, so autoFocus would scroll the whole page up to the row.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-ink/30 p-4 pt-20"
       onMouseDown={onClose}>
       <div className="w-full max-w-xl overflow-hidden rounded-xl2 border border-line bg-white shadow-lift"
@@ -2208,12 +2500,12 @@ function ComponentEditSelect({ current, onPick, onClose }: {
           })}
         </div>
       </div>
-    </div>
+    </div>, document.body
   );
 }
 
 // ── Combination builders (RPT-03) ────────────────────────────────────────────
-type ComboKind = "ats" | "photocell" | "mcc" | "pfc" | "wd" | "lamps";
+type ComboKind = "ats" | "photocell" | "mcc" | "pfc" | "wd" | "lamps" | "custom";
 function BreakerSelect({ label, value, onPick, pool, placeholder = "Search breaker…" }: {
   label: string; value: DbComponent | null; onPick: (c: DbComponent) => void; pool: DbComponent[]; placeholder?: string;
 }) {
@@ -2319,8 +2611,8 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
   const [kw, setKw] = useState(kws[0] ?? "");
   useEffect(() => setKw(mccKws(kind)[0] ?? ""), [kind]);
   const types = useMemo(() => mccTypes(kind, kw), [kind, kw]);
-  const [type, setType] = useState(1);
-  useEffect(() => setType(types[0] ?? 1), [types]);
+  const [type, setType] = useState(2);
+  useEffect(() => setType(types.includes(2) ? 2 : (types[0] ?? 1)), [types]); // default Type 2 when available
   const [withCtl, setWithCtl] = useState(true);
   const [qty, setQty] = useState(1); // RPT-1: quantity for this combination
   return (
@@ -2419,6 +2711,85 @@ function LampsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) 
         Red / Green / Yellow pilot lights (LED 230 V AC) — 1 each.
       </p>
       <button className="btn-ghost" onClick={() => onPreview(buildIndicationLamps(), "Indication Lamps")}>Generate set</button>
+    </div>
+  );
+}
+
+// New Combination: build a custom named group from any catalogue components. Name it,
+// search-and-add items (each with its own qty), then add it as a group to the active section.
+function CustomBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
+  const pool = useMemo(() => COMPONENTS, []);
+  const [name, setName] = useState("");
+  const [comboQty, setComboQty] = useState(1); // ×N — scales the whole combination
+  const [items, setItems] = useState<{ comp: DbComponent; qty: number }[]>([]);
+  const [pending, setPending] = useState<DbComponent | null>(null); // picked component awaiting a qty
+  const [pendQty, setPendQty] = useState("");
+  const add = (c: DbComponent, qty: number) =>
+    setItems((old) => {
+      const i = old.findIndex((x) => x.comp.ref === c.ref && x.comp.n === c.n);
+      if (i >= 0) { const next = [...old]; next[i] = { ...next[i], qty: next[i].qty + qty }; return next; } // bump qty if re-added
+      return [...old, { comp: c, qty }];
+    });
+  const confirmAdd = () => { if (!pending) return; add(pending, parseInt(pendQty, 10) || 1); setPending(null); setPendQty(""); };
+  const setQty = (i: number, q: number) => setItems((old) => old.map((x, j) => (j === i ? { ...x, qty: Math.max(1, q) } : x)));
+  const remove = (i: number) => setItems((old) => old.filter((_, j) => j !== i));
+  const label = name.trim() || "New Combination";
+  const gen = () => {
+    if (!items.length) return;
+    // baseQty = per-unit qty; qty = baseQty × N so the group's ×N combination-qty scales it.
+    onPreview(items.map((it) => ({ qty: it.qty * comboQty, baseQty: it.qty, desc: it.comp.n, comp: it.comp, groupLabel: label })), label);
+  };
+  return (
+    <div className="rounded-lg border border-line p-3">
+      {/* Name written directly — same pill input as the “New section…” field */}
+      <input className="input h-10 w-full rounded-full text-sm sm:w-72" value={name}
+        onChange={(e) => setName(e.target.value)} placeholder="New combination…" />
+      <div className="mt-2">
+        <BreakerSelect label="Add component" value={null} onPick={(c) => { setPending(c); setPendQty(""); }} pool={pool} placeholder="Search all components…" />
+      </div>
+      {/* Qty popup — appears when a component is picked, before it's added to the list */}
+      {pending && (
+        <div className="mt-2 rounded-lg border border-brand/50 bg-white p-3 shadow-sm">
+          <p className="mb-2 text-xs">
+            <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{pending.t}</span>
+            <span className="font-bold text-ink">{pending.n}</span>
+            <span className="ml-1 text-[11px] text-muted">{pending.ref} · {pending.brand}</span>
+          </p>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-muted">Qty</label>
+            <input autoFocus inputMode="numeric" className="input h-9 w-24" placeholder="1" value={pendQty}
+              onChange={(e) => setPendQty(e.target.value.replace(/[^\d]/g, ""))}
+              onKeyDown={(e) => { if (e.key === "Enter") confirmAdd(); if (e.key === "Escape") { setPending(null); setPendQty(""); } }} />
+            <button type="button" className="btn-primary h-9 px-4 text-sm" onClick={confirmAdd}>Add</button>
+            <button type="button" className="btn-ghost h-9 px-3 text-sm" onClick={() => { setPending(null); setPendQty(""); }}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {items.length > 0 ? (
+        <div className="mt-2 overflow-hidden rounded border border-line/70">
+          {items.map((it, i) => (
+            <div key={it.comp.ref + it.comp.n + i} className="flex items-center gap-2 border-t border-line/60 px-2 py-1 text-xs first:border-0">
+              <span className="min-w-0 flex-1 truncate">{it.comp.n} <span className="text-muted">· {it.comp.ref} · {it.comp.brand}</span></span>
+              <input className="input h-7 w-16 text-center" inputMode="numeric" value={it.qty}
+                onChange={(e) => setQty(i, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1)} title="Quantity" />
+              <button type="button" className="px-1 text-red-500 hover:text-red-700" title="Remove" onClick={() => remove(i)}>✕</button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-[11px] text-muted">Search and pick components to add them. Set a quantity per item, then generate — they’re added as one named group.</p>
+      )}
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+          Combination qty
+          <input className="input h-8 w-16 text-center" inputMode="numeric" value={comboQty}
+            onChange={(e) => setComboQty(Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1))}
+            title="Quantity of the whole combination — scales every item (×N)" />
+        </label>
+        <button className="btn-ghost" disabled={!items.length} onClick={gen}>
+          Generate combination ({items.length}{comboQty > 1 ? ` ×${comboQty}` : ""})
+        </button>
+      </div>
     </div>
   );
 }

@@ -202,7 +202,7 @@ input[type="number"] {
   }
   .a4-sheet {
     width: 100%;
-    min-height: 273mm; /* A4 height (297mm) minus the @page 12mm top+bottom margins */
+    min-height: 277mm; /* A4 height (297mm) minus the @page 10mm top+bottom margins */
     border: none !important;
     border-radius: 0 !important;
     box-shadow: none !important;
@@ -228,6 +228,17 @@ input[type="number"] {
     box-shadow: none !important;
     border-radius: 0 !important;
   }
+  /* The offer sits inside an animate-fade-up wrapper whose lingering transform would become the
+     containing block for the absolute .print-area — pushing it (and every table) right of the
+     page. Neutralize the animation transforms in print so .print-area anchors to the page and
+     the content is centered. */
+  .animate-fade-up,
+  .animate-fade-in,
+  .animate-pop {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
   .no-print {
     display: none !important;
   }
@@ -242,7 +253,7 @@ input[type="number"] {
   }
   /* The technical-offer cover fills its own page */
   .tech-cover {
-    min-height: 247mm;
+    min-height: 251mm;
     border: none !important;
     box-shadow: none !important;
     border-radius: 0 !important;
@@ -251,5 +262,5 @@ input[type="number"] {
 
 @page {
   size: A4;
-  margin: 12mm;
+  margin: 10mm; /* narrower page margins → wider content area (tables span more of the page) */
 }
