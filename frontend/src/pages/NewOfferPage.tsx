@@ -28,7 +28,7 @@ const initialRmu: RmuConfigInput = {
   nalCount: 2,
   nalfCount: 1,
   hasMetering: false,
-  rtuType: "READY1",
+  rtuType: "NONE",
   installation: "INDOOR",
   busbarCurrentA: 630,
   fuseRatingA: null,
@@ -128,6 +128,13 @@ export default function NewOfferPage() {
       setRmu((c) => ({ ...c, clientSpec: "EECH" }));
     }
   }, [rmu.clientSpec]);
+
+  // PRAL has no smart option — force it off (standard) whenever PRAL is selected.
+  useEffect(() => {
+    if (rmu.productType === "PRAL" && rmu.rtuType !== "NONE") {
+      setRmu((c) => ({ ...c, rtuType: "NONE" }));
+    }
+  }, [rmu.productType, rmu.rtuType]);
 
   const [preview, setPreview] = useState<GeneratedOffer | null>(null);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
@@ -516,12 +523,6 @@ export default function NewOfferPage() {
                 )}
               </div>
 
-              {/* Smart/RTU levels are a PRAL/PSEC feature — not offered for Lucy. */}
-              {!isLucy && (
-                <Field label="Smart" hint="Smart (with RTU) ⇒ spec ·9; Ready-to-be-smart ⇒ spec ·0">
-                  <Select value={rmu.rtuType} onChange={(v) => setR("rtuType", v)} options={RTU_TYPES} />
-                </Field>
-              )}
             </div>
           </section>
 
@@ -555,12 +556,13 @@ export default function NewOfferPage() {
                     renderLabel={(v) => v}
                   />
                 </Field>
-                <Field label="Voltage transformer">
+                <Field label="Voltage transformer" hint="Two core → with fuse · single core → without fuse">
                   <Segmented
                     value={String(rmu.vtCores ?? 1) as "1" | "2"}
                     onChange={(v) => {
                       const cores = Number(v);
                       setR("vtCores", cores);
+                      // Fuse follows the core count: two core = with fuse, single = without.
                       setR("meteringWithFuse", cores === 2);
                     }}
                     options={["1", "2"] as const}
@@ -573,21 +575,28 @@ export default function NewOfferPage() {
                 <Field label="VT class (CL)" hint="Fixed (non-editable)">
                   <input className="input bg-surface" value="0.5" readOnly />
                 </Field>
-                {rmu.vtCores === 2 && (
-                  <div className="sm:col-span-2">
-                    <Field label="VT protection" hint="Double-core VT only — affects the panel code & price">
-                      <Segmented
-                        value={rmu.meteringWithFuse ? "with" : "without"}
-                        onChange={(v) => setR("meteringWithFuse", v === "with")}
-                        options={["without", "with"] as const}
-                        renderLabel={(v) => (v === "without" ? "Without fuse" : "With fuse")}
-                      />
-                    </Field>
-                  </div>
-                )}
               </div>
             )}
           </section>
+
+          {/* Smart / RTU — optional, PSEC & Lucy only (PRAL has no smart). Works
+              like the metering toggle: turn it on, then pick the level. */}
+          {rmu.productType !== "PRAL" && (
+            <section className="card p-5 animate-fade-up">
+              <Toggle
+                checked={rmu.rtuType !== "NONE"}
+                onChange={(on) => setR("rtuType", on ? "READY1" : "NONE")}
+                label="Smart / RTU (optional)"
+              />
+              {rmu.rtuType !== "NONE" && (
+                <div className="mt-4 sm:max-w-md animate-fade-up">
+                  <Field label="Smart level" hint="Priced as a separate line in the commercial offer">
+                    <Select value={rmu.rtuType} onChange={(v) => setR("rtuType", v)} options={RTU_TYPES} />
+                  </Field>
+                </div>
+              )}
+            </section>
+          )}
 
           <div className="flex justify-between">
             <button type="button" className="btn-ghost" onClick={() => setTab("project")}>← Project</button>

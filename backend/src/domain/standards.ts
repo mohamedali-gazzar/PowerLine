@@ -9,12 +9,22 @@ export type VoltageKv = 12 | 24;
 // Smart level (replaces the old NONE/TYPE1/TYPE2 RTU options):
 //   READY1/2 = "ready to be smart" (prepared, no RTU yet); SMART1/2 = actual RTU.
 //   type 1 = monitor only; type 2 = monitor & control (motorized switch).
-export type RtuType = "READY1" | "READY2" | "SMART1" | "SMART2";
+// NONE = no smart / RTU (standard panel). The rest are the selectable smart levels.
+export type RtuType = "NONE" | "READY1" | "READY2" | "SMART1" | "SMART2";
 export type Installation = "INDOOR" | "OUTDOOR";
 
 export const PRODUCT_TYPES: ProductType[] = ["PRAL", "PSEC", "LUCY"];
 export const VOLTAGES: VoltageKv[] = [12, 24];
+// Selectable smart levels (NONE is represented by the "Smart" toggle being off).
 export const RTU_TYPES: RtuType[] = ["READY1", "READY2", "SMART1", "SMART2"];
+
+/** Display labels for the smart / RTU levels (used in the commercial line item). */
+export const RTU_LABEL: Record<string, string> = {
+  READY1: "Ready to be Smart — Type 1",
+  READY2: "Ready to be Smart — Type 2",
+  SMART1: "Smart — Type 1 (monitor only)",
+  SMART2: "Smart — Type 2 (monitor & control)",
+};
 export const INSTALLATIONS: Installation[] = ["INDOOR", "OUTDOOR"];
 
 // Smart-level semantics — tolerant of the legacy NONE/TYPE1/TYPE2 values that may

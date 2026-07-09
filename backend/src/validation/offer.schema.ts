@@ -2,7 +2,6 @@ import { z } from "zod";
 import {
   PRODUCT_TYPES,
   VOLTAGES,
-  RTU_TYPES,
   INSTALLATIONS,
 } from "../domain/standards";
 
@@ -22,7 +21,9 @@ export const rmuConfigSchema = z.object({
   nalCount: z.number().int().min(0).max(5), // Ring feeders R0–R5
   nalfCount: z.number().int().min(0).max(2), // Transformer feeders T0–T2
   hasMetering: z.boolean().default(false),
-  rtuType: z.enum(RTU_TYPES as [string, ...string[]]).default("READY1"),
+  rtuType: z
+    .enum(["NONE", "READY1", "READY2", "SMART1", "SMART2"])
+    .default("NONE"),
   installation: z.enum(INSTALLATIONS as [string, ...string[]]).default("INDOOR"),
   busbarCurrentA: z.number().int().positive().max(2500).default(630),
   fuseRatingA: z.number().int().positive().max(400).optional().nullable(),

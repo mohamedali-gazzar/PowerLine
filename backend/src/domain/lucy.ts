@@ -8,7 +8,14 @@
 // Switch "L", stored as nalCount); the second is the TRANSFORMER count (Circuit
 // Breaker "V", stored as nalfCount). "+M" adds the Air-Insulated Metering Unit.
 
-import { getRatings, type ProductType } from "./standards";
+import {
+  getRatings,
+  rtuHasRtu,
+  rtuIsReady,
+  rtuTypeNum,
+  rtuMotorized,
+  type ProductType,
+} from "./standards";
 import type {
   RmuConfigInput,
   GeneratedOffer,
@@ -151,6 +158,26 @@ export function assembleLucyOffer(c: RmuConfigInput): GeneratedOffer {
   const cfg = findLucyConfig(c);
   const wayText = cfg?.wayText ?? `${feeders + transformers}-way`;
 
+  // Smart / RTU (optional) — same levels as PSEC.
+  const hasRtu = rtuHasRtu(c.rtuType);
+  const ready = rtuIsReady(c.rtuType);
+  const typeNum = rtuTypeNum(c.rtuType);
+  const titleBase = hasRtu
+    ? `Smart Lucy AEGIS PLUS ${voltageKv}KV-TYPE ${typeNum}`
+    : ready
+    ? `Lucy AEGIS PLUS ${voltageKv}KV (Ready to be Smart-TYPE ${typeNum})`
+    : `Lucy AEGIS PLUS ${voltageKv}KV`;
+  // Generic RTU hardware (not in Lucy's sheet — same kit PSEC uses).
+  let communication: CubicleItem[] | undefined;
+  if (hasRtu) {
+    communication = [
+      { qty: 1, description: "RTU" },
+      { qty: 3, description: "Expansion module 16 DI" },
+      { qty: 1, description: "Power supply 24 VDC, 10A" },
+    ];
+    if (rtuMotorized(c.rtuType)) communication.push({ qty: 1, description: "Expansion module 8 DO" });
+  }
+
   const headerType = metering
     ? "SF6 Insulated Circuit Breaker Ring Main Unit along with Air Insulated Metering Unit (AEGIS PLUS)"
     : "SF6 Insulated Circuit Breaker Ring Main Unit (AEGIS PLUS)";
@@ -218,7 +245,7 @@ export function assembleLucyOffer(c: RmuConfigInput): GeneratedOffer {
     panelCode: "", // Lucy has no Powerline product code — left blank on purpose
     priceKey: `LUCY-${lucyKey(c)}`,
     commercialDescription: lucyCommercialDescription(c),
-    titleProduct: `Lucy AEGIS PLUS ${voltageKv}KV (${outdoor ? "Outdoor" : "Indoor"})`,
+    titleProduct: `${titleBase} (${outdoor ? "Outdoor" : "Indoor"})`,
     titleFamily: "SF6 Circuit-Breaker Ring Main Unit",
     generalData,
     electricalData,
@@ -228,12 +255,12 @@ export function assembleLucyOffer(c: RmuConfigInput): GeneratedOffer {
       "All steelwork will be finish painted gray to RAL 7032, powder coated and stoved.",
     ],
     cubicles,
-    communication: undefined,
+    communication,
     summary: {
       productType: "LUCY" as ProductType,
       lbsBrand: "ABB" as LbsBrand, // N/A for Lucy (not shown in the Lucy view)
       clientSpec: "EECH" as ClientSpec, // N/A for Lucy
-      smart: false,
+      smart: hasRtu,
       insulation: "SF6",
       voltageKv,
       nalCount: feeders,

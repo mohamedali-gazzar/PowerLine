@@ -2,7 +2,7 @@
 
 export type ProductType = "PRAL" | "PSEC" | "LUCY";
 export type VoltageKv = 12 | 24;
-export type RtuType = "READY1" | "READY2" | "SMART1" | "SMART2";
+export type RtuType = "NONE" | "READY1" | "READY2" | "SMART1" | "SMART2";
 export type Installation = "INDOOR" | "OUTDOOR";
 export type OfferStatus = "DRAFT" | "SENT" | "WON" | "LOST";
 export type ProductCategory = "RMU" | "KIOSK" | "LV";

@@ -8,6 +8,7 @@ import {
   type RmuConfigInput,
 } from "./assembly";
 import { lucyPrice, lucyKey } from "./lucy";
+import { RTU_LABEL } from "./standards";
 
 export const PRICE_LIST: Record<string, number> = {
   // --- P-RAL 12 (air) ---
@@ -74,6 +75,19 @@ export const ADD_ONS = {
   outdoorEnclosure: { name: "Outdoor Enclosure", price: 2000 },
 } as const;
 
+// Smart / RTU add-on prices (USD) per product family. PRAL has no smart option,
+// so it is absent here → no RTU line is ever added for PRAL.
+const RTU_PRICES: Record<string, Record<string, number>> = {
+  PSEC: { READY1: 6500, READY2: 8000, SMART1: 12000, SMART2: 14000 },
+  LUCY: { READY1: 8500, READY2: 10000, SMART1: 14000, SMART2: 16000 },
+};
+
+/** Smart/RTU commercial add-on for this config, or null when none applies. */
+function rtuAddOn(c: RmuConfigInput): { name: string; price: number } | null {
+  const price = RTU_PRICES[c.productType]?.[c.rtuType ?? "NONE"];
+  return price ? { name: `Smart / RTU — ${RTU_LABEL[c.rtuType] ?? c.rtuType}`, price } : null;
+}
+
 export interface ConfigPricing {
   panelCode: string;
   priceKey: string;
@@ -99,6 +113,8 @@ export function priceForConfig(c: RmuConfigInput): ConfigPricing {
     const basePrice = lucyPrice(c);
     const addOns: { name: string; price: number }[] = [];
     if (c.installation === "OUTDOOR") addOns.push({ ...ADD_ONS.outdoorEnclosure });
+    const rtu = rtuAddOn(c);
+    if (rtu) addOns.push(rtu);
     const listPrice =
       basePrice == null ? null : basePrice + addOns.reduce((s, a) => s + a.price, 0);
     return {
@@ -116,6 +132,8 @@ export function priceForConfig(c: RmuConfigInput): ConfigPricing {
 
   const addOns: { name: string; price: number }[] = [];
   if (c.installation === "OUTDOOR") addOns.push({ ...ADD_ONS.outdoorEnclosure });
+  const rtu = rtuAddOn(c);
+  if (rtu) addOns.push(rtu);
 
   const listPrice =
     basePrice == null
