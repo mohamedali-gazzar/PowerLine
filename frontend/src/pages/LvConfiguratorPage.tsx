@@ -27,7 +27,6 @@ import {
 import { rankSearchOptions } from "../lv/search";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import * as XLSX from "xlsx";
-import { type TechnicalDoc, type PdfCompRow } from "../lv/technicalPdf";
 import {
   PRO_E_DEPTHS, PRO_E_THICKNESS, PRO_E_IPS, IS2_DEPTHS, PLP_DEPTHS,
   proEIp31Disabled, retable, defaultCellConfig, type CellType,
@@ -712,7 +711,7 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
 // Running page header on every non-cover offer page (logo + project name + QTN · customer).
 function PageHeader({ s, qtnRef }: { s: LvState; qtnRef: string }) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-4 border-b pb-2" style={{ borderColor: "#E7E7EB" }}>
+    <div data-pdf-header className="mb-3 flex items-center justify-between gap-4 border-b pb-2" style={{ borderColor: "#E7E7EB" }}>
       <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-14" />
       <div className="text-right">
         {s.project.name && <div className="text-base font-bold leading-tight text-ink">{s.project.name}</div>}
@@ -769,81 +768,27 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
   // Revision is folded into the QTN number: rev 00 → unchanged, rev 01 → "-1", rev 02 → "-2", …
   const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
   const qtnRef = revNum > 0 ? `${qtnNo}-${revNum}` : qtnNo;
-  // ── Build the plain PDF doc for the jsPDF exporter. Mirrors the on-screen grouping
-  //    (sections / combination sub-groups / zebra) so the PDF matches the preview;
-  //    the exporter then flows each panel's component table across A4 pages. ──
-  const pdfRowsOf = (p: LvPanel): PdfCompRow[] => {
-    const rows: PdfCompRow[] = [];
-    const secs = p.sections.filter((sec) => p.components.some((c) => c.section === sec));
-    if (secs.length === 0) return rows;
-    const multiSection = secs.length > 1;
-    const effGroup = effectiveGroups(p.components);
-    secs.forEach((sec) => {
-      const comps = p.components.filter((c) => c.section === sec);
-      const order: string[] = [];
-      const byG = new Map<string, PanelComponent[]>();
-      comps.forEach((c) => { const k = effGroup.get(c.id) || ""; if (!byG.has(k)) { byG.set(k, []); order.push(k); } byG.get(k)!.push(c); });
-      if (multiSection || order.some((g) => g)) rows.push({ kind: "section", label: sec });
-      let dataRow = 0;
-      for (const g of order) {
-        if (g) {
-          const gf = byG.get(g)!.find((c) => !isSpacer(c));
-          const gbase = gf ? (gf.baseQty ?? gf.qty) : 0;
-          const gcq = gf && gbase > 0 ? Math.max(1, Math.round(gf.qty / gbase)) : 1;
-          const gScalable = /\(Type \d+\)/.test(g) || !!byG.get(g)!.find((c) => !isSpacer(c))?.comboScalable;
-          rows.push({ kind: "group", label: g.toUpperCase(), suffix: gScalable ? `, QTY (${gcq}) each contain:` : "" });
-        }
-        for (const c of byG.get(g)!) {
-          if (isSpacer(c)) rows.push({ kind: "spacer" });
-          else rows.push({ kind: "comp", qty: String(c.baseQty ?? c.qty), desc: c.name, comment: c.comment || "", adj: c.adj || "", brand: c.brand || "", note: c.note || "", zebra: dataRow++ % 2 === 1 });
-        }
-      }
-    });
-    return rows;
-  };
-  const sv = (x: unknown) => (x == null ? "" : String(x));
-  const buildPdfDoc = (): TechnicalDoc => ({
-    filename: offerTitle("TO", qtnNo, s.project.revisionNo),
-    projectName: s.project.name || "",
-    qtnRef,
-    customer: s.project.customer || "",
-    notes: { general: s.notesGeneral ?? [], additional: s.notesAdditional ?? [] },
-    panels: s.panels.map((p, pi) => {
-      const sp = specOf(p);
-      return {
-        itemNo: pi + 1,
-        name: p.name,
-        qty: sv(p.qty),
-        spec: [
-          ["Panel Type", sv(sp.panelType), "IP", sv(sp.ip)],
-          ["Mounting", sv(sp.mount), "Rating", p.ratingA ? `${p.ratingA} A` : ""],
-          ["RAL", sv(sp.ral), "Amb. Temp.", sv(p.ambTemp)],
-          ["Copper", sv(p.copperType), "Neutral", sv(p.neutral)],
-          ["Incoming Cables", sv(p.incomingCables), "Earth", sv(p.earth)],
-          ["Outgoing Cables", sv(p.outgoingCables), "Form", sv(p.form)],
-          ["Short Circuit", sv(p.shortCircuit), "Fed From", sv(p.fedFrom)],
-        ] as [string, string, string, string][],
-        rows: pdfRowsOf(p),
-      };
-    }),
-  });
   const exportPdf = async () => {
-    const coverEl = document.querySelector<HTMLElement>("[data-pdf-cover]");
-    // Lazy-load the heavy PDF libs (jspdf + autotable + html2canvas) only on export.
+    const printArea = document.querySelector<HTMLElement>("[data-pdf-root]");
+    if (!printArea) return;
+    // Lazy-load html2canvas + jsPDF only on export. The PDF is built by capturing the
+    // on-screen offer HTML (so Arabic / RTL render exactly like the preview) and
+    // paginating it across A4 pages with a repeated header + "Page X of Y" footer.
     const { exportTechnicalPdf } = await import("../lv/technicalPdf");
-    await exportTechnicalPdf(buildPdfDoc(), coverEl);
+    await exportTechnicalPdf({ printArea, filename: offerTitle("TO", qtnNo, s.project.revisionNo) });
   };
   return (
     <div className="animate-fade-up">
       <PrintBar label={`${s.panels.length} panel${s.panels.length > 1 ? "s" : ""} → multi-page PDF (tables flow across pages).`}
         docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} exportFn={exportPdf} />
       <div className="offer-workspace">
-      <div className="print-area space-y-6">
+      <div data-pdf-root className="print-area space-y-6">
         {/* Cover page (shared branded title page) — no footer on the cover */}
         <OfferCover s={s} qtnNo={qtnNo} kind="Technical" />
         {/* Notes page (editable: edit / add / remove lines) — after the cover */}
         <section className="a4-sheet flex flex-col px-8 pb-3 pt-6" style={{ breakAfter: "page" }}>
           <PageHeader s={s} qtnRef={qtnRef} />
+          <div data-pdf-notes>
           {([["General Notes :-", "notesGeneral"], ["Additional Notes :-", "notesAdditional"]] as [string, NotesKey][]).map(([title, key]) => (
             <div key={key} className="mt-5">
               <h3 className="mb-2 text-lg font-bold italic underline" style={{ color: TRED }}>{title}</h3>
@@ -862,16 +807,17 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                 className="no-print mt-2 ml-8 text-xs font-semibold text-brand hover:underline">+ Add note</button>
             </div>
           ))}
+          </div>
           <PageFooter n={2} />
         </section>
         {s.panels.map((p, pi) => {
           const sp = specOf(p);
           return (
-            <div key={p.id} className="a4-sheet flex flex-col px-8 pb-3 pt-6"
+            <div key={p.id} data-pdf-panel className="a4-sheet flex flex-col px-8 pb-3 pt-6"
               style={pi < s.panels.length - 1 ? { breakAfter: "page" } : undefined}>
               <PageHeader s={s} qtnRef={qtnRef} />
               {/* panel-data table — rounded bordered frame */}
-              <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
+              <div data-pdf-specblock className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
               {/* item bar */}
               <table className="w-full table-fixed border-separate border-spacing-0">
                 <colgroup>
@@ -922,7 +868,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                   it also stops Chrome repeating <thead>/<tfoot> across print pages, so a panel that
                   overflows shows its header + page-number footer on its last page (not each page). */}
               <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
-              <table className="w-full table-fixed border-separate border-spacing-0">
+              <table data-pdf-comptable className="w-full table-fixed border-separate border-spacing-0">
                 <colgroup>
                   <col className="w-[10%]" />
                   <col className="w-[63%]" />
@@ -1763,6 +1709,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   // ── Multi-row selection: checkbox column, running sum, floating action bar ──
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [lastPickId, setLastPickId] = useState<string | null>(null);
+  const [moveOpen, setMoveOpen] = useState(false); // "Move to section" dropdown in the selection action bar
+  useEffect(() => setMoveOpen(false), [selected]); // close it whenever the selection changes
   const [hoverSum, setHoverSum] = useState<{ col: "qty" | "unit" | "total"; x: number; y: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const [barTop, setBarTop] = useState<number | null>(null); // action-bar y, just below the lowest selected row (card-relative)
@@ -1878,6 +1826,17 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     if (!selected.size) return;
     if (selected.size > 3 && !window.confirm(`Delete ${selected.size} selected rows?`)) return;
     u({ components: p.components.filter((c) => !selected.has(c.id)) });
+    clearSel();
+  };
+  // Move the selected rows into another section — dropped in after that section's existing
+  // rows. Selection clears on completion (like Delete), which closes the bar + dropdown.
+  const moveSelTo = (target: string) => {
+    if (!selected.size) return;
+    const moved = p.components.filter((c) => selected.has(c.id)).map((c) => ({ ...c, section: target }));
+    const rest = p.components.filter((c) => !selected.has(c.id));
+    let insertAt = rest.length; // target section empty → append at the end
+    for (let i = rest.length - 1; i >= 0; i--) { if (rest[i].section === target) { insertAt = i + 1; break; } }
+    u({ components: [...rest.slice(0, insertAt), ...moved, ...rest.slice(insertAt)] });
     clearSel();
   };
   useEffect(() => {
@@ -2495,6 +2454,22 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                 className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-brand-dark transition hover:bg-brand-light">
                 <span className="text-base leading-none">⧉</span> Duplicate
               </button>
+              <div className="relative">
+                <button type="button" onClick={() => setMoveOpen((v) => !v)} title="Move selected rows to another section"
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-ink transition hover:bg-surface ${moveOpen ? "bg-surface" : ""}`}>
+                  <span className="text-base leading-none">↧</span> Move to
+                  <svg width="9" height="9" viewBox="0 0 12 12" className="opacity-50" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </button>
+                {moveOpen && (
+                  <div className="absolute bottom-full left-1/2 z-50 mb-2 max-h-56 w-52 -translate-x-1/2 overflow-auto rounded-xl border border-line bg-white py-1 shadow-lift">
+                    <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-muted">Move to section</p>
+                    {p.sections.map((sec) => (
+                      <button key={sec} type="button" onClick={() => moveSelTo(sec)}
+                        className="block w-full truncate px-3 py-1.5 text-left text-sm text-ink hover:bg-brand-tint">{sec}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <button type="button" onClick={deleteSel} title="Delete selected rows (Del)"
                 className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-red-600 transition hover:bg-red-50">
                 <span className="text-base leading-none">✕</span> Delete
@@ -2528,7 +2503,8 @@ function ComponentEditSelect({ current, onPick, onClose }: {
   current: PanelComponent; onPick: (c: DbComponent) => void; onClose: () => void;
 }) {
   const [q, setQ] = useState("");
-  const curRef = useRef<HTMLButtonElement>(null);
+  const [active, setActive] = useState(0); // keyboard-highlighted row index into `shown`
+  const activeRef = useRef<HTMLButtonElement>(null);
   const isCurrent = (c: DbComponent) => c.ref === current.ref && c.n === current.name;
   const shown = useMemo(() => {
     const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -2538,7 +2514,20 @@ function ComponentEditSelect({ current, onPick, onClose }: {
       return terms.every((t) => hay.includes(t));
     });
   }, [q]);
-  useEffect(() => { curRef.current?.scrollIntoView({ block: "center" }); }, []);
+  // Start the cursor on the current component (unfiltered) or the top match (filtered).
+  useEffect(() => {
+    if (!q) { const i = shown.findIndex(isCurrent); setActive(i >= 0 ? i : 0); }
+    else setActive(0);
+  }, [q]);
+  // Keep the highlighted row scrolled into view (also scrolls to the current one on open).
+  useEffect(() => { activeRef.current?.scrollIntoView({ block: "nearest" }); }, [active, shown]);
+  // ↑/↓ move the highlight, Enter picks it — driven from the always-focused search box.
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") onClose();
+    else if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, shown.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); const c = shown[active]; if (c) onPick(c); }
+  };
   // Portal to <body>: rendered inline in a table row, this fixed overlay would otherwise be
   // captured by the panels tab's animate-fade-up transform — placing it near the top of the tall
   // wrapper instead of the viewport, so autoFocus would scroll the whole page up to the row.
@@ -2548,19 +2537,19 @@ function ComponentEditSelect({ current, onPick, onClose }: {
       <div className="w-full max-w-xl overflow-hidden rounded-xl2 border border-line bg-white shadow-lift"
         onMouseDown={(e) => e.stopPropagation()}>
         <div className="border-b border-line p-3">
-          <p className="mb-1.5 text-xs font-bold text-ink">Change component <span className="font-normal text-muted">— current: {current.name}</span></p>
+          <p className="mb-1.5 text-xs font-bold text-ink">Change component <span className="font-normal text-muted">— current: {current.name}</span><span className="ml-1 font-normal text-muted/80">· ↑↓ to move · Enter to pick</span></p>
           <input autoFocus className="input h-9 text-sm" placeholder="Search name / reference / type / rating…"
-            value={q} onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Escape") onClose(); }} />
+            value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} />
         </div>
         <div className="max-h-[55vh] overflow-auto">
           {shown.length === 0 && <div className="px-3 py-3 text-xs text-muted">No matches.</div>}
-          {shown.map((c) => {
-            const cur = isCurrent(c);
+          {shown.map((c, i) => {
+            const cur = isCurrent(c), act = i === active;
             return (
-              <button key={c.ref + c.n} ref={cur ? curRef : undefined} type="button"
-                onMouseDown={() => onPick(c)}
-                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-brand-tint ${cur ? "bg-brand-light font-bold text-brand-dark" : ""}`}>
+              <button key={c.ref + c.n} ref={act ? activeRef : undefined} type="button"
+                onMouseDown={() => onPick(c)} onMouseEnter={() => setActive(i)}
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${act ? "bg-brand-tint" : cur ? "bg-brand-light" : ""} ${cur ? "font-bold text-brand-dark" : ""}`}
+                style={act ? { boxShadow: "inset 2px 0 0 #F16722" } : undefined}>
                 <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{c.t}</span>
                 <span className="min-w-0 flex-1 truncate">{c.n}</span>
                 <span className="shrink-0 text-[11px] text-muted">{c.ref} · {c.brand}{cur ? " · current" : ""}</span>
