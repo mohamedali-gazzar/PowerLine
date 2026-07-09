@@ -27,6 +27,7 @@ import {
 import { rankSearchOptions } from "../lv/search";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import * as XLSX from "xlsx";
+import { type TechnicalDoc, type PdfCompRow } from "../lv/technicalPdf";
 import {
   PRO_E_DEPTHS, PRO_E_THICKNESS, PRO_E_IPS, IS2_DEPTHS, PLP_DEPTHS,
   proEIp31Disabled, retable, defaultCellConfig, type CellType,
@@ -466,14 +467,23 @@ function offerTitle(kind: "TO" | "CO" | "ML", qtnNo: string, rev: string): strin
   return `${kind}-${qtnNo} Rev ${String(rev ?? "").padStart(2, "0")}`;
 }
 
-function PrintBar({ label, docTitle, blockers }: { label: string; docTitle?: string; blockers?: ExportCheck[] }) {
+function PrintBar({ label, docTitle, blockers, exportFn }: { label: string; docTitle?: string; blockers?: ExportCheck[]; exportFn?: () => Promise<void> | void }) {
   // Set the document title right before printing so the saved PDF / print job is
   // named after the offer; restore it once the dialog closes (afterprint).
   const [modal, setModal] = useState(false);
   const [acked, setAcked] = useState(false); // remember the user accepted the warning
+  const [busy, setBusy] = useState(false); // jsPDF export in flight (async)
   const issues = blockers ?? [];
   const count = issues.reduce((n, c) => n + c.items.length, 0);
-  const doPrint = () => {
+  const doPrint = async () => {
+    // Technical offer builds a real multi-page PDF (jsPDF) instead of window.print().
+    if (exportFn) {
+      setBusy(true);
+      try { await exportFn(); }
+      catch (e) { console.error("PDF export failed", e); alert("Sorry — generating the PDF failed. Please try again."); }
+      finally { setBusy(false); }
+      return;
+    }
     if (!docTitle) return window.print();
     const prev = document.title;
     document.title = docTitle;
@@ -482,8 +492,8 @@ function PrintBar({ label, docTitle, blockers }: { label: string; docTitle?: str
     window.print();
   };
   // Pre-export gate: warn (once) if any check fails; the user can accept and proceed.
-  const onExport = () => (count > 0 && !acked ? setModal(true) : doPrint());
-  const proceed = () => { setAcked(true); setModal(false); doPrint(); };
+  const onExport = () => (count > 0 && !acked ? setModal(true) : void doPrint());
+  const proceed = () => { setAcked(true); setModal(false); void doPrint(); };
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-2 no-print">
@@ -496,7 +506,7 @@ function PrintBar({ label, docTitle, blockers }: { label: string; docTitle?: str
               ⚠ {count} warning{count > 1 ? "s" : ""}
             </button>
           )}
-          <button className="btn-primary" onClick={onExport}>⬇ PDF / Print</button>
+          <button className="btn-primary" onClick={onExport} disabled={busy}>{busy ? "Generating…" : "⬇ PDF / Print"}</button>
         </div>
       </div>
       {modal && <ExportWarnModal checks={issues} onClose={() => setModal(false)} onProceed={proceed} />}
@@ -574,7 +584,7 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
     { role: "Support", name: s.project.supportEngineer, phone: "", email: "" },
   ].filter((c) => c.name);
   return (
-    <section className="a4-sheet flex flex-col overflow-hidden" style={{ breakAfter: "page" }}>
+    <section data-pdf-cover className="a4-sheet flex flex-col overflow-hidden" style={{ breakAfter: "page" }}>
       <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
       <div className="flex flex-1 flex-col px-12 pb-2 pt-12">
         <div className="flex items-center justify-between">
@@ -644,7 +654,7 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
           ))}
         </div>
         <div className="mt-auto pt-8">
-          <div className="h-[3px] w-full rounded" style={{ background: TRED }} />
+          <div className="h-[3px] w-[calc(100%+3rem)] rounded" style={{ background: TRED }} />
           <div className="mt-6 flex flex-wrap items-center gap-3">
             {[
               { name: "ISO 9001", url: "https://drive.google.com/file/d/1D2GThbsl9FDr7rnhdFl7jsnWKXyOc8KY/view" },
@@ -711,10 +721,10 @@ function PageHeader({ s, qtnRef }: { s: LvState; qtnRef: string }) {
     </div>
   );
 }
-// Page-number-only footer, centered, no border/label. Pinned to the bottom of the sheet (mt-auto).
+// "Page X" footer, centered, no border/label, pinned to the bottom of the sheet (mt-auto).
 // Browser print can't count pages via CSS, so the number is computed per sheet in React.
 function PageFooter({ n }: { n: number }) {
-  return <div className="mt-auto pt-3 text-center text-[10.5px] font-semibold text-muted">{n}</div>;
+  return <div className="mt-auto pt-3 text-center text-[10.5px] font-semibold text-muted">Page {n}</div>;
 }
 
 type NotesKey = "notesGeneral" | "notesAdditional";
@@ -759,16 +769,80 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
   // Revision is folded into the QTN number: rev 00 → unchanged, rev 01 → "-1", rev 02 → "-2", …
   const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
   const qtnRef = revNum > 0 ? `${qtnNo}-${revNum}` : qtnNo;
+  // ── Build the plain PDF doc for the jsPDF exporter. Mirrors the on-screen grouping
+  //    (sections / combination sub-groups / zebra) so the PDF matches the preview;
+  //    the exporter then flows each panel's component table across A4 pages. ──
+  const pdfRowsOf = (p: LvPanel): PdfCompRow[] => {
+    const rows: PdfCompRow[] = [];
+    const secs = p.sections.filter((sec) => p.components.some((c) => c.section === sec));
+    if (secs.length === 0) return rows;
+    const multiSection = secs.length > 1;
+    const effGroup = effectiveGroups(p.components);
+    secs.forEach((sec) => {
+      const comps = p.components.filter((c) => c.section === sec);
+      const order: string[] = [];
+      const byG = new Map<string, PanelComponent[]>();
+      comps.forEach((c) => { const k = effGroup.get(c.id) || ""; if (!byG.has(k)) { byG.set(k, []); order.push(k); } byG.get(k)!.push(c); });
+      if (multiSection || order.some((g) => g)) rows.push({ kind: "section", label: sec });
+      let dataRow = 0;
+      for (const g of order) {
+        if (g) {
+          const gf = byG.get(g)!.find((c) => !isSpacer(c));
+          const gbase = gf ? (gf.baseQty ?? gf.qty) : 0;
+          const gcq = gf && gbase > 0 ? Math.max(1, Math.round(gf.qty / gbase)) : 1;
+          const gScalable = /\(Type \d+\)/.test(g) || !!byG.get(g)!.find((c) => !isSpacer(c))?.comboScalable;
+          rows.push({ kind: "group", label: g.toUpperCase(), suffix: gScalable ? `, QTY (${gcq}) each contain:` : "" });
+        }
+        for (const c of byG.get(g)!) {
+          if (isSpacer(c)) rows.push({ kind: "spacer" });
+          else rows.push({ kind: "comp", qty: String(c.baseQty ?? c.qty), desc: c.name, comment: c.comment || "", adj: c.adj || "", brand: c.brand || "", note: c.note || "", zebra: dataRow++ % 2 === 1 });
+        }
+      }
+    });
+    return rows;
+  };
+  const sv = (x: unknown) => (x == null ? "" : String(x));
+  const buildPdfDoc = (): TechnicalDoc => ({
+    filename: offerTitle("TO", qtnNo, s.project.revisionNo),
+    projectName: s.project.name || "",
+    qtnRef,
+    customer: s.project.customer || "",
+    notes: { general: s.notesGeneral ?? [], additional: s.notesAdditional ?? [] },
+    panels: s.panels.map((p, pi) => {
+      const sp = specOf(p);
+      return {
+        itemNo: pi + 1,
+        name: p.name,
+        qty: sv(p.qty),
+        spec: [
+          ["Panel Type", sv(sp.panelType), "IP", sv(sp.ip)],
+          ["Mounting", sv(sp.mount), "Rating", p.ratingA ? `${p.ratingA} A` : ""],
+          ["RAL", sv(sp.ral), "Amb. Temp.", sv(p.ambTemp)],
+          ["Copper", sv(p.copperType), "Neutral", sv(p.neutral)],
+          ["Incoming Cables", sv(p.incomingCables), "Earth", sv(p.earth)],
+          ["Outgoing Cables", sv(p.outgoingCables), "Form", sv(p.form)],
+          ["Short Circuit", sv(p.shortCircuit), "Fed From", sv(p.fedFrom)],
+        ] as [string, string, string, string][],
+        rows: pdfRowsOf(p),
+      };
+    }),
+  });
+  const exportPdf = async () => {
+    const coverEl = document.querySelector<HTMLElement>("[data-pdf-cover]");
+    // Lazy-load the heavy PDF libs (jspdf + autotable + html2canvas) only on export.
+    const { exportTechnicalPdf } = await import("../lv/technicalPdf");
+    await exportTechnicalPdf(buildPdfDoc(), coverEl);
+  };
   return (
     <div className="animate-fade-up">
-      <PrintBar label={`${s.panels.length} panel${s.panels.length > 1 ? "s" : ""} → ${s.panels.length} technical page${s.panels.length > 1 ? "s" : ""} in one PDF.`}
-        docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} />
+      <PrintBar label={`${s.panels.length} panel${s.panels.length > 1 ? "s" : ""} → multi-page PDF (tables flow across pages).`}
+        docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} exportFn={exportPdf} />
       <div className="offer-workspace">
       <div className="print-area space-y-6">
         {/* Cover page (shared branded title page) — no footer on the cover */}
         <OfferCover s={s} qtnNo={qtnNo} kind="Technical" />
         {/* Notes page (editable: edit / add / remove lines) — after the cover */}
-        <section className="a4-sheet flex flex-col px-8 pb-10 pt-6" style={{ breakAfter: "page" }}>
+        <section className="a4-sheet flex flex-col px-8 pb-3 pt-6" style={{ breakAfter: "page" }}>
           <PageHeader s={s} qtnRef={qtnRef} />
           {([["General Notes :-", "notesGeneral"], ["Additional Notes :-", "notesAdditional"]] as [string, NotesKey][]).map(([title, key]) => (
             <div key={key} className="mt-5">
@@ -793,11 +867,11 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
         {s.panels.map((p, pi) => {
           const sp = specOf(p);
           return (
-            <div key={p.id} className="a4-sheet flex flex-col px-8 pb-7 pt-6"
+            <div key={p.id} className="a4-sheet flex flex-col px-8 pb-3 pt-6"
               style={pi < s.panels.length - 1 ? { breakAfter: "page" } : undefined}>
               <PageHeader s={s} qtnRef={qtnRef} />
-              {/* panel-data table — square bordered frame (matches the components table below) */}
-              <div className="border isolate" style={{ borderColor: "#d4d4da" }}>
+              {/* panel-data table — rounded bordered frame */}
+              <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
               {/* item bar */}
               <table className="w-full table-fixed border-separate border-spacing-0">
                 <colgroup>
@@ -844,11 +918,10 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
               </table>
               </div>{/* /panel-data frame */}
               <div className="h-3" aria-hidden />{/* white space between the two tables */}
-              {/* components table — square bordered frame. No overflow-hidden/rounded: Chrome only
-                  repeats <thead>/<tfoot> across print pages when the table isn't inside an overflow
-                  clip, so each overflow page gets the header on top and the end-line at the bottom.
-                  (Square corners avoid the orange header poking past a rounded frame.) */}
-              <div className="border isolate" style={{ borderColor: "#d4d4da" }}>
+              {/* components table — rounded bordered frame. overflow-hidden clips the corners; note
+                  it also stops Chrome repeating <thead>/<tfoot> across print pages, so a panel that
+                  overflows shows its header + page-number footer on its last page (not each page). */}
+              <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
               <table className="w-full table-fixed border-separate border-spacing-0">
                 <colgroup>
                   <col className="w-[10%]" />
@@ -910,12 +983,13 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                           const gcq = gf && gbase > 0 ? Math.max(1, Math.round(gf.qty / gbase)) : 1;
                           // Match the panels editor: MCC (by name) + custom combinations (flagged) show "QTY (N) each contain:".
                           const gScalable = /\(Type \d+\)/.test(g) || !!byG.get(g)!.find((c) => !isSpacer(c))?.comboScalable;
+                          // Long headers (e.g. the P.F.C kVAR breakdown) shrink to fit on one line; short ones stay 13.5px.
+                          const gShrink = g.length + (gScalable ? 25 : 0) > 55;
                           rows.push(
                             // Group sub-header styled like the panels editor. break-after: avoid keeps it
                             // with its first rows so it's never stranded at the bottom of a page.
                             <tr key={`g-${sec}-${g}`} style={{ breakInside: "avoid", breakAfter: "avoid" }}>
-                              <td className="py-1" />
-                              <td colSpan={4} className="px-2 py-1 text-left font-display text-[13.5px] font-normal leading-[20px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>{gScalable ? <span className="font-bold">, QTY ({gcq}) each contain:</span> : ""}</td>
+                              <td colSpan={5} className={`px-2 py-1 text-left font-display font-normal leading-[20px] underline underline-offset-2 ${gShrink ? "whitespace-nowrap text-[10.5px]" : "text-[13.5px]"}`} style={{ color: TRED }}><span className="uppercase">{g}</span>{gScalable ? <span className="font-bold">, QTY ({gcq}) each contain:</span> : ""}</td>
                             </tr>
                           );
                         }
@@ -941,15 +1015,10 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                     });
                   })()}
                 </tbody>
-                {/* Page-number-only footer in <tfoot> so Chrome repeats it at the bottom of EVERY page
-                    the table spans (including overflow pages). Centered, no border/label/extra text. */}
-                <tfoot>
-                  <tr>
-                    <td colSpan={5} className="pt-2 pb-0.5 text-center text-[10.5px] font-semibold text-muted">{3 + pi}</td>
-                  </tr>
-                </tfoot>
               </table>
               </div>
+              {/* Page number below the table, pinned to the bottom of the page (mt-auto), centered. */}
+              <div className="mt-auto pt-3 text-center text-[10.5px] font-semibold text-muted">Page {3 + pi}</div>
             </div>
           );
         })}
