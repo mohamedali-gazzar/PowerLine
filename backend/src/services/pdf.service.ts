@@ -171,7 +171,7 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, g: GeneratedOffe
   doc.rect(MARGIN, boxY, 5, 110).fill(ORANGE); // accent stripe
   const metaRows: [string, string][] = [
     ["Offer No", offer.offerNumber],
-    ["Date", new Date(offer.createdAt).toISOString().slice(0, 10)],
+    ["Date", offer.offerDate || new Date(offer.createdAt).toISOString().slice(0, 10)],
     ["Project", offer.projectName],
     ["Customer", offer.customer],
   ];

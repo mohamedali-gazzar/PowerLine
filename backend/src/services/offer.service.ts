@@ -113,6 +113,7 @@ export async function createOffer(input: CreateOfferInput) {
       paymentTerms: input.paymentTerms ?? null,
       warrantyMonths: input.warrantyMonths ?? null,
       notes: input.notes ?? null,
+      offerDate: input.offerDate ?? null,
       rmu: {
         create: {
           productType: input.rmu.productType,

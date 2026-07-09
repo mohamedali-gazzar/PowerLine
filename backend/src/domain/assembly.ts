@@ -18,7 +18,7 @@ import {
 } from "./standards";
 import { assembleLucyOffer } from "./lucy";
 
-export type LbsBrand = "ABB" | "MURGE" | "SCHNEIDER" | "JGGY" | "GRL";
+export type LbsBrand = "ABB" | "MURGE" | "SCHNEIDER" | "JGGY" | "GRL" | "CHINT";
 export type ClientSpec = "EECH" | "KAHRABA";
 
 /** Two-letter brand code used in the product code (coding-system Variable 3). */
@@ -28,6 +28,7 @@ export const BRAND_CODE: Record<LbsBrand, string> = {
   SCHNEIDER: "SH",
   JGGY: "GY",
   GRL: "GL",
+  CHINT: "CH",
 };
 
 /** Human brand word for BOM / commercial text. */
@@ -37,13 +38,14 @@ const BRAND_WORD: Record<LbsBrand, string> = {
   SCHNEIDER: "Schneider",
   JGGY: "JGGY",
   GRL: "GRL",
+  CHINT: "Chint",
 };
 
 /** Brands the coding system DEFINES per family: PSEC=SF6 (ABB/Murge/Schneider),
  *  PRAL=Air (ABB/JGGY/GRL). Used for code parsing/display only. */
 export const BRANDS_BY_FAMILY: Record<ProductType, LbsBrand[]> = {
   PSEC: ["ABB", "MURGE", "SCHNEIDER"],
-  PRAL: ["ABB", "JGGY", "GRL"],
+  PRAL: ["ABB", "CHINT"],
   LUCY: [], // Lucy is a single-OEM family — no LBS brand choice
 };
 

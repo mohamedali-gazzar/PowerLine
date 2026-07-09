@@ -61,6 +61,8 @@ model Offer {
   paymentTerms   String?
   warrantyMonths Int?
   notes          String?
+  // Offer date shown on the cover pages (user-set; falls back to createdAt).
+  offerDate      String?
 
   rmu RmuConfig?
 

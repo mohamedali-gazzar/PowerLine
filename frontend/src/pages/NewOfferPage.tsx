@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import {
@@ -76,6 +76,7 @@ export default function NewOfferPage() {
   const [deliveryWeeks, setDeliveryWeeks] = useState(12);
   const [paymentTerms, setPaymentTerms] = useState("50% advance, 50% before delivery");
   const [warrantyMonths, setWarrantyMonths] = useState(12);
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const [rmu, setRmu] = useState<RmuConfigInput>(initialRmu);
   const setR = <K extends keyof RmuConfigInput>(k: K, v: RmuConfigInput[K]) =>
@@ -85,6 +86,7 @@ export default function NewOfferPage() {
   // Offer cover-page team — sales lists are the SHARED registry (also used by LV)
   const [staff, setStaff] = useStaff();
   const [newSales, setNewSales] = useState({ name: "", mobile: "", email: "" });
+  const [newEng, setNewEng] = useState("");
   // Pre-fill the QTN from the New-QTN dialog (RMU → /offers/new?qtn=QTN-26-…).
   const [params] = useSearchParams();
   const [team, setTeam] = useState({
@@ -111,6 +113,15 @@ export default function NewOfferPage() {
     setStaff({ ...staff, salesPeople: [...staff.salesPeople, { ...newSales, name: newSales.name.trim() }] });
     setNewSales({ name: "", mobile: "", email: "" });
   };
+  const removeSalesPerson = (name: string) =>
+    setStaff({ ...staff, salesPeople: staff.salesPeople.filter((x) => x.name !== name) });
+  const addEngineer = () => {
+    if (!newEng.trim()) return;
+    setStaff({ ...staff, supportEngineers: [...staff.supportEngineers, { name: newEng.trim(), mobile: "", email: "" }] });
+    setNewEng("");
+  };
+  const removeEngineer = (name: string) =>
+    setStaff({ ...staff, supportEngineers: staff.supportEngineers.filter((x) => x.name !== name) });
 
   // Keep the brand to one we actually have data for (PSEC: ABB/Murge, PRAL: ABB)
   // — reset to ABB if the current brand isn't available for the family.
@@ -240,6 +251,7 @@ export default function NewOfferPage() {
       deliveryWeeks,
       paymentTerms: paymentTerms || null,
       warrantyMonths,
+      offerDate: date || null,
       rmu,
     };
   }
@@ -343,69 +355,83 @@ export default function NewOfferPage() {
         </div>
       )}
 
-      {/* ── Project tab ─────────────────────────────────────────────────── */}
+      {/* ── Project tab — mirrors the LV Project tab (Revision removed) ──── */}
       {tab === "project" && (
-        <div className="space-y-5">
-          <section className="card p-5 animate-fade-up">
-            <h2 className="sec-head">Project &amp; Customer</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Project name *">
-                <TextInput value={projectName} onChange={setProjectName} placeholder="Feeder Upgrade" />
-              </Field>
-              <Field label="Customer *">
-                <TextInput value={customer} onChange={setCustomer} placeholder="EEHC" />
-              </Field>
-            </div>
-          </section>
-
-          <section className="card p-5 animate-fade-up">
-            <h2 className="sec-head">Project team &amp; cover</h2>
-            <p className="mb-3 text-xs text-muted">
-              Shown on the offer cover. The sales / manager / support lists are <b>shared with the LV section</b> —
-              add someone here and they appear there too.
-            </p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Quotation No. (QTN)">
-                <TextInput value={team.quotationNo} onChange={(v) => upTeam({ quotationNo: v })} placeholder="QTN-26-0001" />
-              </Field>
-              <Field label="Opportunity No. (OPTY)">
-                <TextInput value={team.opportunityNo} onChange={(v) => upTeam({ opportunityNo: v })} placeholder="OPTY-0001" />
-              </Field>
-              <Field label="Sales person">
-                <select className="input cursor-pointer" value={team.salesName} onChange={(e) => pickSales(e.target.value)}>
-                  <option value="">— select —</option>
-                  {staff.salesPeople.filter((p) => p.name !== SALES_MANAGER).map((p) => <option key={p.name}>{p.name}</option>)}
-                </select>
-              </Field>
-              <Field label="Sales mobile / email" hint="Auto-filled from the sales person">
-                <input className="input bg-surface" readOnly value={[team.salesMobile, team.salesEmail].filter(Boolean).join("  ·  ")} />
-              </Field>
-              <Field label="Sales manager" hint="Fixed">
-                <input className="input bg-surface" readOnly value={manager.name} />
-              </Field>
-              <Field label="Manager mobile / email" hint="Fixed">
-                <input className="input bg-surface" readOnly value={[manager.mobile, manager.email].filter(Boolean).join("  ·  ")} />
-              </Field>
-              <Field label="Sales support">
+        <div className="grid max-w-4xl gap-5 animate-fade-up">
+          <div className="card p-5">
+            <h2 className="sec-head">Project</h2>
+            <p className="mb-3 text-xs text-muted">Used to generate the Technical &amp; Commercial offer cover pages.</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div><L>Project name</L><input className="input" value={projectName} onChange={(e) => setProjectName(e.target.value)} /></div>
+              <div><L>Customer</L><input className="input" value={customer} onChange={(e) => setCustomer(e.target.value)} /></div>
+              <div><L>QTN No.</L><input className="input" value={team.quotationNo} onChange={(e) => upTeam({ quotationNo: e.target.value })} /></div>
+              <div><L>OPTY No.</L><input className="input" value={team.opportunityNo} onChange={(e) => upTeam({ opportunityNo: e.target.value })} /></div>
+              <div>
+                <L>Sales support engineer</L>
                 <select className="input cursor-pointer" value={team.supportName} onChange={(e) => pickSupport(e.target.value)}>
                   <option value="">— select —</option>
                   {staff.supportEngineers.map((p) => <option key={p.name}>{p.name}</option>)}
                 </select>
-              </Field>
+              </div>
+              <div><L>Date</L><input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+              <div className="grid content-start gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div><L>Sales manager</L><input className="input bg-surface" value={manager.name} readOnly /></div>
+                  <div><L>Phone no.</L><input className="input bg-surface" value={manager.mobile} readOnly /></div>
+                </div>
+                <div><L>Manager email</L><input className="input bg-surface" value={manager.email} readOnly /></div>
+              </div>
+              <div className="grid content-start gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <L>Sales person</L>
+                    <select className="input cursor-pointer" value={team.salesName} onChange={(e) => pickSales(e.target.value)}>
+                      <option value="">— select —</option>
+                      {staff.salesPeople.filter((p) => p.name !== SALES_MANAGER).map((p) => <option key={p.name}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div><L>Phone no.</L><input className="input bg-surface" value={team.salesMobile} readOnly /></div>
+                </div>
+                <div><L>Sales person email</L><input className="input bg-surface" value={team.salesEmail} readOnly /></div>
+              </div>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
-              <span className="text-xs font-semibold text-muted">+ Add sales person:</span>
-              <input className="input h-9 w-32" placeholder="Name" value={newSales.name} onChange={(e) => setNewSales({ ...newSales, name: e.target.value })} />
-              <input className="input h-9 w-32" placeholder="Mobile" value={newSales.mobile} onChange={(e) => setNewSales({ ...newSales, mobile: e.target.value })} />
-              <input className="input h-9 w-44" placeholder="Email" value={newSales.email} onChange={(e) => setNewSales({ ...newSales, email: e.target.value })} />
-              <button type="button" className="btn-ghost h-9" onClick={addSalesPerson}>Add</button>
+          </div>
+
+          <div className="card p-5">
+            <h2 className="sec-head">Staff lists</h2>
+            <p className="mb-3 text-xs text-muted">Editable — <b>shared with the LV section</b>. Add or remove names.</p>
+            <L>Sales people</L>
+            <div className="mb-2 max-h-44 overflow-auto rounded-lg border border-line">
+              {staff.salesPeople.map((p) => (
+                <div key={p.name} className="flex items-center justify-between border-b border-line/60 px-3 py-1 text-sm last:border-0">
+                  <span>{p.name} <span className="text-[11px] text-muted">{p.mobile} · {p.email}</span></span>
+                  <button type="button" className="text-red-500 hover:underline" onClick={() => removeSalesPerson(p.name)}>remove</button>
+                </div>
+              ))}
             </div>
-          </section>
+            <div className="mb-4 flex flex-wrap gap-2">
+              <input className="input h-9 w-36" placeholder="Name" value={newSales.name} onChange={(e) => setNewSales({ ...newSales, name: e.target.value })} />
+              <input className="input h-9 w-36" placeholder="Mobile" value={newSales.mobile} onChange={(e) => setNewSales({ ...newSales, mobile: e.target.value })} />
+              <input className="input h-9 w-48" placeholder="Email" value={newSales.email} onChange={(e) => setNewSales({ ...newSales, email: e.target.value })} />
+              <button type="button" className="btn-ghost h-9" onClick={addSalesPerson}>+ Add</button>
+            </div>
+            <L>Sales support engineers</L>
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {staff.supportEngineers.map((eng) => (
+                <span key={eng.name} className="chip bg-surface text-ink">
+                  {eng.name}
+                  <button type="button" className="ml-1.5 text-red-500" onClick={() => removeEngineer(eng.name)}>×</button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input className="input h-9 w-56" placeholder="New engineer name" value={newEng} onChange={(e) => setNewEng(e.target.value)} />
+              <button type="button" className="btn-ghost h-9" onClick={addEngineer}>+ Add</button>
+            </div>
+          </div>
 
           <div className="flex justify-end">
-            <button type="button" className="btn-primary" onClick={() => setTab("panel")}>
-              Next: Panel →
-            </button>
+            <button type="button" className="btn-primary" onClick={() => setTab("panel")}>Next: Panel →</button>
           </div>
         </div>
       )}
@@ -442,7 +468,7 @@ export default function NewOfferPage() {
                     hint={
                       rmu.productType === "PSEC"
                         ? "ABB · Murge available · Schneider locked (no data)"
-                        : "ABB available · JGGY · GRL locked (no data)"
+                        : "ABB available · Chint locked (no data)"
                     }
                   >
                     <Segmented
@@ -745,4 +771,9 @@ export default function NewOfferPage() {
       )}
     </div>
   );
+}
+
+// Small field label, matching the LV section's Project tab.
+function L({ children }: { children: ReactNode }) {
+  return <label className="label">{children}</label>;
 }

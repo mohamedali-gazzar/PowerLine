@@ -8,7 +8,7 @@ export type OfferStatus = "DRAFT" | "SENT" | "WON" | "LOST";
 export type ProductCategory = "RMU" | "KIOSK" | "LV";
 
 // The RMU "code", e.g. PSEC10AB12R3T1M (see RMU Coding System).
-export type LbsBrand = "ABB" | "MURGE" | "SCHNEIDER" | "JGGY" | "GRL";
+export type LbsBrand = "ABB" | "MURGE" | "SCHNEIDER" | "JGGY" | "GRL" | "CHINT";
 export type ClientSpec = "EECH" | "KAHRABA";
 
 export interface RmuConfigInput {
@@ -60,6 +60,7 @@ export interface OfferInput {
   paymentTerms?: string | null;
   warrantyMonths?: number | null;
   notes?: string | null;
+  offerDate?: string | null;
   rmu: RmuConfigInput;
 }
 
@@ -196,6 +197,7 @@ export interface Offer {
   paymentTerms?: string | null;
   warrantyMonths?: number | null;
   notes?: string | null;
+  offerDate?: string | null;
   createdAt: string;
   updatedAt: string;
   rmu: StoredRmu;

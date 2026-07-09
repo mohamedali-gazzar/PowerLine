@@ -73,6 +73,7 @@ interface OfferLike {
   paymentTerms: string | null;
   warrantyMonths: number | null;
   createdAt: Date | string;
+  offerDate?: string | null;
 }
 
 export function buildCommercial(
@@ -119,7 +120,7 @@ export function buildCommercial(
   return {
     offerNumber: offer.offerNumber,
     plReference: offer.offerNumber,
-    date: new Date(offer.createdAt).toISOString().slice(0, 10),
+    date: offer.offerDate || new Date(offer.createdAt).toISOString().slice(0, 10),
     customer: offer.customer,
     project: offer.projectName,
     quotationNo: offer.quotationNo ?? null,

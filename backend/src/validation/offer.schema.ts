@@ -10,7 +10,7 @@ const OFFER_STATUS = ["DRAFT", "SENT", "WON", "LOST"] as const;
 // The RMU "code": PRAL/PSEC, voltage, and how many NAL/NALF/metering/RTU.
 export const rmuConfigSchema = z.object({
   productType: z.enum(PRODUCT_TYPES as [string, ...string[]]),
-  lbsBrand: z.enum(["ABB", "MURGE", "SCHNEIDER", "JGGY", "GRL"]).default("ABB"),
+  lbsBrand: z.enum(["ABB", "MURGE", "SCHNEIDER", "JGGY", "GRL", "CHINT"]).default("ABB"),
   clientSpec: z.enum(["EECH", "KAHRABA"]).default("EECH"),
   voltageKv: z
     .number()
@@ -96,6 +96,7 @@ export const createOfferSchema = z.object({
   paymentTerms: z.string().trim().max(300).optional().nullable(),
   warrantyMonths: z.number().int().positive().max(120).optional().nullable(),
   notes: z.string().trim().max(2000).optional().nullable(),
+  offerDate: z.string().trim().max(40).optional().nullable(),
 
   rmu: rmuConfigSchema,
 });

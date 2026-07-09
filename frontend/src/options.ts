@@ -21,7 +21,7 @@ export const AVAILABLE_CLIENT_SPECS: readonly string[] = ["EECH"];
 // LBS brands the coding system DEFINES per family: PSEC=SF6, PRAL=Air.
 export const BRANDS_BY_FAMILY: Record<"PRAL" | "PSEC" | "LUCY", readonly string[]> = {
   PSEC: ["ABB", "MURGE", "SCHNEIDER"],
-  PRAL: ["ABB", "JGGY", "GRL"],
+  PRAL: ["ABB", "CHINT"],
   LUCY: [], // Lucy is a single-OEM family — no LBS brand choice
 };
 
@@ -52,6 +52,7 @@ export const LABELS: Record<string, string> = {
   SCHNEIDER: "Schneider",
   JGGY: "JGGY",
   GRL: "GRL",
+  CHINT: "Chint",
   EECH: "EECH",
   KAHRABA: "KAHRABA",
 };
