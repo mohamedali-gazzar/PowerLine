@@ -265,7 +265,12 @@ function lineup(doc: PDFKit.PDFDocument, g: GeneratedOffer) {
 }
 
 function cubicleBlock(doc: PDFKit.PDFDocument, c: Cubicle) {
-  const heading = c.code === "RTU" ? "Communication:" : `QTY ${c.qty} Cubical: ${c.name}, each consisting of:`;
+  const heading =
+    c.code === "RTU"
+      ? "Communication:"
+      : c.code === "EXTRA"
+      ? `${c.name}:` // e.g. "Supplied Complete With:" — not a cubicle, so no "QTY … Cubical"
+      : `QTY ${c.qty} Cubical: ${c.name}, each consisting of:`;
   const hH = Math.max(18, doc.heightOfString(heading, { width: CONTENT_W - 16 }) + 8);
   // Keep the cubicle header bar + the table header (15) + the first item row
   // together, so a cubicle never begins with only its title at the page bottom.

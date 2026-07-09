@@ -17,11 +17,8 @@ import {
   AVAILABLE_BRANDS_BY_FAMILY,
   CLIENT_SPECS,
   AVAILABLE_CLIENT_SPECS,
-  LUCY_CONFIGS,
-  lucyKeyOf,
-  isLucyConfig,
 } from "../options";
-import type { GeneratedOffer, OfferInput, RmuConfigInput, LbsBrand, ProductType } from "../types";
+import type { GeneratedOffer, OfferInput, RmuConfigInput, LbsBrand } from "../types";
 
 const initialRmu: RmuConfigInput = {
   productType: "PRAL",
@@ -43,6 +40,15 @@ const initialRmu: RmuConfigInput = {
   meteringWithFuse: false,
 };
 
+// Tabbed workflow, mirroring the LV section (Project → Panel → Technical → Commercial).
+type Tab = "project" | "panel" | "technical" | "commercial";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "project", label: "Project" },
+  { key: "panel", label: "Panel" },
+  { key: "technical", label: "Technical Offer" },
+  { key: "commercial", label: "Commercial Offer" },
+];
+
 /** Trigger a browser download of a same-origin file with a chosen filename. */
 function downloadFile(url: string, filename: string) {
   const a = document.createElement("a");
@@ -55,6 +61,7 @@ function downloadFile(url: string, filename: string) {
 
 export default function NewOfferPage() {
   const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>("project");
 
   const [projectName, setProjectName] = useState("");
   const [customer, setCustomer] = useState("");
@@ -73,26 +80,7 @@ export default function NewOfferPage() {
   const [rmu, setRmu] = useState<RmuConfigInput>(initialRmu);
   const setR = <K extends keyof RmuConfigInput>(k: K, v: RmuConfigInput[K]) =>
     setRmu((c) => ({ ...c, [k]: v }));
-
-  // Switching product type. Lucy is a fixed catalogue (indoor only) — snap to a
-  // valid Lucy configuration + indoor installation when entering it.
-  const onProductType = (v: ProductType) =>
-    setRmu((c) => {
-      if (v !== "LUCY") return { ...c, productType: v };
-      const counts = isLucyConfig(c) ? {} : { nalCount: 2, nalfCount: 1, hasMetering: false };
-      return { ...c, ...counts, productType: v, installation: "INDOOR" };
-    });
-
-  // What to generate (each is independently selectable — e.g. export Commercial
-  // or SLD only, without the Technical offer). At least one must be selected.
-  const [wantTechnical, setWantTechnical] = useState(true);
-  const [wantCommercial, setWantCommercial] = useState(false);
-  const [wantSld, setWantSld] = useState(false);
-
-  // SLD cover fields
-  const [salesNumber, setSalesNumber] = useState("");
-  const [orderNumber, setOrderNumber] = useState("");
-  const [notes, setNotes] = useState("");
+  const isLucy = rmu.productType === "LUCY";
 
   // Offer cover-page team — sales lists are the SHARED registry (also used by LV)
   const [staff, setStaff] = useStaff();
@@ -141,16 +129,13 @@ export default function NewOfferPage() {
     }
   }, [rmu.clientSpec]);
 
-  // SLD is available for PSEC only (for now) — turn it off for PRAL.
-  useEffect(() => {
-    if (rmu.productType !== "PSEC" && wantSld) setWantSld(false);
-  }, [rmu.productType, wantSld]);
-
   const [preview, setPreview] = useState<GeneratedOffer | null>(null);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ id: string; offerNumber: string; items: string[] } | null>(null);
+  // Reuse a created offer across per-tab downloads until an input changes.
+  const [created, setCreated] = useState<{ id: string; offerNumber: string; sig: string } | null>(null);
 
   const code = useMemo(
     () =>
@@ -219,113 +204,111 @@ export default function NewOfferPage() {
   // No catalogue price for this config and no manual price entered.
   const priceMissing = basePrice == null && unitPrice <= 0;
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!wantTechnical && !wantCommercial && !wantSld) {
-      setError("Select at least one output to export (Technical, Commercial, or SLD).");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+  function buildPayload(): OfferInput {
+    return {
+      category: "RMU",
+      salesNumber: null,
+      orderNumber: null,
+      quotationNo: team.quotationNo || null,
+      opportunityNo: team.opportunityNo || null,
+      salesName: team.salesName || null,
+      salesMobile: team.salesMobile || null,
+      salesEmail: team.salesEmail || null,
+      salesManagerName: manager.name || null,
+      salesManagerMobile: manager.mobile || null,
+      salesManagerEmail: manager.email || null,
+      supportName: team.supportName || null,
+      supportMobile: team.supportMobile || null,
+      supportEmail: team.supportEmail || null,
+      projectName,
+      customer,
+      status: "DRAFT",
+      notes: null,
+      currency,
+      usdToEgpRate: currency === "EGP" ? usdRate || null : null,
+      unitPrice,
+      quantity,
+      discountPct,
+      validityDays,
+      deliveryWeeks,
+      paymentTerms: paymentTerms || null,
+      warrantyMonths,
+      rmu,
+    };
+  }
+
+  /** Create the offer once and reuse it while inputs are unchanged. */
+  async function ensureOffer(payload: OfferInput, sig: string) {
+    if (created && created.sig === sig) return created;
+    const c = await api.createOffer(payload);
+    const rec = { id: c.id, offerNumber: c.offerNumber, sig };
+    setCreated(rec);
+    return rec;
+  }
+
+  /** Generate + download the requested PDFs (Technical / Commercial). */
+  async function download(outputs: ("Technical" | "Commercial")[]) {
+    if (!projectName.trim() || !customer.trim()) {
+      setError("Enter a project name and customer on the Project tab first.");
+      setTab("project");
       return;
     }
-    if (wantCommercial && priceMissing) {
-      setError(
-        `No catalogue price for ${panelCode}. Enter a unit price in the Commercial section before generating a commercial offer.`
-      );
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    if (outputs.includes("Commercial") && priceMissing) {
+      setError(`No catalogue price for ${panelCode} — enter a unit price on the Commercial tab.`);
+      setTab("commercial");
       return;
     }
     setSubmitting(true);
     setError(null);
     setDone(null);
     try {
-      const payload: OfferInput = {
-        category: "RMU",
-        salesNumber: salesNumber || null,
-        orderNumber: orderNumber || null,
-        quotationNo: team.quotationNo || null,
-        opportunityNo: team.opportunityNo || null,
-        salesName: team.salesName || null,
-        salesMobile: team.salesMobile || null,
-        salesEmail: team.salesEmail || null,
-        salesManagerName: manager.name || null,
-        salesManagerMobile: manager.mobile || null,
-        salesManagerEmail: manager.email || null,
-        supportName: team.supportName || null,
-        supportMobile: team.supportMobile || null,
-        supportEmail: team.supportEmail || null,
-        projectName,
-        customer,
-        status: "DRAFT",
-        notes: notes || null,
-        currency,
-        usdToEgpRate: currency === "EGP" ? usdRate || null : null,
-        unitPrice,
-        quantity,
-        discountPct,
-        validityDays,
-        deliveryWeeks,
-        paymentTerms: paymentTerms || null,
-        warrantyMonths,
-        rmu,
-      };
-      const created = await api.createOffer(payload);
-      // Directly download the selected outputs (any combination of Technical /
-      // Commercial / SLD — e.g. Commercial or SLD only).
-      const num = created.offerNumber;
+      const payload = buildPayload();
+      const rec = await ensureOffer(payload, JSON.stringify(payload));
       const jobs: { url: string; name: string; label: string }[] = [];
-      if (wantTechnical)
-        jobs.push({ url: `${api.pdfUrl(created.id)}?dl=1`, name: `${num}-Technical.pdf`, label: "Technical" });
-      if (wantCommercial)
-        jobs.push({ url: `${api.commercialPdfUrl(created.id)}?dl=1`, name: `${num}-Commercial.pdf`, label: "Commercial" });
-      if (wantSld)
-        jobs.push({ url: `${api.sldPdfUrl(created.id)}?dl=1`, name: `${num}-SLD.pdf`, label: "SLD" });
-      // stagger so the browser doesn't block multiple simultaneous downloads
+      if (outputs.includes("Technical"))
+        jobs.push({ url: `${api.pdfUrl(rec.id)}?dl=1`, name: `${rec.offerNumber}-Technical.pdf`, label: "Technical" });
+      if (outputs.includes("Commercial"))
+        jobs.push({ url: `${api.commercialPdfUrl(rec.id)}?dl=1`, name: `${rec.offerNumber}-Commercial.pdf`, label: "Commercial" });
       jobs.forEach((j, i) => setTimeout(() => downloadFile(j.url, j.name), i * 700));
-      setDone({ id: created.id, offerNumber: num, items: jobs.map((j) => j.label) });
-      window.scrollTo({ top: 0 });
+      setDone({ id: rec.id, offerNumber: rec.offerNumber, items: jobs.map((j) => j.label) });
     } catch (err) {
       setError((err as Error).message);
-      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSubmitting(false);
     }
   }
 
+  const generateAll = () => download(priceMissing ? ["Technical"] : ["Technical", "Commercial"]);
+
   return (
-    <form onSubmit={submit}>
-      <div className="mb-5 flex items-center justify-between animate-fade-up">
+    <div>
+      <div className="mb-4 flex items-center justify-between animate-fade-up">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">New RMU Offer</h1>
-          <p className="text-sm text-muted">Configure the code — the offer builds itself.</p>
+          <p className="text-sm text-muted">Configure the panel — the offer builds itself.</p>
         </div>
-        <button type="submit" className="btn-primary" disabled={submitting}>
+        <button type="button" className="btn-primary" disabled={submitting} onClick={generateAll}>
           {submitting ? "Generating…" : "Generate & Download →"}
         </button>
       </div>
 
-      {/* What to generate */}
-      <div className="card mb-5 p-4 animate-fade-up">
-        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">
-          What do you want to generate?
-        </p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <OutputCard
-            active={wantTechnical}
-            onClick={() => setWantTechnical((v) => !v)}
-            label="Technical Offer"
-            desc="Specs & cubicle lineup"
-          />
-          <OutputCard
-            active={wantCommercial}
-            onClick={() => setWantCommercial((v) => !v)}
-            label="Commercial Offer"
-            desc="Pricing, VAT & terms"
-          />
-          <OutputCard
-            active={false}
-            disabled
-            label="Single-line Diagram"
-            desc="🔒 Locked"
-          />
+      {/* Tab bar (sticky), like the LV section */}
+      <div className="sticky top-0 z-20 -mx-4 mb-5 bg-surface/85 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+        <div className="flex flex-wrap gap-2">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`rounded-full px-5 py-2 text-sm font-bold transition-all ${
+                tab === t.key
+                  ? "bg-brand text-white shadow-soft"
+                  : "bg-white text-muted ring-1 ring-line hover:ring-brand/40"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -339,9 +322,6 @@ export default function NewOfferPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <button type="button" className="btn-ghost" onClick={() => setDone(null)}>
-                Create another
-              </button>
               <button type="button" className="btn-ghost" onClick={() => navigate(`/offers/${done.id}`)}>
                 View offer →
               </button>
@@ -356,10 +336,10 @@ export default function NewOfferPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.02fr_.98fr]">
-        {/* LEFT: inputs */}
+      {/* ── Project tab ─────────────────────────────────────────────────── */}
+      {tab === "project" && (
         <div className="space-y-5">
-          <section className="card p-5 animate-fade-up" style={{ animationDelay: "0.04s" }}>
+          <section className="card p-5 animate-fade-up">
             <h2 className="sec-head">Project &amp; Customer</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Project name *">
@@ -371,7 +351,7 @@ export default function NewOfferPage() {
             </div>
           </section>
 
-          <section className="card p-5 animate-fade-up" style={{ animationDelay: "0.06s" }}>
+          <section className="card p-5 animate-fade-up">
             <h2 className="sec-head">Project team &amp; cover</h2>
             <p className="mb-3 text-xs text-muted">
               Shown on the offer cover. The sales / manager / support lists are <b>shared with the LV section</b> —
@@ -415,9 +395,20 @@ export default function NewOfferPage() {
             </div>
           </section>
 
-          <section className="card p-5 animate-fade-up" style={{ animationDelay: "0.08s" }}>
+          <div className="flex justify-end">
+            <button type="button" className="btn-primary" onClick={() => setTab("panel")}>
+              Next: Panel →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Panel tab ───────────────────────────────────────────────────── */}
+      {tab === "panel" && (
+        <div className="space-y-5">
+          <section className="card p-5 animate-fade-up">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="sec-head !mb-0 !pb-0 after:hidden">RMU Code</h2>
+              <h2 className="sec-head !mb-0 !pb-0 after:hidden">Panel — RMU Code</h2>
               <div className="text-right">
                 <span key={panelCode} className="code-chip animate-pop">{panelCode}</span>
                 <div className="mt-1 text-xs text-muted">{code}</div>
@@ -428,7 +419,7 @@ export default function NewOfferPage() {
               <Field label="Product type">
                 <Segmented
                   value={rmu.productType}
-                  onChange={onProductType}
+                  onChange={(v) => setR("productType", v)}
                   options={["PRAL", "PSEC", "LUCY"] as const}
                   renderLabel={(v) =>
                     v === "PRAL" ? "PRAL · Air" : v === "PSEC" ? "PSEC · SF6" : "LUCY · GIS"
@@ -437,7 +428,7 @@ export default function NewOfferPage() {
               </Field>
 
               {/* Lucy has no LBS brand or client specification — hidden for it. */}
-              {rmu.productType !== "LUCY" && (
+              {!isLucy && (
                 <>
                   <Field
                     label="LBS brand / type"
@@ -483,60 +474,37 @@ export default function NewOfferPage() {
                     renderLabel={(v) => `${v} kV`}
                   />
                 </Field>
-                <Field label="Installation">
-                  {rmu.productType === "LUCY" ? (
-                    <input className="input bg-surface" value="Indoor" readOnly />
-                  ) : (
-                    <Segmented
-                      value={rmu.installation}
-                      onChange={(v) => setR("installation", v)}
-                      options={["INDOOR", "OUTDOOR"] as const}
-                      renderLabel={(v) => (v === "INDOOR" ? "Indoor" : "Outdoor")}
-                    />
-                  )}
+                <Field label="Installation" hint="Outdoor adds an enclosure (priced in the commercial offer)">
+                  <Segmented
+                    value={rmu.installation}
+                    onChange={(v) => setR("installation", v)}
+                    options={["INDOOR", "OUTDOOR"] as const}
+                    renderLabel={(v) => (v === "INDOOR" ? "Indoor" : "Outdoor")}
+                  />
                 </Field>
               </div>
 
-              {rmu.productType === "LUCY" ? (
-                <Field label="Configuration" hint="Lucy AEGIS PLUS — 8 available configurations (Feeder + Transformer)">
-                  <select
-                    className="input cursor-pointer"
-                    value={lucyKeyOf(rmu)}
-                    onChange={(e) => {
-                      const cfg = LUCY_CONFIGS.find((x) => x.key === e.target.value);
-                      if (cfg)
-                        setRmu((c) => ({
-                          ...c,
-                          nalCount: cfg.nalCount,
-                          nalfCount: cfg.nalfCount,
-                          hasMetering: cfg.hasMetering,
-                        }));
-                    }}
-                  >
-                    {LUCY_CONFIGS.map((x) => (
-                      <option key={x.key} value={x.key}>
-                        {x.label}
-                      </option>
-                    ))}
-                  </select>
+              <div className="grid grid-cols-2 gap-4">
+                <Field
+                  label={isLucy ? "Feeders (R)" : "Ring feeders (R)"}
+                  hint={isLucy ? "Load-break switches (L)" : "NAL — R0 to R5"}
+                >
+                  <NumberInput value={rmu.nalCount} min={0} onChange={(v) => setR("nalCount", v)} />
                 </Field>
-              ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Ring feeders (R)" hint="NAL — R0 to R5">
-                    <NumberInput value={rmu.nalCount} min={0} onChange={(v) => setR("nalCount", v)} />
-                  </Field>
-                  <Field label="Transformer feeders (T)" hint="NALF — T0 to T2">
-                    <NumberInput value={rmu.nalfCount} min={0} onChange={(v) => setR("nalfCount", v)} />
-                  </Field>
-                </div>
-              )}
+                <Field
+                  label={isLucy ? "Transformer feeders (T)" : "Transformer feeders (T)"}
+                  hint={isLucy ? "Circuit breakers (V)" : "NALF — T0 to T2"}
+                >
+                  <NumberInput value={rmu.nalfCount} min={0} onChange={(v) => setR("nalfCount", v)} />
+                </Field>
+              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Busbar current">
                   <NumberInput value={rmu.busbarCurrentA} suffix="A" onChange={(v) => setR("busbarCurrentA", v)} />
                 </Field>
                 {/* Lucy has no fuse (transformer feeders are circuit breakers). */}
-                {rmu.productType !== "LUCY" && (
+                {!isLucy && (
                   <Field label="Fuse rating" hint="Blank = catalogue max ('up to')">
                     <NumberInput
                       value={rmu.fuseRatingA ?? NaN}
@@ -549,7 +517,7 @@ export default function NewOfferPage() {
               </div>
 
               {/* Smart/RTU levels are a PRAL/PSEC feature — not offered for Lucy. */}
-              {rmu.productType !== "LUCY" && (
+              {!isLucy && (
                 <Field label="Smart" hint="Smart (with RTU) ⇒ spec ·9; Ready-to-be-smart ⇒ spec ·0">
                   <Select value={rmu.rtuType} onChange={(v) => setR("rtuType", v)} options={RTU_TYPES} />
                 </Field>
@@ -557,16 +525,19 @@ export default function NewOfferPage() {
             </div>
           </section>
 
-          {/* Metering — toggle reveals CT / VT options. Hidden for Lucy: its
-              metering unit is fixed and chosen via the Configuration dropdown. */}
-          {rmu.productType !== "LUCY" && (
-          <section className="card p-5 animate-fade-up" style={{ animationDelay: "0.12s" }}>
+          {/* Metering — a toggle for every type; CT/VT options for PRAL/PSEC only. */}
+          <section className="card p-5 animate-fade-up">
             <Toggle
               checked={rmu.hasMetering}
               onChange={(v) => setR("hasMetering", v)}
               label="Include Metering cubicle (+M)"
             />
-            {rmu.hasMetering && (
+            {rmu.hasMetering && isLucy && (
+              <p className="mt-2 text-xs text-muted">
+                Lucy metering is a fixed Air-Insulated Metering Unit (100/5A CT, 50 VA VT) — no extra options.
+              </p>
+            )}
+            {rmu.hasMetering && !isLucy && (
               <div className="mt-4 grid grid-cols-1 gap-4 rounded-lg bg-brand-tint p-4 sm:grid-cols-2 animate-fade-up">
                 <Field label="CT primary current" hint="Fills X/5 & Ip — blank keeps 'X'">
                   <NumberInput
@@ -590,7 +561,6 @@ export default function NewOfferPage() {
                     onChange={(v) => {
                       const cores = Number(v);
                       setR("vtCores", cores);
-                      // Single core has no fuse option; double core defaults to with-fuse.
                       setR("meteringWithFuse", cores === 2);
                     }}
                     options={["1", "2"] as const}
@@ -618,10 +588,53 @@ export default function NewOfferPage() {
               </div>
             )}
           </section>
-          )}
 
-          {wantCommercial && (
-          <section className="card p-5 animate-fade-up" style={{ animationDelay: "0.16s" }}>
+          <div className="flex justify-between">
+            <button type="button" className="btn-ghost" onClick={() => setTab("project")}>← Project</button>
+            <button type="button" className="btn-primary" onClick={() => setTab("technical")}>
+              Next: Technical Offer →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Technical Offer tab ─────────────────────────────────────────── */}
+      {tab === "technical" && (
+        <div className="space-y-4 animate-fade-up">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
+              <span className="h-2 w-2 rounded-full bg-green-500" /> Live technical offer
+            </div>
+            <button type="button" className="btn-primary" disabled={submitting} onClick={() => download(["Technical"])}>
+              {submitting ? "Generating…" : "⬇ Download Technical PDF"}
+            </button>
+          </div>
+          <div className="card p-5">
+            {previewErr ? (
+              <p className="rounded bg-red-50 p-2 text-sm text-red-600">{previewErr}</p>
+            ) : preview ? (
+              <OfferView g={preview} />
+            ) : (
+              <div className="space-y-3">
+                <div className="skeleton h-24" />
+                <div className="skeleton h-32" />
+                <div className="skeleton h-40" />
+              </div>
+            )}
+          </div>
+          <div className="flex justify-between">
+            <button type="button" className="btn-ghost" onClick={() => setTab("panel")}>← Panel</button>
+            <button type="button" className="btn-primary" onClick={() => setTab("commercial")}>
+              Next: Commercial Offer →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Commercial Offer tab ────────────────────────────────────────── */}
+      {tab === "commercial" && (
+        <div className="space-y-4 animate-fade-up">
+          <section className="card p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="sec-head !mb-0 !pb-0 after:hidden">Commercial</h2>
               {basePrice != null ? (
@@ -712,116 +725,15 @@ export default function NewOfferPage() {
               </div>
             </div>
           </section>
-          )}
 
-          {wantSld && (
-          <section className="card p-5 animate-fade-up" style={{ animationDelay: "0.18s" }}>
-            <h2 className="sec-head">Single-line Diagram — Cover</h2>
-            <p className="mb-3 text-xs text-muted">
-              Item number on the drawings = panel code <b>{panelCode}</b>. Project, customer &amp; QTY come from above.
-            </p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Sales Order">
-                <TextInput value={salesNumber} onChange={setSalesNumber} placeholder="e.g. SO-2026-123" />
-              </Field>
-              <Field label="Work Order">
-                <TextInput value={orderNumber} onChange={setOrderNumber} placeholder="e.g. WO-456" />
-              </Field>
-              <div className="sm:col-span-2">
-                <Field label="Notes (cover)">
-                  <textarea
-                    className="input h-20"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Optional notes shown on the SLD cover page"
-                  />
-                </Field>
-              </div>
-            </div>
-          </section>
-          )}
-        </div>
-
-        {/* RIGHT: live preview */}
-        <div className="lg:sticky lg:top-20 lg:self-start">
-          <div className="card max-h-[calc(100vh-7rem)] overflow-y-auto p-5">
-            <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
-              <span className="h-2 w-2 rounded-full bg-green-500" /> Live preview
-            </div>
-            {previewErr && (
-              <p className="rounded bg-red-50 p-2 text-sm text-red-600">{previewErr}</p>
-            )}
-            {preview ? (
-              <OfferView g={preview} />
-            ) : (
-              !previewErr && (
-                <div className="space-y-3">
-                  <div className="skeleton h-24" />
-                  <div className="skeleton h-32" />
-                  <div className="skeleton h-40" />
-                </div>
-              )
-            )}
+          <div className="flex items-center justify-between">
+            <button type="button" className="btn-ghost" onClick={() => setTab("technical")}>← Technical Offer</button>
+            <button type="button" className="btn-primary" disabled={submitting} onClick={() => download(["Commercial"])}>
+              {submitting ? "Generating…" : "⬇ Download Commercial PDF"}
+            </button>
           </div>
         </div>
-      </div>
-
-      <div className="mt-6 flex justify-end gap-2">
-        <button type="button" className="btn-ghost" onClick={() => navigate("/")}>
-          Cancel
-        </button>
-        <button type="submit" className="btn-primary" disabled={submitting}>
-          {submitting ? "Generating…" : "Generate & Download →"}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function OutputCard({
-  label,
-  desc,
-  active,
-  locked,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  desc: string;
-  active?: boolean;
-  locked?: boolean;
-  disabled?: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={disabled || locked ? undefined : onClick}
-      disabled={disabled}
-      className={`relative rounded-xl border p-3 text-left transition-all ${
-        disabled
-          ? "cursor-not-allowed border-line bg-surface opacity-60"
-          : active
-          ? "border-brand bg-brand-tint shadow-soft"
-          : "border-line bg-white hover:border-brand/50"
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-bold text-ink">{label}</span>
-        <span
-          className={`flex h-5 w-5 items-center justify-center rounded-full border text-[11px] ${
-            active ? "border-brand bg-brand text-white" : "border-line text-transparent"
-          }`}
-        >
-          ✓
-        </span>
-      </div>
-      <p className="mt-0.5 text-xs text-muted">{desc}</p>
-      {locked && (
-        <span className="absolute right-2 top-8 text-[9px] uppercase tracking-wide text-muted">
-          default
-        </span>
       )}
-    </button>
+    </div>
   );
 }

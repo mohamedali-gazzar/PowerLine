@@ -76,7 +76,11 @@ export default function OfferView({ g }: { g: GeneratedOffer }) {
             <CubicleBlock
               key={i}
               index={i}
-              heading={`QTY ${c.qty} Cubical: ${c.name}, each consisting of:`}
+              heading={
+                c.code === "EXTRA"
+                  ? `${c.name}:` // not a cubicle — plain heading
+                  : `QTY ${c.qty} Cubical: ${c.name}, each consisting of:`
+              }
               items={c.items}
             />
           ))}

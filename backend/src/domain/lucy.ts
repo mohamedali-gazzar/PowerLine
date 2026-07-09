@@ -131,9 +131,10 @@ const plural = (n: number) => (n === 1 ? "number" : "numbers");
 /** Line-item scope text for the Lucy commercial offer. */
 export function lucyCommercialDescription(c: RmuConfigInput): string {
   const measuring = c.hasMetering ? " with Air-Insulated metering" : "";
+  const install = c.installation === "OUTDOOR" ? "outdoor" : "indoor";
   return (
     `Supply of ${c.voltageKv} KV SF6 Circuit-Breaker Ring Main Unit, Lucy Electric (AEGIS PLUS), ` +
-    `(${c.nalCount} Feeder + ${c.nalfCount} Transformer)${measuring}, for indoor installation ` +
+    `(${c.nalCount} Feeder + ${c.nalfCount} Transformer)${measuring}, for ${install} installation ` +
     `as per technical specifications enclosed.`
   );
 }
@@ -146,6 +147,7 @@ export function assembleLucyOffer(c: RmuConfigInput): GeneratedOffer {
   const transformers = c.nalfCount;
   const metering = c.hasMetering;
   const busbarA = c.busbarCurrentA || 630;
+  const outdoor = c.installation === "OUTDOOR";
   const cfg = findLucyConfig(c);
   const wayText = cfg?.wayText ?? `${feeders + transformers}-way`;
 
@@ -158,9 +160,9 @@ export function assembleLucyOffer(c: RmuConfigInput): GeneratedOffer {
     { label: "Type", value: headerType },
     { label: "Type of apparatus", value: "SF6 insulated Circuit Breaker / Load Break Switch (AEGIS PLUS)" },
     { label: "Application", value: "Standard IEC 62271-200" },
-    { label: "Configuration", value: `${voltageKv}kV, 21kA/3sec, IP41, suitable for indoor use — Unit shall be ${wayText}.` },
-    { label: "Installation", value: "Indoor" },
-    { label: "Protection index", value: "IP41" },
+    { label: "Configuration", value: `${voltageKv}kV, 21kA/3sec, IP41, suitable for ${outdoor ? "outdoor (with enclosure)" : "indoor"} use — Unit shall be ${wayText}.` },
+    { label: "Installation", value: outdoor ? "Outdoor" : "Indoor" },
+    { label: "Protection index", value: outdoor ? "IP54 (outdoor enclosure)" : "IP41" },
     { label: "Switchgear color", value: "Gray RAL 7032, powder coated and stoved" },
     { label: "Packing", value: "Domestic" },
   ];
@@ -216,12 +218,12 @@ export function assembleLucyOffer(c: RmuConfigInput): GeneratedOffer {
     panelCode: "", // Lucy has no Powerline product code — left blank on purpose
     priceKey: `LUCY-${lucyKey(c)}`,
     commercialDescription: lucyCommercialDescription(c),
-    titleProduct: `Lucy AEGIS PLUS ${voltageKv}KV (Indoor)`,
+    titleProduct: `Lucy AEGIS PLUS ${voltageKv}KV (${outdoor ? "Outdoor" : "Indoor"})`,
     titleFamily: "SF6 Circuit-Breaker Ring Main Unit",
     generalData,
     electricalData,
     additionalData: [],
-    installationNote: undefined,
+    installationNote: outdoor ? "Provided with enclosure for outdoor installation" : undefined,
     generalNotes: [
       "All steelwork will be finish painted gray to RAL 7032, powder coated and stoved.",
     ],
@@ -238,7 +240,7 @@ export function assembleLucyOffer(c: RmuConfigInput): GeneratedOffer {
       nalfCount: transformers,
       hasMetering: metering,
       rtuType: c.rtuType,
-      installation: "INDOOR",
+      installation: c.installation,
       fuseRatingA: 0,
       fuseOverride: false,
       busbarCurrentA: busbarA,

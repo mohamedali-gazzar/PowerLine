@@ -97,12 +97,16 @@ export function priceForConfig(c: RmuConfigInput): ConfigPricing {
   // add-ons (indoor only). Configs outside the catalogue → price on application.
   if (c.productType === "LUCY") {
     const basePrice = lucyPrice(c);
+    const addOns: { name: string; price: number }[] = [];
+    if (c.installation === "OUTDOOR") addOns.push({ ...ADD_ONS.outdoorEnclosure });
+    const listPrice =
+      basePrice == null ? null : basePrice + addOns.reduce((s, a) => s + a.price, 0);
     return {
       panelCode: "",
       priceKey: `LUCY-${lucyKey(c)}`,
       basePrice,
-      addOns: [],
-      listPrice: basePrice,
+      addOns,
+      listPrice,
       found: basePrice != null,
     };
   }
