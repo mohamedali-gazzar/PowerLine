@@ -196,11 +196,12 @@ export const api = {
     ai: (
       question: string,
       context: { doc: string; page?: number | null; text: string }[],
-      history: { role: "user" | "assistant"; text: string }[] = []
+      history: { role: "user" | "assistant"; text: string }[] = [],
+      topic?: string
     ) =>
       request<{ answer: string }>("/support/ai", {
         method: "POST",
-        body: JSON.stringify({ question, context, history }),
+        body: JSON.stringify({ question, context, history, topic }),
       }),
   },
 

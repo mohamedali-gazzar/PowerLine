@@ -3,6 +3,9 @@ import { api } from "../api";
 import {
   loadDocsData,
   localSearch,
+  detectTopics,
+  topicById,
+  TOPICS,
   type DocInfo,
   type SearchHit,
 } from "../docs/search";
@@ -15,6 +18,23 @@ import {
 // accurate answer grounded in OUR documents — it never reads whole files.
 // If the AI is unavailable (no key / error), the chat falls back to showing
 // the closest document passage directly, so it always answers something.
+//
+// To reduce wrong-family answers the chat is TOPIC-AWARE: the user can pick a
+// topic (MVSG, RMU, CT/VT, …) so retrieval is scoped to that family, and even
+// in "All" mode the topic is auto-detected from the wording (incl. shorthand
+// like MVSG / RMU / CT-VT) so answers still land on the right documents.
+
+// Short chip labels for the topic bar (full labels live in search.ts TOPICS).
+const SHORT: Record<string, string> = {
+  switchgear: "MVSG",
+  rmu: "RMU",
+  breakers: "Breakers",
+  lvpanels: "LV Panels",
+  pfc: "PFC",
+  transformers: "CT/VT",
+  kiosks: "Kiosks",
+  meters: "Meters",
+};
 
 interface ChatSource {
   doc: DocInfo;
@@ -26,6 +46,7 @@ interface ChatMsg {
   text: string;
   sources?: ChatSource[];
   note?: string;
+  topicTag?: string; // topic recognised for a user message (picked or detected)
   pending?: boolean;
 }
 
@@ -33,25 +54,30 @@ interface ChatMsg {
 async function callSupportAI(
   question: string,
   hits: SearchHit[],
-  history: { role: "user" | "assistant"; text: string }[]
+  history: { role: "user" | "assistant"; text: string }[],
+  topicLabel?: string
 ): Promise<string> {
   const context = hits.slice(0, 8).map((h) => ({
     doc: h.doc.name,
     page: h.page,
     text: h.text.slice(0, 4000),
   }));
-  const r = await api.support.ai(question, context, history);
+  const r = await api.support.ai(question, context, history, topicLabel);
   return r.answer;
 }
 
 export default function DocsPage() {
   const [docs, setDocs] = useState<DocInfo[] | null>(null);
   const [loadErr, setLoadErr] = useState("");
+  const [topic, setTopic] = useState<string>("all"); // "all" or a Topic id
   const [messages, setMessages] = useState<ChatMsg[]>([
     {
       role: "ai",
       text:
-        "Ask me anything about the technical specifications — EEHC specs for RMUs, switchgear, meters, kiosks, LV panels, CTs/VTs and more. I read the relevant documents and answer from them.",
+        "👋 Hi — I'm the PowerLine specifications assistant. Pick a topic below to keep answers " +
+        "focused (MV Switchgear, RMU, Meters, CT/VT, Kiosks, LV Panels, Breakers, PFC), or just " +
+        "ask. I understand shorthand too — MVSG, RMU, CT/VT, LV, PFC — and I answer from our EEHC " +
+        "documents. What would you like to know?",
     },
   ]);
   const [input, setInput] = useState("");
@@ -88,20 +114,47 @@ export default function DocsPage() {
         text: m.text.slice(0, 1500),
       }));
 
+  const pickTopic = (id: string) => {
+    setTopic(id);
+    if (id !== "all") {
+      const t = topicById(id);
+      if (t)
+        setMessages((m) => [
+          ...m,
+          {
+            role: "ai",
+            text: `Focused on ${t.emoji} ${t.label}. I'll answer only from these documents — ask away, or switch topic anytime above.`,
+          },
+        ]);
+    }
+  };
+
   const send = async () => {
     const q = input.trim();
     if (!q || busy || !docs) return;
     setInput("");
     setBusy(true);
     const history = recentHistory(messages);
-    setMessages((m) => [...m, { role: "user", text: q }, { role: "ai", text: "", pending: true }]);
+
+    // Topic in effect: an explicit pick, otherwise auto-detected from the wording
+    // (so the chat visibly "knows" a question about MVSG / RMU / CT-VT / …).
+    const active = topic !== "all" ? topicById(topic) : detectTopics(q)[0];
+    const topicTag = active ? `${active.emoji} ${active.label}` : undefined;
+    const topicLabel = active?.label;
+
+    setMessages((m) => [
+      ...m,
+      { role: "user", text: q, topicTag },
+      { role: "ai", text: "", pending: true },
+    ]);
     try {
-      // 1) Retrieve the relevant passages locally (instant, no AI).
-      const { hits } = await localSearch(q, 8);
+      // 1) Retrieve the relevant passages locally (instant, no AI). Scoped to the
+      //    picked topic; in "all" mode the engine auto-detects + boosts the family.
+      const { hits } = await localSearch(q, 8, topic);
       const sources = dedupeSources(hits).slice(0, 3);
       try {
         // 2) AI composes the answer from those passages (every message).
-        const answer = await callSupportAI(q, hits, history);
+        const answer = await callSupportAI(q, hits, history, topicLabel);
         setMessages((m) =>
           m.map((msg) => (msg.pending ? { role: "ai", text: answer, sources } : msg))
         );
@@ -146,6 +199,8 @@ export default function DocsPage() {
       setBusy(false);
     }
   };
+
+  const activeTopic = topic !== "all" ? topicById(topic) : undefined;
 
   return (
     <div className="animate-fade-up">
@@ -199,12 +254,41 @@ export default function DocsPage() {
             ))}
             <div ref={bottomRef} />
           </div>
+
           <div className="border-t border-line p-3">
+            {/* Topic selector — scope answers to one family, fewer wrong sources */}
+            <div className="mb-2">
+              <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                <span>Topic</span>
+                <span className="normal-case tracking-normal text-[10px] font-medium text-muted/90">
+                  {activeTopic
+                    ? `focused — answers stay in ${activeTopic.label}`
+                    : "all documents — I also auto-detect (MVSG, RMU, CT/VT…)"}
+                </span>
+              </div>
+              <div className="flex gap-1.5 overflow-x-auto pb-1">
+                <TopicChip label="🌐 All" active={topic === "all"} onClick={() => pickTopic("all")} />
+                {TOPICS.map((t) => (
+                  <TopicChip
+                    key={t.id}
+                    label={`${t.emoji} ${SHORT[t.id] ?? t.label}`}
+                    title={t.label}
+                    active={topic === t.id}
+                    onClick={() => pickTopic(t.id)}
+                  />
+                ))}
+              </div>
+            </div>
+
             <div className="flex gap-2">
               <input
                 className="input flex-1"
                 dir="auto"
-                placeholder="Ask about the technical specs… (English or العربية)"
+                placeholder={
+                  activeTopic
+                    ? `Ask about ${activeTopic.label}… (English or العربية)`
+                    : "Ask about the technical specs… (English or العربية)"
+                }
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") send(); }}
@@ -215,12 +299,41 @@ export default function DocsPage() {
               </button>
             </div>
             <p className="mt-1.5 text-[11px] text-muted">
-              The assistant reads the relevant specification pages and answers from them.
+              {activeTopic
+                ? `Answering only from ${activeTopic.label} documents — pick “All” above to search everything.`
+                : "The assistant reads the relevant specification pages and answers from them."}
             </p>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function TopicChip({
+  label,
+  title,
+  active,
+  onClick,
+}: {
+  label: string;
+  title?: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-semibold transition ${
+        active
+          ? "bg-brand text-white shadow-sm"
+          : "bg-brand-tint/60 text-brand-dark hover:bg-brand-tint"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -239,10 +352,15 @@ function dedupeSources(hits: SearchHit[]): ChatSource[] {
 function Message({ msg }: { msg: ChatMsg }) {
   if (msg.role === "user") {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-1">
         <div dir="auto" className="max-w-[85%] rounded-2xl rounded-br-md bg-brand px-4 py-2.5 text-sm text-white shadow-soft">
           {msg.text}
         </div>
+        {msg.topicTag && (
+          <span className="mr-0.5 inline-flex items-center gap-1 rounded-full bg-brand-tint/70 px-2 py-0.5 text-[10px] font-semibold text-brand-dark">
+            🎯 {msg.topicTag}
+          </span>
+        )}
       </div>
     );
   }

@@ -47,6 +47,116 @@ export interface LocalResult {
 // meaningful words are found in one chunk (+ its doc name/category).
 export const CONFIDENT_COVERAGE = 0.65;
 
+// ── Topics ────────────────────────────────────────────────────────────────
+// User-facing topics for the chat's topic selector. `cats` are the raw manifest
+// categories a topic covers; `terms` are the words/abbreviations a user might
+// type (so "MVSG", "switch board", "CT/VT" all resolve to the right family);
+// `anchors` are tokens present in the topic's document names, added to the query
+// so retrieval reaches the right documents even from an abbreviation alone.
+export interface Topic {
+  id: string;
+  label: string;
+  emoji: string;
+  cats: string[];
+  terms: string[];
+  anchors: string[];
+}
+
+export const TOPICS: Topic[] = [
+  {
+    id: "switchgear",
+    label: "MV Switchgear (MVSG)",
+    emoji: "⚡",
+    cats: ["switch gears"],
+    terms: ["switchgear", "switch gear", "mvsg", "mv sg", "switch board", "switchboard",
+      "mv panel", "primary switchgear", "gis switchgear"],
+    anchors: ["switchgear"],
+  },
+  {
+    id: "rmu",
+    label: "Ring Main Units (RMU)",
+    emoji: "🔁",
+    cats: ["RMU"],
+    terms: ["rmu", "ring main unit", "ring main", "smart rmu"],
+    anchors: ["rmu", "ring"],
+  },
+  {
+    id: "breakers",
+    label: "LV Circuit Breakers",
+    emoji: "🔌",
+    cats: ["low voltage circuit breakers up to 6300 A"],
+    terms: ["circuit breaker", "breaker", "acb", "mccb", "mcb"],
+    anchors: ["breaker", "circuit"],
+  },
+  {
+    id: "lvpanels",
+    label: "LV Panels",
+    emoji: "🗄️",
+    cats: ["Low Voltage Panels"],
+    terms: ["lv panel", "low voltage panel", "panel board", "distribution board"],
+    anchors: ["panel"],
+  },
+  {
+    id: "pfc",
+    label: "Power Factor Correction",
+    emoji: "📈",
+    cats: ["LOW VOLTAGE AUTOMATIC POWER FACTOR CORRECTION"],
+    terms: ["power factor", "pfc", "capacitor bank", "apfc"],
+    anchors: ["factor", "correction"],
+  },
+  {
+    id: "transformers",
+    label: "CT / VT Transformers",
+    emoji: "🧲",
+    cats: ["CT . VT"],
+    terms: ["current transformer", "voltage transformer", "instrument transformer",
+      "ct", "vt", "pt", "ct/vt"],
+    anchors: ["transformer", "current", "voltage"],
+  },
+  {
+    id: "kiosks",
+    label: "Distribution Kiosks",
+    emoji: "🏗️",
+    cats: ["kiosks"],
+    terms: ["kiosk", "package substation", "compact substation"],
+    anchors: ["kiosk"],
+  },
+  {
+    id: "meters",
+    label: "Meters & Metering",
+    emoji: "🔢",
+    cats: ["METERS"],
+    terms: ["meter", "metering", "smart meter", "prepaid meter", "mtu",
+      "data concentrator", "kwh", "ami"],
+    anchors: ["meter"],
+  },
+];
+
+const TOPIC_BY_ID = new Map(TOPICS.map((t) => [t.id, t]));
+
+export function topicById(id: string | null | undefined): Topic | undefined {
+  return id ? TOPIC_BY_ID.get(id) : undefined;
+}
+
+/** Whole-word (plural-tolerant) test so "meter" doesn't match "parameter". */
+function hasTerm(paddedNorm: string, term: string): boolean {
+  const t = term.trim();
+  return paddedNorm.includes(` ${t} `) || paddedNorm.includes(` ${t}s `);
+}
+
+/** Which topics does this question mention? Strongest first. Understands
+ *  abbreviations / synonyms (MVSG, RMU, CT/VT, PFC, …). */
+export function detectTopics(question: string): Topic[] {
+  const nq = ` ${normalize(question)} `;
+  return TOPICS.map((t) => ({
+    t,
+    hits: t.terms.reduce((n, term) => n + (hasTerm(nq, term) ? 1 : 0), 0),
+  }))
+    .filter((s) => s.hits > 0)
+    .sort((a, b) => b.hits - a.hits)
+    .map((s) => s.t);
+}
+
 interface IndexedChunk {
   d: string;
   p: number;
@@ -55,6 +165,9 @@ interface IndexedChunk {
   docName: string;
   nDocName: string;
   nCategory: string;
+  cDocName: string; // separator-free name (so "switchgear" matches "switch gears")
+  cCategory: string; // separator-free category
+  category: string; // raw manifest category (for topic scoping)
 }
 
 let dataPromise: Promise<{ docs: DocInfo[]; index: IndexedChunk[]; fuse: Fuse<IndexedChunk> }> | null =
@@ -70,6 +183,13 @@ function normalize(s: string): string {
     .replace(/ة/g, "ه")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Normalized text with ALL separators removed (spaces, dots, dashes), so a
+ *  single-word query token like "switchgear" matches a spaced/punctuated name
+ *  or category like "switch gears" or "CT . VT". */
+function compact(s: string): string {
+  return normalize(s).replace(/[^a-z0-9؀-ۿ]/g, "");
 }
 
 const STOPWORDS = new Set([
@@ -120,6 +240,9 @@ export function loadDocsData() {
           docName: doc?.name ?? c.d,
           nDocName: normalize(doc?.name ?? c.d),
           nCategory: normalize(doc?.category ?? ""),
+          cDocName: compact(doc?.name ?? c.d),
+          cCategory: compact(doc?.category ?? ""),
+          category: doc?.category ?? "",
         };
       });
       // Secondary fuzzy index (typo tolerance / low-coverage context gathering).
@@ -144,44 +267,84 @@ export function loadDocsData() {
   return dataPromise;
 }
 
-/** Search the local corpus. Instant — a lookup, not a network/AI call. */
-export async function localSearch(question: string, limit = 5): Promise<LocalResult> {
+/** Search the local corpus. Instant — a lookup, not a network/AI call.
+ *  Pass a `topicId` (from the chat's topic selector) to HARD-scope retrieval to
+ *  one document family so answers never mix (e.g. an RMU spec can't answer a
+ *  switchgear question). Omit it (or pass "all") to search everything with the
+ *  topic auto-detected from the wording — including abbreviations like MVSG. */
+export async function localSearch(
+  question: string,
+  limit = 5,
+  topicId?: string
+): Promise<LocalResult> {
   const { docs, index, fuse } = await loadDocsData();
   const byId = new Map(docs.map((d) => [d.id, d]));
   const tokens = tokenize(question);
   if (tokens.length === 0) return { hits: [], confident: false };
 
-  // Primary: token-coverage scoring over every chunk. Chunks living in a
-  // category/document whose NAME matches the question get a boost, so
-  // "switchgear" questions rank switch-gear specs above other docs that merely
-  // mention the word.
+  // Topic scoping. An explicitly-picked topic hard-restricts retrieval to its
+  // family; with no pick we auto-detect from the wording and apply a softer
+  // affinity boost so the right family still leads.
+  const picked = topicId && topicId !== "all" ? TOPIC_BY_ID.get(topicId) : undefined;
+  const affinityTopic = picked ?? detectTopics(question)[0];
+  const affinityCats = affinityTopic ? new Set(affinityTopic.cats) : null;
+  const hardCats = picked ? new Set(picked.cats) : null;
+
+  // Expand the query with the active topic's anchor words so the scorer reaches
+  // that family's documents even when the user typed only an abbreviation.
+  const searchTokens = [...tokens];
+  if (affinityTopic)
+    for (const a of affinityTopic.anchors)
+      if (!searchTokens.includes(a)) searchTokens.push(a);
+
   type Scored = { c: IndexedChunk; coverage: number; density: number };
-  const scored: Scored[] = [];
-  for (const c of index) {
-    let matched = 0;
-    let density = 0;
-    let homeBoost = 0;
-    for (const tok of tokens) {
-      const inDocMeta = c.nDocName.includes(tok) || c.nCategory.includes(tok);
-      if (c.nt.includes(tok)) {
-        matched++;
-        if (inDocMeta) homeBoost += 0.08; // topic word AND it's that doc's subject
-        // occurrences (capped) reward chunks that are ABOUT the topic
-        let n = 0;
-        let at = c.nt.indexOf(tok);
-        while (at !== -1 && n < 5) {
-          n++;
-          at = c.nt.indexOf(tok, at + tok.length);
+  const scoreAll = (restrict: Set<string> | null): Scored[] => {
+    const out: Scored[] = [];
+    for (const c of index) {
+      if (restrict && !restrict.has(c.category)) continue;
+      let matched = 0;
+      let density = 0;
+      let homeBoost = 0;
+      for (const tok of searchTokens) {
+        // Match the token against the document name / category in both their
+        // spaced and separator-free forms, so "switchgear" matches the "switch
+        // gears" category. A query word that names the document's own subject is
+        // strong evidence it is ABOUT the question — boost it whether or not the
+        // word also appears in this particular chunk's body.
+        const inDocMeta =
+          c.nDocName.includes(tok) ||
+          c.nCategory.includes(tok) ||
+          c.cDocName.includes(tok) ||
+          c.cCategory.includes(tok);
+        if (inDocMeta) homeBoost += 0.15;
+        if (c.nt.includes(tok)) {
+          matched++;
+          // occurrences (capped) reward chunks that are ABOUT the topic
+          let n = 0;
+          let at = c.nt.indexOf(tok);
+          while (at !== -1 && n < 5) {
+            n++;
+            at = c.nt.indexOf(tok, at + tok.length);
+          }
+          density += n;
+        } else if (inDocMeta) {
+          matched += 0.9; // found in the file name / category tag
         }
-        density += n;
-      } else if (inDocMeta) {
-        matched += 0.9; // found in the file name / category tag
       }
+      if (matched <= 0) continue;
+      // Denominator is the user's real token count; anchors + boosts add on top.
+      let coverage = matched / tokens.length + homeBoost;
+      if (affinityCats && affinityCats.has(c.category)) coverage += 0.25; // on-topic family
+      out.push({ c, coverage, density });
     }
-    if (matched > 0)
-      scored.push({ c, coverage: matched / tokens.length + homeBoost, density });
-  }
-  scored.sort((a, b) => b.coverage - a.coverage || b.density - a.density);
+    out.sort((a, b) => b.coverage - a.coverage || b.density - a.density);
+    return out;
+  };
+
+  // Hard-scope when a topic is picked; if the question doesn't actually fit it
+  // (no results at all), fall back to everything so the chat still answers.
+  let scored = scoreAll(hardCats);
+  if (hardCats && scored.length === 0) scored = scoreAll(null);
 
   // Diversify: at most 3 chunks per document so the AI sees several documents'
   // views of the topic instead of one file dominating the context.
@@ -197,11 +360,15 @@ export async function localSearch(question: string, limit = 5): Promise<LocalRes
   let top = diverse;
 
   // Secondary: if coverage is weak, let Fuse gather fuzzy candidates (typos,
-  // morphological variants) so the AI escalation still gets grounded context.
+  // morphological variants). Keep them inside the picked topic when scoped.
   if ((top[0]?.coverage ?? 0) < CONFIDENT_COVERAGE) {
     try {
-      const fuzzy = fuse.search(tokens.map((t) => `'${t}`).join(" | "), { limit });
+      const fuzzy = fuse.search(searchTokens.map((t) => `'${t}`).join(" | "), {
+        limit: limit * 3,
+      });
       for (const r of fuzzy) {
+        if (hardCats && !hardCats.has(r.item.category)) continue;
+        if (top.length >= limit) break;
         if (!top.some((s) => s.c === r.item)) {
           top.push({ c: r.item, coverage: Math.max(0, 0.5 - (r.score ?? 1) / 2), density: 0 });
         }
