@@ -191,6 +191,19 @@ export const api = {
     submit: (id: string) => request<{ ok: true }>(`/qtns/${id}/submit`, { method: "POST" }),
   },
 
+  // ── Docs & Support — retrieval-grounded AI answering ────────────────────────
+  support: {
+    ai: (
+      question: string,
+      context: { doc: string; page?: number | null; text: string }[],
+      history: { role: "user" | "assistant"; text: string }[] = []
+    ) =>
+      request<{ answer: string }>("/support/ai", {
+        method: "POST",
+        body: JSON.stringify({ question, context, history }),
+      }),
+  },
+
   // ── Account (profile, history, stats) ───────────────────────────────────────
   account: {
     updateProfile: (data: { name?: string; photo?: string | null }) =>

@@ -11,6 +11,7 @@ import OfferDetailPage from "./pages/OfferDetailPage";
 import KioskSelectorPage from "./pages/KioskSelectorPage";
 import LvQtnListPage from "./pages/LvQtnListPage";
 import LvConfiguratorPage from "./pages/LvConfiguratorPage";
+import DocsPage from "./pages/DocsPage";
 // Brand fonts — self-hosted via @fontsource so local dev stays offline-capable.
 import "@fontsource/poppins/300.css";
 import "@fontsource/poppins/400.css";
@@ -37,6 +38,7 @@ function Gate() {
         <Route index element={<HomeDashboard />} />
         <Route path="rmu" element={<OffersListPage />} />
         <Route path="kiosks" element={<KioskSelectorPage />} />
+        <Route path="docs" element={<DocsPage />} />
         <Route path="lv" element={<LvQtnListPage />} />
         <Route path="lv/qtn/:id" element={<LvConfiguratorPage />} />
         <Route path="offers/new" element={<NewOfferPage />} />
