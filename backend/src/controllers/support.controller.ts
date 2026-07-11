@@ -11,11 +11,12 @@ import { fail } from "../lib/http";
 // Configure with the ANTHROPIC_API_KEY env var. When the key is missing the
 // endpoint returns 503 and the chat falls back to showing the raw best match.
 
-// Claude Opus 4.8 — Anthropic's most capable model, for accurate, well-grounded
-// answers over the retrieved excerpts. To trade some quality for lower cost on a
-// high-traffic chat, change this to "claude-sonnet-5" (near-Opus quality, ~⅓ the
-// price) or "claude-haiku-4-5" (cheapest) — nothing else needs to change.
-const CLAUDE_MODEL = "claude-opus-4-8";
+// Claude Sonnet 5 — near-Opus quality on grounded Q&A at roughly a third of the
+// price, a good fit for a support chat. Thinking is disabled on the request below
+// to keep answers fast and within the token budget (Sonnet 5 would otherwise turn
+// adaptive thinking ON by default when omitted). For maximum quality switch this
+// to "claude-opus-4-8"; for the lowest cost "claude-haiku-4-5".
+const CLAUDE_MODEL = "claude-sonnet-5";
 
 const askSchema = z.object({
   question: z.string().trim().min(1).max(2000),
@@ -113,6 +114,10 @@ export async function askAi(req: Request, res: Response) {
         // 1024-token cap on Gemini truncated them). Answers here are short, so
         // this is plenty and non-streaming stays well under the request timeout.
         max_tokens: 2048,
+        // No extended thinking: keep the chat fast/cheap and give the whole budget
+        // to the answer. (Sonnet 5 enables adaptive thinking by default when this
+        // is omitted; the system prompt already forbids reasoning in the reply.)
+        thinking: { type: "disabled" },
         system: SYSTEM_RULES,
         messages: [{ role: "user", content: userMessage }],
       });
