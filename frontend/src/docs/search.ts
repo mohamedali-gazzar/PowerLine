@@ -157,6 +157,38 @@ export function detectTopics(question: string): Topic[] {
     .map((s) => s.t);
 }
 
+// Query-expansion synonyms for the scorer — bridge the vocabulary gap between how
+// engineers ask and how the specs are written. VT and PT both mean voltage /
+// potential transformer; "ratings" implies burden (VA), accuracy class, ratio…
+// Without this, "VT ratings" never reaches a page that says "Potential
+// transformer … 100 VA, cl 0.5 for first core and 30 VA, cl 3P for second core".
+const SYN: Record<string, string[]> = {
+  vt: ["voltage", "potential", "transformer"],
+  pt: ["potential", "voltage", "transformer"],
+  ct: ["current", "transformer"],
+  rating: ["va", "ratio", "rated", "burden", "accuracy", "class"],
+  burden: ["va"],
+  accuracy: ["class"],
+  core: ["winding"],
+  fuse: ["hrc"],
+};
+const RATING_SIGNALS = new Set(["va", "class", "burden", "accuracy", "ratio", "rated", "rating"]);
+
+/** Extra query tokens implied by domain synonyms (VT → potential transformer, …). */
+function expandSyn(tokens: string[]): string[] {
+  const extra: string[] = [];
+  for (const t of tokens) {
+    const e = SYN[t];
+    if (e) for (const x of e) if (!tokens.includes(x) && !extra.includes(x)) extra.push(x);
+  }
+  return extra;
+}
+
+// A chunk carries concrete rating VALUES (e.g. "30 VA", "cl 0.5", "3P") — worth
+// surfacing above blank guarantee-table templates when the user asks for ratings.
+const HAS_MAGNITUDE = /\b\d+\s*va\b/i;
+const HAS_CLASS_CODE = /\bcl\s*\d|class\s*\d|\b\d\s*p\b/i;
+
 interface IndexedChunk {
   d: string;
   p: number;
@@ -296,6 +328,13 @@ export async function localSearch(
   if (affinityTopic)
     for (const a of affinityTopic.anchors)
       if (!searchTokens.includes(a)) searchTokens.push(a);
+  // Domain-synonym expansion (VT↔PT↔voltage/potential transformer, ratings↔VA/
+  // class/burden/…) so a question reaches specs written in different words.
+  for (const e of expandSyn(tokens))
+    if (!searchTokens.includes(e)) searchTokens.push(e);
+  // When the question is about ratings/values, reward chunks that carry concrete
+  // figures ("30 VA", "cl 0.5", "3P") over blank parameter templates.
+  const wantValues = searchTokens.some((t) => RATING_SIGNALS.has(t));
 
   type Scored = { c: IndexedChunk; coverage: number; density: number };
   const scoreAll = (restrict: Set<string> | null): Scored[] => {
@@ -335,6 +374,10 @@ export async function localSearch(
       // Denominator is the user's real token count; anchors + boosts add on top.
       let coverage = matched / tokens.length + homeBoost;
       if (affinityCats && affinityCats.has(c.category)) coverage += 0.25; // on-topic family
+      if (wantValues) {
+        if (HAS_MAGNITUDE.test(c.t)) coverage += 0.3; // has a real "… VA" figure
+        if (HAS_CLASS_CODE.test(c.t)) coverage += 0.3; // has "cl 0.5" / "3P" / "class 5P10"
+      }
       out.push({ c, coverage, density });
     }
     out.sort((a, b) => b.coverage - a.coverage || b.density - a.density);

@@ -57,7 +57,7 @@ async function callSupportAI(
   history: { role: "user" | "assistant"; text: string }[],
   topicLabel?: string
 ): Promise<string> {
-  const context = hits.slice(0, 8).map((h) => ({
+  const context = hits.slice(0, 12).map((h) => ({
     doc: h.doc.name,
     page: h.page,
     text: h.text.slice(0, 4000),
@@ -150,7 +150,8 @@ export default function DocsPage() {
     try {
       // 1) Retrieve the relevant passages locally (instant, no AI). Scoped to the
       //    picked topic; in "all" mode the engine auto-detects + boosts the family.
-      const { hits } = await localSearch(q, 8, topic);
+      //    Send 12 so tabular ratings (which sit deeper in a doc) reach the AI.
+      const { hits } = await localSearch(q, 12, topic);
       const sources = dedupeSources(hits).slice(0, 3);
       try {
         // 2) AI composes the answer from those passages (every message).

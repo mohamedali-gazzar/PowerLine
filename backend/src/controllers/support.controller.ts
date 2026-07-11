@@ -30,7 +30,7 @@ const askSchema = z.object({
         text: z.string().trim().max(4000),
       })
     )
-    .max(10)
+    .max(14)
     .default([]),
   // Recent turns (user/assistant) so follow-up questions keep their meaning.
   history: z
@@ -54,7 +54,11 @@ const SYSTEM_RULES =
   "source of truth. Answer accurately USING THE EXCERPTS: synthesize across them when needed and " +
   "quote exact values (ratings, clauses, standards, KV/A figures) when present. If the excerpts " +
   "don't contain the answer, say so plainly and name which document would likely cover it — never " +
-  "invent facts. If the question is too vague to answer, or clearly needs a specific product or " +
+  "invent facts. DOMAIN NOTE: VT = PT = voltage/potential transformer, CT = current transformer; " +
+  "ratings appear as accuracy class (e.g. cl 0.5, 3P), burden (VA), ratio, and number of cores/" +
+  "windings, and often sit inside a technical-data or guarantee table — read those carefully and " +
+  "quote the exact figures rather than saying a value is absent. If the question is too vague to " +
+  "answer, or clearly needs a specific product or " +
   "rating the user hasn't given, ask ONE short clarifying question and suggest the likely options — " +
   "otherwise answer directly, don't stall. When a topic scope is given, stay within it. Answer in " +
   "the SAME LANGUAGE as the question (English or Arabic). Cite the document name (and page) you " +
