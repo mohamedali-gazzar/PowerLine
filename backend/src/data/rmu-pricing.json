@@ -1,0 +1,91 @@
+{
+  "_note": "RMU pricing master. Edit pricing/RMU-Pricing.xlsx and run `node tools/pricing-import.cjs rmu` — do NOT hand-edit this file.",
+  "currency": "USD",
+  "vatPct": 14,
+  "panels": {
+    "P-RAL12N0F1": 2482,
+    "P-RAL12N2F1": 4828,
+    "P-RAL12N3F1": 6260,
+    "P-RAL12N2F1M1": 8467,
+    "P-RAL12N3F1M1": 9841,
+    "P-RAL12N4F0M1": 9795,
+    "P-RAL12N2F1M1-With Fuse": 9342,
+    "P-RAL12N3F1M1-With Fuse": 10749,
+    "P-RAL12N4F0M1-With Fuse": 10671,
+    "P-RAL24N0F1": 2534,
+    "P-RAL24N2F1": 5916,
+    "P-RAL24N3F1": 7365,
+    "P-RAL24N2F1M1": 10259,
+    "P-RAL24N3F1M1": 12049,
+    "P-RAL24N2F1M1-With Fuse": 10878,
+    "P-RAL24N3F1M1-With Fuse": 12720,
+    "P-SEC24N0F1": 3952,
+    "P-SEC24N1F0": 3269,
+    "P-SEC24N1F1": 6196,
+    "P-SEC24N2F1": 8826,
+    "P-SEC24N3F1": 11374,
+    "P-SEC24N4F0": 10920,
+    "P-SEC12N2F1M1": 13190,
+    "P-SEC12N3F1M1": 15887,
+    "P-SEC12N2F1M1-With Fuse": 14065,
+    "P-SEC12N3F1M1-With Fuse": 16762,
+    "P-SEC24N2F1M1": 14160,
+    "P-SEC24N3F1M1": 16857,
+    "P-SEC24N0F1M1": 9071,
+    "P-SEC24N2F1M1-With Fuse": 14864,
+    "P-SEC24N3F1M1-With Fuse": 17561,
+    "P-SEC24N0F1M1-With Fuse": 9904,
+    "P-SEC.M12N2F1M1": 10225,
+    "P-SEC.M12N3F1M1": 11968,
+    "P-SEC.M12N4F0M1": 11527,
+    "P-SEC.M12N2F1M1-With Fuse": 11100,
+    "P-SEC.M12N3F1M1-With Fuse": 12843,
+    "P-SEC.M12N4F0M1-With Fuse": 12402,
+    "P-SEC.M24N2F1": 5592,
+    "P-SEC.M24N3F1": 7197,
+    "P-SEC.M24N2F1M1": 10746,
+    "P-SEC.M24N3F1M1": 12939,
+    "P-SEC.M24N4F0M1": 12497,
+    "P-SEC.M24N2F1M1-With Fuse": 11899,
+    "P-SEC.M24N3F1M1-With Fuse": 13642,
+    "P-SEC.M24N4F0M1-With Fuse": 13201
+  },
+  "lucy": {
+    "0+1": 8310,
+    "1+1": 9151,
+    "2+1": 12242,
+    "2+2": 16941,
+    "3+1": 14220,
+    "2+2+M": 30611,
+    "2+1+M": 24350,
+    "3+1+M": 26650
+  },
+  "rtu": {
+    "PSEC": {
+      "READY1": 6500,
+      "READY2": 8000,
+      "SMART1": 12000,
+      "SMART2": 14000
+    },
+    "LUCY": {
+      "READY1": 8500,
+      "READY2": 10000,
+      "SMART1": 14000,
+      "SMART2": 16000
+    }
+  },
+  "addOns": {
+    "shuntTrip": {
+      "name": "Shunt trip",
+      "price": 220
+    },
+    "auxiliarySwitch": {
+      "name": "Auxiliary Switch",
+      "price": 301
+    },
+    "outdoorEnclosure": {
+      "name": "Outdoor Enclosure",
+      "price": 2000
+    }
+  }
+}

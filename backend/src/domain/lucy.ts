@@ -32,33 +32,30 @@ export interface LucyConfig {
   transformers: number; // Circuit-Breaker ways (V) → nalfCount
   metering: boolean;
   wayText: string; // Lucy's physical arrangement wording (e.g. "3-way L-V-L")
-  priceUsd: number; // selling price (USD, same for 12 & 24 kV)
 }
 
-/** The eight quoted Lucy configurations. Price is identical for 12 & 24 kV. */
+/** The eight quoted Lucy configurations (structure only — prices live in the
+ *  pricing master, src/data/rmu-pricing.json "lucy" map, keyed by `key`). */
 export const LUCY_CONFIGS: LucyConfig[] = [
-  { key: "0+1", feeders: 0, transformers: 1, metering: false, wayText: "1-way V", priceUsd: 8310 },
-  { key: "1+1", feeders: 1, transformers: 1, metering: false, wayText: "2-way L-V", priceUsd: 9151 },
-  { key: "2+1", feeders: 2, transformers: 1, metering: false, wayText: "3-way L-V-L", priceUsd: 12242 },
-  { key: "2+2", feeders: 2, transformers: 2, metering: false, wayText: "4-way L-V-V-L", priceUsd: 16941 },
-  { key: "3+1", feeders: 3, transformers: 1, metering: false, wayText: "4-way L-L-V-L", priceUsd: 14220 },
+  { key: "0+1", feeders: 0, transformers: 1, metering: false, wayText: "1-way V" },
+  { key: "1+1", feeders: 1, transformers: 1, metering: false, wayText: "2-way L-V" },
+  { key: "2+1", feeders: 2, transformers: 1, metering: false, wayText: "3-way L-V-L" },
+  { key: "2+2", feeders: 2, transformers: 2, metering: false, wayText: "4-way L-V-V-L" },
+  { key: "3+1", feeders: 3, transformers: 1, metering: false, wayText: "4-way L-L-V-L" },
   {
     key: "2+2+M", feeders: 2, transformers: 2, metering: true,
     wayText:
       "2-way L-L (Right Extensible) & 2-way V-V (Left Extensible) coupled together with Air Insulated Metering Unit (Busbar In - Busbar out) configuration",
-    priceUsd: 30611,
   },
   {
     key: "2+1+M", feeders: 2, transformers: 1, metering: true,
     wayText:
       "2-way L-L (Right Extensible) & 1-way V (Left Extensible) coupled together with Air Insulated Metering Unit (Busbar In - Busbar out) configuration",
-    priceUsd: 24350,
   },
   {
     key: "3+1+M", feeders: 3, transformers: 1, metering: true,
     wayText:
       "3-way L-L-L (Right Extensible) & 1-way V (Left Extensible) coupled together with Air Insulated Metering Unit (Busbar In - Busbar out) configuration",
-    priceUsd: 26650,
   },
 ];
 
@@ -71,9 +68,6 @@ export const findLucyConfig = (c: ConfigCounts): LucyConfig | undefined =>
   LUCY_CONFIGS.find(
     (x) => x.feeders === c.nalCount && x.transformers === c.nalfCount && x.metering === c.hasMetering
   );
-
-/** Lucy list/selling price (USD) for a config, or null when not in the catalogue. */
-export const lucyPrice = (c: ConfigCounts): number | null => findLucyConfig(c)?.priceUsd ?? null;
 
 // ── Bills of material (identical across all Lucy configs) ────────────────────
 

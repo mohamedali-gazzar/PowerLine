@@ -127,6 +127,7 @@ export interface GeneratedOffer {
   titleProduct: string;
   titleFamily: string;
   listPricing?: ConfigPricing;
+  vatPct?: number; // from the pricing master (preview endpoint)
   generalData: Row[];
   electricalData: Row[];
   additionalData: Row[];

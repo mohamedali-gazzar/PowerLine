@@ -4,8 +4,9 @@
 import { round2 } from "./pricing";
 import type { GeneratedOffer } from "../domain/assembly";
 import type { ConfigPricing } from "../domain/priceList";
+import { VAT_PCT } from "../domain/pricing-data";
 
-export const VAT_PCT = 14; // Egypt VAT
+export { VAT_PCT }; // Egypt VAT — from the pricing master (rmu-pricing.json)
 
 export interface CommercialItem {
   description: string;

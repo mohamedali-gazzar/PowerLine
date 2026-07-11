@@ -1,5 +1,6 @@
-// RMU price list (USD), transcribed from "Pricing Sheet RMU 2026".
-// Keyed by the catalogue panel code / price key (see buildPriceKey).
+// RMU price lookups. All actual prices live in the pricing master
+// (src/data/rmu-pricing.json, edited via pricing/RMU-Pricing.xlsx) and are read
+// through the pricing-data provider — no prices are hardcoded here.
 // "Minimum unit price" — the floor; the selling price is set per offer.
 
 import {
@@ -7,84 +8,14 @@ import {
   buildPriceKey,
   type RmuConfigInput,
 } from "./assembly";
-import { lucyPrice, lucyKey } from "./lucy";
+import { lucyKey } from "./lucy";
 import { RTU_LABEL } from "./standards";
+import { panelPrice, lucyConfigPrice, rtuPrice, addOnPrice } from "./pricing-data";
 
-export const PRICE_LIST: Record<string, number> = {
-  // --- P-RAL 12 (air) ---
-  "P-RAL12N0F1": 2482,
-  "P-RAL12N2F1": 4828,
-  "P-RAL12N3F1": 6260,
-  "P-RAL12N2F1M1": 8467,
-  "P-RAL12N3F1M1": 9841,
-  "P-RAL12N4F0M1": 9795,
-  "P-RAL12N2F1M1-With Fuse": 9342,
-  "P-RAL12N3F1M1-With Fuse": 10749,
-  "P-RAL12N4F0M1-With Fuse": 10671,
-
-  // --- P-RAL 24 (air) ---
-  "P-RAL24N0F1": 2534,
-  "P-RAL24N2F1": 5916,
-  "P-RAL24N3F1": 7365,
-  "P-RAL24N2F1M1": 10259,
-  "P-RAL24N3F1M1": 12049,
-  "P-RAL24N2F1M1-With Fuse": 10878,
-  "P-RAL24N3F1M1-With Fuse": 12720,
-
-  // --- P-SEC (SF6, ABB) ---
-  "P-SEC24N0F1": 3952,
-  "P-SEC24N1F0": 3269,
-  "P-SEC24N1F1": 6196,
-  "P-SEC24N2F1": 8826,
-  "P-SEC24N3F1": 11374,
-  "P-SEC24N4F0": 10920,
-  "P-SEC12N2F1M1": 13190,
-  "P-SEC12N3F1M1": 15887,
-  "P-SEC12N2F1M1-With Fuse": 14065,
-  "P-SEC12N3F1M1-With Fuse": 16762,
-  "P-SEC24N2F1M1": 14160,
-  "P-SEC24N3F1M1": 16857,
-  "P-SEC24N0F1M1": 9071,
-  "P-SEC24N2F1M1-With Fuse": 14864,
-  "P-SEC24N3F1M1-With Fuse": 17561,
-  "P-SEC24N0F1M1-With Fuse": 9904,
-
-  // --- P-SEC Murge (SF6, Murge LBS) ---
-  // 12 kV (metering variants only, per the price sheet)
-  "P-SEC.M12N2F1M1": 10225,
-  "P-SEC.M12N3F1M1": 11968,
-  "P-SEC.M12N4F0M1": 11527,
-  "P-SEC.M12N2F1M1-With Fuse": 11100,
-  "P-SEC.M12N3F1M1-With Fuse": 12843,
-  "P-SEC.M12N4F0M1-With Fuse": 12402,
-  // 24 kV
-  "P-SEC.M24N2F1": 5592,
-  "P-SEC.M24N3F1": 7197,
-  "P-SEC.M24N2F1M1": 10746,
-  "P-SEC.M24N3F1M1": 12939,
-  "P-SEC.M24N4F0M1": 12497,
-  "P-SEC.M24N2F1M1-With Fuse": 11899,
-  "P-SEC.M24N3F1M1-With Fuse": 13642,
-  "P-SEC.M24N4F0M1-With Fuse": 13201,
-};
-
-// Optional extras (USD).
-export const ADD_ONS = {
-  shuntTrip: { name: "Shunt trip", price: 220 },
-  auxiliarySwitch: { name: "Auxiliary Switch", price: 301 },
-  outdoorEnclosure: { name: "Outdoor Enclosure", price: 2000 },
-} as const;
-
-// Smart / RTU add-on prices (USD) per product family. PRAL has no smart option,
-// so it is absent here → no RTU line is ever added for PRAL.
-const RTU_PRICES: Record<string, Record<string, number>> = {
-  PSEC: { READY1: 6500, READY2: 8000, SMART1: 12000, SMART2: 14000 },
-  LUCY: { READY1: 8500, READY2: 10000, SMART1: 14000, SMART2: 16000 },
-};
-
-/** Smart/RTU commercial add-on for this config, or null when none applies. */
+/** Smart/RTU commercial add-on for this config, or null when none applies.
+ *  PRAL has no smart option (absent from the rtu price map) → never priced. */
 function rtuAddOn(c: RmuConfigInput): { name: string; price: number } | null {
-  const price = RTU_PRICES[c.productType]?.[c.rtuType ?? "NONE"];
+  const price = rtuPrice(c.productType, c.rtuType ?? "NONE");
   return price ? { name: `Smart / RTU — ${RTU_LABEL[c.rtuType] ?? c.rtuType}`, price } : null;
 }
 
@@ -98,23 +29,32 @@ export interface ConfigPricing {
 }
 
 /** The price list only covers ABB/Murge (PSEC) and ABB (PRAL). Other brands
- *  (Schneider/JGGY/GRL) have no list price → quoted on application. */
+ *  (Schneider/Chint) have no list price → quoted on application. */
 function priceEligible(c: RmuConfigInput): boolean {
   const brand = c.lbsBrand ?? "ABB";
   if (c.productType === "PSEC") return brand === "ABB" || brand === "MURGE";
   return brand === "ABB"; // PRAL list = ABB air only
 }
 
+/** Common optional extras applied to any product family. */
+function commonAddOns(c: RmuConfigInput): { name: string; price: number }[] {
+  const addOns: { name: string; price: number }[] = [];
+  if (c.installation === "OUTDOOR") {
+    const enc = addOnPrice("outdoorEnclosure");
+    if (enc) addOns.push(enc);
+  }
+  const rtu = rtuAddOn(c);
+  if (rtu) addOns.push(rtu);
+  return addOns;
+}
+
 /** Look up the minimum list price for a configuration, plus applicable add-ons. */
 export function priceForConfig(c: RmuConfigInput): ConfigPricing {
-  // Lucy has its own USD price map keyed by config (same for 12 & 24 kV) and no
-  // add-ons (indoor only). Configs outside the catalogue → price on application.
+  // Lucy has its own USD price map keyed by config (same for 12 & 24 kV).
+  // Configs outside the catalogue → price on application.
   if (c.productType === "LUCY") {
-    const basePrice = lucyPrice(c);
-    const addOns: { name: string; price: number }[] = [];
-    if (c.installation === "OUTDOOR") addOns.push({ ...ADD_ONS.outdoorEnclosure });
-    const rtu = rtuAddOn(c);
-    if (rtu) addOns.push(rtu);
+    const basePrice = lucyConfigPrice(lucyKey(c));
+    const addOns = commonAddOns(c);
     const listPrice =
       basePrice == null ? null : basePrice + addOns.reduce((s, a) => s + a.price, 0);
     return {
@@ -128,12 +68,8 @@ export function priceForConfig(c: RmuConfigInput): ConfigPricing {
   }
   const panelCode = buildProductCode(c);
   const priceKey = buildPriceKey(c);
-  const basePrice = priceEligible(c) ? PRICE_LIST[priceKey] ?? null : null;
-
-  const addOns: { name: string; price: number }[] = [];
-  if (c.installation === "OUTDOOR") addOns.push({ ...ADD_ONS.outdoorEnclosure });
-  const rtu = rtuAddOn(c);
-  if (rtu) addOns.push(rtu);
+  const basePrice = priceEligible(c) ? panelPrice(priceKey) : null;
+  const addOns = commonAddOns(c);
 
   const listPrice =
     basePrice == null

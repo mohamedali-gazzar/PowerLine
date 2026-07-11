@@ -169,6 +169,7 @@ export default function NewOfferPage() {
   const basePrice = basePriceUsd == null ? null : basePriceUsd * rate; // in the selected currency
   const effUnit = unitPrice > 0 ? unitPrice : basePrice ?? 0;
   const addOnsUnit = addOns.reduce((s, a) => s + a.price, 0) * rate;
+  const vatPct = preview?.vatPct ?? 14; // from the pricing master via the preview
   const totals = useMemo(() => {
     const qty = quantity || 0;
     const panelSubtotal = effUnit * qty;
@@ -176,9 +177,9 @@ export default function NewOfferPage() {
     const subtotal = panelSubtotal + addOnsTotal;
     const discount = subtotal * (discountPct / 100);
     const exVat = subtotal - discount;
-    const vat = exVat * 0.14;
+    const vat = exVat * (vatPct / 100);
     return { panelSubtotal, addOnsTotal, subtotal, discount, exVat, vat, incVat: exVat + vat };
-  }, [effUnit, addOnsUnit, quantity, discountPct]);
+  }, [effUnit, addOnsUnit, quantity, discountPct, vatPct]);
 
   const timer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
@@ -751,7 +752,7 @@ export default function NewOfferPage() {
                 </div>
               )}
               <div className="flex justify-between text-muted">
-                <span>VAT (14%)</span>
+                <span>VAT ({vatPct}%)</span>
                 <span>{currency} {totals.vat.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
               </div>
               <div className="mt-1 flex justify-between text-lg font-extrabold text-brand-dark">

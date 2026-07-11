@@ -15,6 +15,7 @@ import {
 } from "../services/offer.service";
 import { assembleOffer, type RmuConfigInput } from "../domain/assembly";
 import { priceForConfig } from "../domain/priceList";
+import { VAT_PCT } from "../domain/pricing-data";
 import { generateOfferPdf } from "../services/pdf.service";
 import { buildCommercial } from "../services/commercial.service";
 import { generateCommercialPdf } from "../services/pdf-commercial.service";
@@ -44,7 +45,8 @@ export function postPreview(req: Request, res: Response) {
     const cfg = previewSchema.parse(req.body) as RmuConfigInput;
     const generated = assembleOffer(cfg);
     const listPricing = priceForConfig(cfg);
-    res.json({ ...generated, listPricing });
+    // vatPct from the pricing master so the on-screen totals match the PDFs.
+    res.json({ ...generated, listPricing, vatPct: VAT_PCT });
   } catch (err) {
     handleError(err, res);
   }
