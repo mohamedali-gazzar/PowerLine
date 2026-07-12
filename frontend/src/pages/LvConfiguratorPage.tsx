@@ -1400,6 +1400,95 @@ function predictIncomerRating(p: LvPanel): number {
   return INCOMER_RATINGS.find((r) => r >= a) ?? INCOMER_RATINGS[INCOMER_RATINGS.length - 1];
 }
 
+// Floating, minimizable window that explains how the "Main Busbar" and
+// "Cu Connections" cost cells are calculated for the current panel. Portaled to
+// <body> because the Panels tab's animate-fade-up transform would otherwise anchor
+// a `fixed` element to the tab wrapper instead of the viewport.
+function CopperBreakdownWindow({ p, calc, f, onClose }: {
+  p: LvPanel; calc: PanelCalc; f: LvState["factors"]; onClose: () => void;
+}) {
+  const [min, setMin] = useState(false);
+  const rate = f.copper; // EGP / kg copper
+  // Main-busbar pieces — mirror mainBusbarAuto() for display.
+  const isAuto = mainBusbarAuto(p) !== null;
+  const area = busbarBarAreaMm2(p.ratingA);
+  const slot1 = (p.panelItems ?? []).find((it) => (it.slot ?? 1) === 1) ?? null;
+  const height = slot1 ? parseInt(slot1.name.match(/(\d+)/)?.[1] ?? "0", 10) : 0;
+  const poles = p.busbarPoles || 3;
+  const isDouble = p.panelsSizing?.layout === "Double";
+  // Cu-connection contribution per component: (kg/pole) × poles × qty.
+  const col: "cuP" | "cuC" = p.sizingMode === "cells" ? "cuC" : "cuP";
+  const cuRows = p.components
+    .filter((c) => !isSpacer(c))
+    .map((c) => ({ name: c.name, poles: c.poles || 0, perPole: c[col] || 0, qty: c.qty, kg: (c[col] || 0) * (c.poles || 0) * c.qty }))
+    .filter((r) => r.kg > 0)
+    .sort((a, b) => b.kg - a.kg);
+
+  const eq = "mt-1 rounded bg-surface px-2 py-1 font-mono text-[11.5px] text-ink";
+  return createPortal(
+    <div className="fixed bottom-4 right-4 z-50 w-[380px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl2 border border-line bg-white shadow-lift animate-pop">
+      <div className="flex items-center justify-between gap-2 border-b border-line bg-brand-tint px-3 py-2">
+        <div className="flex items-center gap-1.5 truncate text-sm font-bold text-brand-dark">
+          <span>🧮</span> Copper breakdown <span className="truncate font-normal text-muted">· {p.name || "panel"}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button type="button" onClick={() => setMin((m) => !m)} title={min ? "Restore" : "Minimize"}
+            className="rounded px-1.5 py-0.5 text-muted hover:bg-white hover:text-ink">{min ? "▢" : "—"}</button>
+          <button type="button" onClick={onClose} title="Close"
+            className="rounded px-1.5 py-0.5 text-muted hover:bg-white hover:text-red-500">✕</button>
+        </div>
+      </div>
+      {!min && (
+        <div className="max-h-[62vh] overflow-auto px-3 py-3 text-[12.5px]">
+          {/* ── Main Busbar ── */}
+          <h4 className="mb-1 font-bold text-ink">Main Busbar · {calc.busbarKg.toFixed(1)} KG · {fmtEgp(calc.busbarCost)} EGP</h4>
+          {isAuto ? (
+            <div className="space-y-0.5 text-muted">
+              <div>Bar section <b className="text-ink">{area} mm²</b> — from incomer rating <b className="text-ink">{p.ratingA} A</b></div>
+              <div>Panel height <b className="text-ink">{height} mm</b> — from Sizing (1) “{slot1?.name}”</div>
+              <div>Poles <b className="text-ink">{poles}</b> · copper density <b className="text-ink">0.000009</b> kg/mm³{isDouble && <> · <b className="text-ink">Double ×2</b></>}</div>
+              <div className={eq}>{area} × {height} × {poles} × 0.000009{isDouble ? " × 2" : ""} = <b>{calc.busbarKg.toFixed(1)} kg</b></div>
+              <div className={eq}>{calc.busbarKg.toFixed(1)} kg × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
+            </div>
+          ) : (
+            <div className="space-y-0.5 text-muted">
+              <div>Manual value <b className="text-ink">{calc.busbarKg.toFixed(1)} kg</b> — the auto rule applies only to SR-Basic / Unikit / Local panels with a rating and a Sizing (1).</div>
+              <div className={eq}>{calc.busbarKg.toFixed(1)} kg × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
+            </div>
+          )}
+          {/* ── Cu Connections ── */}
+          <h4 className="mb-1 mt-3 font-bold text-ink">Cu Connections · {calc.cuWeight.toFixed(1)} KG · {fmtEgp(calc.cuConnCost)} EGP</h4>
+          <p className="mb-1 text-[11.5px] text-muted">Each component adds <b className="text-ink">(kg/pole {col === "cuC" ? "· cell" : "· panel"} column) × poles × qty</b>:</p>
+          {cuRows.length ? (
+            <table className="w-full text-[11.5px]">
+              <thead className="text-left text-muted">
+                <tr><th className="py-0.5 pr-2 font-semibold">Component</th><th className="px-1 py-0.5 text-right font-semibold">P</th><th className="px-1 py-0.5 text-right font-semibold">kg/P</th><th className="px-1 py-0.5 text-right font-semibold">Qty</th><th className="py-0.5 pl-1 text-right font-semibold">kg</th></tr>
+              </thead>
+              <tbody>
+                {cuRows.map((r, i) => (
+                  <tr key={i} className="border-t border-line/60">
+                    <td className="py-0.5 pr-2">{r.name}</td>
+                    <td className="px-1 py-0.5 text-right">{r.poles}</td>
+                    <td className="px-1 py-0.5 text-right">{r.perPole.toFixed(3)}</td>
+                    <td className="px-1 py-0.5 text-right">{r.qty}</td>
+                    <td className="py-0.5 pl-1 text-right font-semibold text-ink">{r.kg.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-line"><td className="py-0.5 pr-2 font-bold" colSpan={4}>Total copper</td><td className="py-0.5 pl-1 text-right font-bold text-ink">{calc.cuWeight.toFixed(1)}</td></tr>
+              </tfoot>
+            </table>
+          ) : <p className="text-[11.5px] text-muted">No components carry copper yet.</p>}
+          <div className={eq}>{calc.cuWeight.toFixed(1)} kg × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.cuConnCost)} EGP</b></div>
+          <p className="mt-2 text-[11px] text-muted">Copper rate <b className="text-ink">{fmtEgp(rate)} EGP/kg</b> — from Pricing Settings.</p>
+        </div>
+      )}
+    </div>,
+    document.body
+  );
+}
+
 function PanelEditor({ s, p, upPanel }: {
   s: LvState; p: LvPanel;
   upPanel: (id: string, patch: Partial<LvPanel>) => void;
@@ -1430,6 +1519,7 @@ function PanelEditor({ s, p, upPanel }: {
   // The open combination builder is owned here and shared between the cards — most
   // combos render in CombosCard; P.F.C renders inline in ComponentsCard.
   const [comboKind, setComboKind] = useState<ComboKind | null>(null);
+  const [copperOpen, setCopperOpen] = useState(false); // "how is this calculated?" window
 
   return (
     <div className="space-y-4">
@@ -1447,8 +1537,16 @@ function PanelEditor({ s, p, upPanel }: {
           <div className="rounded-lg bg-surface p-2.5">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Enclosure<br /><b>{fmtEgp(calc.enclCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Kits<br /><b>{fmtEgp(calc.kits)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Main Busbar ({calc.busbarKg.toFixed(1)} KG)<br /><b>{fmtEgp(calc.busbarCost)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Cu Connections ({calc.cuWeight.toFixed(1)} KG)<br /><b>{fmtEgp(calc.cuConnCost)} EGP</b></div>
+          <button type="button" onClick={() => setCopperOpen(true)} title="How is this calculated?"
+            className="group relative rounded-lg bg-surface p-2.5 text-left transition hover:bg-brand-tint/60 hover:ring-1 hover:ring-brand/30">
+            Main Busbar ({calc.busbarKg.toFixed(1)} KG)<br /><b>{fmtEgp(calc.busbarCost)} EGP</b>
+            <span className="absolute right-1.5 top-1.5 text-[10px] text-muted opacity-50 group-hover:opacity-100">ⓘ</span>
+          </button>
+          <button type="button" onClick={() => setCopperOpen(true)} title="How is this calculated?"
+            className="group relative rounded-lg bg-surface p-2.5 text-left transition hover:bg-brand-tint/60 hover:ring-1 hover:ring-brand/30">
+            Cu Connections ({calc.cuWeight.toFixed(1)} KG)<br /><b>{fmtEgp(calc.cuConnCost)} EGP</b>
+            <span className="absolute right-1.5 top-1.5 text-[10px] text-muted opacity-50 group-hover:opacity-100">ⓘ</span>
+          </button>
           <div className="rounded-lg bg-surface p-2.5">Total Copper (KG)<br /><b>{(calc.cuWeight + calc.busbarKg).toFixed(1)} KG</b></div>
           <div className="rounded-lg bg-surface p-2.5">Unit Cost<br /><b>{fmtEgp(calc.unitCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">
@@ -1466,6 +1564,8 @@ function PanelEditor({ s, p, upPanel }: {
         </div>
         )}
       </div>
+
+      {copperOpen && <CopperBreakdownWindow p={p} calc={calc} f={s.factors} onClose={() => setCopperOpen(false)} />}
 
       {/* Panel details */}
       <div className="card p-5">
