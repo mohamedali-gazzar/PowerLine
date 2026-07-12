@@ -760,10 +760,10 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
     };
   };
   const Lbl = ({ children }: { children: React.ReactNode }) => (
-    <td className="whitespace-nowrap border px-2 font-display text-[11px] font-bold leading-[18px]" style={{ color: TRED, background: "#fdf0e9", borderColor: "#E7E7EB" }}>{children}</td>
+    <td className="whitespace-nowrap border px-2 py-1 font-display text-[11px] font-bold leading-[15px]" style={{ color: TRED, background: "#fdf0e9", borderColor: "#E7E7EB" }}>{children}</td>
   );
   const Val = ({ children }: { children?: React.ReactNode }) => (
-    <td className="whitespace-nowrap border px-2 text-[12px] leading-[18px]" style={{ borderColor: "#E7E7EB" }}>{children}</td>
+    <td className="whitespace-nowrap border px-2 py-1 text-[12px] leading-[15px]" style={{ borderColor: "#E7E7EB" }}>{children}</td>
   );
   // Revision is folded into the QTN number: rev 00 → unchanged, rev 01 → "-1", rev 02 → "-2", …
   const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
@@ -878,11 +878,11 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                 </colgroup>
                 <thead>
                   <tr style={{ background: TRED }} className="text-white font-display">
-                    <th className="px-2 text-center text-[12px] font-bold leading-[22px]">Qty</th>
-                    <th className="px-2 text-center text-[12px] font-bold leading-[22px]">Description</th>
-                    <th className="px-2 text-center text-[12px] font-bold leading-[22px]">ADJ</th>
-                    <th className="px-2 text-left text-[12px] font-bold leading-[22px]">Brand</th>
-                    <th className="px-2 text-left text-[12px] font-bold leading-[22px]">NOTE</th>
+                    <th className="px-2 text-center py-1 text-[12px] font-bold leading-[20px]">Qty</th>
+                    <th className="px-2 text-center py-1 text-[12px] font-bold leading-[20px]">Description</th>
+                    <th className="px-2 text-center py-1 text-[12px] font-bold leading-[20px]">ADJ</th>
+                    <th className="px-2 text-left py-1 text-[12px] font-bold leading-[20px]">Brand</th>
+                    <th className="px-2 text-left py-1 text-[12px] font-bold leading-[20px]">NOTE</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -914,9 +914,17 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                       if (multiSection || order.some((g) => g))
                         rows.push(
                           <tr key={`s-${sec}`} style={{ breakInside: "avoid", breakAfter: "avoid" }}>
-                            <td className="border-y" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }} />
-                            <td className="border-y px-2 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[20px]" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }}>{sec}</td>
-                            <td colSpan={3} className="border-y" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }} />
+                            {sec.length > 40 ? (
+                              // long name (e.g. P.F.C.) — span all columns so it fits on one line
+                              <td colSpan={5} className="border-y px-2 py-1 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[18px] whitespace-nowrap" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }}>{sec}</td>
+                            ) : (
+                              // short name — centred in the Description column, aligned with the "Description" header
+                              <>
+                                <td className="border-y" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }} />
+                                <td className="border-y px-2 py-1 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[18px]" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }}>{sec}</td>
+                                <td colSpan={3} className="border-y" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }} />
+                              </>
+                            )}
                           </tr>
                         );
                       for (const g of order) {
@@ -945,15 +953,15 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                               <td colSpan={5} className="px-2 py-0.5 text-[12.5px] leading-[12.5px]">&nbsp;</td>
                             </tr>
                           ) : (
-                            <tr key={c.id} style={{ breakInside: "avoid" }} className={`align-top ${dataRow++ % 2 === 1 ? "bg-[#f4f4f6]" : ""}`}>
-                              <td className="px-2 text-center text-[12.5px] font-semibold leading-[20px]">{c.baseQty ?? c.qty}</td>
-                              <td className="px-2 text-[12.5px] leading-[20px]">
+                            <tr key={c.id} style={{ breakInside: "avoid" }} className={`align-middle ${dataRow++ % 2 === 1 ? "bg-[#f4f4f6]" : ""}`}>
+                              <td className="px-2 py-1 text-center text-[12.5px] font-semibold leading-[15px]">{c.baseQty ?? c.qty}</td>
+                              <td className="px-2 py-1 text-[12.5px] leading-[15px]">
                                 {c.name}
-                                {c.comment && <div className="text-[11px] italic leading-tight text-muted">{c.comment}</div>}
+                                {c.comment && <div className="mt-0.5 text-[11px] italic leading-tight text-muted">{c.comment}</div>}
                               </td>
-                              <td className="px-2 text-center text-[12.5px] leading-[20px]">{c.adj}</td>
-                              <td className="px-2 text-[12.5px] leading-[20px]">{c.brand}</td>
-                              <td className="px-2 text-[11.5px] text-muted leading-[20px]">{c.note}</td>
+                              <td className="px-2 py-1 text-center text-[12.5px] leading-[15px]">{c.adj}</td>
+                              <td className="px-2 py-1 text-[12.5px] leading-[15px]">{c.brand}</td>
+                              <td className="px-2 py-1 text-[11.5px] text-muted leading-[15px]">{c.note}</td>
                             </tr>
                           ));
                       }

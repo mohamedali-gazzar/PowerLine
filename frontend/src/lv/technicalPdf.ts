@@ -19,7 +19,10 @@
 //     [data-pdf-comptable]  the components table (its rows flow across pages)
 // ─────────────────────────────────────────────────────────────────────────────
 import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas";
+// html-to-image (SVG foreignObject) renders through the browser engine, so the
+// captured pages match the on-screen offer exactly — including tight-row descenders
+// that html2canvas clips. That's why the export uses it instead of html2canvas.
+import * as htmlToImage from "html-to-image";
 
 const PW = 210; // A4 width (mm)
 const PH = 297; // A4 height (mm)
@@ -192,12 +195,16 @@ export async function exportTechnicalPdf(opts: ExportOpts): Promise<void> {
       if (f) f.textContent = `Page ${i + 1} of ${total}`; // cover has no .pdf-footer
     });
 
-    await new Promise((r) => setTimeout(r, 40)); // let layout + fonts settle
+    await new Promise((r) => setTimeout(r, 40)); // let layout settle
+    await document.fonts.ready; // web fonts loaded before capture
 
     const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
+    // Embed the web fonts once (Montserrat/Poppins) so each page's foreignObject renders
+    // them without re-fetching per page. Nexa is a system font and needs no embedding.
+    let fontEmbedCSS: string | undefined;
+    try { fontEmbedCSS = await htmlToImage.getFontEmbedCSS(host); } catch { /* fall back to per-call embedding */ }
     for (let i = 0; i < pages.length; i++) {
-      const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false });
-      const img = canvas.toDataURL("image/jpeg", 0.92);
+      const img = await htmlToImage.toJpeg(pages[i], { quality: 0.92, backgroundColor: "#ffffff", pixelRatio: 2, fontEmbedCSS });
       if (i > 0) pdf.addPage();
       pdf.addImage(img, "JPEG", 0, 0, PW, PH);
     }
