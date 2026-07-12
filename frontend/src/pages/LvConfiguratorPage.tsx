@@ -2860,6 +2860,14 @@ function CustomBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string)
   );
 }
 
+// Enclosure dimensions live in the "H x W x D" name string (the price-DB H/W/D
+// fields are all 0), e.g. "1400x800x300" → { H:1400, W:800, D:300 }. Used for
+// RPT-02's Double rule: panel 2 matches panel 1's H & D, width 600/800 mm only.
+function encDims(name: string): { H: number; W: number; D: number } | null {
+  const m = String(name).match(/(\d+)\s*x\s*(\d+)\s*x\s*(\d+)/i);
+  return m ? { H: +m[1], W: +m[2], D: +m[3] } : null;
+}
+
 // ── Panel type (RPT-01 §Sizing + RPT-02) — enclosure sizings added like
 //    components: pick → row with qty / remove ─────────────────────────────────
 function SizingCard({ p, u, factors }: {
@@ -2879,11 +2887,15 @@ function SizingCard({ p, u, factors }: {
   const famOptions = ps.layout === "Double" ? DOUBLE_FAMILIES : PANEL_SYSTEMS;
   const sizing1Pool = ENCLOSURES.filter((e) => e.fam === ps.family);
   // RPT-1: in a Double layout, panel 2 inherits panel 1's height & depth — only
-  // the width (60/80) may vary.
+  // the width (600/800 mm) may vary. Dimensions are read from the name (encDims)
+  // because the price-DB H/W/D fields are all 0.
   const slot1Sel = (p.panelItems ?? []).find((it) => (it.slot ?? 1) === 1) ?? null;
-  const slot1Enc = slot1Sel ? ENCLOSURES.find((e) => e.ref === slot1Sel.ref && e.name === slot1Sel.name) : undefined;
-  const sizing2Pool = sizing1Pool.filter((e) =>
-    (e.W === 600 || e.W === 800) && (!slot1Enc || (e.H === slot1Enc.H && e.D === slot1Enc.D)));
+  const slot1Dims = slot1Sel ? encDims(slot1Sel.name) : null;
+  const sizing2Pool = sizing1Pool.filter((e) => {
+    const d = encDims(e.name);
+    return d != null && (d.W === 600 || d.W === 800) &&
+      (!slot1Dims || (d.H === slot1Dims.H && d.D === slot1Dims.D));
+  });
 
   const ip31Off = proEIp31Disabled(cc.depth, cc.thickness);
 
