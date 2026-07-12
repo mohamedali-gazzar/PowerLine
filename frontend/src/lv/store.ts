@@ -646,16 +646,40 @@ export function exportBlockers(s: LvState): ExportCheck[] {
 }
 
 // ── Search ───────────────────────────────────────────────────────────────────
+// Strict, progressive AND-filter + relevance ranking for the component search box.
+// The query is split into space-separated tokens; a component matches only when its
+// full text (name + desc + reference + type + family + rating + brand) contains EVERY
+// token (case-insensitive) — so typing more tokens narrows the list, and once "250"
+// is typed a 125A-only item drops unless it also contains "250".
+// Ranking (best first) is scored against the DESCRIPTION (c.n):
+//   0 starts with the whole query · 1 contains the query as one phrase ·
+//   2 starts with the first token · 3 first token at a word start · 4 contains it ·
+//   5 first token only matched via reference/type/rating.
+// Ties: earlier match position, then shorter description, then alphabetical.
 export function searchComponents(q: string, limit = 50): DbComponent[] {
-  const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  if (!terms.length) return [];
-  const hits: DbComponent[] = [];
+  const raw = q.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!raw) return [];
+  const terms = raw.split(" ");
+  const first = terms[0];
+  const atWordStart = new RegExp(`(^|[^a-z0-9])${first.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
+  const scored: { c: DbComponent; score: number; pos: number }[] = [];
   for (const c of COMPONENTS) {
     const hay = `${c.n} ${c.d} ${c.ref} ${c.t} ${c.f} ${c.r} ${c.brand}`.toLowerCase();
-    if (terms.every((t) => hay.includes(t))) {
-      hits.push(c);
-      if (hits.length >= limit) break;
-    }
+    if (!terms.every((t) => hay.includes(t))) continue; // strict AND across all tokens
+    const desc = (c.n || "").toLowerCase();
+    const phrase = desc.indexOf(raw);
+    let score: number;
+    if (desc.startsWith(raw)) score = 0;
+    else if (phrase >= 0) score = 1;
+    else if (desc.startsWith(first)) score = 2;
+    else if (atWordStart.test(desc)) score = 3;
+    else if (desc.includes(first)) score = 4;
+    else score = 5;
+    const pos = phrase >= 0 ? phrase : desc.indexOf(first) >= 0 ? desc.indexOf(first) : 1e9;
+    scored.push({ c, score, pos });
   }
-  return hits;
+  scored.sort((a, b) =>
+    a.score - b.score || a.pos - b.pos || a.c.n.length - b.c.n.length || a.c.n.localeCompare(b.c.n)
+  );
+  return scored.slice(0, limit).map((x) => x.c);
 }
