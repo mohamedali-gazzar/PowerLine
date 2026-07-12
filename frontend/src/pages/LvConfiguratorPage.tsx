@@ -1423,8 +1423,8 @@ const fmtNum = (n: number) => (isFinite(n) ? n : 0).toLocaleString("en-US", { ma
 // "Cu Connections" cost cells are calculated for the current panel. Portaled to
 // <body> because the Panels tab's animate-fade-up transform would otherwise anchor
 // a `fixed` element to the tab wrapper instead of the viewport.
-function CopperBreakdownWindow({ p, calc, f, onClose }: {
-  p: LvPanel; calc: PanelCalc; f: LvState["factors"]; onClose: () => void;
+function CopperBreakdownWindow({ which, p, calc, f, onClose }: {
+  which: "busbar" | "cu"; p: LvPanel; calc: PanelCalc; f: LvState["factors"]; onClose: () => void;
 }) {
   const [min, setMin] = useState(false);
   const rate = f.copper; // EGP / kg copper
@@ -1451,7 +1451,7 @@ function CopperBreakdownWindow({ p, calc, f, onClose }: {
     <div className="fixed bottom-4 right-4 z-50 w-[380px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl2 border border-line bg-white shadow-lift animate-pop">
       <div className="flex items-center justify-between gap-2 border-b border-line bg-brand-tint px-3 py-2">
         <div className="flex items-center gap-1.5 truncate text-sm font-bold text-brand-dark">
-          <span>🧮</span> Copper breakdown <span className="truncate font-normal text-muted">· {p.name || "panel"}</span>
+          <span>🧮</span> {which === "busbar" ? "Main Busbar" : "Cu Connections"} <span className="truncate font-normal text-muted">· {p.name || "panel"}</span>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           <button type="button" onClick={() => setMin((m) => !m)} title={min ? "Restore" : "Minimize"}
@@ -1462,6 +1462,7 @@ function CopperBreakdownWindow({ p, calc, f, onClose }: {
       </div>
       {!min && (
         <div className="max-h-[62vh] overflow-auto px-3 py-3 text-[12.5px]">
+          {which === "busbar" && (<>
           {/* ── Main Busbar ── */}
           <h4 className="mb-1 font-bold text-ink">Main Busbar · {fmtNum(calc.busbarKg)} KG · {fmtEgp(calc.busbarCost)} EGP</h4>
           {isAuto ? (
@@ -1478,8 +1479,10 @@ function CopperBreakdownWindow({ p, calc, f, onClose }: {
               <div className={eq}>{fmtNum(calc.busbarKg)} kg × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
             </div>
           )}
+          </>)}
+          {which === "cu" && (<>
           {/* ── Cu Connections ── */}
-          <h4 className="mb-1 mt-3 font-bold text-ink">Cu Connections · {fmtNum(calc.cuWeight)} KG · {fmtEgp(calc.cuConnCost)} EGP</h4>
+          <h4 className="mb-1 font-bold text-ink">Cu Connections · {fmtNum(calc.cuWeight)} KG · {fmtEgp(calc.cuConnCost)} EGP</h4>
           <p className="mb-1 text-[11.5px] text-muted">Each component adds <b className="text-ink">(kg/pole {col === "cuC" ? "· cell" : "· panel"} column) × poles × qty</b>, <b className="text-ink">×{BUSWAY_COPPER_FACTOR}</b> when the note says “busway”:</p>
           {cuRows.length ? (
             <table className="w-full text-[11.5px]">
@@ -1503,6 +1506,7 @@ function CopperBreakdownWindow({ p, calc, f, onClose }: {
             </table>
           ) : <p className="text-[11.5px] text-muted">No components carry copper yet.</p>}
           <div className={eq}>{fmtNum(calc.cuWeight)} kg × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.cuConnCost)} EGP</b></div>
+          </>)}
           <p className="mt-2 text-[11px] text-muted">Copper rate <b className="text-ink">{fmtEgp(rate)} EGP/kg</b> — from Pricing Settings.</p>
         </div>
       )}
@@ -1541,7 +1545,7 @@ function PanelEditor({ s, p, upPanel }: {
   // The open combination builder is owned here and shared between the cards — most
   // combos render in CombosCard; P.F.C renders inline in ComponentsCard.
   const [comboKind, setComboKind] = useState<ComboKind | null>(null);
-  const [copperOpen, setCopperOpen] = useState(false); // "how is this calculated?" window
+  const [copperOpen, setCopperOpen] = useState<null | "busbar" | "cu">(null); // separate "how is this calculated?" windows
 
   return (
     <div className="space-y-4">
@@ -1559,12 +1563,12 @@ function PanelEditor({ s, p, upPanel }: {
           <div className="rounded-lg bg-surface p-2.5">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Enclosure<br /><b>{fmtEgp(calc.enclCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Kits<br /><b>{fmtEgp(calc.kits)} EGP</b></div>
-          <button type="button" onClick={() => setCopperOpen(true)} title="How is this calculated?"
+          <button type="button" onClick={() => setCopperOpen("busbar")} title="How is this calculated?"
             className="group relative rounded-lg bg-surface p-2.5 text-left transition hover:bg-brand-tint/60 hover:ring-1 hover:ring-brand/30">
             Main Busbar ({fmtNum(calc.busbarKg)} KG)<br /><b>{fmtEgp(calc.busbarCost)} EGP</b>
             <span className="absolute right-1.5 top-1.5 text-[10px] text-muted opacity-50 group-hover:opacity-100">ⓘ</span>
           </button>
-          <button type="button" onClick={() => setCopperOpen(true)} title="How is this calculated?"
+          <button type="button" onClick={() => setCopperOpen("cu")} title="How is this calculated?"
             className="group relative rounded-lg bg-surface p-2.5 text-left transition hover:bg-brand-tint/60 hover:ring-1 hover:ring-brand/30">
             Cu Connections ({fmtNum(calc.cuWeight)} KG)<br /><b>{fmtEgp(calc.cuConnCost)} EGP</b>
             <span className="absolute right-1.5 top-1.5 text-[10px] text-muted opacity-50 group-hover:opacity-100">ⓘ</span>
@@ -1587,7 +1591,7 @@ function PanelEditor({ s, p, upPanel }: {
         )}
       </div>
 
-      {copperOpen && <CopperBreakdownWindow p={p} calc={calc} f={s.factors} onClose={() => setCopperOpen(false)} />}
+      {copperOpen && <CopperBreakdownWindow which={copperOpen} p={p} calc={calc} f={s.factors} onClose={() => setCopperOpen(null)} />}
 
       {/* Panel details */}
       <div className="card p-5">
@@ -2144,14 +2148,14 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     u({ components: [...p.components, toPanelComponent(c, p.activeSection, Math.max(1, qty))] });
     setQ("");
     // Return focus to the search box so the next component can be typed without the mouse.
-    requestAnimationFrame(() => searchRef.current?.focus());
+    requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true }));
   };
   // Shift+Enter in the search box drops a blank spacer row at the end of the active
   // section (Word-style separator) — same append behaviour as adding a component.
   const addSpacer = () => {
     u({ components: [...p.components, spacerComponent(p.activeSection)] });
     setQ("");
-    requestAnimationFrame(() => searchRef.current?.focus());
+    requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true }));
   };
 
   return (
