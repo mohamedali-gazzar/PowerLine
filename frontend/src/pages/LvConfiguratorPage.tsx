@@ -1325,8 +1325,8 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
   };
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[260px_1fr] animate-fade-up">
-      {/* panel list — sticks below the sticky tab header */}
-      <div className="card p-3 lg:sticky lg:top-16">
+      {/* panel list — sticks below the tab header, with its own scroll (independent of the editor) */}
+      <div className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto">
         {s.panels.map((p, i) => {
           const active = p.id === s.selectedId;
           return (
@@ -1335,7 +1335,9 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
               onDragLeave={() => setOverId((o) => (o === p.id ? null : o))}
               onDrop={(e) => { e.preventDefault(); dropPanel(p.id); }}
               className={`mb-1.5 flex items-center gap-1 rounded-lg border px-2 py-2 transition-all duration-150 ${
-                active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
+                p.highlight
+                  ? `bg-yellow-200 hover:bg-yellow-300 ${active ? "border-brand" : "border-yellow-400"}`
+                  : active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
               } ${dragId === p.id ? "scale-[0.98] opacity-40" : ""} ${overId === p.id ? "border-t-2 border-t-brand bg-brand-tint" : ""}`}>
               <span
                 draggable
@@ -1350,8 +1352,16 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
                 </svg>
               </span>
               <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{i + 1}</span>
-              <button onClick={() => up({ selectedId: p.id })} className="ml-2 min-w-0 flex-1 text-left">
+              <button onClick={() => up({ selectedId: p.id })} title={p.name.trim() || "(unnamed panel)"} className="ml-2 min-w-0 flex-1 text-left">
                 <div className={`truncate text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.name.trim() || "(unnamed panel)"}</div>
+              </button>
+              <button onClick={() => upPanel(p.id, { highlight: !p.highlight })}
+                title={p.highlight ? "Remove highlight" : "Highlight panel"}
+                className={`shrink-0 rounded p-1 transition-colors hover:bg-white ${p.highlight ? "text-yellow-600" : "text-muted hover:text-yellow-600"}`}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m9 11-6 6v3h9l3-3" />
+                  <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
+                </svg>
               </button>
               <button onClick={() => onClone(p.id)} title="Duplicate panel"
                 className="shrink-0 rounded p-1 text-base text-muted transition-colors hover:bg-white hover:text-brand-dark">⧉</button>
@@ -1363,8 +1373,10 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
         <button className="btn-ghost mt-1 w-full" onClick={onAdd}>+ Add panel</button>
       </div>
 
-      {/* editor */}
-      {sel && <PanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />}
+      {/* editor — its own scroll area so the panel list and editor scroll independently */}
+      <div className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto">
+        {sel && <PanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />}
+      </div>
     </div>
   );
 }
@@ -2125,6 +2137,13 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     // Return focus to the search box so the next component can be typed without the mouse.
     requestAnimationFrame(() => searchRef.current?.focus());
   };
+  // Shift+Enter in the search box drops a blank spacer row at the end of the active
+  // section (Word-style separator) — same append behaviour as adding a component.
+  const addSpacer = () => {
+    u({ components: [...p.components, spacerComponent(p.activeSection)] });
+    setQ("");
+    requestAnimationFrame(() => searchRef.current?.focus());
+  };
 
   return (
     <div ref={cardRef} className="card relative p-5">
@@ -2132,7 +2151,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
 
       {/* Sticky header: section tabs + search bar stay pinned below the tab bar while
           the component list scrolls; unpins automatically when this card ends. */}
-      <div className="sticky top-16 z-20 -mx-5 mb-3 border-b border-line/60 bg-white px-5 pb-3 pt-1">
+      <div className="sticky top-16 z-20 -mx-5 mb-3 border-b border-line/60 bg-white px-5 pb-3 pt-1 lg:top-0">
       {/* sections */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         {p.sections.map((sec) => {
@@ -2221,6 +2240,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
         <input ref={searchRef} className="input" placeholder={`Search components (name / reference / type / rating) → adds to “${p.activeSection}”`}
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
+            if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); if (!pending) addSpacer(); return; } // ⇧Enter → spacer row
             if (pending || !q) return;
             if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, hits.length - 1)); }
             else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIdx((i) => Math.max(i - 1, 0)); }

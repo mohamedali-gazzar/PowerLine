@@ -95,6 +95,7 @@ export interface LvPanel {
   sellFactor: number;    // per-panel selling-factor override; 0 = follow the global (Pricing Settings)
   copperTool: CopperTool; // RPT-1: per-rating copper lengths (Cells → Copper Tool)
   draft: string;          // RPT-1: per-panel scratchpad — never included in outputs
+  highlight?: boolean;    // yellow highlighter toggle in the panel list (UI marker only)
   sections: string[];
   activeSection: string;
   components: PanelComponent[];
