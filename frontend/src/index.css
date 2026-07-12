@@ -115,6 +115,16 @@
     background-size: 800px 100%;
     @apply animate-shimmer rounded;
   }
+  /* Scroll with no visible scrollbar (wheel/trackpad still scroll). Used on the
+     Panels tab's independently-scrolling columns. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
 }
 
 /* Number fields render as plain text — no up/down spinner controls. */

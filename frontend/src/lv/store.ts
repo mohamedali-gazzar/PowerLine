@@ -671,11 +671,23 @@ export function searchComponents(q: string, limit = 50): DbComponent[] {
   const terms = raw.split(" ");
   const first = terms[0];
   const atWordStart = new RegExp(`(^|[^a-z0-9])${first.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
+  // A bare number ("16", "20", "25") reads as an ampere rating → float S200-series MCBs
+  // (miniature circuit breakers) of exactly that rating to the very top (16 → S201-C16).
+  const ratingQuery = /^\d+(?:\.\d+)?$/.test(raw) ? parseFloat(raw) : NaN;
   const scored: { c: DbComponent; score: number; pos: number }[] = [];
   for (const c of COMPONENTS) {
     const hay = `${c.n} ${c.d} ${c.ref} ${c.t} ${c.f} ${c.r} ${c.brand}`.toLowerCase();
     if (!terms.every((t) => hay.includes(t))) continue; // strict AND across all tokens
     const desc = (c.n || "").toLowerCase();
+    if (!Number.isNaN(ratingQuery) && parseFloat(c.r) === ratingQuery && /miniature circuit breaker/i.test(c.n)) {
+      // Among same-rating MCBs, surface the canonical S200-series base first (S201-C16 →
+      // S202/S203/S204 → the M / other series), preferring the C curve.
+      const m = (c.f || "").toUpperCase().match(/^S20(\d)(M?)/);
+      let pref = m ? (m[2] ? 20 : 0) + parseInt(m[1], 10) : 60;
+      if (!/-C\d/i.test(c.n)) pref += 5; // prefer the C tripping curve
+      scored.push({ c, score: -1, pos: pref });
+      continue;
+    }
     const phrase = desc.indexOf(raw);
     let score: number;
     if (desc.startsWith(raw)) score = 0;

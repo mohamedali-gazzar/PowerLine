@@ -80,7 +80,7 @@ export const CELL_SYSTEMS = ["Pro-E", "IS2", "PLP"] as const;
 export const PANELS_MAX_INCOMER_A = 800;
 
 // RPT-02: Double-panel layout restricted to these families, widths 60/80 only.
-export const DOUBLE_FAMILIES = ["SR-Basic", "Unikit"] as const;
+export const DOUBLE_FAMILIES = ["SR-Basic", "Unikit", "Local (Sheet Metal)"] as const;
 export const DOUBLE_SECOND_WIDTHS = [60, 80] as const;
 
 // Staff lists (RPT-01) — editable in the UI; these are the seeded defaults.

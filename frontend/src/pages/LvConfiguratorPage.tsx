@@ -1326,7 +1326,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[260px_1fr] animate-fade-up">
       {/* panel list — sticks below the tab header, with its own scroll (independent of the editor) */}
-      <div className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto">
+      <div className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
         {s.panels.map((p, i) => {
           const active = p.id === s.selectedId;
           return (
@@ -1374,7 +1374,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
       </div>
 
       {/* editor — its own scroll area so the panel list and editor scroll independently */}
-      <div className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto">
+      <div className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
         {sel && <PanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />}
       </div>
     </div>
@@ -1732,6 +1732,13 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     let k = 0;
     u({ components: p.components.map((c) => (c.section === sec ? reordered[k++] : c)) });
   };
+  // Rename a combination group — retags every member row's `group` to the new label.
+  const renameGroup = (group: string, sec: string, name: string) => {
+    const nm = name.trim();
+    if (!nm || nm === group) return;
+    u({ components: p.components.map((c) =>
+      c.section === sec && !isSpacer(c) && (effGroup.get(c.id) || "") === group ? { ...c, group: nm } : c) });
+  };
 
   const [newSection, setNewSection] = useState("");
   const [preview, setPreview] = useState<ComboLine[]>([]); // active circuit-combination preview
@@ -1804,6 +1811,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   );
   const [editingSec, setEditingSec] = useState<string | null>(null); // custom-section rename
   const [editVal, setEditVal] = useState("");
+  const [editGroup, setEditGroup] = useState<string | null>(null); // combination rename — "sec|group"
+  const [editGroupVal, setEditGroupVal] = useState("");
   const [editComp, setEditComp] = useState<string | null>(null); // row being re-selected
   // Picking a search result opens a small qty popup before the component is added.
   const [pending, setPending] = useState<DbComponent | null>(null);
@@ -2284,9 +2293,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
           </div>
         )}
       </div>
-      </div>{/* /sticky header */}
-
-      {/* Inline circuit-combination builder — inserted as a GROUP inside the active section */}
+      {/* Inline circuit-combination builder — pinned inside the sticky sub-header while open,
+          so it stays visible until you generate or close it */}
       {comboKind && (
         <div className="mb-3 rounded-lg border border-brand/40 bg-brand-tint/40 p-3">
           <div className="mb-2 flex items-center justify-between">
@@ -2324,6 +2332,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
           )}
         </div>
       )}
+      </div>{/* /sticky header */}
 
       {/* table grouped by section */}
       {p.components.length === 0 ? (
@@ -2349,7 +2358,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                   className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark disabled:opacity-25">↓</button>
               </span>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-hidden">
               <table className="w-full table-fixed text-[13px]">
                 {/* Shared column widths so every per-section table lines up (RPT-1) */}
                 <colgroup>
@@ -2511,9 +2520,23 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                               <td colSpan={isOut ? 7 : 8} className="py-1 pr-2">
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-4">
-                                    <span className="text-[11px] font-normal text-brand-dark underline underline-offset-2">
-                                      <span className="uppercase tracking-wide">{g}</span>{scalable ? `, QTY (${cq}) each contain:` : ""}
-                                    </span>
+                                    {editGroup === `${sec}|${g}` ? (
+                                      <input autoFocus value={editGroupVal}
+                                        onChange={(e) => setEditGroupVal(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") { renameGroup(g, sec, editGroupVal); setEditGroup(null); }
+                                          else if (e.key === "Escape") setEditGroup(null);
+                                        }}
+                                        onBlur={() => { renameGroup(g, sec, editGroupVal); setEditGroup(null); }}
+                                        className="h-6 w-64 rounded border border-brand px-1.5 text-[11px] uppercase tracking-wide text-brand-dark focus:outline-none" />
+                                    ) : (
+                                      <span className="text-[11px] font-normal text-brand-dark underline underline-offset-2">
+                                        <span className="uppercase tracking-wide">{g}</span>{scalable ? `, QTY (${cq}) each contain:` : ""}
+                                        <button type="button" title="Rename combination"
+                                          onClick={() => { setEditGroupVal(g); setEditGroup(`${sec}|${g}`); }}
+                                          className="ml-1.5 rounded px-1 leading-none text-brand-dark/50 no-underline hover:bg-white hover:text-brand-dark">✎</button>
+                                      </span>
+                                    )}
                                     {scalable && (
                                       <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
                                         Combination qty
@@ -3110,7 +3133,7 @@ function SizingCard({ p, u, factors }: {
                     }`}>{l}</button>
                 ))}
               </div>
-              {ps.layout === "Double" && <p className="mt-1 text-[11px] text-muted">Double: SR-Basic / Unikit only · 2nd width 60/80 (RPT-02)</p>}
+              {ps.layout === "Double" && <p className="mt-1 text-[11px] text-muted">Double: SR-Basic / Unikit / Local only · 2nd width 60/80 (RPT-02)</p>}
             </div>
             <div>
               <L>Enclosure family</L>
