@@ -20,7 +20,7 @@ export function materialAoa(blocks: MatBlock[]): (string | number)[][] {
       aoa.push([title]);
       aoa.push([
         "Description", "Reference",
-        ...(withDisc ? ["ABB discount (%)"] : []),
+        ...(withDisc ? ["Discount (%)"] : []),
         ...(b.withSupplier ? ["Supplier"] : []),
         "Stock", "Qty",
       ]);

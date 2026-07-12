@@ -3380,6 +3380,7 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
 // ── Material List tab (RPT-04) ───────────────────────────────────────────────
 interface AbbDiscCtl {
   globalPct: number;
+  defaultFor: (r: MatRow) => number;
   valueFor: (r: MatRow) => number;
   isOverride: (r: MatRow) => boolean;
   onChange: (r: MatRow, pct: number) => void;
@@ -3397,7 +3398,7 @@ function MatTable({ title, rows, withSupplier, note, abbDisc }: { title: string;
           <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
             <th className="px-4 py-1.5">Description</th>
             <th className="px-2 py-1.5">Reference</th>
-            {abbDisc && <th className="px-2 py-1.5 text-right">ABB discount (%)</th>}
+            {abbDisc && <th className="px-2 py-1.5 text-right">Discount (%)</th>}
             {withSupplier && <th className="px-2 py-1.5">Supplier</th>}
             <th className="px-2 py-1.5">Stock</th>
             <th className="px-4 py-1.5 text-right">Qty</th>
@@ -3415,7 +3416,7 @@ function MatTable({ title, rows, withSupplier, note, abbDisc }: { title: string;
                       abbDisc.isOverride(r) ? "border-brand bg-brand-light font-bold text-brand-dark" : "border-line bg-white text-ink"
                     }`}
                     value={abbDisc.valueFor(r)}
-                    title={abbDisc.isOverride(r) ? "Custom — click and clear to follow the Pricing-Settings default" : `Default from Pricing Settings (${abbDisc.globalPct}%)`}
+                    title={abbDisc.isOverride(r) ? "Custom — click and clear to follow the default" : `Default ${abbDisc.defaultFor(r)}%${abbDisc.defaultFor(r) === abbDisc.globalPct ? " (Pricing Settings)" : ""}`}
                     onChange={(e) => abbDisc.onChange(r, Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))} />
                 </td>
               )}
@@ -3436,14 +3437,18 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   // Per-item ABB discount (%) — defaults to the Pricing-Settings global, editable
   // per item. Stored by reference||name; drives each ABB item's price in the quote.
   const globalPct = Math.round(s.factors.abbDiscount * 100);
+  // Default for a row: ABB products / enclosures follow the Pricing-Settings global; every
+  // other supplier (incl. cells) defaults to 0 — a per-item value still applies to any of them.
+  const defFor = (r: MatRow) => (r.supplier === "ABB" || r.supplier === "ABB Enclosure" ? globalPct : 0);
   const abbDisc: AbbDiscCtl = {
     globalPct,
-    valueFor: (r) => s.abbItemDiscounts[abbKey(r)] ?? globalPct,
-    // Highlight only when the value differs from the Pricing-Settings default.
-    isOverride: (r) => (s.abbItemDiscounts[abbKey(r)] ?? globalPct) !== globalPct,
+    defaultFor: defFor,
+    valueFor: (r) => s.abbItemDiscounts[abbKey(r)] ?? defFor(r),
+    // Highlight only when the value differs from the row's default.
+    isOverride: (r) => (s.abbItemDiscounts[abbKey(r)] ?? defFor(r)) !== defFor(r),
     onChange: (r, pct) => {
       const next = { ...s.abbItemDiscounts };
-      if (pct === globalPct) delete next[abbKey(r)]; // back to default → follow the global (no highlight)
+      if (pct === defFor(r)) delete next[abbKey(r)]; // back to default → follow it (no highlight)
       else next[abbKey(r)] = pct;
       up({ abbItemDiscounts: next });
     },
@@ -3481,7 +3486,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
     const name = window.prompt("Excel file name:", def);
     if (name === null) return; // cancelled
     const exportBlocks = visible.map((b) =>
-      b.kind === "table" && (b.title === "ABB Products" || b.title === "ABB Enclosures")
+      b.kind === "table"
         ? { ...b, abbDiscPct: b.rows.map((r) => abbDisc.valueFor(r)) }
         : b);
     const ws = XLSX.utils.aoa_to_sheet(materialAoa(exportBlocks as MatBlock[]));
@@ -3521,7 +3526,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
         <>
           {visible.map((b, i) => b.kind === "table" ? (
             <MatTable key={b.title} title={`${i + 1} · ${b.title}`} rows={b.rows} withSupplier={b.withSupplier} note={b.note}
-              abbDisc={b.title === "ABB Products" || b.title === "ABB Enclosures" ? abbDisc : undefined} />
+              abbDisc={abbDisc} />
           ) : (
             <div key={b.title} className="card flex items-center justify-between p-4">
               <h3 className="text-sm font-bold text-brand-dark">{i + 1} · {b.title}</h3>

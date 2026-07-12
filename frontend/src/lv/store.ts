@@ -492,17 +492,20 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   // priced cell rows (Pro-E/IS2/PLP). Either way it feeds the kit % below.
   let enclCost = 0;
   for (const it of p.panelItems ?? []) {
-    // ABB enclosures get the ABB discount (per-item Material-List override wins, else the
-    // global factor); Pro-E / IS2 / PLP are other suppliers → no ABB discount.
+    // A per-item Material-List discount applies to any enclosure; without one, only ABB
+    // enclosures follow the global discount (Pro-E / IS2 / PLP keep their list price).
     const base = it.eur > 0 ? it.eur * f.euro : it.egp;
     const isAbbEnc = !["Pro-E", "IS2", "PLP"].includes(it.fam);
     const ov = abbDiscounts?.[abbKey(it)];
-    const disc = isAbbEnc ? 1 - (ov != null ? ov / 100 : f.abbDiscount) : 1;
-    enclCost += base * disc * it.qty;
+    const frac = ov != null ? ov / 100 : isAbbEnc ? f.abbDiscount : 0;
+    enclCost += base * (1 - frac) * it.qty;
   }
   if (p.sizingMode === "cells") {
     for (const r of p.cellConfig.rows) {
-      if (r.qty > 0) enclCost += cellPriceEgp(p.cellConfig.type, r.desc, f) * r.qty;
+      if (r.qty <= 0) continue;
+      // Cells honour a per-item Material-List discount too (keyed by description, like the list row).
+      const ov = abbDiscounts?.[abbKey({ description: r.desc })];
+      enclCost += cellPriceEgp(p.cellConfig.type, r.desc, f) * (1 - (ov != null ? ov / 100 : 0)) * r.qty;
     }
   }
   const cuConnCost = cuWeight * f.copper;
