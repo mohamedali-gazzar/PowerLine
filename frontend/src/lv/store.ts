@@ -467,6 +467,13 @@ export function kitRate(p: LvPanel): number {
       return 0;
   }
 }
+// A component wired via BUSWAY (its NOTE contains "busway", any case, anywhere) carries
+// extra connection copper: its copper weight is multiplied by this factor. Editable here
+// without touching the formula.
+export const BUSWAY_COPPER_FACTOR = 2;
+export const buswayCopperMult = (note?: string): number =>
+  /busway/i.test(note ?? "") ? BUSWAY_COPPER_FACTOR : 1;
+
 export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, number>): PanelCalc {
   let compCost = 0;
   let cuWeight = 0;
@@ -477,7 +484,8 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
     // Per-item ABB discount override (Material List) wins over the global factor.
     const ov = abbDiscounts?.[abbKey(c)];
     compCost += componentPriceEgp(c, f, ov != null ? ov / 100 : undefined) * c.qty;
-    cuWeight += cuKg(c) * c.qty;
+    // Busway-fed rows (NOTE contains "busway") carry extra connection copper.
+    cuWeight += cuKg(c) * c.qty * buswayCopperMult(c.note);
   }
   // Enclosure cost: Panels mode → the chosen sizing items; Cells mode → the
   // priced cell rows (Pro-E/IS2/PLP). Either way it feeds the kit % below.
@@ -558,7 +566,7 @@ export function buildMaterialList(s: LvState): MaterialList {
         stock: c.stock,
         qty: c.qty * mult,
       });
-      copperKg += cuKg(c) * c.qty * mult;
+      copperKg += cuKg(c) * c.qty * mult * buswayCopperMult(c.note); // busway rows carry extra copper
     }
     for (const it of p.panelItems ?? []) {
       add(`e|${it.ref || it.name}`, {
