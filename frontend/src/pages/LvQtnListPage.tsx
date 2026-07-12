@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listQtns, createQtn, deleteQtn, duplicateQtn, nextQtnNumber, type QtnListItem } from "../lv/qtns";
-import { fmtEgp } from "../lv/catalog";
+import { fmtEgp, DEFAULT_FACTORS } from "../lv/catalog";
 import { QtnNumberInput, qtnPrefix, qtnSuffix } from "../components/QtnNumberInput";
 
 /** LV landing page — the list of quotations. "+ New QTN" opens a fresh
@@ -80,7 +80,7 @@ export default function LvQtnListPage() {
                 <th className="px-4 py-3">Project</th>
                 <th className="px-4 py-3">Customer</th>
                 <th className="px-4 py-3">Panels</th>
-                <th className="px-4 py-3">Total (EGP incl. VAT)</th>
+                <th className="px-4 py-3">Total (USD incl. VAT)</th>
                 <th className="px-4 py-3">Updated</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
@@ -97,7 +97,7 @@ export default function LvQtnListPage() {
                   <td className="px-4 py-3">{q.projectName || <span className="text-muted">—</span>}</td>
                   <td className="px-4 py-3 text-muted">{q.customer || "—"}</td>
                   <td className="px-4 py-3 text-muted">{q.panels}</td>
-                  <td className="px-4 py-3 font-semibold">{fmtEgp(q.totalEgp)}</td>
+                  <td className="px-4 py-3 font-semibold" title={`${fmtEgp(q.totalEgp)} EGP · @ ${DEFAULT_FACTORS.usd} EGP/USD`}>{"$" + fmtEgp(q.totalEgp / DEFAULT_FACTORS.usd)}</td>
                   <td className="px-4 py-3 text-xs text-muted">{new Date(q.updatedAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-3" onClick={(e) => e.stopPropagation()}>
