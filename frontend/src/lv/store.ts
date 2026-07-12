@@ -483,7 +483,13 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   // priced cell rows (Pro-E/IS2/PLP). Either way it feeds the kit % below.
   let enclCost = 0;
   for (const it of p.panelItems ?? []) {
-    enclCost += (it.eur > 0 ? it.eur * f.euro : it.egp) * it.qty;
+    // ABB enclosures get the ABB discount (per-item Material-List override wins, else the
+    // global factor); Pro-E / IS2 / PLP are other suppliers → no ABB discount.
+    const base = it.eur > 0 ? it.eur * f.euro : it.egp;
+    const isAbbEnc = !["Pro-E", "IS2", "PLP"].includes(it.fam);
+    const ov = abbDiscounts?.[abbKey(it)];
+    const disc = isAbbEnc ? 1 - (ov != null ? ov / 100 : f.abbDiscount) : 1;
+    enclCost += base * disc * it.qty;
   }
   if (p.sizingMode === "cells") {
     for (const r of p.cellConfig.rows) {
@@ -517,6 +523,7 @@ export interface MatRow {
   supplier: string;
   description: string;
   reference: string;
+  name?: string; // ABB-discount key fallback (enclosures whose reference is blank)
   stock: string;
   qty: number;
 }
@@ -558,6 +565,7 @@ export function buildMaterialList(s: LvState): MaterialList {
         supplier: ["Pro-E", "IS2", "PLP"].includes(it.fam) ? it.fam : "ABB Enclosure",
         description: `${it.fam} — ${it.name}`,
         reference: it.ref,
+        name: it.name, // keeps the ABB-discount key aligned with calcPanel's abbKey(it)
         stock: "",
         qty: it.qty * mult,
       });

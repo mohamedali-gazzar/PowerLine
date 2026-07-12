@@ -3297,7 +3297,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
     { kind: "table", title: "ABB Products", rows: ml.abb, note: abbNote },
     !abbOnly && { kind: "table", title: "Other Suppliers", rows: ml.other, withSupplier: true },
     !abbOnly && { kind: "table", title: "PLP Cells", rows: ml.plpCells },
-    { kind: "table", title: "ABB Enclosures", rows: ml.abbEnclosures },
+    { kind: "table", title: "ABB Enclosures", rows: ml.abbEnclosures, note: abbNote },
     !abbOnly && { kind: "table", title: "IS2", rows: ml.is2 },
     !abbOnly && { kind: "copper", title: "Copper — total project weight", kg: ml.copperKg },
     !abbOnly && { kind: "table", title: "Pro-E", rows: ml.proE },
@@ -3312,7 +3312,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
     const name = window.prompt("Excel file name:", def);
     if (name === null) return; // cancelled
     const exportBlocks = visible.map((b) =>
-      b.kind === "table" && b.title === "ABB Products"
+      b.kind === "table" && (b.title === "ABB Products" || b.title === "ABB Enclosures")
         ? { ...b, abbDiscPct: b.rows.map((r) => abbDisc.valueFor(r)) }
         : b);
     const ws = XLSX.utils.aoa_to_sheet(materialAoa(exportBlocks as MatBlock[]));
@@ -3352,7 +3352,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
         <>
           {visible.map((b, i) => b.kind === "table" ? (
             <MatTable key={b.title} title={`${i + 1} · ${b.title}`} rows={b.rows} withSupplier={b.withSupplier} note={b.note}
-              abbDisc={b.title === "ABB Products" ? abbDisc : undefined} />
+              abbDisc={b.title === "ABB Products" || b.title === "ABB Enclosures" ? abbDisc : undefined} />
           ) : (
             <div key={b.title} className="card flex items-center justify-between p-4">
               <h3 className="text-sm font-bold text-brand-dark">{i + 1} · {b.title}</h3>
