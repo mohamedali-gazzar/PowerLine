@@ -1906,6 +1906,9 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   };
   const clearSel = () => { setSelected(new Set()); setLastPickId(null); };
   const selectedTotal = p.components.reduce((sum, c) => (selected.has(c.id) && !isSpacer(c) ? sum + itemPriceEgp(c, s) * c.qty : sum), 0);
+  // The selection is a single existing combination when every selected row shares one non-empty group.
+  const selGroupSet = new Set(p.components.filter((c) => selected.has(c.id) && !isSpacer(c)).map((c) => effGroup.get(c.id) || ""));
+  const isSelCombo = selGroupSet.size === 1 && [...selGroupSet][0] !== "";
   // Column-aware sum over the selected rows (QTY / UNIT COST / TOTAL) for the hover tooltip.
   const colSum = (col: "qty" | "unit" | "total") =>
     p.components.reduce((acc, c) => {
@@ -1980,6 +1983,31 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     let insertAt = rest.length; // target section empty → append at the end
     for (let i = rest.length - 1; i >= 0; i--) { if (rest[i].section === target) { insertAt = i + 1; break; } }
     u({ components: [...rest.slice(0, insertAt), ...moved, ...rest.slice(insertAt)] });
+    clearSel();
+  };
+  // Group the selected rows into one combination — retag them with a new unique group name
+  // (comboScalable, so the group gets a "Combination qty ×N" control) in the first row's section.
+  const combineSel = () => {
+    const isSel = (c: PanelComponent) => selected.has(c.id) && !isSpacer(c);
+    const selReal = p.components.filter(isSel);
+    if (selReal.length < 2) return; // a combination needs 2+ rows
+    const target = selReal[0].section;
+    const used = new Set(p.components.filter((c) => c.section === target).map((c) => effGroup.get(c.id) || "").filter(Boolean));
+    let name = "New Combination";
+    for (let k = 2; used.has(name); k++) name = `New Combination ${k}`;
+    const moved = selReal.map((c) => ({ ...c, section: target, group: name, baseQty: c.baseQty ?? c.qty, comboScalable: true }));
+    const rest = p.components.filter((c) => !isSel(c));
+    const firstIdx = p.components.findIndex(isSel);
+    let insertAt = 0;
+    for (let i = 0; i < firstIdx; i++) if (!isSel(p.components[i])) insertAt++;
+    u({ components: [...rest.slice(0, insertAt), ...moved, ...rest.slice(insertAt)] });
+    clearSel();
+  };
+  // Dissolve the selected combination(s) — clear the group on every row of any group the selection touches.
+  const uncombineSel = () => {
+    const groups = new Set(p.components.filter((c) => selected.has(c.id) && !isSpacer(c)).map((c) => effGroup.get(c.id) || "").filter(Boolean));
+    if (!groups.size) return;
+    u({ components: p.components.map((c) => (!isSpacer(c) && groups.has(effGroup.get(c.id) || "") ? { ...c, group: "", comboScalable: false } : c)) });
     clearSel();
   };
   useEffect(() => {
@@ -2602,26 +2630,28 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
           <div
             className={`no-print z-40 ${dragPos ? "fixed" : "absolute left-1/2 -translate-x-1/2"}`}
             style={dragPos ? { left: dragPos.x, top: dragPos.y } : { top: barTop ?? 0 }}>
-            <div data-selbar="" className="flex items-center gap-2.5 rounded-full border border-line bg-white py-2 pl-3 pr-3 shadow-lift animate-pop">
+            <div data-selbar="" className="flex flex-col gap-1 rounded-2xl border border-line bg-white py-2 pl-3 pr-3 shadow-lift animate-pop">
+              <div className="flex items-center gap-2.5">
               <span onMouseDown={startBarDrag} title="Drag to move the bar"
-                className="flex cursor-move select-none items-center gap-2 text-muted/60 hover:text-brand">
+                className="flex shrink-0 cursor-move select-none items-center text-muted/60 hover:text-brand">
                 <svg width="11" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                   <circle cx="5" cy="3" r="1.4" /><circle cx="11" cy="3" r="1.4" />
                   <circle cx="5" cy="8" r="1.4" /><circle cx="11" cy="8" r="1.4" />
                   <circle cx="5" cy="13" r="1.4" /><circle cx="11" cy="13" r="1.4" />
                 </svg>
-                <span className="whitespace-nowrap text-sm font-semibold text-ink">
-                  {selected.size} selected · <span className="text-brand-dark">Total {fmtEgp(selectedTotal)}</span>
-                </span>
               </span>
-              <span className="h-6 w-px bg-line" />
+              <button type="button" onClick={isSelCombo ? uncombineSel : combineSel} disabled={!isSelCombo && selected.size < 2}
+                title={isSelCombo ? "Ungroup the selected combination" : "Group the selected rows into one combination"}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold text-ink transition hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40">
+                <span className="text-base leading-none">{isSelCombo ? "⊟" : "⊞"}</span> {isSelCombo ? "Uncombine" : "Combination"}
+              </button>
               <button type="button" onClick={duplicateSel} title="Duplicate selected rows (Ctrl/Cmd+D)"
-                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-brand-dark transition hover:bg-brand-light">
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold text-ink transition hover:bg-surface">
                 <span className="text-base leading-none">⧉</span> Duplicate
               </button>
               <div className="relative">
                 <button type="button" onClick={() => setMoveOpen((v) => !v)} title="Move selected rows to another section"
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold text-ink transition hover:bg-surface ${moveOpen ? "bg-surface" : ""}`}>
+                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold text-ink transition hover:bg-surface ${moveOpen ? "bg-surface" : ""}`}>
                   <span className="text-base leading-none">↧</span> Move to
                   <svg width="9" height="9" viewBox="0 0 12 12" className="opacity-50" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>
@@ -2642,6 +2672,11 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
               <span className="h-6 w-px bg-line" />
               <button type="button" onClick={clearSel} title="Close (Esc)" aria-label="Close — clear selection"
                 className="flex h-7 w-7 items-center justify-center rounded-full text-sm leading-none text-muted transition hover:bg-surface hover:text-ink">✕</button>
+              </div>
+              <div className="flex items-baseline justify-center gap-2 leading-none">
+                <span className="text-xs font-semibold text-muted">{selected.size} selected</span>
+                <span className="text-[16px] font-bold text-brand-dark">Total {fmtEgp(selectedTotal)}</span>
+              </div>
             </div>
           </div>
         );
