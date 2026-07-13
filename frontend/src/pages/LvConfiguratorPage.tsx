@@ -878,11 +878,11 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                 </colgroup>
                 <thead>
                   <tr style={{ background: TRED }} className="text-white font-display">
-                    <th className="px-2 text-center py-1 text-[12px] font-bold leading-[20px]">Qty</th>
-                    <th className="px-2 text-center py-1 text-[12px] font-bold leading-[20px]">Description</th>
-                    <th className="px-2 text-center py-1 text-[12px] font-bold leading-[20px]">ADJ</th>
-                    <th className="px-2 text-left py-1 text-[12px] font-bold leading-[20px]">Brand</th>
-                    <th className="px-2 text-left py-1 text-[12px] font-bold leading-[20px]">NOTE</th>
+                    <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">Qty</th>
+                    <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">Description</th>
+                    <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">ADJ</th>
+                    <th className="px-2 text-left py-1 text-[12px] font-bold leading-[17px]">Brand</th>
+                    <th className="px-2 text-left py-1 text-[12px] font-bold leading-[17px]">NOTE</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -916,12 +916,12 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                           <tr key={`s-${sec}`} style={{ breakInside: "avoid", breakAfter: "avoid" }}>
                             {sec.length > 40 ? (
                               // long name (e.g. P.F.C.) — span all columns so it fits on one line
-                              <td colSpan={5} className="border-y px-2 py-1 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[18px] whitespace-nowrap" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }}>{sec}</td>
+                              <td colSpan={5} className="border-y px-2 py-1 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[15px] whitespace-nowrap" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }}>{sec}</td>
                             ) : (
                               // short name — centred in the Description column, aligned with the "Description" header
                               <>
                                 <td className="border-y" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }} />
-                                <td className="border-y px-2 py-1 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[18px]" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }}>{sec}</td>
+                                <td className="border-y px-2 py-1 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[15px]" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }}>{sec}</td>
                                 <td colSpan={3} className="border-y" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }} />
                               </>
                             )}
