@@ -85,13 +85,13 @@ function normalize(state: LvState): LvState {
           : [...p.sections, ...missing];
       }
     }
-    // Indication Lamps, Photocell and WD kit are flat items — drop their groups so they show
-    // no header. Named labels below are Lamps/Photocell; WD kit uses dynamic
+    // Indication Lamps, Push Buttons, Photocell and WD kit are flat items — drop their groups so
+    // they show no header. Named labels below are Lamps/Push Buttons/Photocell; WD kit uses dynamic
     // "WD <frame> fixed/moving part" labels (regex). MCC keeps "… (Type N)", ATS keeps
     // "Source (1)" etc.
     if (Array.isArray(p.components)) {
       const FLAT_GROUPS = new Set([
-        "Indication Lamps",
+        "Indication Lamps", "Push Buttons",
         "Circuit Breaker", "Contactor (auto)", "Aux contact (auto)", "Fixed components",
       ]);
       const isWdGroup = (s: string) => /^WD .+ (fixed|moving) part$/i.test(s);

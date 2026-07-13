@@ -298,3 +298,19 @@ export function buildIndicationLamps(): ComboLine[] {
     groupLabel: "Indication Lamps",
   }));
 }
+
+// ── Push Buttons ─────────────────────────────────────────────────────────────
+// Fixed start/stop pushbutton pair: green start (NO) + red stop (NC).
+export const PUSH_BUTTONS: { qty: number; desc: string }[] = [
+  { qty: 1, desc: "CP1-10G-10 Pushbutton" },
+  { qty: 1, desc: "CP1-10R-01 Pushbutton" },
+];
+
+export function buildPushButtons(): ComboLine[] {
+  return PUSH_BUTTONS.map((l) => ({
+    qty: l.qty,
+    desc: l.desc,
+    comp: findByName(l.desc),
+    groupLabel: "Push Buttons",
+  }));
+}

@@ -21,7 +21,7 @@ import {
   MCC_KINDS, mccKws, mccTypes, buildMcc,
   PFC_DEFAULT, pfcTotalKvar, pfcHeader, buildPfc,
   WD_OPTIONS, buildWd,
-  buildIndicationLamps,
+  buildIndicationLamps, buildPushButtons,
   type ComboLine, type AtsTypeId,
 } from "../lv/combos";
 import { rankSearchOptions } from "../lv/search";
@@ -1771,8 +1771,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     } else {
       const sec = p.activeSection;
       const items = preview.map((l) => {
-        // Indication Lamps + Photocell + WD kit → flat items (no group header).
-        if (comboKind === "lamps" || comboKind === "photocell" || comboKind === "wd") {
+        // Indication Lamps + Push Buttons + Photocell + WD kit → flat items (no group header).
+        if (comboKind === "lamps" || comboKind === "pushbtn" || comboKind === "photocell" || comboKind === "wd") {
           return l.comp ? toPanelComponent(l.comp, sec, l.qty) : freeComponent(l.desc, sec, l.qty);
         }
         const grp = l.groupLabel || tag || "Combination";
@@ -1786,7 +1786,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   };
   // Row-2 circuit combinations (smaller sub-row under the section pills). P.F.C is NOT here —
   // it's triggered from the sections row (beside Outgoings) since it builds its own section.
-  const COMBOS = [["lamps", "Indication Lamps"], ["ats", "ATS"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"], ["custom", "New Combination"]] as const;
+  const COMBOS = [["lamps", "Indication Lamps"], ["pushbtn", "Push Buttons"], ["ats", "ATS"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"], ["custom", "New Combination"]] as const;
   // Word-style row inserter: drop an empty row (spacer) after a given component, or at
   // the top of the section when afterId is null.
   const insertSpacerAfter = (sec: string, afterId: string | null) => {
@@ -2379,6 +2379,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
           {comboKind === "mcc" && <MccBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "wd" && <WdBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "lamps" && <LampsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
+          {comboKind === "pushbtn" && <PushButtonsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "pfc" && <PfcBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "custom" && <CustomBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {preview.length > 0 && (
@@ -2803,7 +2804,7 @@ function ComponentEditSelect({ current, onPick, onClose }: {
 }
 
 // ── Combination builders (RPT-03) ────────────────────────────────────────────
-type ComboKind = "ats" | "photocell" | "mcc" | "pfc" | "wd" | "lamps" | "custom";
+type ComboKind = "ats" | "photocell" | "mcc" | "pfc" | "wd" | "lamps" | "pushbtn" | "custom";
 function BreakerSelect({ label, value, onPick, pool, placeholder = "Search breaker…" }: {
   label: string; value: DbComponent | null; onPick: (c: DbComponent) => void; pool: DbComponent[]; placeholder?: string;
 }) {
@@ -3009,6 +3010,18 @@ function LampsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) 
         Red / Green / Yellow pilot lights (LED 230 V AC) — 1 each.
       </p>
       <button className="btn-ghost" onClick={() => onPreview(buildIndicationLamps(), "Indication Lamps")}>Generate set</button>
+    </div>
+  );
+}
+
+// Push Buttons: fixed green-start / red-stop pushbutton pair, added as a "Push Buttons" group.
+function PushButtonsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
+  return (
+    <div className="rounded-lg border border-line p-3">
+      <p className="mb-2 text-[11px] text-muted">
+        CP1-10G-10 (green start) + CP1-10R-01 (red stop) — 1 each.
+      </p>
+      <button className="btn-ghost" onClick={() => onPreview(buildPushButtons(), "Push Buttons")}>Generate set</button>
     </div>
   );
 }
