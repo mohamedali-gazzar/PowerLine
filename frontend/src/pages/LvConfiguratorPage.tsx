@@ -44,8 +44,11 @@ const TABS: Tab[] = ["project", "pricing", "panels", "technical", "commercial", 
 function effectiveGroups(comps: PanelComponent[]): Map<string, string> {
   const out = new Map<string, string>();
   comps.forEach((c, i) => {
-    if (isSpacer(c)) { out.set(c.id, ""); return; }
-    if (c.group) { out.set(c.id, c.group); return; }
+    if (!isSpacer(c) && c.group) { out.set(c.id, c.group); return; }
+    // Ungrouped rows — and spacers — inherit a combination only when the SAME group
+    // brackets them on both sides. So a spacer dropped inside a combination stays part
+    // of it (one header, blank row in the middle), while a separator sitting between two
+    // different groups (or after a group) stays ungrouped ("").
     let prev = "", next = "";
     for (let j = i - 1; j >= 0; j--) { if (comps[j].section !== c.section) break; const g = comps[j].group; if (g) { prev = g; break; } }
     for (let j = i + 1; j < comps.length; j++) { if (comps[j].section !== c.section) break; const g = comps[j].group; if (g) { next = g; break; } }
@@ -937,13 +940,14 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                           const gcq = gf && gbase > 0 ? Math.max(1, Math.round(gf.qty / gbase)) : 1;
                           // Match the panels editor: MCC (by name) + custom combinations (flagged) show "QTY (N) each contain:".
                           const gScalable = /\(Type \d+\)/.test(g) || !!byG.get(g)!.find((c) => !isSpacer(c))?.comboScalable;
-                          // Long headers (e.g. the P.F.C kVAR breakdown) shrink to fit on one line; short ones stay 13.5px.
-                          const gShrink = g.length + (gScalable ? 25 : 0) > 55;
                           rows.push(
                             // Group sub-header styled like the panels editor. break-after: avoid keeps it
-                            // with its first rows so it's never stranded at the bottom of a page.
+                            // with its first rows so it's never stranded at the bottom of a page. The empty
+                            // first cell starts the header at the Description column, aligned with its items;
+                            // every sub-header uses one font size (13.5px) regardless of name length.
                             <tr key={`g-${sec}-${g}`} style={{ breakInside: "avoid", breakAfter: "avoid" }}>
-                              <td colSpan={5} className={`px-2 py-1 text-left font-display font-normal leading-[20px] underline underline-offset-2 ${gShrink ? "whitespace-nowrap text-[10.5px]" : "text-[13.5px]"}`} style={{ color: TRED }}><span className="uppercase">{g}</span>{gScalable ? <span className="font-bold">, QTY ({gcq}) each contain:</span> : ""}</td>
+                              <td className="py-1" />
+                              <td colSpan={4} className="px-2 py-1 text-left font-display font-normal leading-[20px] text-[13.5px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>{gScalable ? <span className="font-bold">, QTY ({gcq}) each contain:</span> : ""}</td>
                             </tr>
                           );
                         }
@@ -1841,7 +1845,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   }, [q, pending]);
   // When the qty popup opens, focus + select the field so the quantity can be typed
   // straight from the keyboard (type the number, then Enter to add).
-  useEffect(() => { if (pending) { qtyRef.current?.focus(); qtyRef.current?.select(); } }, [pending]);
+  useEffect(() => { if (pending) { qtyRef.current?.focus({ preventScroll: true }); qtyRef.current?.select(); } }, [pending]);
   // Keyboard nav of the search results: first hit auto-highlighted; ↑/↓ move the
   // selection, Enter picks the highlighted component (then the qty popup opens).
   const [activeIdx, setActiveIdx] = useState(0);
@@ -2181,6 +2185,12 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   };
 
   const refocusSearch = () => requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true }));
+  // After an add, keep the view on the row that was just inserted (instead of the list
+  // jumping back to the top) — wait a couple frames for the new <tr> to render, then reveal it.
+  const revealRow = (id: string) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      cardRef.current?.querySelector(`tr[data-cid="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
+    }));
   const add = (c: DbComponent, qty = 1) => {
     const base = Math.max(1, qty);
     const t = addTarget;
@@ -2198,12 +2208,15 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
       u({ components: arr });
       setQ("");
       refocusSearch();
+      revealRow(nc.id);
       return;
     }
-    u({ components: [...p.components, toPanelComponent(c, p.activeSection, base)] });
+    const nc = toPanelComponent(c, p.activeSection, base);
+    u({ components: [...p.components, nc] });
     setQ("");
     // Return focus to the search box so the next component can be typed without the mouse.
     refocusSearch();
+    revealRow(nc.id);
   };
   // Shift+Enter in the search box drops a blank spacer row at the end of the active
   // section (Word-style separator) — same append behaviour as adding a component.
@@ -2343,7 +2356,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
             </p>
             <div className="flex items-center gap-2">
               <label className="text-xs font-semibold text-muted">Qty</label>
-              <input ref={qtyRef} autoFocus inputMode="numeric" className="input h-9 w-24" placeholder="1" value={pendQty}
+              <input ref={qtyRef} inputMode="numeric" className="input h-9 w-24" placeholder="1" value={pendQty}
                 onChange={(e) => setPendQty(e.target.value.replace(/[^\d]/g, ""))}
                 onKeyDown={(e) => { if (e.key === "Enter") { add(pending, parseInt(pendQty, 10) || 1); setPending(null); } if (e.key === "Escape") setPending(null); }} />
               <button type="button" className="btn-primary h-9 px-4 text-sm" onClick={() => { add(pending, parseInt(pendQty, 10) || 1); setPending(null); }}>Add</button>
