@@ -201,7 +201,7 @@ export interface PfcInput {
   var2Kvar: 25 | 50;
 }
 export const PFC_DEFAULT: PfcInput = {
-  kvar: 600, cbRating: 0, fixedSteps: 1, fixedKvar: 25, var1Steps: 3, var1Kvar: 25, var2Steps: 10, var2Kvar: 50,
+  kvar: 300, cbRating: 0, fixedSteps: 1, fixedKvar: 50, var1Steps: 5, var1Kvar: 50, var2Steps: 0, var2Kvar: 50,
 };
 
 const CAP_25 = "25 KVAR";
