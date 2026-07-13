@@ -1817,6 +1817,14 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   const [editVal, setEditVal] = useState("");
   const [editGroup, setEditGroup] = useState<string | null>(null); // combination rename — "sec|group"
   const [editGroupVal, setEditGroupVal] = useState("");
+  // "Add into an existing combination" — armed from a group's "+ Add" button; the next
+  // component(s) picked from the search drop into this group instead of the section end.
+  const [addTarget, setAddTarget] = useState<{ sec: string; group: string } | null>(null);
+  useEffect(() => {
+    if (!addTarget) return;
+    const eg = effectiveGroups(p.components);
+    if (!p.components.some((c) => c.section === addTarget.sec && !isSpacer(c) && (eg.get(c.id) || "") === addTarget.group)) setAddTarget(null);
+  }, [p.components, addTarget]);
   const [editComp, setEditComp] = useState<string | null>(null); // row being re-selected
   // Picking a search result opens a small qty popup before the component is added.
   const [pending, setPending] = useState<DbComponent | null>(null);
@@ -2172,11 +2180,30 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     u({ components: arr });
   };
 
+  const refocusSearch = () => requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true }));
   const add = (c: DbComponent, qty = 1) => {
-    u({ components: [...p.components, toPanelComponent(c, p.activeSection, Math.max(1, qty))] });
+    const base = Math.max(1, qty);
+    const t = addTarget;
+    if (t) {
+      // Drop into an existing combination: same group label, inserted right after the
+      // group's last row, and scaled to the group's current ×N if the combination is scalable.
+      const scalable = /\(Type \d+\)/.test(t.group) || !!p.components.find((x) => x.section === t.sec && !isSpacer(x) && (effGroup.get(x.id) || "") === t.group)?.comboScalable;
+      const cq = scalable ? comboQtyOf(p.components.filter((x) => x.section === t.sec), t.group) : 1;
+      const nc: PanelComponent = { ...toPanelComponent(c, t.sec, base * cq, t.group), baseQty: base, ...(scalable ? { comboScalable: true } : {}) };
+      const arr = [...p.components];
+      let lastIdx = -1;
+      arr.forEach((x, i) => { if (x.section === t.sec && !isSpacer(x) && (effGroup.get(x.id) || "") === t.group) lastIdx = i; });
+      if (lastIdx < 0) { setAddTarget(null); return; }
+      arr.splice(lastIdx + 1, 0, nc);
+      u({ components: arr });
+      setQ("");
+      refocusSearch();
+      return;
+    }
+    u({ components: [...p.components, toPanelComponent(c, p.activeSection, base)] });
     setQ("");
     // Return focus to the search box so the next component can be typed without the mouse.
-    requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true }));
+    refocusSearch();
   };
   // Shift+Enter in the search box drops a blank spacer row at the end of the active
   // section (Word-style separator) — same append behaviour as adding a component.
@@ -2218,7 +2245,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                 overSec === sec ? "border-brand bg-brand-light text-brand ring-2 ring-brand/50"
                 : active ? "border-brand bg-brand-light text-brand" : "border-line bg-white text-muted hover:border-brand/40"
               }`}>
-              <button type="button" data-section={sec} onClick={() => { u({ activeSection: sec }); if (comboKind === "pfc") setComboKind(null); }}
+              <button type="button" data-section={sec} onClick={() => { u({ activeSection: sec }); if (comboKind === "pfc") setComboKind(null); setAddTarget(null); }}
                 onKeyDown={(e) => {
                   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
                   e.preventDefault();
@@ -2242,7 +2269,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
             </span>
             {sec === "Outgoings" && (
               <button type="button" title="Add a P.F.C combination — its own section beside Outgoings"
-                onClick={() => setComboKind(comboKind === "pfc" ? null : "pfc")}
+                onClick={() => { setComboKind(comboKind === "pfc" ? null : "pfc"); setAddTarget(null); }}
                 className={`inline-flex items-center gap-1 rounded-full border px-5 py-2.5 text-sm font-semibold transition ${
                   comboKind === "pfc" ? "border-brand bg-brand-light text-brand" : "border-line bg-white text-muted hover:border-brand/40"
                 }`}>
@@ -2267,7 +2294,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
         <span className="mr-1 text-[10px] font-bold uppercase tracking-wide text-muted">Combinations</span>
         {COMBOS.map(([k, label]) => (
           <button key={k} type="button" title={`Add a ${label} combination as a group inside “${p.activeSection}”`}
-            onClick={() => { setComboKind(comboKind === k ? null : k); setPreview([]); setTag(""); }}
+            onClick={() => { setComboKind(comboKind === k ? null : k); setPreview([]); setTag(""); setAddTarget(null); }}
             className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
               comboKind === k ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-surface text-muted hover:border-brand/40 hover:text-brand-dark"
             }`}>
@@ -2278,7 +2305,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
 
       {/* search */}
       <div ref={searchWrapRef} className="relative">
-        <input ref={searchRef} className="input" placeholder={`Search components (name / reference / type / rating) → adds to “${p.activeSection}”`}
+        <input ref={searchRef} className="input" placeholder={addTarget ? `Search components → drop into combination “${addTarget.group}”` : `Search components (name / reference / type / rating) → adds to “${p.activeSection}”`}
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); if (!pending) addSpacer(); return; } // ⇧Enter → spacer row
@@ -2312,7 +2339,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
             <p className="mb-2 text-xs">
               <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{pending.t}</span>
               <span className="font-bold text-ink">{pending.n}</span>
-              <span className="ml-1 text-[11px] text-muted">{pending.ref} · {pending.brand} → “{p.activeSection}”</span>
+              <span className="ml-1 text-[11px] text-muted">{pending.ref} · {pending.brand} → {addTarget ? `combination “${addTarget.group}”` : `“${p.activeSection}”`}</span>
             </p>
             <div className="flex items-center gap-2">
               <label className="text-xs font-semibold text-muted">Qty</label>
@@ -2325,6 +2352,16 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
           </div>
         )}
       </div>
+      {addTarget && (
+        <div className="mt-1.5 flex items-center gap-2 text-[11px]">
+          <span className="inline-flex items-center gap-1 rounded-full bg-brand-light px-2 py-0.5 font-semibold text-brand-dark">
+            ⊞ Adding into “{addTarget.group}”
+            <button type="button" onClick={() => setAddTarget(null)} title="Stop adding to this combination"
+              className="ml-0.5 rounded-full px-1 leading-none hover:bg-white">✕</button>
+          </span>
+          <span className="text-muted">each component you pick drops into this combination — click ✕ or another section to stop</span>
+        </div>
+      )}
       {/* Inline circuit-combination builder — pinned inside the sticky sub-header while open,
           so it stays visible until you generate or close it */}
       {comboKind && (
@@ -2580,6 +2617,9 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                                     )}
                                   </div>
                                   <div className="flex shrink-0 items-center gap-1">
+                                    <button type="button" title={`Add a component into “${g}”`}
+                                      onClick={() => { const armed = addTarget?.sec === sec && addTarget?.group === g; setAddTarget(armed ? null : { sec, group: g }); if (!armed) { u({ activeSection: sec }); refocusSearch(); } }}
+                                      className={`mr-1 rounded px-1.5 py-0.5 text-[11px] font-bold leading-none transition ${addTarget?.sec === sec && addTarget?.group === g ? "bg-brand text-white" : "text-brand-dark/70 hover:bg-white hover:text-brand-dark"}`}>+ Add</button>
                                     <button type="button" title="Move group up (sort within section)" onClick={() => reorderGroup(g, sec, -1)}
                                       className="rounded px-1 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">↑</button>
                                     <button type="button" title="Move group down (sort within section)" onClick={() => reorderGroup(g, sec, 1)}
