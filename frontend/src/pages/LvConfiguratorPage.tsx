@@ -2466,8 +2466,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                     <th className="py-1 pr-2 text-right">Unit cost</th>
                     <th className="py-1 pr-2 text-right">Total</th>
                     <th className="py-1 pr-1 text-right">
-                      {sec !== "Outgoings" && (() => {
-                        // Outgoings uses a per-group select-all (in each group header) instead of a section-wide one.
+                      {(() => {
+                        // Section-wide select-all (Outgoings also keeps its per-group select-alls).
                         const ids = p.components.filter((c) => c.section === sec && !isSpacer(c)).map((c) => c.id);
                         const sel = ids.filter((id) => selected.has(id)).length;
                         return (
