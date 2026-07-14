@@ -184,6 +184,15 @@ function paginatePanel(host: HTMLElement, headerEl: HTMLElement | null, panelEl:
       }
       ri++;
     }
+    // Keep a section/group header with its content: if this page ends on header row(s)
+    // whose items overflowed onto the next page, move those headers to the next page too
+    // (so a header is never stranded as the last row). Guarded to keep ≥1 row per page.
+    if (ri < rows.length) {
+      while (ri > 0 && tb.childElementCount > 1 && rows[ri - 1].hasAttribute("data-pdf-head")) {
+        tb.removeChild(tb.lastElementChild!);
+        ri--;
+      }
+    }
     pages.push(page);
     first = false;
   } while (ri < rows.length);

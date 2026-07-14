@@ -95,6 +95,16 @@ function nearestField(cur: HTMLElement, list: HTMLElement[], key: ArrowKey): HTM
 function L({ children }: { children: React.ReactNode }) {
   return <label className="label">{children}</label>;
 }
+// Shared "jump to the linked view" arrow — the same icon marks a panel (→ its Technical-Offer
+// page) and each Technical-Offer page (→ its panel), so both directions carry one icon.
+function JumpArrow() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 17 17 7" />
+      <path d="M7 7h10v10" />
+    </svg>
+  );
+}
 function Sel<T extends string>({ value, onChange, options, className }: {
   value: T; onChange: (v: T) => void; options: readonly T[]; className?: string;
 }) {
@@ -309,12 +319,23 @@ export default function LvConfiguratorPage() {
   // Per-tab memory: remember each tab's scroll position (and the last active tab
   // for this QTN), and restore them when you return — instead of resetting.
   const scrollByTab = useRef<Record<string, number>>({});
+  const jumpPanelRef = useRef<string | null>(null); // panel to reveal after switching to the Technical Offer
   const goToTab = (t: Tab) => {
     scrollByTab.current[tab] = window.scrollY; // remember where we were on this tab
     localStorage.setItem(tabKey, t);
     setTab(t);
   };
+  // "Open in Technical Offer" from a panel: switch to the offer tab, then scroll that panel's page into view.
+  const openPanelInOffer = (panelId: string) => { jumpPanelRef.current = panelId; goToTab("technical"); };
+  // "Back to panel" from a Technical-Offer page: select that panel and switch to the Panels tab.
+  const openPanelInPanels = (panelId: string) => { up({ selectedId: panelId }); goToTab("panels"); };
   useLayoutEffect(() => {
+    const jump = jumpPanelRef.current;
+    if (jump && tab === "technical") {
+      jumpPanelRef.current = null;
+      const el = document.querySelector<HTMLElement>(`[data-offer-panel="${CSS.escape(jump)}"]`);
+      if (el) { window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - 76)); return; } // 76px ≈ sticky tab header
+    }
     window.scrollTo(0, scrollByTab.current[tab] ?? 0); // restore the entered tab's position
   }, [tab]);
 
@@ -425,9 +446,9 @@ export default function LvConfiguratorPage() {
         {tab === "pricing" && <PricingTab s={s} up={up} />}
         {tab === "panels" && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
-            onAdd={addPanel} onDel={removePanel} onClone={clonePanel} />
+            onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer} />
         )}
-        {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} />)}
+        {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} />)}
         {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} />)}
         {tab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
       </div>
@@ -748,7 +769,7 @@ function SeparatorPage({ text, onChange, onRemove }: { text: string; onChange: (
 }
 
 type NotesKey = "notesGeneral" | "notesAdditional";
-function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void }) {
+function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void; onBackToPanel: (id: string) => void }) {
   // Editable notes page (after the cover): edit / add / remove lines.
   const notesOf = (k: NotesKey) => s[k] ?? [];
   const setNotes = (k: NotesKey, a: string[]) => up(k === "notesGeneral" ? { notesGeneral: a } : { notesAdditional: a });
@@ -855,9 +876,17 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                   <span className="text-sm leading-none">＋</span> Page
                 </button>
               </div>
-              <div data-pdf-panel className="a4-sheet flex flex-col px-8 pb-3 pt-6"
+              <div data-pdf-panel data-offer-panel={p.id} className="a4-sheet flex flex-col px-8 pb-3 pt-6"
                 style={pi < s.panels.length - 1 ? { breakAfter: "page" } : undefined}>
               <PageHeader s={s} qtnRef={qtnRef} />
+              {/* Back to this panel in the Panels tab (screen only — stripped from the PDF) */}
+              <div className="no-print -mt-1 mb-1 flex justify-end">
+                <button type="button" onClick={() => onBackToPanel(p.id)} title={`Back to “${p.name}” in Panels`}
+                  className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold shadow-sm transition hover:bg-[#FEF3ED]"
+                  style={{ borderColor: TRED, color: TRED }}>
+                  <JumpArrow /> Panel
+                </button>
+              </div>
               {/* panel-data table — rounded bordered frame */}
               <div data-pdf-specblock className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
               {/* item bar */}
@@ -912,11 +941,11 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
               <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
               <table data-pdf-comptable className="w-full table-fixed border-separate border-spacing-0">
                 <colgroup>
-                  <col className="w-[10%]" />
-                  <col className="w-[63%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[67%]" />
                   <col className="w-[7%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[10%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[8%]" />
                 </colgroup>
                 <thead>
                   <tr style={{ background: TRED }} className="text-white font-display">
@@ -955,7 +984,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                       // context (e.g. Main Incoming) is never lost above the sub-headers.
                       if (multiSection || order.some((g) => g))
                         rows.push(
-                          <tr key={`s-${sec}`} style={{ breakInside: "avoid", breakAfter: "avoid" }}>
+                          <tr key={`s-${sec}`} data-pdf-head style={{ breakInside: "avoid", breakAfter: "avoid" }}>
                             {sec.length > 40 ? (
                               // long name (e.g. P.F.C.) — span all columns so it fits on one line
                               <td colSpan={5} className="border-y px-2 py-1 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[15px] whitespace-nowrap" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }}>{sec}</td>
@@ -984,7 +1013,7 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
                             // with its first rows so it's never stranded at the bottom of a page. The empty
                             // first cell starts the header at the Description column, aligned with its items;
                             // every sub-header uses one font size (13.5px) regardless of name length.
-                            <tr key={`g-${sec}-${g}`} style={{ breakInside: "avoid", breakAfter: "avoid" }}>
+                            <tr key={`g-${sec}-${g}`} data-pdf-head style={{ breakInside: "avoid", breakAfter: "avoid" }}>
                               <td className="py-1" />
                               <td colSpan={4} className="px-2 py-1 text-left font-display font-normal leading-[20px] text-[13.5px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>{gScalable ? <span className="font-bold">, QTY ({gcq}) each contain:</span> : ""}</td>
                             </tr>
@@ -1335,11 +1364,12 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
 }
 
 // ── Panels tab ───────────────────────────────────────────────────────────────
-function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
+function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer }: {
   s: LvState; sel: LvPanel | null;
   up: (p: Partial<LvState>) => void;
   upPanel: (id: string, p: Partial<LvPanel>) => void;
   onAdd: () => void; onDel: (id: string) => void; onClone: (id: string) => void;
+  onOpenInOffer: (id: string) => void;
 }) {
   // Drag-and-drop reorder state (hooks must precede the early return).
   const [dragId, setDragId] = useState<string | null>(null);
@@ -1378,39 +1408,53 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone }: {
               onDragOver={(e) => { if (dragId && dragId !== p.id) { e.preventDefault(); if (overId !== p.id) setOverId(p.id); } }}
               onDragLeave={() => setOverId((o) => (o === p.id ? null : o))}
               onDrop={(e) => { e.preventDefault(); dropPanel(p.id); }}
-              className={`mb-1.5 flex items-center gap-1 rounded-lg border px-2 py-2 transition-all duration-150 ${
+              className={`mb-1.5 rounded-lg border px-2 py-1.5 transition-all duration-150 ${
                 p.highlight
                   ? `bg-yellow-200 hover:bg-yellow-300 ${active ? "border-brand" : "border-yellow-400"}`
                   : active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
               } ${dragId === p.id ? "scale-[0.98] opacity-40" : ""} ${overId === p.id ? "border-t-2 border-t-brand bg-brand-tint" : ""}`}>
-              <span
-                draggable
-                onDragStart={(e) => { setDragId(p.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", p.id); } catch {} }}
-                onDragEnd={() => { setDragId(null); setOverId(null); }}
-                title="Drag to reorder"
-                className="shrink-0 cursor-grab select-none px-0.5 text-muted/50 transition-colors hover:text-brand active:cursor-grabbing">
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                  <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
-                  <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
-                  <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
-                </svg>
-              </span>
-              <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{i + 1}</span>
-              <button onClick={() => up({ selectedId: p.id })} title={p.name.trim() || "(unnamed panel)"} className="ml-2 min-w-0 flex-1 text-left">
-                <div className={`truncate text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.name.trim() || "(unnamed panel)"}</div>
-              </button>
-              <button onClick={() => upPanel(p.id, { highlight: !p.highlight })}
-                title={p.highlight ? "Remove highlight" : "Highlight panel"}
-                className={`shrink-0 rounded p-1 transition-colors hover:bg-white ${p.highlight ? "text-yellow-600" : "text-muted hover:text-yellow-600"}`}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="m9 11-6 6v3h9l3-3" />
-                  <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
-                </svg>
-              </button>
-              <button onClick={() => onClone(p.id)} title="Duplicate panel"
-                className="shrink-0 rounded p-1 text-base text-muted transition-colors hover:bg-white hover:text-brand-dark">⧉</button>
-              <button onClick={() => onDel(p.id)} title="Delete panel"
-                className="shrink-0 rounded p-1 text-base text-red-500 transition-colors hover:bg-white">✕</button>
+              {/* Icons sit inline after a short name; a long name pushes them to wrap onto a
+                  second line, right-aligned (flex-wrap + ml-auto). */}
+              <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
+                {/* name group — kept together; the name shows in full (wraps only if very long) */}
+                <div className="flex min-w-0 items-center gap-1">
+                  <span
+                    draggable
+                    onDragStart={(e) => { setDragId(p.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", p.id); } catch {} }}
+                    onDragEnd={() => { setDragId(null); setOverId(null); }}
+                    title="Drag to reorder"
+                    className="shrink-0 cursor-grab select-none px-0.5 text-muted/50 transition-colors hover:text-brand active:cursor-grabbing">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                      <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
+                      <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
+                      <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
+                    </svg>
+                  </span>
+                  <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{i + 1}</span>
+                  <button onClick={() => up({ selectedId: p.id })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
+                    <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.name.trim() || "(unnamed panel)"}</div>
+                  </button>
+                </div>
+                {/* action icons (smaller) — inline when the name is short, else wrapped below-right */}
+                <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                  <button onClick={() => onOpenInOffer(p.id)} title="Open this panel in the Technical Offer"
+                    className="shrink-0 rounded p-0.5 text-muted transition-colors hover:bg-white hover:text-brand-dark">
+                    <JumpArrow />
+                  </button>
+                  <button onClick={() => upPanel(p.id, { highlight: !p.highlight })}
+                    title={p.highlight ? "Remove highlight" : "Highlight panel"}
+                    className={`shrink-0 rounded p-0.5 transition-colors hover:bg-white ${p.highlight ? "text-yellow-600" : "text-muted hover:text-yellow-600"}`}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m9 11-6 6v3h9l3-3" />
+                      <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
+                    </svg>
+                  </button>
+                  <button onClick={() => onClone(p.id)} title="Duplicate panel"
+                    className="shrink-0 rounded p-0.5 text-sm text-muted transition-colors hover:bg-white hover:text-brand-dark">⧉</button>
+                  <button onClick={() => onDel(p.id)} title="Delete panel"
+                    className="shrink-0 rounded p-0.5 text-sm text-red-500 transition-colors hover:bg-white">✕</button>
+                </div>
+              </div>
             </div>
           );
         })}
@@ -1786,6 +1830,22 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     if (!nm || nm === group) return;
     u({ components: p.components.map((c) =>
       c.section === sec && !isSpacer(c) && (effGroup.get(c.id) || "") === group ? { ...c, group: nm } : c) });
+  };
+  // Duplicate a whole combination — clone every member (fresh ids) under a new unique
+  // "<name> copy" label, inserted right after the original group.
+  const duplicateGroup = (group: string, sec: string) => {
+    const inGroup = (c: PanelComponent) => c.section === sec && (effGroup.get(c.id) || "") === group;
+    const members = p.components.filter(inGroup);
+    if (!members.length) return;
+    const used = new Set(p.components.filter((c) => c.section === sec && !isSpacer(c)).map((c) => effGroup.get(c.id) || "").filter(Boolean));
+    let name = `${group} copy`;
+    for (let k = 2; used.has(name); k++) name = `${group} copy ${k}`;
+    const clones = members.map((c) => ({ ...c, id: uid(), ...(isSpacer(c) ? {} : { group: name }) }));
+    const arr = [...p.components];
+    let lastIdx = -1;
+    arr.forEach((c, i) => { if (inGroup(c)) lastIdx = i; });
+    arr.splice(lastIdx + 1, 0, ...clones);
+    u({ components: arr });
   };
 
   const [newSection, setNewSection] = useState("");
@@ -2638,68 +2698,73 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                           const gIds = secComps.filter((c) => !isSpacer(c) && (effGroup.get(c.id) || "") === g).map((c) => c.id);
                           const gSel = gIds.filter((id) => selected.has(id)).length;
                           rows.push(
-                            <tr key={`grp-${sec}-${g}`}>
+                            <tr key={`grp-${sec}-${g}`} className="align-middle">
                               <td className="py-1" />
-                              <td colSpan={isOut ? 7 : 8} className="py-1 pr-2">
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-4">
-                                    {editGroup === `${sec}|${g}` ? (
-                                      <input autoFocus value={editGroupVal}
-                                        onChange={(e) => setEditGroupVal(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") { renameGroup(g, sec, editGroupVal); setEditGroup(null); }
-                                          else if (e.key === "Escape") setEditGroup(null);
-                                        }}
-                                        onBlur={() => { renameGroup(g, sec, editGroupVal); setEditGroup(null); }}
-                                        className="h-6 w-64 rounded border border-brand px-1.5 text-[11px] uppercase tracking-wide text-brand-dark focus:outline-none" />
-                                    ) : (
-                                      <span className="text-[11px] font-normal text-brand-dark underline underline-offset-2">
-                                        <span className="uppercase tracking-wide">{g}</span>{scalable ? `, QTY (${cq}) each contain:` : ""}
-                                        <button type="button" title="Rename combination"
-                                          onClick={() => { setEditGroupVal(g); setEditGroup(`${sec}|${g}`); }}
-                                          className="ml-1.5 rounded px-1 leading-none text-brand-dark/50 no-underline hover:bg-white hover:text-brand-dark">✎</button>
-                                      </span>
-                                    )}
-                                    {scalable && (
-                                      <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
-                                        Combination qty
-                                        <input type="number" min={1} value={cq}
-                                          onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
-                                          className="h-6 w-14 rounded border border-line px-1 text-center text-xs focus:border-brand focus:outline-none"
-                                          title="Quantity of the whole combination — scales all its items" />
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="flex shrink-0 items-center gap-1">
-                                    <button type="button" title={`Add a component into “${g}”`}
-                                      onClick={() => { const armed = addTarget?.sec === sec && addTarget?.group === g; setAddTarget(armed ? null : { sec, group: g }); if (!armed) { u({ activeSection: sec }); refocusSearch(); } }}
-                                      className={`mr-1 rounded px-1.5 py-0.5 text-[11px] font-bold leading-none transition ${addTarget?.sec === sec && addTarget?.group === g ? "bg-brand text-white" : "text-brand-dark/70 hover:bg-white hover:text-brand-dark"}`}>+ Add</button>
-                                    <button type="button" title="Move group up (sort within section)" onClick={() => reorderGroup(g, sec, -1)}
-                                      className="rounded px-1 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">↑</button>
-                                    <button type="button" title="Move group down (sort within section)" onClick={() => reorderGroup(g, sec, 1)}
-                                      className="rounded px-1 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">↓</button>
-                                    {p.sections.length > 1 && (
-                                      <select value="" onChange={(e) => { if (e.target.value) moveGroupToSection(g, sec, e.target.value); }}
-                                        title="Move this group to another section"
-                                        className="h-6 cursor-pointer rounded border border-line bg-white px-1 text-[11px] text-muted focus:border-brand focus:outline-none">
-                                        <option value="">Move to…</option>
-                                        {p.sections.filter((x) => x !== sec).map((x) => <option key={x} value={x}>{x}</option>)}
-                                      </select>
-                                    )}
-                                  </div>
+                              {/* Description column — combination name (+2px vs the rows) */}
+                              <td className="py-1 pr-2">
+                                {editGroup === `${sec}|${g}` ? (
+                                  <input autoFocus value={editGroupVal}
+                                    onChange={(e) => setEditGroupVal(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") { renameGroup(g, sec, editGroupVal); setEditGroup(null); }
+                                      else if (e.key === "Escape") setEditGroup(null);
+                                    }}
+                                    onBlur={() => { renameGroup(g, sec, editGroupVal); setEditGroup(null); }}
+                                    className="h-6 w-full rounded border border-brand px-1.5 text-[13px] uppercase tracking-wide text-brand-dark focus:outline-none" />
+                                ) : (
+                                  <span className="text-[13px] font-normal leading-tight text-brand-dark underline underline-offset-2">
+                                    <span className="uppercase tracking-wide">{g}</span>{scalable ? `, QTY (${cq}) each contain:` : ""}
+                                    <button type="button" title="Rename combination"
+                                      onClick={() => { setEditGroupVal(g); setEditGroup(`${sec}|${g}`); }}
+                                      className="ml-1.5 rounded px-1 leading-none text-brand-dark/50 no-underline hover:bg-white hover:text-brand-dark">✎</button>
+                                  </span>
+                                )}
+                              </td>
+                              {/* Reference column — "Combination qty" label (bigger + bold) */}
+                              <td className="py-1 pr-2 text-right">
+                                {scalable && <span className="whitespace-nowrap text-[13px] font-bold text-muted">Combination qty</span>}
+                              </td>
+                              {/* Qty column — the combination-qty box, aligned with the row Qty inputs */}
+                              <td className="py-1 pr-2">
+                                {scalable && (
+                                  <input type="number" min={1} value={cq}
+                                    onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
+                                    className="input h-7 px-1.5 text-center text-xs"
+                                    title="Quantity of the whole combination — scales all its items" />
+                                )}
+                              </td>
+                              {/* Adj → Total columns — actions on the left, "Move to" pushed to the right */}
+                              <td colSpan={4} className="py-1 pr-1">
+                                <div className="flex items-center justify-end gap-1">
+                                  <button type="button" title={`Add a component into “${g}”`}
+                                    onClick={() => { const armed = addTarget?.sec === sec && addTarget?.group === g; setAddTarget(armed ? null : { sec, group: g }); if (!armed) { u({ activeSection: sec }); refocusSearch(); } }}
+                                    className={`rounded px-1.5 py-0.5 text-[11px] font-bold leading-none transition ${addTarget?.sec === sec && addTarget?.group === g ? "bg-brand text-white" : "text-brand-dark/70 hover:bg-white hover:text-brand-dark"}`}>+ Add</button>
+                                  <button type="button" title="Move group up (sort within section)" onClick={() => reorderGroup(g, sec, -1)}
+                                    className="rounded px-1 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">↑</button>
+                                  <button type="button" title="Move group down (sort within section)" onClick={() => reorderGroup(g, sec, 1)}
+                                    className="rounded px-1 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">↓</button>
+                                  <button type="button" title="Duplicate this combination" onClick={() => duplicateGroup(g, sec)}
+                                    className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">⧉</button>
+                                  {p.sections.length > 1 && (
+                                    <select value="" onChange={(e) => { if (e.target.value) moveGroupToSection(g, sec, e.target.value); }}
+                                      title="Move this group to another section"
+                                      className="ml-1 h-6 w-24 cursor-pointer rounded border border-line bg-white px-1 text-[11px] text-muted focus:border-brand focus:outline-none">
+                                      <option value="">Move to…</option>
+                                      {p.sections.filter((x) => x !== sec).map((x) => <option key={x} value={x}>{x}</option>)}
+                                    </select>
+                                  )}
                                 </div>
                               </td>
-                              {isOut && (
-                                <td className="py-1 pr-1 text-right">
-                                  {gIds.length > 0 && (
-                                    <input type="checkbox" className="h-3.5 w-3.5 cursor-pointer accent-brand align-middle"
-                                      checked={gSel === gIds.length}
-                                      ref={(el) => { if (el) el.indeterminate = gSel > 0 && gSel < gIds.length; }}
-                                      onChange={(e) => setGroupSel(sec, g, e.target.checked)}
-                                      title="Select / clear all in this group" />
-                                  )}
-                                </td>
-                              )}
+                              {/* Last column — Outgoings per-group select-all */}
+                              <td className="py-1 pr-1 text-right">
+                                {isOut && gIds.length > 0 && (
+                                  <input type="checkbox" className="h-3.5 w-3.5 cursor-pointer accent-brand align-middle"
+                                    checked={gSel === gIds.length}
+                                    ref={(el) => { if (el) el.indeterminate = gSel > 0 && gSel < gIds.length; }}
+                                    onChange={(e) => setGroupSel(sec, g, e.target.checked)}
+                                    title="Select / clear all in this group" />
+                                )}
+                              </td>
                             </tr>
                           );
                         }
