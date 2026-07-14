@@ -2394,7 +2394,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
           {comboKind === "lamps" && <LampsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "pushbtn" && <PushButtonsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "pfc" && <PfcBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
-          {comboKind === "custom" && <CustomBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
+          {comboKind === "custom" && <CustomBuilder factors={s.factors} onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {preview.length > 0 && (
             <div className="mt-3 rounded-lg border border-line bg-white p-3">
               <div className="mb-1.5 text-xs font-bold text-ink">Preview — {preview.length} items{tag ? ` (${tag})` : ""}</div>
@@ -3039,22 +3039,76 @@ function PushButtonsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: st
   );
 }
 
+// Rich component search — same behaviour as the main Components search bar: ranked hits
+// (name / reference / type / rating) showing price · type badge · name · ref/brand, with
+// arrow-key navigation, Enter to pick, and Esc / outside-click to close.
+function ComponentSearch({ factors, onPick, placeholder, inputRef }: {
+  factors: LvState["factors"]; onPick: (c: DbComponent) => void; placeholder?: string; inputRef?: React.RefObject<HTMLInputElement>;
+}) {
+  const [q, setQ] = useState("");
+  const hits = useMemo(() => searchComponents(q, 40), [q]);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { setActiveIdx(0); }, [q]);
+  useEffect(() => { (listRef.current?.children[activeIdx] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" }); }, [activeIdx]);
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setQ(""); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+  const pick = (c: DbComponent) => { onPick(c); setQ(""); };
+  return (
+    <div ref={wrapRef} className="relative">
+      <input ref={inputRef} className="input" placeholder={placeholder ?? "Search components (name / reference / type / rating)…"}
+        value={q} onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          if (!q) return;
+          if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, hits.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIdx((i) => Math.max(i - 1, 0)); }
+          else if (e.key === "Enter") { e.preventDefault(); const c = hits[activeIdx]; if (c) pick(c); }
+          else if (e.key === "Escape") setQ("");
+        }} />
+      {q && (
+        <div ref={listRef} className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-line bg-white shadow-lift">
+          {hits.length === 0 && <div className="px-3 py-2 text-xs text-muted">No matches</div>}
+          {hits.map((c, i) => (
+            <button key={c.ref + c.n} type="button"
+              className={`flex w-full items-center gap-3 px-3 py-1.5 text-left text-sm ${i === activeIdx ? "bg-brand-light" : "hover:bg-brand-tint"}`}
+              onMouseEnter={() => setActiveIdx(i)}
+              onMouseDown={() => pick(c)}>
+              <b className="w-24 shrink-0 whitespace-nowrap text-left text-brand-dark">EGP {fmtEgp(componentPriceEgp(c, factors))}</b>
+              <span className="min-w-0 flex-1 truncate">
+                <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{c.t}</span>
+                {c.n}
+                <span className="ml-1 text-[11px] text-muted">{c.ref} · {c.brand}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // New Combination: build a custom named group from any catalogue components. Name it,
 // search-and-add items (each with its own qty), then add it as a group to the active section.
-function CustomBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
-  const pool = useMemo(() => COMPONENTS, []);
+function CustomBuilder({ factors, onPreview }: { factors: LvState["factors"]; onPreview: (l: ComboLine[], tag: string) => void }) {
   const [name, setName] = useState("");
   const [comboQty, setComboQty] = useState(1); // ×N — scales the whole combination
   const [items, setItems] = useState<{ comp: DbComponent; qty: number }[]>([]);
   const [pending, setPending] = useState<DbComponent | null>(null); // picked component awaiting a qty
   const [pendQty, setPendQty] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const add = (c: DbComponent, qty: number) =>
     setItems((old) => {
       const i = old.findIndex((x) => x.comp.ref === c.ref && x.comp.n === c.n);
       if (i >= 0) { const next = [...old]; next[i] = { ...next[i], qty: next[i].qty + qty }; return next; } // bump qty if re-added
       return [...old, { comp: c, qty }];
     });
-  const confirmAdd = () => { if (!pending) return; add(pending, parseInt(pendQty, 10) || 1); setPending(null); setPendQty(""); };
+  // Adding an item returns focus to the component search (to add the next one) rather
+  // than letting focus fall onto the Combination-qty field.
+  const confirmAdd = () => { if (!pending) return; add(pending, parseInt(pendQty, 10) || 1); setPending(null); setPendQty(""); requestAnimationFrame(() => searchRef.current?.focus()); };
   const setQty = (i: number, q: number) => setItems((old) => old.map((x, j) => (j === i ? { ...x, qty: Math.max(1, q) } : x)));
   const remove = (i: number) => setItems((old) => old.filter((_, j) => j !== i));
   const label = name.trim() || "New Combination";
@@ -3069,7 +3123,8 @@ function CustomBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string)
       <input className="input h-10 w-full rounded-full text-sm sm:w-72" value={name}
         onChange={(e) => setName(e.target.value)} placeholder="New combination…" />
       <div className="mt-2">
-        <BreakerSelect label="Add component" value={null} onPick={(c) => { setPending(c); setPendQty(""); }} pool={pool} placeholder="Search all components…" />
+        <L>Add component</L>
+        <ComponentSearch inputRef={searchRef} factors={factors} placeholder="Search all components…" onPick={(c) => { setPending(c); setPendQty(""); }} />
       </div>
       {/* Qty popup — appears when a component is picked, before it's added to the list */}
       {pending && (
