@@ -3057,26 +3057,16 @@ function WdBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => 
 }
 
 function LampsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
-  return (
-    <div className="rounded-lg border border-line p-3">
-      <p className="mb-2 text-[11px] text-muted">
-        Red / Green / Yellow pilot lights (LED 230 V AC) — 1 each.
-      </p>
-      <button className="btn-ghost" onClick={() => onPreview(buildIndicationLamps(), "Indication Lamps")}>Generate set</button>
-    </div>
-  );
+  // Fixed set — generate on open so the "Add to …" step shows directly (no Generate step, no blurb).
+  useEffect(() => { onPreview(buildIndicationLamps(), "Indication Lamps"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
 }
 
 // Push Buttons: fixed green-start / red-stop pushbutton pair, added as a "Push Buttons" group.
 function PushButtonsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
-  return (
-    <div className="rounded-lg border border-line p-3">
-      <p className="mb-2 text-[11px] text-muted">
-        CP1-10G-10 (green start) + CP1-10R-01 (red stop) — 1 each.
-      </p>
-      <button className="btn-ghost" onClick={() => onPreview(buildPushButtons(), "Push Buttons")}>Generate set</button>
-    </div>
-  );
+  // Fixed set — generate on open so the "Add to …" step shows directly (no Generate step, no blurb).
+  useEffect(() => { onPreview(buildPushButtons(), "Push Buttons"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
 }
 
 // Rich component search — same behaviour as the main Components search bar: ranked hits
