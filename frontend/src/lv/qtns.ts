@@ -50,6 +50,9 @@ function normalize(state: LvState): LvState {
   state.notesGeneral ??= [...DEFAULT_GENERAL_NOTES];
   state.notesAdditional ??= [];
   state.abbItemDiscounts ??= {};
+  // Technical-Offer divider pages: default to none, and drop any whose panel is gone.
+  state.offerSeparators = (Array.isArray(state.offerSeparators) ? state.offerSeparators : [])
+    .filter((sep) => Array.isArray(state.panels) && state.panels.some((p) => p.id === sep.beforePanelId));
   if (!Array.isArray(state.commercialTerms))
     state.commercialTerms = DEFAULT_COMMERCIAL_TERMS.map((x) => ({ ...x }));
   if (!Array.isArray(state.commercialTermsAr))

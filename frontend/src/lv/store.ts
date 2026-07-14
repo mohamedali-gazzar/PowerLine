@@ -122,6 +122,13 @@ export interface LvProject {
 }
 
 export interface TermsSection { title: string; body: string }
+/** A divider page inserted into the Technical Offer — a full themed sheet with one
+ *  large centred title (e.g. "Building A"), shown right before the panel it references. */
+export interface OfferSeparator {
+  id: string;
+  beforePanelId: string;
+  text: string;
+}
 export interface LvState {
   project: LvProject;
   factors: Factors;
@@ -136,6 +143,8 @@ export interface LvState {
   // Per-item ABB discount % override (edited on the Material List), keyed by
   // reference||name. Absent → the item uses the global factors.abbDiscount.
   abbItemDiscounts: Record<string, number>;
+  // Divider/separator pages for the Technical Offer, each rendered before its panel.
+  offerSeparators?: OfferSeparator[];
 }
 
 /** Default General Terms & Conditions shown at the end of the commercial offer — editable.

@@ -89,6 +89,27 @@ function makeCoverPage(coverEl: HTMLElement): HTMLElement {
   return c;
 }
 
+// A divider/separator page → one full-bleed page (like the cover). The controlled
+// <textarea> loses its value on cloneNode, so its text is baked into a <div>.
+function makeSeparatorPage(sepEl: HTMLElement): HTMLElement {
+  const c = sepEl.cloneNode(true) as HTMLElement;
+  neutralize(c);
+  c.style.width = "210mm";
+  c.style.height = "297mm";
+  c.style.margin = "0";
+  c.style.boxShadow = "none";
+  const orig = sepEl.querySelector("textarea");
+  const clone = c.querySelector("textarea");
+  if (clone) {
+    const div = document.createElement("div");
+    div.textContent = orig?.value || "";
+    div.className = clone.className;
+    div.style.whiteSpace = "pre-wrap";
+    clone.replaceWith(div);
+  }
+  return c;
+}
+
 // Pack a list of block nodes into A4 content pages (used for the notes).
 function paginateBlocks(host: HTMLElement, headerEl: HTMLElement | null, origBlocks: HTMLElement[]): HTMLElement[] {
   const pages: HTMLElement[] = [];
@@ -174,7 +195,8 @@ export async function exportTechnicalPdf(opts: ExportOpts): Promise<void> {
   const cover = printArea.querySelector<HTMLElement>("[data-pdf-cover]");
   const header = printArea.querySelector<HTMLElement>("[data-pdf-header]");
   const notes = printArea.querySelector<HTMLElement>("[data-pdf-notes]");
-  const panels = Array.from(printArea.querySelectorAll<HTMLElement>("[data-pdf-panel]"));
+  // Panels and divider pages together, in document order (dividers sit before their panel).
+  const body = Array.from(printArea.querySelectorAll<HTMLElement>("[data-pdf-panel], [data-pdf-separator]"));
 
   // Off-screen host where page-blocks are laid out and measured, then captured.
   const host = document.createElement("div");
@@ -185,7 +207,10 @@ export async function exportTechnicalPdf(opts: ExportOpts): Promise<void> {
     const pages: HTMLElement[] = [];
     if (cover) pages.push(makeCoverPage(cover));
     if (notes) pages.push(...paginateBlocks(host, header, Array.from(notes.children) as HTMLElement[]));
-    for (const panel of panels) pages.push(...paginatePanel(host, header, panel));
+    for (const el of body) {
+      if (el.hasAttribute("data-pdf-separator")) pages.push(makeSeparatorPage(el));
+      else pages.push(...paginatePanel(host, header, el));
+    }
     if (!pages.length) return;
 
     host.append(...pages); // ensure all mounted, in order (cover wasn't mounted yet)

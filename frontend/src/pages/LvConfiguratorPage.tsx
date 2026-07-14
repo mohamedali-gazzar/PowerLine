@@ -729,6 +729,24 @@ function PageFooter({ n }: { n: number }) {
   return <div className="mt-auto pt-3 text-center text-[10.5px] font-semibold text-muted">Page {n}</div>;
 }
 
+// A Technical-Offer divider page — a full themed sheet with one large centred title
+// (e.g. "Building A"), inserted before a panel to group the offer into sections.
+function SeparatorPage({ text, onChange, onRemove }: { text: string; onChange: (t: string) => void; onRemove: () => void }) {
+  return (
+    <section data-pdf-separator className="a4-sheet relative flex flex-col items-center justify-center px-16" style={{ breakAfter: "page" }}>
+      {/* left accent bar — matches the offer cover */}
+      <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
+      <button type="button" onClick={onRemove} title="Remove this divider page"
+        className="no-print absolute right-6 top-6 rounded-full px-3 py-1 text-xs font-semibold text-muted transition hover:bg-red-50 hover:text-red-600">✕ Remove page</button>
+      <textarea value={text} onChange={(e) => onChange(e.target.value)} rows={2}
+        placeholder="Type a title (e.g. Building A)…"
+        className="w-full resize-none overflow-hidden bg-transparent text-center font-display text-6xl font-extrabold leading-[1.12] tracking-tight outline-none placeholder:text-2xl placeholder:font-semibold placeholder:text-muted/40"
+        style={{ color: "#26262a" }} />
+      <div className="mt-8 h-[6px] w-32 rounded-full" style={{ background: TRED }} />
+    </section>
+  );
+}
+
 type NotesKey = "notesGeneral" | "notesAdditional";
 function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void }) {
   // Editable notes page (after the cover): edit / add / remove lines.
@@ -737,6 +755,11 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
   const editNote = (k: NotesKey, i: number, v: string) => { const a = [...notesOf(k)]; a[i] = v; setNotes(k, a); };
   const removeNote = (k: NotesKey, i: number) => setNotes(k, notesOf(k).filter((_, j) => j !== i));
   const addNote = (k: NotesKey) => setNotes(k, [...notesOf(k), ""]);
+  // Divider pages: full themed pages inserted before a chosen panel (e.g. "Building A").
+  const separators = s.offerSeparators ?? [];
+  const addSeparator = (beforePanelId: string) => up({ offerSeparators: [...separators, { id: uid(), beforePanelId, text: "" }] });
+  const editSeparator = (id: string, text: string) => up({ offerSeparators: separators.map((x) => (x.id === id ? { ...x, text } : x)) });
+  const removeSeparator = (id: string) => up({ offerSeparators: separators.filter((x) => x.id !== id) });
   if (!s.panels.length) {
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Technical Offer is generated from them.</div>;
   }
@@ -815,9 +838,25 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
         </section>
         {s.panels.map((p, pi) => {
           const sp = specOf(p);
+          const seps = separators.filter((sep) => sep.beforePanelId === p.id);
+          const sepsBefore = separators.filter((sep) => { const j = s.panels.findIndex((pp) => pp.id === sep.beforePanelId); return j >= 0 && j <= pi; }).length;
           return (
-            <div key={p.id} data-pdf-panel className="a4-sheet flex flex-col px-8 pb-3 pt-6"
-              style={pi < s.panels.length - 1 ? { breakAfter: "page" } : undefined}>
+            <Fragment key={p.id}>
+              {seps.map((sep) => (
+                <SeparatorPage key={sep.id} text={sep.text}
+                  onChange={(t) => editSeparator(sep.id, t)} onRemove={() => removeSeparator(sep.id)} />
+              ))}
+              {/* Insert a divider page before this panel (screen only) */}
+              <div className="no-print -mb-3 flex w-[210mm] max-w-full">
+                <button type="button" onClick={() => addSeparator(p.id)}
+                  title={`Insert a divider page before “${p.name}”`}
+                  className="inline-flex items-center gap-1.5 rounded-full border-2 border-dashed bg-white px-3.5 py-1.5 text-xs font-bold shadow-sm transition hover:bg-[#FEF3ED]"
+                  style={{ borderColor: TRED, color: TRED }}>
+                  <span className="text-sm leading-none">＋</span> Page
+                </button>
+              </div>
+              <div data-pdf-panel className="a4-sheet flex flex-col px-8 pb-3 pt-6"
+                style={pi < s.panels.length - 1 ? { breakAfter: "page" } : undefined}>
               <PageHeader s={s} qtnRef={qtnRef} />
               {/* panel-data table — rounded bordered frame */}
               <div data-pdf-specblock className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
@@ -976,8 +1015,9 @@ function TechnicalTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch:
               </table>
               </div>
               {/* Page number below the table, pinned to the bottom of the page (mt-auto), centered. */}
-              <div className="mt-auto pt-3 text-center text-[10.5px] font-semibold text-muted">Page {3 + pi}</div>
-            </div>
+              <div className="mt-auto pt-3 text-center text-[10.5px] font-semibold text-muted">Page {3 + pi + sepsBefore}</div>
+              </div>
+            </Fragment>
           );
         })}
       </div>
