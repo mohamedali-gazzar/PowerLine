@@ -11,6 +11,7 @@ export default function LvQtnListPage() {
   const [qtns, setQtns] = useState<QtnListItem[]>([]);
   const [creating, setCreating] = useState(false);
   const [num, setNum] = useState("");
+  const [kind, setKind] = useState<"panels" | "spare">("panels");
   const [suggestion, setSuggestion] = useState("");
   const [err, setErr] = useState("");
 
@@ -27,6 +28,7 @@ export default function LvQtnListPage() {
 
   const onNew = () => {
     setNum(""); // start empty — the full number is typed
+    setKind("panels");
     setErr("");
     setCreating(true);
     nextQtnNumber().then(setSuggestion).catch(() => {});
@@ -34,7 +36,7 @@ export default function LvQtnListPage() {
   const confirmNew = async () => {
     if (!num.trim()) { setErr("Quotation number is required."); return; }
     try {
-      const rec = await createQtn(num);
+      const rec = await createQtn(num, kind);
       navigate(`/lv/qtn/${rec.id}`);
     } catch (e) {
       setErr((e as Error).message || "Could not create the quotation.");
@@ -117,6 +119,8 @@ export default function LvQtnListPage() {
           value={num}
           error={err}
           suggestion={suggestion}
+          kind={kind}
+          onKind={setKind}
           onChange={(v) => { setNum(v); if (err) setErr(""); }}
           onUseSuggestion={(s) => { setNum(s); setErr(""); }}
           onCancel={() => setCreating(false)}
@@ -128,10 +132,12 @@ export default function LvQtnListPage() {
 }
 
 /** Required-number dialog shown when creating a new quotation. */
-function NewQtnModal({ value, error, suggestion, onChange, onUseSuggestion, onCancel, onConfirm }: {
+function NewQtnModal({ value, error, suggestion, kind, onKind, onChange, onUseSuggestion, onCancel, onConfirm }: {
   value: string;
   error: string;
   suggestion: string;
+  kind: "panels" | "spare";
+  onKind: (k: "panels" | "spare") => void;
   onChange: (v: string) => void;
   onUseSuggestion: (s: string) => void;
   onCancel: () => void;
@@ -150,6 +156,16 @@ function NewQtnModal({ value, error, suggestion, onChange, onUseSuggestion, onCa
         className="relative w-full max-w-sm rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
         <h2 className="text-lg font-extrabold tracking-tight text-ink">New Quotation</h2>
         <p className="mt-0.5 text-xs text-muted">Type the quotation number — e.g. <b className="font-mono">{qtnPrefix()}00000</b></p>
+        <label className="label mt-4">Quotation type</label>
+        <div className="grid grid-cols-2 gap-2">
+          {([["panels", "Panels", "Full panel quotation"], ["spare", "Spare parts", "Loose components & copper"]] as ["panels" | "spare", string, string][]).map(([k, label, hint]) => (
+            <button key={k} type="button" onClick={() => onKind(k)}
+              className={`rounded-lg border-2 p-2.5 text-left transition ${kind === k ? "border-brand bg-brand-tint/50" : "border-line hover:border-brand/40"}`}>
+              <div className="text-sm font-bold text-ink">{label}</div>
+              <div className="text-[11px] text-muted">{hint}</div>
+            </button>
+          ))}
+        </div>
         <label className="label mt-4" htmlFor="qtn-number">
           Quotation number <span className="text-brand">*</span>
         </label>

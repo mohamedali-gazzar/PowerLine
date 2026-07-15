@@ -96,6 +96,7 @@ export interface LvPanel {
   copperTool: CopperTool; // RPT-1: per-rating copper lengths (Cells → Copper Tool)
   draft: string;          // RPT-1: per-panel scratchpad — never included in outputs
   highlight?: boolean;    // yellow highlighter toggle in the panel list (UI marker only)
+  spare?: boolean;        // this cell is the Spare-parts list (no sizing/specs; components + copper only)
   sections: string[];
   activeSection: string;
   components: PanelComponent[];
@@ -145,6 +146,9 @@ export interface LvState {
   abbItemDiscounts: Record<string, number>;
   // Divider/separator pages for the Technical Offer, each rendered before its panel.
   offerSeparators?: OfferSeparator[];
+  // QTN kind chosen at creation: a normal panel quotation, or a spare-parts
+  // quotation whose single "Spare parts" cell drives all offers.
+  kind?: "panels" | "spare";
 }
 
 /** Default General Terms & Conditions shown at the end of the commercial offer — editable.
@@ -293,6 +297,12 @@ export function newPanel(_n?: number): LvPanel {
   };
 }
 
+/** The single "Spare parts" cell of a spare-parts QTN — a stripped panel that holds
+ *  only components/enclosures (as rows) + a manual copper weight (mainBusbarKg). */
+export function newSparePanel(): LvPanel {
+  return { ...newPanel(), name: "Spare parts", spare: true, sections: ["Spare parts"], activeSection: "Spare parts" };
+}
+
 export function initialState(): LvState {
   return {
     project: {
@@ -312,6 +322,7 @@ export function initialState(): LvState {
     commercialTerms: DEFAULT_COMMERCIAL_TERMS.map((s) => ({ ...s })),
     commercialTermsAr: DEFAULT_COMMERCIAL_TERMS_AR.map((s) => ({ ...s })),
     abbItemDiscounts: {},
+    kind: "panels",
   };
 }
 /** Effective ABB-discount key for a component / material row (reference, else name). */
@@ -485,6 +496,22 @@ export const buswayCopperMult = (note?: string): number =>
   /busway/i.test(note ?? "") ? BUSWAY_COPPER_FACTOR : 1;
 
 export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, number>): PanelCalc {
+  // Spare-parts cell: components/enclosures (as rows) + manual copper weight only —
+  // no enclosure sizing, kits, connection copper or operations markup.
+  if (p.spare) {
+    let compCost = 0;
+    for (const c of p.components) {
+      if (isSpacer(c)) continue;
+      const ov = abbDiscounts?.[abbKey(c)];
+      compCost += componentPriceEgp(c, f, ov != null ? ov / 100 : undefined) * c.qty;
+    }
+    const busbarKg = p.mainBusbarKg || 0;
+    const busbarCost = busbarKg * f.copper;
+    const unitCost = compCost + busbarCost;
+    const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
+    const sellUnit = factor > 0 ? unitCost / factor : unitCost;
+    return { compCost, enclCost: 0, cuConnCost: 0, busbarCost, busbarKg, kits: 0, cuWeight: 0, unitCost, unitCostOps: unitCost, sellUnit, totalSell: sellUnit * p.qty };
+  }
   let compCost = 0;
   let cuWeight = 0;
   // Cu connections use the cell copper column (cuC) in Cells mode, else the panel column (cuP).
@@ -536,6 +563,7 @@ export function grandTotals(s: LvState) {
   const vat = sell * s.factors.vat;
   return { sell, vat, incl: sell + vat };
 }
+
 
 // ── Material List (RPT-04) ───────────────────────────────────────────────────
 // Aggregate across all panels (× panel qty), group identical references, and
@@ -639,6 +667,8 @@ export function exportBlockers(s: LvState): ExportCheck[] {
       if (isSpacer(c) || c.type === "Space") continue;
       if (itemPriceEgp(c, s) <= 0) zeroPrice.push(`${tag}: ${c.name || c.ref || "item"} — 0 EGP`);
     }
+    // Spare-parts cell: no sizing / cells / busbar rules to check.
+    if (p.spare) return;
     // 2) No cells (Cells mode, ignoring the fixed Sides row)
     if (p.sizingMode === "cells" && !p.cellConfig.rows.some((r) => r.qty > 0 && !r.locked)) {
       noCells.push(`${tag}: no cell quantity selected`);

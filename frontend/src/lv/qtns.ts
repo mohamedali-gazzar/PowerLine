@@ -6,6 +6,7 @@
 import { api, type QtnSummaryInput } from "../api";
 import {
   initialState,
+  newSparePanel,
   grandTotals,
   meteringBeforeOutgoings,
   DEFAULT_GENERAL_NOTES,
@@ -50,6 +51,9 @@ function normalize(state: LvState): LvState {
   state.notesGeneral ??= [...DEFAULT_GENERAL_NOTES];
   state.notesAdditional ??= [];
   state.abbItemDiscounts ??= {};
+  // QTN kind: legacy QTNs (no kind) are panel quotations; a spare-parts QTN is one
+  // whose cells are all spare cells.
+  if (state.kind !== "spare") state.kind = "panels";
   // Technical-Offer divider pages: default to none, and drop any whose panel is gone.
   state.offerSeparators = (Array.isArray(state.offerSeparators) ? state.offerSeparators : [])
     .filter((sep) => Array.isArray(state.panels) && state.panels.some((p) => p.id === sep.beforePanelId));
@@ -138,8 +142,15 @@ export async function getQtn(id: string): Promise<QtnRecord | null> {
   }
 }
 
-export async function createQtn(number: string): Promise<QtnRecord> {
+export async function createQtn(number: string, kind: "panels" | "spare" = "panels"): Promise<QtnRecord> {
   const state = initialState();
+  state.kind = kind;
+  if (kind === "spare") {
+    // A spare-parts QTN opens with its single "Spare parts" cell, selected.
+    const sp = newSparePanel();
+    state.panels = [sp];
+    state.selectedId = sp.id;
+  }
   return toRecord(await api.qtns.create(number.trim(), state, summaryOf(state)));
 }
 

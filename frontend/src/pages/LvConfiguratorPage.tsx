@@ -7,10 +7,10 @@ import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
   PANEL_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
   COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp,
-  type DbComponent,
+  type DbComponent, type DbEnclosure,
 } from "../lv/catalog";
 import {
-  newPanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
+  newPanel, newSparePanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, busbarBarAreaMm2, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck,
@@ -35,8 +35,8 @@ import {
   COPPER_RATINGS, csaFor, copperWeight, copperTotal, roundUpRating, ratingForCsa, pctOf,
 } from "../lv/copper";
 
-type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material";
-const TABS: Tab[] = ["project", "pricing", "panels", "technical", "commercial", "material"];
+type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material" | "spare";
+const TABS: Tab[] = ["project", "pricing", "panels", "technical", "commercial", "material", "spare"];
 
 /** Effective combination group per component (id → group). A component keeps its
  *  own group; an ungrouped one sitting between two same-group items (in the same
@@ -214,7 +214,10 @@ export default function LvConfiguratorPage() {
         setHist({ past: [], present: r.state, future: [] });
         setQtnNum(r.number);
         setSubmitted(r.submitted);
-        if (!localStorage.getItem(tabKey) && r.state.panels.length) setTab("panels");
+        if (!localStorage.getItem(tabKey)) {
+          if (r.state.kind === "spare") setTab("spare");
+          else if (r.state.panels.length) setTab("panels");
+        }
         setLoading(false);
       })
       .catch(() => { if (alive) navigate("/lv", { replace: true }); });
@@ -286,9 +289,11 @@ export default function LvConfiguratorPage() {
 
   const totals = useMemo(() => grandTotals(s), [s]);
   const sel = s.panels.find((p) => p.id === s.selectedId) ?? null;
+  const isSpareQtn = s.kind === "spare";
   // RPT-1: block every offer/output tab until each panel has its mandatory fields.
+  // Spare cells carry no rating/enclosure, so they're exempt from the panel checks.
   const offerIssues = s.panels.flatMap((p, i) =>
-    panelInvalid(p).map((msg) => `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}: ${msg}`));
+    p.spare ? [] : panelInvalid(p).map((msg) => `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}: ${msg}`));
 
   // immutable update helpers
   const up = (patch: Partial<LvState>) => apply((old) => ({ ...old, ...patch }));
@@ -299,6 +304,12 @@ export default function LvConfiguratorPage() {
     const p = newPanel(s.panels.length + 1);
     apply((old) => ({ ...old, panels: [...old.panels, p], selectedId: p.id }));
     setTab("panels");
+  };
+  // A spare-parts QTN adds more "Spare parts" cells the same way panels are added.
+  const addSpareCell = () => {
+    const c = newSparePanel();
+    apply((old) => ({ ...old, panels: [...old.panels, c], selectedId: c.id }));
+    setTab("spare");
   };
   const removePanel = (id: string) =>
     apply((old) => {
@@ -327,8 +338,9 @@ export default function LvConfiguratorPage() {
   };
   // "Open in Technical Offer" from a panel: switch to the offer tab, then scroll that panel's page into view.
   const openPanelInOffer = (panelId: string) => { jumpPanelRef.current = panelId; goToTab("technical"); };
-  // "Back to panel" from a Technical-Offer page: select that panel and switch to the Panels tab.
-  const openPanelInPanels = (panelId: string) => { up({ selectedId: panelId }); goToTab("panels"); };
+  // "Back to panel" from a Technical-Offer page: select that panel and switch to the
+  // Panels tab (or the Spare Parts editor on a spare-parts QTN).
+  const openPanelInPanels = (panelId: string) => { up({ selectedId: panelId }); goToTab(isSpareQtn ? "spare" : "panels"); };
   useLayoutEffect(() => {
     const jump = jumpPanelRef.current;
     if (jump && tab === "technical") {
@@ -431,7 +443,9 @@ export default function LvConfiguratorPage() {
           Negative margins let the bg band span the full content width; py keeps a
           solid band so content scrolls cleanly underneath. */}
       <div className="sticky top-0 z-30 -mx-4 mb-4 flex flex-wrap gap-1.5 border-b border-line/60 bg-surface px-4 py-2.5 no-print sm:-mx-6 sm:px-6">
-        {([["project", "Project"], ["pricing", "Pricing Settings"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"]] as [Tab, string][]).map(([t, label]) => (
+        {((isSpareQtn
+          ? [["project", "Project"], ["pricing", "Pricing Settings"], ["spare", "Spare Parts"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"]]
+          : [["project", "Project"], ["pricing", "Pricing Settings"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"]]) as [Tab, string][]).map(([t, label]) => (
           <button key={t} onClick={() => goToTab(t)}
             className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
               tab === t ? "border-brand bg-brand text-white shadow-soft" : "border-line bg-white text-muted hover:border-brand/40"
@@ -444,9 +458,14 @@ export default function LvConfiguratorPage() {
       <div ref={navRef} onKeyDown={onFieldArrowNav}>
         {tab === "project" && <ProjectTab s={s} up={up} qtnNum={qtnNum} onRenameQtn={renameQtnNumber} />}
         {tab === "pricing" && <PricingTab s={s} up={up} />}
-        {tab === "panels" && (
+        {tab === "panels" && !isSpareQtn && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
             onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer} />
+        )}
+        {tab === "spare" && isSpareQtn && (
+          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
+            onAdd={addSpareCell} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
+            addLabel="+ Add cell" emptyLabel="No spare cells yet." emptyAddLabel="+ Add your first cell" />
         )}
         {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} />)}
         {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} />)}
@@ -906,7 +925,9 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                   </tr>
                 </tbody>
               </table>
-              {/* spec grid — 2 label/value pairs per row, like the reference */}
+              {/* spec grid — 2 label/value pairs per row, like the reference.
+                  A spare-parts cell has no specs, so only its item bar shows. */}
+              {!p.spare && (
               <table className="w-full table-fixed border-collapse">
                 <colgroup>
                   <col className="w-[18%]" />
@@ -933,6 +954,7 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                   ))}
                 </tbody>
               </table>
+              )}
               </div>{/* /panel-data frame */}
               <div className="h-3" aria-hidden />{/* white space between the two tables */}
               {/* components table — rounded bordered frame. overflow-hidden clips the corners; note
@@ -1364,12 +1386,228 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
 }
 
 // ── Panels tab ───────────────────────────────────────────────────────────────
-function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer }: {
+// ── Spare Parts cell editor ──────────────────────────────────────────────────
+// The stripped editor for a spare-parts QTN's single "Spare parts" cell: a name,
+// two search bars (components · panels & cells / enclosures) that add priced rows,
+// and a manual copper weight (kg × the copper rate). No sizing, copper tool or
+// panel details. Its price flows through calcPanel into every offer + the totals.
+function spareEnclosureRow(e: DbEnclosure): PanelComponent {
+  return {
+    id: uid(), section: "Spare parts", name: `${e.fam} — ${e.name}`, desc: e.name, ref: e.ref,
+    type: "Enclosure", brand: e.fam, rating: e.ip || "", eur: e.eur, egp: e.egp, poles: 0,
+    cuP: 0, cuC: 0, stock: "", qty: 1, adj: "", comment: "", note: "",
+  };
+}
+// Enclosure search bar — a twin of ComponentSearch (same dropdown, arrow-nav, price
+// badge) but over the enclosure catalog (panels & cells).
+function EnclosureSearch({ factors, onPick, placeholder, inputRef }: {
+  factors: LvState["factors"]; onPick: (e: DbEnclosure) => void; placeholder?: string; inputRef?: React.RefObject<HTMLInputElement>;
+}) {
+  const [q, setQ] = useState("");
+  const hits = useMemo(
+    () => (q.trim()
+      ? rankSearchOptions(ENCLOSURES.map((e) => ({ label: `${e.fam} — ${e.name}`, hint: `${e.ref} ${e.ip}`, e })), q, 40).map((o) => o.e)
+      : []),
+    [q],
+  );
+  const [activeIdx, setActiveIdx] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { setActiveIdx(0); }, [q]);
+  useEffect(() => { (listRef.current?.children[activeIdx] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" }); }, [activeIdx]);
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setQ(""); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+  const pick = (e: DbEnclosure) => { onPick(e); setQ(""); };
+  return (
+    <div ref={wrapRef} className="relative">
+      <input ref={inputRef} className="input" placeholder={placeholder ?? "Search enclosures (family / name / reference)…"}
+        value={q} onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          if (!q) return;
+          if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, hits.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIdx((i) => Math.max(i - 1, 0)); }
+          else if (e.key === "Enter") { e.preventDefault(); const en = hits[activeIdx]; if (en) pick(en); }
+          else if (e.key === "Escape") setQ("");
+        }} />
+      {q && (
+        <div ref={listRef} className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-line bg-white shadow-lift">
+          {hits.length === 0 && <div className="px-3 py-2 text-xs text-muted">No matches</div>}
+          {hits.map((en, i) => (
+            <button key={en.ref + en.name} type="button"
+              className={`flex w-full items-center gap-3 px-3 py-1.5 text-left text-sm ${i === activeIdx ? "bg-brand-light" : "hover:bg-brand-tint"}`}
+              onMouseEnter={() => setActiveIdx(i)}
+              onMouseDown={() => pick(en)}>
+              <b className="w-24 shrink-0 whitespace-nowrap text-left text-brand-dark">EGP {fmtEgp(enclosurePriceEgp(en, factors))}</b>
+              <span className="min-w-0 flex-1 truncate">
+                <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{en.fam}</span>
+                {en.name}
+                <span className="ml-1 text-[11px] text-muted">{en.ref}{en.ip ? ` · ${en.ip}` : ""}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+function SpareEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: string, patch: Partial<LvPanel>) => void }) {
+  const f = s.factors;
+  const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
+  const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
+  const priceOf = (c: PanelComponent) => componentPriceEgp(c, f);
+
+  // Picking a result opens a small qty popup before the row is added — the same flow
+  // as the panel's component search. preventScroll keeps the page from jumping, and
+  // focus returns to the bar that was used so the next item can be typed right away.
+  const [pending, setPending] = useState<PanelComponent | null>(null);
+  const [pendQty, setPendQty] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const encRef = useRef<HTMLInputElement>(null);
+  const qtyRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (pending) { qtyRef.current?.focus({ preventScroll: true }); qtyRef.current?.select(); } }, [pending]);
+  const pickComp = (c: DbComponent) => { setPending(toPanelComponent(c, "Spare parts", 1)); setPendQty(""); };
+  const pickEnc = (e: DbEnclosure) => { setPending(spareEnclosureRow(e)); setPendQty(""); };
+  const confirmAdd = () => {
+    if (!pending) return;
+    const wasEnc = pending.type === "Enclosure";
+    u({ components: [...p.components, { ...pending, qty: Math.max(1, parseInt(pendQty, 10) || 1) }] });
+    setPending(null); setPendQty("");
+    requestAnimationFrame(() => (wasEnc ? encRef.current : searchRef.current)?.focus({ preventScroll: true }));
+  };
+  const cancelAdd = () => { setPending(null); setPendQty(""); };
+  const setQty = (id: string, n: number) => u({ components: p.components.map((c) => (c.id === id ? { ...c, qty: Math.max(1, Math.round(n) || 1) } : c)) });
+  const delRow = (id: string) => u({ components: p.components.filter((c) => c.id !== id) });
+
+  const rows = p.components;
+  return (
+    <div className="space-y-4 animate-fade-up">
+      {/* Header + name + live total */}
+      <div className="card p-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-[240px] flex-1">
+            <h2 className="sec-head mb-1 flex items-center gap-2">🧰 Spare Parts</h2>
+            <p className="text-xs text-muted">
+              Loose components &amp; enclosures plus copper by weight. No sizing or panel details — its price
+              feeds the Technical, Commercial and Material offers.
+            </p>
+            <div className="mt-3 max-w-sm">
+              <L>Name</L>
+              <input className="input" value={p.name} placeholder="Spare parts"
+                onChange={(e) => u({ name: e.target.value })} />
+            </div>
+          </div>
+          <div className="rounded-xl bg-brand-light p-3 text-right text-brand-dark">
+            <div className="text-[11px] font-semibold uppercase tracking-wide">Spare parts total (selling)</div>
+            <div className="text-xl font-extrabold">{fmtEgp(calc.sellUnit)} EGP</div>
+            <div className="text-[11px] text-muted">{f.usd > 0 ? `${fmtEgp(calc.sellUnit / f.usd)} USD` : ""}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Two search bars: components · panels & cells — same bar as the panel editor. */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="card p-4">
+          <L>Add component</L>
+          <ComponentSearch inputRef={searchRef} factors={f} onPick={pickComp} placeholder="Search components (name / reference / type / rating)…" />
+        </div>
+        <div className="card p-4">
+          <L>Add panel / cell (enclosure)</L>
+          <EnclosureSearch inputRef={encRef} factors={f} onPick={pickEnc} placeholder="Search enclosures (family / name / reference)…" />
+        </div>
+      </div>
+
+      {/* Qty popup — opened when a component/enclosure is picked, before it's added. */}
+      {pending && (
+        <div className="rounded-lg border border-brand/50 bg-white p-3 shadow-sm">
+          <p className="mb-2 text-xs">
+            <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{pending.type === "Enclosure" ? "Enclosure" : pending.type || "Item"}</span>
+            <span className="font-bold text-ink">{pending.name}</span>
+            <span className="ml-1 text-[11px] text-muted">{pending.ref}{pending.brand ? ` · ${pending.brand}` : ""} · {fmtEgp(priceOf(pending))} EGP</span>
+          </p>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-muted">Qty</label>
+            <input ref={qtyRef} inputMode="numeric" className="input h-9 w-24" placeholder="1" value={pendQty}
+              onChange={(e) => setPendQty(e.target.value.replace(/[^\d]/g, ""))}
+              onKeyDown={(e) => { if (e.key === "Enter") confirmAdd(); if (e.key === "Escape") cancelAdd(); }} />
+            <button type="button" className="btn-primary h-9 px-4 text-sm" onClick={confirmAdd}>Add</button>
+            <button type="button" className="btn-ghost h-9 px-3 text-sm" onClick={cancelAdd}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Item list */}
+      <div className="card p-0 overflow-hidden">
+        <table className="w-full text-sm">
+          <colgroup><col className="w-[46%]" /><col className="w-[18%]" /><col className="w-[12%]" /><col className="w-[10%]" /><col className="w-[12%]" /><col className="w-8" /></colgroup>
+          <thead>
+            <tr className="border-b border-line bg-surface text-left text-[11px] uppercase tracking-wide text-muted">
+              <th className="px-3 py-2 font-semibold">Description</th>
+              <th className="px-3 py-2 font-semibold">Reference</th>
+              <th className="px-3 py-2 font-semibold">Type / Brand</th>
+              <th className="px-2 py-2 text-center font-semibold">Qty</th>
+              <th className="px-3 py-2 text-right font-semibold">Line total</th>
+              <th className="px-1 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr><td colSpan={6} className="px-3 py-6 text-center text-muted">No spare items yet — search above to add components or enclosures.</td></tr>
+            )}
+            {rows.map((c) => (
+              <tr key={c.id} className="border-b border-line/50 last:border-0">
+                <td className="px-3 py-1.5 font-medium text-ink">{c.name}</td>
+                <td className="px-3 py-1.5 text-muted">{c.ref || "—"}</td>
+                <td className="px-3 py-1.5 text-muted">{c.type === "Enclosure" ? c.brand : c.brand || c.type || "—"}</td>
+                <td className="px-2 py-1.5 text-center">
+                  <input className="input h-7 w-14 px-1.5 text-center text-xs" inputMode="numeric" value={c.qty}
+                    onChange={(e) => setQty(c.id, parseInt(e.target.value.replace(/[^\d]/g, ""), 10) || 1)} />
+                </td>
+                <td className="px-3 py-1.5 text-right font-semibold text-ink">{fmtEgp(priceOf(c) * c.qty)}</td>
+                <td className="px-1 py-1.5 text-center">
+                  <button onClick={() => delRow(c.id)} title="Remove" className="rounded p-0.5 text-red-500 hover:bg-red-50">✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Copper by weight + cost breakdown */}
+      <div className="card p-5">
+        <h2 className="sec-head">Copper &amp; totals</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <L>Copper (KG)</L>
+            <input className="input" type="number" min={0} step={0.5} value={p.mainBusbarKg || ""} placeholder="0"
+              onChange={(e) => u({ mainBusbarKg: parseFloat(e.target.value) || 0 })} />
+            <p className="mt-1 text-[11px] text-muted">× {fmtEgp(f.copper)} EGP/KG</p>
+          </div>
+          <div className="rounded-lg bg-surface p-2.5 text-sm">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5 text-sm">Copper<br /><b>{fmtEgp(calc.busbarCost)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5 text-sm">Unit cost<br /><b>{fmtEgp(calc.unitCost)} EGP</b></div>
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg bg-brand-light p-2.5 text-sm text-brand-dark">Selling (÷ {p.sellFactor > 0 ? p.sellFactor : f.factor})<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
+          <div className="rounded-lg bg-brand p-2.5 text-sm text-white">Selling (USD)<br /><b>{fmtEgp(f.usd > 0 ? calc.sellUnit / f.usd : 0)} USD</b></div>
+        </div>
+        <p className="mt-3 text-[11px] text-muted">
+          Generate the itemised list, prices and procurement from the Technical, Commercial and Material tabs above.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
   s: LvState; sel: LvPanel | null;
   up: (p: Partial<LvState>) => void;
   upPanel: (id: string, p: Partial<LvPanel>) => void;
   onAdd: () => void; onDel: (id: string) => void; onClone: (id: string) => void;
   onOpenInOffer: (id: string) => void;
+  addLabel?: string; emptyLabel?: string; emptyAddLabel?: string;
 }) {
   // Drag-and-drop reorder state (hooks must precede the early return).
   const [dragId, setDragId] = useState<string | null>(null);
@@ -1378,8 +1616,8 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer }
     return (
       <div className="card p-12 text-center animate-fade-up">
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-brand-tint text-2xl">⚡</div>
-        <p className="text-muted">No panels yet.</p>
-        <button className="btn-primary mt-4" onClick={onAdd}>+ Add your first panel</button>
+        <p className="text-muted">{emptyLabel}</p>
+        <button className="btn-primary mt-4" onClick={onAdd}>{emptyAddLabel}</button>
       </div>
     );
   }
@@ -1458,12 +1696,15 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer }
             </div>
           );
         })}
-        <button className="btn-ghost mt-1 w-full" onClick={onAdd}>+ Add panel</button>
+        <button className="btn-ghost mt-1 w-full" onClick={onAdd}>{addLabel}</button>
       </div>
 
-      {/* editor — its own scroll area so the panel list and editor scroll independently */}
+      {/* editor — its own scroll area so the panel list and editor scroll independently.
+          A spare cell uses the stripped SpareEditor; every other cell the full PanelEditor. */}
       <div className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
-        {sel && <PanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />}
+        {sel && (sel.spare
+          ? <SpareEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />
+          : <PanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />)}
       </div>
     </div>
   );
