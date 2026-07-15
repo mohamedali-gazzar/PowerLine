@@ -2368,7 +2368,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                   u({ activeSection: next });
                   requestAnimationFrame(() => (document.querySelector(`button[data-section="${CSS.escape(next)}"]`) as HTMLElement | null)?.focus());
                 }}
-                title={dragId ? `Move component to “${sec}”` : undefined}>{sec}</button>
+                title={dragId ? `Move component to “${sec}”` : sec}
+                className="max-w-[160px] truncate text-left align-middle">{sec}</button>
               {!isFixed(sec) && (
                 <span className="ml-1 inline-flex items-center gap-0.5 border-l border-line/70 pl-1">
                   <button type="button" title="Duplicate section with its components" onClick={() => duplicateSection(sec)}
