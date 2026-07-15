@@ -19,7 +19,7 @@ import {
   type SalesPerson,
 } from "./catalog";
 import { defaultCellConfig, type CellConfig } from "./cells";
-import { roundUpRating, pctOf, type CopperTool } from "./copper";
+import { roundUpRating, pctOf, csaFor, ratingForCsa, type CopperTool } from "./copper";
 
 let uidCtr = 0;
 export const uid = () => `u${++uidCtr}_${Math.random().toString(36).slice(2, 7)}`;
@@ -647,11 +647,14 @@ export function exportBlockers(s: LvState): ExportCheck[] {
     const reasons: string[] = [];
     if (p.sizingMode === "cells" && (p.ratingA || 0) > 0) {
       const inc = p.ratingA;
+      const phaseR = roundUpRating(inc);
+      // Neutral / Earth are sized from the phase busbar's C.S.A (round the % up to the next bar).
+      const phaseCsa = csaFor(p.cellConfig.type, phaseR);
       const t = p.copperTool ?? {};
       const need: [string, "p" | "n" | "e", number][] = [
-        ["Phase", "p", roundUpRating(inc)],
-        ["Neutral", "n", roundUpRating(inc * pctOf(p.neutral))],
-        ["Earth", "e", roundUpRating(inc * pctOf(p.earth))],
+        ["Phase", "p", phaseR],
+        ["Neutral", "n", ratingForCsa(p.cellConfig.type, pctOf(p.neutral) * phaseCsa)],
+        ["Earth", "e", ratingForCsa(p.cellConfig.type, pctOf(p.earth) * phaseCsa)],
       ];
       const unfilled = need.filter(([, k, r]) => !((t[String(r)]?.[k] || 0) > 0)).map(([lbl]) => lbl);
       if (unfilled.length) reasons.push(`${unfilled.join(" / ")} length not entered`);

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type HistoryItem, type WeekStat } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { createQtn } from "../lv/qtns";
-import { QtnNumberInput, qtnPrefix, qtnSuffix } from "../components/QtnNumberInput";
+import { QtnNumberInput, qtnPrefix } from "../components/QtnNumberInput";
 
 /** Post-login home: profile, weekly performance, QTN history, and quick actions
  *  (New QTN → RMU/LV, plus the Kiosk tool). */
@@ -231,13 +231,13 @@ function ProfilePhoto() {
 function NewQtnChooser({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"choose" | "lv" | "rmu">("choose");
-  const [number, setNumber] = useState(qtnPrefix());
+  const [number, setNumber] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const start = (m: "lv" | "rmu") => { setNumber(qtnPrefix()); setErr(""); setMode(m); };
+  const start = (m: "lv" | "rmu") => { setNumber(""); setErr(""); setMode(m); };
   const create = async () => {
-    if (!qtnSuffix(number).trim()) { setErr("Enter the quotation number."); return; }
+    if (!number.trim()) { setErr("Enter the quotation number."); return; }
     if (mode === "rmu") {
       // RMU offers are created in the offer form; carry the QTN into its cover field.
       navigate(`/offers/new?qtn=${encodeURIComponent(number)}`);
@@ -287,7 +287,7 @@ function NewQtnChooser({ onClose }: { onClose: () => void }) {
           <>
             <h2 className="text-lg font-extrabold tracking-tight">New {mode === "rmu" ? "RMU" : "LV"} Quotation</h2>
             <p className="mt-0.5 text-xs text-muted">
-              <b className="font-mono">{qtnPrefix()}</b> is fixed — just type the number after it.
+              Type the quotation number — e.g. <b className="font-mono">{qtnPrefix()}00000</b>
             </p>
             <label className="label mt-4" htmlFor="qtn-number">Quotation number <span className="text-brand">*</span></label>
             <QtnNumberInput id="qtn-number" autoFocus value={number}
@@ -295,7 +295,7 @@ function NewQtnChooser({ onClose }: { onClose: () => void }) {
             {err && <p className="mt-1.5 text-xs font-semibold text-red-600">{err}</p>}
             <div className="mt-5 flex justify-between">
               <button className="btn-ghost" onClick={() => setMode("choose")}>← Back</button>
-              <button className="btn-primary" onClick={create} disabled={busy || !qtnSuffix(number).trim()}>
+              <button className="btn-primary" onClick={create} disabled={busy || !number.trim()}>
                 {busy ? "Creating…" : mode === "rmu" ? "Continue" : "Create QTN"}
               </button>
             </div>

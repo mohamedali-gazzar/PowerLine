@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listQtns, createQtn, deleteQtn, duplicateQtn, nextQtnNumber, type QtnListItem } from "../lv/qtns";
 import { fmtEgp, DEFAULT_FACTORS } from "../lv/catalog";
-import { QtnNumberInput, qtnPrefix, qtnSuffix } from "../components/QtnNumberInput";
+import { QtnNumberInput, qtnPrefix } from "../components/QtnNumberInput";
 
 /** LV landing page — the list of quotations. "+ New QTN" opens a fresh
  *  workspace (Project / Pricing / Panels / Technical / Commercial / Material). */
@@ -10,7 +10,7 @@ export default function LvQtnListPage() {
   const navigate = useNavigate();
   const [qtns, setQtns] = useState<QtnListItem[]>([]);
   const [creating, setCreating] = useState(false);
-  const [num, setNum] = useState(qtnPrefix());
+  const [num, setNum] = useState("");
   const [suggestion, setSuggestion] = useState("");
   const [err, setErr] = useState("");
 
@@ -26,13 +26,13 @@ export default function LvQtnListPage() {
   }, []);
 
   const onNew = () => {
-    setNum(qtnPrefix()); // QTN-YY- prefix shown; year is a dropdown, suffix typed
+    setNum(""); // start empty — the full number is typed
     setErr("");
     setCreating(true);
     nextQtnNumber().then(setSuggestion).catch(() => {});
   };
   const confirmNew = async () => {
-    if (!qtnSuffix(num).trim()) { setErr("Quotation number is required."); return; }
+    if (!num.trim()) { setErr("Quotation number is required."); return; }
     try {
       const rec = await createQtn(num);
       navigate(`/lv/qtn/${rec.id}`);
@@ -149,7 +149,7 @@ function NewQtnModal({ value, error, suggestion, onChange, onUseSuggestion, onCa
       <div role="dialog" aria-modal="true" aria-label="New quotation"
         className="relative w-full max-w-sm rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
         <h2 className="text-lg font-extrabold tracking-tight text-ink">New Quotation</h2>
-        <p className="mt-0.5 text-xs text-muted"><b className="font-mono">{qtnPrefix()}</b> is fixed — just type the number after it.</p>
+        <p className="mt-0.5 text-xs text-muted">Type the quotation number — e.g. <b className="font-mono">{qtnPrefix()}00000</b></p>
         <label className="label mt-4" htmlFor="qtn-number">
           Quotation number <span className="text-brand">*</span>
         </label>
@@ -164,7 +164,7 @@ function NewQtnModal({ value, error, suggestion, onChange, onUseSuggestion, onCa
         )}
         <div className="mt-5 flex justify-end gap-2">
           <button className="btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className="btn-primary" onClick={onConfirm} disabled={!qtnSuffix(value).trim()}>Create QTN</button>
+          <button className="btn-primary" onClick={onConfirm} disabled={!value.trim()}>Create QTN</button>
         </div>
       </div>
     </div>

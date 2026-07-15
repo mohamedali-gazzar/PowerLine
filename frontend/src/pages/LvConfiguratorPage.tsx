@@ -32,7 +32,7 @@ import {
   proEIp31Disabled, retable, defaultCellConfig, type CellType,
 } from "../lv/cells";
 import {
-  COPPER_RATINGS, csaFor, copperWeight, copperTotal, roundUpRating, pctOf,
+  COPPER_RATINGS, csaFor, copperWeight, copperTotal, roundUpRating, ratingForCsa, pctOf,
 } from "../lv/copper";
 
 type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material";
@@ -1350,12 +1350,12 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
         Exchange rates, material costs, operations and margins — drives the EGP selling price live.
       </p>
       <div className="grid gap-3 sm:grid-cols-3">
-        {num("euro", "EUR → EGP")}
-        {num("usd", "USD → EGP")}
+        {num("factor", "Selling factor", { hint: "cost ÷ factor = selling price" })}
         {num("copper", "Copper (EGP/KG)", { step: 1 })}
         {num("sheetMetal", "Sheet metal (EGP/KG)", { step: 1 })}
+        {num("usd", "USD → EGP")}
+        {num("euro", "EUR → EGP")}
         {num("operations", "Operations (%)", { pct: true })}
-        {num("factor", "Selling factor", { hint: "cost ÷ factor = selling price" })}
         {num("abbDiscount", "ABB discount (%)", { pct: true, hint: "Applied to ABB products ONLY (RPT-01)" })}
         {num("vat", "VAT (%)", { pct: true })}
       </div>
@@ -3562,8 +3562,11 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
   };
   const inc = p.ratingA || 0;
   const hiP = inc ? roundUpRating(inc) : 0;
-  const hiN = inc ? roundUpRating(inc * pctOf(p.neutral)) : 0;
-  const hiE = inc ? roundUpRating(inc * pctOf(p.earth)) : 0;
+  // Neutral / Earth are sized from the phase busbar's C.S.A (not the rating): take the
+  // % of the phase C.S.A, then round up to the next standard bar.
+  const phaseCsa = hiP ? csaFor(type, hiP) : 0;
+  const hiN = phaseCsa ? ratingForCsa(type, pctOf(p.neutral) * phaseCsa) : 0;
+  const hiE = phaseCsa ? ratingForCsa(type, pctOf(p.earth) * phaseCsa) : 0;
   const total = copperTotal(type, tool);
   const cell = (rating: number, key: "p" | "n" | "e", hi: boolean, color: string) => {
     const v = tool[String(rating)]?.[key] ?? 0;
@@ -3585,7 +3588,7 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
           <span style={{ color: "#dc2626" }}>Phase {hiP} A</span> ·{" "}
           <span style={{ color: "#111827" }}>Neutral {hiN} A</span> ·{" "}
           <span style={{ color: "#16a34a" }}>Earth {hiE} A</span>
-          <span className="font-normal text-muted"> — from {inc} A incomer (N {Math.round(pctOf(p.neutral) * 100)}% · E {Math.round(pctOf(p.earth) * 100)}%)</span>
+          <span className="font-normal text-muted"> — {inc} A incomer · N {Math.round(pctOf(p.neutral) * 100)}% · E {Math.round(pctOf(p.earth) * 100)}% of phase C.S.A ({phaseCsa} mm²)</span>
         </p>
       ) : (
         <p className="mb-2 text-[11px] text-muted">Set the panel's Incoming C.B rating to get Phase / Neutral / Earth recommendations.</p>

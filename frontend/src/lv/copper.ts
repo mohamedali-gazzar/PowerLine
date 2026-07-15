@@ -23,6 +23,14 @@ export function csaFor(type: CellType, rating: number): number {
   return (type === "Pro-E" ? CSA_PRO_E : CSA_PLP)[rating] ?? 0;
 }
 
+/** Smallest standard rating whose bar C.S.A is ≥ the target area (mm²) — i.e. round a
+ *  neutral/earth C.S.A up to the next available bar. Returns 0 for a non-positive target. */
+export function ratingForCsa(type: CellType, targetCsa: number): number {
+  if (targetCsa <= 0) return 0;
+  for (const r of COPPER_RATINGS) if (csaFor(type, r) >= targetCsa - 1e-9) return r; // CSA is non-decreasing
+  return COPPER_RATINGS[COPPER_RATINGS.length - 1];
+}
+
 export interface CopperLen { p: number; n: number; e: number } // lengths in mm
 export type CopperTool = Record<string, CopperLen>;            // keyed by rating
 
