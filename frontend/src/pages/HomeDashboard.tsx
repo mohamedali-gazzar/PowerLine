@@ -232,11 +232,10 @@ function NewQtnChooser({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"choose" | "lv" | "rmu">("choose");
   const [number, setNumber] = useState("");
-  const [lvKind, setLvKind] = useState<"panels" | "spare">("panels");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const start = (m: "lv" | "rmu") => { setNumber(""); setErr(""); setLvKind("panels"); setMode(m); };
+  const start = (m: "lv" | "rmu") => { setNumber(""); setErr(""); setMode(m); };
   const create = async () => {
     if (!number.trim()) { setErr("Enter the quotation number."); return; }
     if (mode === "rmu") {
@@ -246,7 +245,7 @@ function NewQtnChooser({ onClose }: { onClose: () => void }) {
     }
     setBusy(true);
     try {
-      const rec = await createQtn(number, lvKind);
+      const rec = await createQtn(number);
       navigate(`/lv/qtn/${rec.id}`);
     } catch (e) {
       setErr((e as Error).message || "Could not create the quotation.");
@@ -290,20 +289,6 @@ function NewQtnChooser({ onClose }: { onClose: () => void }) {
             <p className="mt-0.5 text-xs text-muted">
               Type the quotation number — e.g. <b className="font-mono">{qtnPrefix()}00000</b>
             </p>
-            {mode === "lv" && (
-              <>
-                <label className="label mt-4">Quotation type</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {([["panels", "Panels", "Full panel quotation"], ["spare", "Spare parts", "Loose components & copper"]] as [typeof lvKind, string, string][]).map(([k, label, hint]) => (
-                    <button key={k} type="button" onClick={() => setLvKind(k)}
-                      className={`rounded-lg border-2 p-2.5 text-left transition ${lvKind === k ? "border-brand bg-brand-tint/50" : "border-line hover:border-brand/40"}`}>
-                      <div className="text-sm font-bold text-ink">{label}</div>
-                      <div className="text-[11px] text-muted">{hint}</div>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
             <label className="label mt-4" htmlFor="qtn-number">Quotation number <span className="text-brand">*</span></label>
             <QtnNumberInput id="qtn-number" autoFocus value={number}
               onChange={(v) => { setNumber(v); if (err) setErr(""); }} onEnter={create} />
