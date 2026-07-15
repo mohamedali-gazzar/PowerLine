@@ -305,11 +305,13 @@ export default function LvConfiguratorPage() {
     apply((old) => ({ ...old, panels: [...old.panels, p], selectedId: p.id }));
     setTab("panels");
   };
-  // A spare-parts QTN adds more "Spare parts" cells the same way panels are added.
+  // Add a "Spare parts" cell — both from a spare QTN's list and from a panels QTN
+  // ("+ Add spare parts"). It selects the new cell so its Spare editor shows at once,
+  // staying on whichever list tab is active.
   const addSpareCell = () => {
     const c = newSparePanel();
     apply((old) => ({ ...old, panels: [...old.panels, c], selectedId: c.id }));
-    setTab("spare");
+    setTab(isSpareQtn ? "spare" : "panels");
   };
   const removePanel = (id: string) =>
     apply((old) => {
@@ -460,7 +462,8 @@ export default function LvConfiguratorPage() {
         {tab === "pricing" && <PricingTab s={s} up={up} />}
         {tab === "panels" && !isSpareQtn && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
-            onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer} />
+            onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
+            onAddSpare={addSpareCell} />
         )}
         {tab === "spare" && isSpareQtn && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
@@ -1601,12 +1604,13 @@ function SpareEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: 
   );
 }
 
-function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
+function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
   s: LvState; sel: LvPanel | null;
   up: (p: Partial<LvState>) => void;
   upPanel: (id: string, p: Partial<LvPanel>) => void;
   onAdd: () => void; onDel: (id: string) => void; onClone: (id: string) => void;
   onOpenInOffer: (id: string) => void;
+  onAddSpare?: () => void;
   addLabel?: string; emptyLabel?: string; emptyAddLabel?: string;
 }) {
   // Drag-and-drop reorder state (hooks must precede the early return).
@@ -1617,7 +1621,15 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
       <div className="card p-12 text-center animate-fade-up">
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-brand-tint text-2xl">⚡</div>
         <p className="text-muted">{emptyLabel}</p>
-        <button className="btn-primary mt-4" onClick={onAdd}>{emptyAddLabel}</button>
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+          <button className="btn-primary" onClick={onAdd}>{emptyAddLabel}</button>
+          {onAddSpare && (
+            <button onClick={onAddSpare}
+              className="rounded-lg border border-dashed border-brand/40 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-tint">
+              🧰 Add spare parts
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -1670,7 +1682,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
                   </span>
                   <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{i + 1}</span>
                   <button onClick={() => up({ selectedId: p.id })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
-                    <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.name.trim() || "(unnamed panel)"}</div>
+                    <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare ? "🧰 " : ""}{p.name.trim() || "(unnamed panel)"}</div>
                   </button>
                 </div>
                 {/* action icons (smaller) — inline when the name is short, else wrapped below-right */}
@@ -1697,6 +1709,12 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
           );
         })}
         <button className="btn-ghost mt-1 w-full" onClick={onAdd}>{addLabel}</button>
+        {onAddSpare && (
+          <button onClick={onAddSpare} title="Add a Spare parts cell to this quotation"
+            className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-brand/40 px-3 py-1.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-tint">
+            🧰 Add spare parts
+          </button>
+        )}
       </div>
 
       {/* editor — its own scroll area so the panel list and editor scroll independently.
