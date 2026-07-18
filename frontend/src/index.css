@@ -3,6 +3,67 @@
 @tailwind utilities;
 
 /* ----------------------------------------------------------------------------
+   Colour theme — light by default, dark via <html data-theme="dark"> (set by
+   src/theme.ts and the inline boot script in index.html). The neutral palette,
+   brand tints and elevated "card" surface all resolve through these variables,
+   so both themes reuse one set of utility classes. Brand orange is constant.
+   Generated offer sheets (.print-area) stay light in BOTH themes — they're
+   print documents — by re-declaring the light values within that subtree.
+---------------------------------------------------------------------------- */
+:root {
+  --c-ink: 38 38 42;            /* #26262A — primary text */
+  --c-muted: 107 107 114;       /* #6B6B72 — secondary text */
+  --c-line: 231 231 235;        /* #E7E7EB — borders */
+  --c-surface: 244 244 246;     /* #F4F4F6 — app background */
+  --c-brand-light: 251 220 203; /* #FBDCCB — tint fill */
+  --c-brand-tint: 254 243 237;  /* #FEF3ED — light wash */
+  --c-card: #ffffff;            /* cards / inputs / modals / white surfaces */
+  --c-canvas: #e2e4e8;          /* grey workspace behind the offer sheets */
+}
+:root[data-theme="dark"] {
+  --c-ink: 233 233 240;
+  --c-muted: 158 158 170;
+  --c-line: 56 56 64;
+  --c-surface: 20 20 24;
+  --c-brand-light: 92 52 30;    /* muted dark-orange fill */
+  --c-brand-tint: 58 40 30;     /* muted dark-orange wash */
+  --c-card: #1e1e25;            /* elevated surface */
+  --c-canvas: #0e0e11;
+  color-scheme: dark;           /* native scrollbars / date pickers follow */
+}
+:root[data-theme="dark"] .print-area {
+  --c-ink: 38 38 42;
+  --c-muted: 107 107 114;
+  --c-line: 231 231 235;
+  --c-surface: 244 244 246;
+  --c-brand-light: 251 220 203;
+  --c-brand-tint: 254 243 237;
+  --c-card: #ffffff;
+  color-scheme: light;
+  /* Re-anchor the inherited text colour to dark — offer rows that don't carry an
+     explicit text class would otherwise inherit the app's light-on-dark colour. */
+  color: rgb(var(--c-ink));
+}
+/* Flip the many literal `bg-white` surfaces (modals, tab pills, dropdowns, list
+   rows) via the card variable — inside .print-area it resolves back to white. */
+:root[data-theme="dark"] .bg-white { background-color: var(--c-card); }
+:root[data-theme="dark"] .offer-workspace { background: var(--c-canvas); }
+/* Dark-orange tint fills are dark, so brand-dark text needs to lighten for
+   contrast (offers keep the original orange). */
+:root[data-theme="dark"] .text-brand-dark,
+:root[data-theme="dark"] .text-brand-darker { color: #F4915A; }
+:root[data-theme="dark"] .print-area .text-brand-dark { color: #D9591C; }
+:root[data-theme="dark"] .print-area .text-brand-darker { color: #B5470F; }
+/* Skeleton shimmer + scrollbars tuned for dark. */
+:root[data-theme="dark"] .skeleton {
+  background: linear-gradient(90deg, #1f1f26 25%, #2a2a32 37%, #1f1f26 63%);
+  background-size: 800px 100%;
+}
+:root[data-theme="dark"] * { scrollbar-color: #3a3a44 transparent; }
+:root[data-theme="dark"] *::-webkit-scrollbar-thumb { background: #3a3a44; }
+:root[data-theme="dark"] *::-webkit-scrollbar-thumb:hover { background: #4a4a56; }
+
+/* ----------------------------------------------------------------------------
    Brand headline font — Nexa (commercial; not shipped in the brand kit).
    When you have the Nexa web fonts, drop Nexa-Regular.woff2 / Nexa-Bold.woff2
    into frontend/public/fonts/ and UNCOMMENT the block below. "Nexa" is already
@@ -56,10 +117,11 @@
     @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-muted;
   }
   .input {
-    @apply w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink
+    @apply w-full rounded-lg border border-line px-3 py-2 text-sm text-ink
       shadow-sm transition-all duration-150 outline-none
       placeholder:text-muted/60
       focus:border-brand focus:ring-4 focus:ring-brand/40 hover:border-accent/60;
+    background-color: var(--c-card);
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2
@@ -71,10 +133,12 @@
       hover:bg-brand-dark hover:shadow-lift;
   }
   .btn-ghost {
-    @apply btn border border-line bg-white text-ink hover:border-brand/40 hover:bg-brand-tint;
+    @apply btn border border-line text-ink hover:border-brand/40 hover:bg-brand-tint;
+    background-color: var(--c-card);
   }
   .card {
-    @apply rounded-xl2 border border-line bg-white shadow-soft;
+    @apply rounded-xl2 border border-line shadow-soft;
+    background-color: var(--c-card);
   }
   .section-title {
     @apply text-sm font-bold uppercase tracking-wide text-brand-dark;
@@ -105,7 +169,8 @@
   }
   /* Technical-offer cover (title) page */
   .tech-cover {
-    @apply flex min-h-[55vh] flex-col items-center justify-center gap-3 rounded-xl2 border border-line bg-white p-10 text-center shadow-soft;
+    @apply flex min-h-[55vh] flex-col items-center justify-center gap-3 rounded-xl2 border border-line p-10 text-center shadow-soft;
+    background-color: var(--c-card);
   }
 }
 

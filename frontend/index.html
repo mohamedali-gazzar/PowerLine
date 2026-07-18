@@ -6,6 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#F16722" />
     <title>PowerLine — Offer Configurator</title>
+    <!-- Apply the saved (or OS) colour theme before first paint — no flash. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("powerline-theme");
+          if (t !== "light" && t !== "dark")
+            t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {}
+      })();
+    </script>
     <style>
       /* Boot splash — shows instantly (before the React bundle loads), then
          fades out on mount (see main.tsx). Inline so it needs no JS/CSS first. */
@@ -18,6 +29,12 @@
         justify-content: center;
         background: #ffffff;
         transition: opacity 0.35s ease;
+      }
+      html[data-theme="dark"] #pl-splash {
+        background: #16161a;
+      }
+      html[data-theme="dark"] #pl-splash .pl-bar {
+        background: #2a2a32;
       }
       #pl-splash.pl-hide {
         opacity: 0;

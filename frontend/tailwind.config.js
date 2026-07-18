@@ -1,6 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  // Dark mode is opt-in via <html data-theme="dark"> (see src/theme.ts). The neutral
+  // palette + brand tints below resolve through CSS variables so both themes share
+  // one set of utility classes; index.css supplies the light/dark variable values.
+  darkMode: ["selector", '[data-theme="dark"]'],
   theme: {
     extend: {
       fontFamily: {
@@ -16,11 +20,13 @@ export default {
         // ---- Powerline brand palette (from PL brand guidelines 2026) ----
         // Primary: Powerline Orange  #F16722  (RGB 241·103·34, Pantone 158 C)
         brand: {
-          DEFAULT: "#F16722", // primary brand orange
+          DEFAULT: "#F16722", // primary brand orange (constant in both themes)
           dark: "#D9591C", // hover
           darker: "#B5470F", // active / dark-orange text
-          light: "#FBDCCB", // light tint fill
-          tint: "#FEF3ED", // very light wash background
+          // Light tint fill + very light wash — variable so dark mode uses muted
+          // dark-orange washes instead of glaring peach.
+          light: "rgb(var(--c-brand-light) / <alpha-value>)",
+          tint: "rgb(var(--c-brand-tint) / <alpha-value>)",
         },
         accent: {
           DEFAULT: "#F4824A", // lighter secondary orange
@@ -28,11 +34,13 @@ export default {
         },
         // Secondary: Charcoal Grey  #585859  (RGB 88·88·89, Pantone Cool Gray 10 C)
         charcoal: "#585859", // exact brand charcoal (wordmark "POWER", accents)
-        ink: "#26262A", // near-black neutral — headings & primary text
-        muted: "#6B6B72", // neutral grey — secondary text / labels
-        line: "#E7E7EB", // neutral border
-        surface: "#F4F4F6", // neutral off-white app background
-        sidebar: "#2A2A2E", // deep charcoal sidebar
+        // Neutral palette — variable-driven so it flips with the theme (light values
+        // are the original hex; dark values live in index.css).
+        ink: "rgb(var(--c-ink) / <alpha-value>)", // headings & primary text
+        muted: "rgb(var(--c-muted) / <alpha-value>)", // secondary text / labels
+        line: "rgb(var(--c-line) / <alpha-value>)", // neutral border
+        surface: "rgb(var(--c-surface) / <alpha-value>)", // app background
+        sidebar: "#2A2A2E", // deep charcoal sidebar (dark in both themes)
       },
       boxShadow: {
         soft: "0 1px 3px rgba(20,20,28,.06), 0 6px 18px rgba(20,20,28,.06)",
