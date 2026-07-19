@@ -652,6 +652,8 @@ export function buildMaterialList(s: LvState): MaterialList {
 export interface ExportCheck { title: string; items: string[] }
 /** Runs the pre-export checks across all panels. Returns the FAILING checks
  *  (empty array = clear to export):
+ *   0. Highlighted — panels flagged with the sidebar highlighter, surfaced so they're
+ *                    reviewed before exporting (shown even with no other issue).
  *   1. Zero price   — a real component priced at 0 (spare "Space" items excluded).
  *   2. No cells     — a Cells-mode panel with no editable cell qty (fixed Sides ignored).
  *   3. Missing copper — recommended Phase/Neutral/Earth (per the incomer) not entered
@@ -660,8 +662,12 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   const zeroPrice: string[] = [];
   const noCells: string[] = [];
   const missingCopper: string[] = [];
+  const highlighted: string[] = []; // panels flagged with the sidebar highlighter
   s.panels.forEach((p, i) => {
-    const tag = `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}`;
+    const label = `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}`;
+    if (p.highlight) highlighted.push(label);
+    // A highlighted panel carries a 🖍️ marker on any other warning it raises.
+    const tag = p.highlight ? `🖍️ ${label}` : label;
     // 1) Zero price
     for (const c of p.components) {
       if (isSpacer(c) || c.type === "Space") continue;
@@ -693,6 +699,7 @@ export function exportBlockers(s: LvState): ExportCheck[] {
     if (reasons.length) missingCopper.push(`${tag}: ${reasons.join("; ")}`);
   });
   const out: ExportCheck[] = [];
+  if (highlighted.length) out.push({ title: "🖍️ Highlighted panels", items: highlighted });
   if (zeroPrice.length) out.push({ title: "Zero price", items: zeroPrice });
   if (noCells.length) out.push({ title: "No cells selected", items: noCells });
   if (missingCopper.length) out.push({ title: "Missing copper", items: missingCopper });
