@@ -256,9 +256,9 @@ export function buildPfc(i: PfcInput, cb?: DbComponent): ComboLine[] {
 
   const varSteps = i.var1Steps + i.var2Steps;
   const ctl: string[] = [];
-  if (varSteps > 0 && varSteps <= 6) ctl.push("Power Factor Controller 6 step RVT-6");
-  else if (varSteps <= 12) ctl.push("Power Factor Controller 12 step RVT-12");
-  else if (varSteps > 12) ctl.push("Power Factor Controller 6 step RVT-6", "Power Factor Controller 12 step RVT-12");
+  if (varSteps > 0 && varSteps <= 6) ctl.push("Power Factor Controller 6 step RVC-6");
+  else if (varSteps <= 12) ctl.push("Power Factor Controller 12 step RVC-12");
+  else if (varSteps > 12) ctl.push("Power Factor Controller 6 step RVC-6", "Power Factor Controller 12 step RVC-12");
   ctl.forEach((c) => out.push({ qty: 1, desc: c, comp: findByName(c), groupLabel: header }));
   // P.F.C. cubicle ventilation — always add 1 fan + 2 filters + 1 thermostat by default.
   for (const [qty, name] of [[1, "Fan 25*25"], [2, "Filter 25*25"], [1, "Thermostat"]] as const)
