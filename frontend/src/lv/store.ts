@@ -19,7 +19,7 @@ import {
   type SalesPerson,
 } from "./catalog";
 import { defaultCellConfig, type CellConfig } from "./cells";
-import { roundUpRating, pctOf, csaFor, ratingForCsa, type CopperTool } from "./copper";
+import { type CopperTool } from "./copper";
 
 let uidCtr = 0;
 export const uid = () => `u${++uidCtr}_${Math.random().toString(36).slice(2, 7)}`;
@@ -679,20 +679,16 @@ export function exportBlockers(s: LvState): ExportCheck[] {
     if (p.sizingMode === "cells" && !p.cellConfig.rows.some((r) => r.qty > 0 && !r.locked)) {
       noCells.push(`${tag}: no cell quantity selected`);
     }
-    // 3) Missing copper
+    // 3) Missing copper — recommend a Phase / Neutral / Earth length. The Copper Tool
+    // highlights the recommended rating row, but that highlight is only a suggestion:
+    // the check passes as long as SOME length is entered in that column (at any rating
+    // row), not necessarily in the highlighted cell.
     const reasons: string[] = [];
     if (p.sizingMode === "cells" && (p.ratingA || 0) > 0) {
-      const inc = p.ratingA;
-      const phaseR = roundUpRating(inc);
-      // Neutral / Earth are sized from the phase busbar's C.S.A (round the % up to the next bar).
-      const phaseCsa = csaFor(p.cellConfig.type, phaseR);
-      const t = p.copperTool ?? {};
-      const need: [string, "p" | "n" | "e", number][] = [
-        ["Phase", "p", phaseR],
-        ["Neutral", "n", ratingForCsa(p.cellConfig.type, pctOf(p.neutral) * phaseCsa)],
-        ["Earth", "e", ratingForCsa(p.cellConfig.type, pctOf(p.earth) * phaseCsa)],
-      ];
-      const unfilled = need.filter(([, k, r]) => !((t[String(r)]?.[k] || 0) > 0)).map(([lbl]) => lbl);
+      const rows = Object.values(p.copperTool ?? {});
+      const anyLen = (k: "p" | "n" | "e") => rows.some((r) => (r?.[k] || 0) > 0);
+      const unfilled = ([["Phase", "p"], ["Neutral", "n"], ["Earth", "e"]] as [string, "p" | "n" | "e"][])
+        .filter(([, k]) => !anyLen(k)).map(([lbl]) => lbl);
       if (unfilled.length) reasons.push(`${unfilled.join(" / ")} length not entered`);
     }
     if ((mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) <= 0) reasons.push("busbar weight is 0");
