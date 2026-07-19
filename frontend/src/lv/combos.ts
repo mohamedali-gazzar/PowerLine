@@ -134,10 +134,14 @@ export function buildPhotocell(ratingA: number, cb?: DbComponent): ComboLine[] {
 }
 
 // ── MCC ──────────────────────────────────────────────────────────────────────
-export const MCC_KINDS = [...new Set(COMBOS.mcc.combos.map((m) => m.kind))];
-export const mccKws = (kind: string) => [...new Set(COMBOS.mcc.combos.filter((m) => m.kind === kind).map((m) => m.kw))];
+// "Two Speed" is a synthetic starter (not in the DB): a Low- + High-Speed DOL pair.
+export const TWO_SPEED = "Two Speed";
+const dolType1Kws = () => COMBOS.mcc.combos.filter((m) => m.kind === "DOL-3Ph" && m.type === 1).map((m) => m.kw);
+export const MCC_KINDS = [...new Set(COMBOS.mcc.combos.map((m) => m.kind)), TWO_SPEED];
+export const mccKws = (kind: string) =>
+  kind === TWO_SPEED ? dolType1Kws() : [...new Set(COMBOS.mcc.combos.filter((m) => m.kind === kind).map((m) => m.kw))];
 export const mccTypes = (kind: string, kw: string) =>
-  [...new Set(COMBOS.mcc.combos.filter((m) => m.kind === kind && m.kw === kw).map((m) => m.type))].sort();
+  kind === TWO_SPEED ? [1] : [...new Set(COMBOS.mcc.combos.filter((m) => m.kind === kind && m.kw === kw).map((m) => m.type))].sort();
 
 // Some MCC template descriptions don't match the component-DB names verbatim
 // (verbose contactor names, "Signal" vs "Signaling", the CAL side block). Map them
@@ -185,6 +189,61 @@ export function buildMcc(kind: string, kw: string, type: number, withControl: bo
         out.push({ qty: n, baseQty: 1, desc: SD_TIMER, comp: findByName(mccAlias(SD_TIMER)), groupLabel: label });
       }
     });
+  }
+  return out;
+}
+
+const kwNum = (kw: string) => parseFloat(kw) || 0;
+/** Default low-speed kW: half the high speed, rounded to the nearest lower standard DOL
+ *  kW (so High 7.5 → Low 3). */
+export function prevSpeedKw(highKw: string): string {
+  const ladder = dolType1Kws();
+  const target = kwNum(highKw) / 2;
+  let best = ladder[0];
+  for (const k of ladder) if (kwNum(k) <= target + 1e-9) best = k;
+  return best;
+}
+/** Merge identical component lines (same reference), summing their quantities. */
+function mergeLines(lines: ComboLine[]): ComboLine[] {
+  const order: string[] = [];
+  const map = new Map<string, ComboLine>();
+  for (const l of lines) {
+    const key = (l.comp?.ref || l.desc || "").toLowerCase();
+    const ex = map.get(key);
+    if (ex) { ex.qty += l.qty; ex.baseQty = (ex.baseQty ?? 0) + (l.baseQty ?? 0); }
+    else { map.set(key, { ...l }); order.push(key); }
+  }
+  return order.map((k) => map.get(k)!);
+}
+/** "Two Speed" starter — pick the HIGH speed; the LOW speed defaults to ~half (rounded to
+ *  a standard kW). Both speeds are DOLs; the high speed carries an EXTRA contactor (×2)
+ *  and its side-aux block. Emitted under ONE header, grouped by component type:
+ *    motor starters · signal contact · contactors · CAL · push buttons · lamps · master.
+ *  Signal contact (per starter) and CAL (per contactor) sum across the two speeds; push
+ *  buttons + indication lamps come as one set per speed (×2); the shared master gear —
+ *  Selector / MCB / Relay / Relay base — stays ×1. Always Type 1. */
+export function buildTwoSpeed(highKw: string, lowKw: string, withControl: boolean, qty = 1): ComboLine[] {
+  const label = `${TWO_SPEED} — High Speed (${highKw}) , Low Speed (${lowKw}):`;
+  const n = Math.max(1, qty);
+  const hi = COMBOS.mcc.combos.find((m) => m.kind === "DOL-3Ph" && m.kw === highKw && m.type === 1);
+  const lo = COMBOS.mcc.combos.find((m) => m.kind === "DOL-3Ph" && m.kw === lowKw && m.type === 1);
+  if (!hi || !lo) return [];
+  const line = (desc: string, per: number): ComboLine =>
+    ({ qty: per * n, baseQty: per, desc, comp: findByName(mccAlias(desc)), groupLabel: label });
+  // Power, grouped by type (parts index: 0=MMS, 1=SK, 2=contactor, 3=CAL).
+  const out = mergeLines([
+    line(hi.parts[0], 1), line(lo.parts[0], 1),   // motor starters — one each
+    line(hi.parts[1], 1), line(lo.parts[1], 1),   // SK signal contact → sums to 2
+    line(hi.parts[2], 2), line(lo.parts[2], 1),   // contactors — high ×2, low ×1
+    line(hi.parts[3], 2), line(lo.parts[3], 1),   // CAL side-aux → sums to 3 (2 high + 1 low)
+  ]);
+  if (withControl) {
+    const isLamp = (d: string) => /pilot light/i.test(d);
+    const isPush = (d: string) => /pushbutton/i.test(d);
+    const ctl = COMBOS.mcc.control;
+    for (const c of ctl.filter((c) => isPush(c.desc))) out.push(line(c.desc, 2)); // push buttons ×2
+    for (const c of ctl.filter((c) => isLamp(c.desc))) out.push(line(c.desc, 2)); // indication lamps ×2
+    for (const c of ctl.filter((c) => !isPush(c.desc) && !isLamp(c.desc))) out.push(line(c.desc, 1)); // master gear ×1
   }
   return out;
 }

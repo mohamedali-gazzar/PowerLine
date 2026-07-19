@@ -10,6 +10,7 @@ import {
   remove,
   duplicate,
   submit,
+  unsubmit,
 } from "../controllers/qtns.controller";
 
 const router = Router();
@@ -24,5 +25,6 @@ router.patch("/:id/number", rename);
 router.delete("/:id", remove);
 router.post("/:id/duplicate", duplicate);
 router.post("/:id/submit", submit);
+router.post("/:id/unsubmit", unsubmit);
 
 export default router;

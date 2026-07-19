@@ -193,3 +193,41 @@ export async function nextQtnNumber(): Promise<string> {
 export async function submitQtn(id: string): Promise<void> {
   await api.qtns.submit(id);
 }
+
+export async function unsubmitQtn(id: string): Promise<void> {
+  await api.qtns.unsubmit(id);
+}
+
+// ── Amendments / revisions ───────────────────────────────────────────────────
+// A revision is a trailing "-<n>" appended after the QTN's 5-digit serial, e.g.
+// "QTN-26-01010-2" → base "QTN-26-01010", rev 2. A plain number is revision 0.
+export function parseRevision(number: string): { base: string; rev: number } {
+  const m = (number || "").trim().match(/^(.*\d{3,})-(\d{1,3})$/);
+  return m ? { base: m[1], rev: parseInt(m[2], 10) } : { base: (number || "").trim(), rev: 0 };
+}
+
+/** The QTN numbers superseded (cancelled) by a higher revision of the same base. */
+export function supersededNumbers(numbers: string[]): Set<string> {
+  const maxRev = new Map<string, number>();
+  const parsed = numbers.map((n) => ({ n, ...parseRevision(n) }));
+  for (const p of parsed) maxRev.set(p.base, Math.max(maxRev.get(p.base) ?? 0, p.rev));
+  const out = new Set<string>();
+  for (const p of parsed) if (p.rev < (maxRev.get(p.base) ?? 0)) out.add(p.n);
+  return out;
+}
+
+/** Amend a QTN: create the next revision (a copy renamed to "…-N+1") and return it.
+ *  The source is thereby superseded — a higher revision now exists. */
+export async function amendQtn(id: string, sourceNumber: string): Promise<QtnRecord | null> {
+  const { base } = parseRevision(sourceNumber);
+  let maxRev = parseRevision(sourceNumber).rev;
+  try {
+    const list = await listQtns();
+    for (const q of list) { const p = parseRevision(q.number); if (p.base === base) maxRev = Math.max(maxRev, p.rev); }
+  } catch { /* fall back to the source's own revision */ }
+  const target = `${base}-${maxRev + 1}`;
+  const copy = await duplicateQtn(id);
+  if (!copy) return null;
+  const res = await renameQtn(copy.id, target);
+  return res.ok ? { ...copy, number: target } : copy;
+}

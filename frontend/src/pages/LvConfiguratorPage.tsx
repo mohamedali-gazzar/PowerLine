@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getQtn, saveQtn, renameQtn, submitQtn, type QtnRecord } from "../lv/qtns";
+import { getQtn, saveQtn, renameQtn, submitQtn, unsubmitQtn, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
 import { useStaff, SALES_MANAGER } from "../staff";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
@@ -18,7 +18,7 @@ import {
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
   breakerPool, breakerAmps, buildPhotocell,
-  MCC_KINDS, mccKws, mccTypes, buildMcc,
+  MCC_KINDS, mccKws, mccTypes, buildMcc, buildTwoSpeed, prevSpeedKw, TWO_SPEED,
   PFC_DEFAULT, pfcTotalKvar, pfcHeader, buildPfc,
   WD_OPTIONS, buildWd,
   buildIndicationLamps, buildPushButtons,
@@ -35,8 +35,8 @@ import {
   COPPER_RATINGS, csaFor, copperWeight, copperTotal, roundUpRating, ratingForCsa, pctOf,
 } from "../lv/copper";
 
-type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material" | "spare";
-const TABS: Tab[] = ["project", "pricing", "panels", "technical", "commercial", "material", "spare"];
+type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity";
+const TABS: Tab[] = ["project", "pricing", "panels", "technical", "commercial", "material", "spare", "selectivity"];
 
 /** Effective combination group per component (id → group). A component keeps its
  *  own group; an ungrouped one sitting between two same-group items (in the same
@@ -201,6 +201,9 @@ export default function LvConfiguratorPage() {
   // Submitted = the QTN is marked complete; it then counts in the team's weekly chart.
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Cancelled = this revision was superseded by a newer amendment (a higher revision of
+  // the same base exists). Derived from the QTN list; makes the revision read-only.
+  const [cancelled, setCancelled] = useState(false);
 
   // Load the quotation from the backend on mount (redirect to the list if gone).
   useEffect(() => {
@@ -223,20 +226,41 @@ export default function LvConfiguratorPage() {
       .catch(() => { if (alive) navigate("/lv", { replace: true }); });
     return () => { alive = false; };
   }, [id, navigate, tabKey]);
+  // A revision is cancelled once a higher revision of the same base exists.
+  useEffect(() => {
+    if (!qtnNum) return;
+    let alive = true;
+    listQtns()
+      .then((list) => { if (alive) setCancelled(supersededNumbers(list.map((q) => q.number)).has(qtnNum)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [qtnNum]);
+  // Read-only when submitted OR cancelled — both freeze content editing.
+  const readOnly = submitted || cancelled;
 
   // Renames the QTN on the backend (unique, non-empty). Edited from the Project tab.
   const renameQtnNumber = async (n: string): Promise<{ ok: boolean; error?: string }> => {
     if (!rec) return { ok: false, error: "Quotation not found." };
+    if (readOnly) return { ok: false, error: cancelled ? "Cancelled revision — read-only." : "Submitted — reopen to edit." };
     const res = await renameQtn(rec.id, n);
     if (res.ok) setQtnNum(n.trim());
     return res;
   };
   // Mark the QTN submitted (complete) — it then counts in the team's weekly chart.
   const doSubmit = async () => {
-    if (!rec || submitted) return;
+    if (!rec || submitted || cancelled) return;
     if (!confirm("Mark this QTN as submitted? It will count in the team's weekly submissions.")) return;
     setSubmitting(true);
     try { await submitQtn(rec.id); setSubmitted(true); }
+    catch { /* ignore */ }
+    finally { setSubmitting(false); }
+  };
+  // Reopen a submitted QTN for editing — it stops counting as submitted until re-submitted.
+  const doReopen = async () => {
+    if (!rec || !submitted) return;
+    if (!confirm("Reopen this submitted QTN for editing? It won't count as submitted until you submit it again.")) return;
+    setSubmitting(true);
+    try { await unsubmitQtn(rec.id); setSubmitted(false); }
     catch { /* ignore */ }
     finally { setSubmitting(false); }
   };
@@ -247,11 +271,11 @@ export default function LvConfiguratorPage() {
       return next === h.present ? h : { past: [...h.past, h.present].slice(-60), present: next, future: [] };
     });
   const undo = () =>
-    setHist((h) => (h.past.length ? { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future].slice(0, 60) } : h));
+    setHist((h) => (!readOnly && h.past.length ? { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future].slice(0, 60) } : h));
   const redo = () =>
-    setHist((h) => (h.future.length ? { past: [...h.past, h.present].slice(-60), present: h.future[0], future: h.future.slice(1) } : h));
-  const canUndo = hist.past.length > 0;
-  const canRedo = hist.future.length > 0;
+    setHist((h) => (!readOnly && h.future.length ? { past: [...h.past, h.present].slice(-60), present: h.future[0], future: h.future.slice(1) } : h));
+  const canUndo = !readOnly && hist.past.length > 0;
+  const canRedo = !readOnly && hist.future.length > 0;
 
   // Debounced live-save to the backend (replaces the previous localStorage save).
   // saveRef holds the latest pending state so the final edit isn't lost if the
@@ -295,12 +319,22 @@ export default function LvConfiguratorPage() {
   const offerIssues = s.panels.flatMap((p, i) =>
     p.spare ? [] : panelInvalid(p).map((msg) => `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}: ${msg}`));
 
+  // Once submitted the QTN is read-only. Content edits are frozen, but pure navigation
+  // is still allowed so a submitted offer can be reviewed: selecting a panel (selectedId)
+  // and switching a panel's section (activeSection) pass through.
+  const isNavOnly = (patch: object, key: string) => Object.keys(patch).length === 1 && key in patch;
   // immutable update helpers
-  const up = (patch: Partial<LvState>) => apply((old) => ({ ...old, ...patch }));
-  const upPanel = (id: string, patch: Partial<LvPanel>) =>
+  const up = (patch: Partial<LvState>) => {
+    if (readOnly && !isNavOnly(patch, "selectedId")) return;
+    apply((old) => ({ ...old, ...patch }));
+  };
+  const upPanel = (id: string, patch: Partial<LvPanel>) => {
+    if (readOnly && !isNavOnly(patch, "activeSection")) return;
     apply((old) => ({ ...old, panels: old.panels.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
+  };
 
   const addPanel = () => {
+    if (readOnly) return;
     const p = newPanel(s.panels.length + 1);
     apply((old) => ({ ...old, panels: [...old.panels, p], selectedId: p.id }));
     setTab("panels");
@@ -309,16 +343,20 @@ export default function LvConfiguratorPage() {
   // ("+ Add spare parts"). It selects the new cell so its Spare editor shows at once,
   // staying on whichever list tab is active.
   const addSpareCell = () => {
+    if (readOnly) return;
     const c = newSparePanel();
     apply((old) => ({ ...old, panels: [...old.panels, c], selectedId: c.id }));
     setTab(isSpareQtn ? "spare" : "panels");
   };
-  const removePanel = (id: string) =>
+  const removePanel = (id: string) => {
+    if (readOnly) return;
     apply((old) => {
       const panels = old.panels.filter((p) => p.id !== id);
       return { ...old, panels, selectedId: panels[0]?.id ?? null };
     });
-  const clonePanel = (id: string) =>
+  };
+  const clonePanel = (id: string) => {
+    if (readOnly) return;
     apply((old) => {
       const src = old.panels.find((p) => p.id === id);
       if (!src) return old;
@@ -328,6 +366,7 @@ export default function LvConfiguratorPage() {
       panels.splice(i + 1, 0, copy);
       return { ...old, panels, selectedId: copy.id };
     });
+  };
 
   // Per-tab memory: remember each tab's scroll position (and the last active tab
   // for this QTN), and restore them when you return — instead of resetting.
@@ -433,13 +472,31 @@ export default function LvConfiguratorPage() {
               ✓ Submitted
             </span>
           ) : (
-            <button className="btn-primary" disabled={submitting} onClick={doSubmit}
-              title="Mark this QTN as submitted (counts in the dashboard chart)">
+            <button className="btn-primary" disabled={submitting || cancelled} onClick={doSubmit}
+              title={cancelled ? "Cancelled revision — read-only" : "Mark this QTN as submitted (counts in the dashboard chart)"}>
               {submitting ? "Submitting…" : "✓ Submit"}
             </button>
           )}
         </div>
       </div>
+
+      {cancelled ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 no-print animate-fade-up">
+          <p className="text-sm font-semibold text-red-800">
+            🚫 This revision was cancelled by a newer amendment — read-only.
+          </p>
+        </div>
+      ) : submitted ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-green-300 bg-green-50 px-4 py-2.5 no-print animate-fade-up">
+          <p className="text-sm font-semibold text-green-800">
+            🔒 This QTN is submitted and read-only — reopen it to make changes.
+          </p>
+          <button className="btn-ghost h-8 shrink-0 px-3 text-xs" disabled={submitting} onClick={doReopen}
+            title="Reopen this QTN for editing (it stops counting as submitted until re-submitted)">
+            🔓 Reopen to edit
+          </button>
+        </div>
+      ) : null}
 
       {/* Tabs — sticky header so sections are reachable without scrolling up.
           Negative margins let the bg band span the full content width; py keeps a
@@ -447,7 +504,7 @@ export default function LvConfiguratorPage() {
       <div className="sticky top-0 z-30 -mx-4 mb-4 flex flex-wrap gap-1.5 border-b border-line/60 bg-surface px-4 py-2.5 no-print sm:-mx-6 sm:px-6">
         {((isSpareQtn
           ? [["project", "Project"], ["pricing", "Pricing Settings"], ["spare", "Spare Parts"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"]]
-          : [["project", "Project"], ["pricing", "Pricing Settings"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"]]) as [Tab, string][]).map(([t, label]) => (
+          : [["project", "Project"], ["pricing", "Pricing Settings"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"], ["selectivity", "Selectivity"]]) as [Tab, string][]).map(([t, label]) => (
           <button key={t} onClick={() => goToTab(t)}
             className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
               tab === t ? "border-brand bg-brand text-white shadow-soft" : "border-line bg-white text-muted hover:border-brand/40"
@@ -473,6 +530,7 @@ export default function LvConfiguratorPage() {
         {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} />)}
         {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} />)}
         {tab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
+        {tab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} />}
       </div>
     </div>
   );
@@ -1599,6 +1657,83 @@ function SpareEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: 
         <p className="mt-3 text-[11px] text-muted">
           Generate the itemised list, prices and procurement from the Technical, Commercial and Material tabs above.
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Selectivity ──────────────────────────────────────────────────────────────
+// A coordination-study table — one row per panel. Name & Fed From are shared with the
+// panel; Main Incoming & Adj are READ from the panel's Main-Incoming breaker (its
+// description and its ADJ. value, as set in the Panels tab).
+/** The panel's main incoming breaker — the first ACB/MCCB/MCB in a "Main Incoming" section. */
+function selMainIncomer(p: LvPanel): PanelComponent | undefined {
+  const isBreaker = (c: PanelComponent) => /\b(ACB|MCCB|MCB)\b/i.test(c.type || "");
+  return p.components.find((c) => !isSpacer(c) && isBreaker(c) && /incom/i.test(c.section || ""));
+}
+function SelectivityTab({ s, upPanel }: { s: LvState; upPanel: (id: string, patch: Partial<LvPanel>) => void }) {
+  const [fedFilter, setFedFilter] = useState(""); // "Fed From" column filter — "" = all
+  const panels = s.panels.filter((p) => !p.spare);
+  // Distinct "Fed From" values seen across the panels → the header filter's options.
+  const fedOptions = Array.from(new Set(panels.map((p) => p.fedFrom.trim()).filter(Boolean)));
+  // Filtering by a source shows every panel fed from it AND the source panel itself
+  // (the panel whose name matches) — so the whole feeder group is visible together.
+  const rows = panels.map((p, i) => ({ p, no: i + 1 }))
+    .filter(({ p }) => !fedFilter || p.fedFrom.trim() === fedFilter || p.name.trim() === fedFilter);
+  const cell = "border border-line px-2 py-1 align-middle";
+  const inp = "w-full min-w-0 bg-transparent px-1 py-0.5 text-sm text-ink outline-none rounded focus:bg-brand-tint/50 placeholder:text-muted/50";
+  return (
+    <div className="animate-fade-up">
+      <div className="card p-5">
+        <h2 className="sec-head">Selectivity</h2>
+        <p className="mb-3 text-xs text-muted">
+          One row per panel — main incoming breaker &amp; its adjustment. Use the <b>Fed From</b> filter in the header to list all panels fed by one source.
+        </p>
+        {panels.length === 0 ? (
+          <p className="rounded-lg bg-surface p-6 text-center text-sm text-muted">No panels yet — add panels first.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-line">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="text-left font-bold text-white" style={{ background: "#1f4e79" }}>
+                  <th className={`${cell} w-16 text-center`}>Item No.</th>
+                  <th className={`${cell} w-56`}>Panel Name</th>
+                  <th className={`${cell} w-56`}>
+                    <div className="flex items-center gap-2">
+                      <span>Fed From</span>
+                      {/* Header filter — show only panels fed from the chosen source. */}
+                      <select value={fedFilter} onChange={(e) => setFedFilter(e.target.value)}
+                        title="Filter — show only panels fed from this source"
+                        className={`ml-auto max-w-[130px] cursor-pointer rounded border-0 px-1.5 py-0.5 text-xs font-semibold text-ink outline-none ${fedFilter ? "bg-amber-200" : "bg-white/95"}`}>
+                        <option value="">▾ All</option>
+                        {fedOptions.map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
+                  </th>
+                  <th className={cell}>Main Incoming</th>
+                  <th className={`${cell} w-48`}>Adj</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr><td colSpan={5} className={`${cell} py-4 text-center text-muted`}>No panels fed from “{fedFilter}”.</td></tr>
+                ) : rows.map(({ p, no }) => {
+                  // Main Incoming + Adj are read from the panel's main incoming breaker.
+                  const inc = selMainIncomer(p);
+                  return (
+                  <tr key={p.id}>
+                    <td className={`${cell} text-center font-semibold text-muted`}>{no}</td>
+                    <td className={cell}><input className={inp} value={p.name} placeholder="Panel name" onChange={(e) => upPanel(p.id, { name: e.target.value })} /></td>
+                    <td className={cell}><input className={inp} value={p.fedFrom} placeholder="—" onChange={(e) => upPanel(p.id, { fedFrom: e.target.value })} /></td>
+                    <td className={`${cell} px-3 text-sm`} title="Read from the panel's Main Incoming breaker">{inc ? inc.name : <span className="text-muted/50">—</span>}</td>
+                    <td className={`${cell} px-3 text-sm`} title="Read from the Main Incoming breaker's ADJ.">{inc?.adj?.trim() ? inc.adj : <span className="text-muted/50">—</span>}</td>
+                  </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3286,9 +3421,14 @@ function PhotocellBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: stri
 
 function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
   const [kind, setKind] = useState(MCC_KINDS[0] ?? "DOL-3Ph");
+  const twoSpeed = kind === TWO_SPEED;
   const kws = useMemo(() => mccKws(kind), [kind]);
-  const [kw, setKw] = useState(kws[0] ?? "");
+  const [kw, setKw] = useState(kws[0] ?? ""); // Two Speed: the HIGH-speed kW (primary)
   useEffect(() => setKw(mccKws(kind)[0] ?? ""), [kind]);
+  // Two Speed low-speed kW — defaults to ~half the high speed (rounded to a standard),
+  // still editable.
+  const [lowKw, setLowKw] = useState("");
+  useEffect(() => { if (twoSpeed) setLowKw(prevSpeedKw(kw)); }, [kw, twoSpeed]);
   const types = useMemo(() => mccTypes(kind, kw), [kind, kw]);
   const [type, setType] = useState(2);
   useEffect(() => setType(types.includes(2) ? 2 : (types[0] ?? 1)), [types]); // default Type 2 when available
@@ -3298,14 +3438,28 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
     <div className="rounded-lg border border-line p-3">
       <div className="flex flex-wrap items-end gap-3">
         <div><L>Starter</L><Sel value={kind as any} onChange={(v) => setKind(v)} options={MCC_KINDS as any} className="w-36" /></div>
-        <div><L>Motor (kW)</L><Sel value={kw as any} onChange={(v) => setKw(v)} options={kws as any} className="w-32" /></div>
-        <div><L>Type</L><Sel value={String(type) as any} onChange={(v) => setType(+v)} options={types.map(String) as any} className="w-24" /></div>
+        {twoSpeed ? (
+          <>
+            <div><L>High Speed (kW)</L><Sel value={kw as any} onChange={(v) => setKw(v)} options={kws as any} className="w-32" /></div>
+            <div><L>Low Speed (kW)</L><Sel value={lowKw as any} onChange={(v) => setLowKw(v)} options={kws as any} className="w-32" /></div>
+          </>
+        ) : (
+          <>
+            <div><L>Motor (kW)</L><Sel value={kw as any} onChange={(v) => setKw(v)} options={kws as any} className="w-32" /></div>
+            <div><L>Type</L><Sel value={String(type) as any} onChange={(v) => setType(+v)} options={types.map(String) as any} className="w-24" /></div>
+          </>
+        )}
         <div><L>Qty</L><input className="input w-20" inputMode="numeric" value={qty}
           onChange={(e) => setQty(Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1))} /></div>
         <label className="flex items-center gap-1.5 pb-2 text-xs font-semibold text-ink">
           <input type="checkbox" checked={withCtl} onChange={(e) => setWithCtl(e.target.checked)} /> + control acc.
         </label>
-        <button className="btn-ghost" onClick={() => onPreview(buildMcc(kind, kw, type, withCtl, qty), `MCC ${kind} ${kw}`)}>Generate combination</button>
+        <button className="btn-ghost"
+          onClick={() => onPreview(
+            twoSpeed ? buildTwoSpeed(kw, lowKw, withCtl, qty) : buildMcc(kind, kw, type, withCtl, qty),
+            twoSpeed ? `MCC Two Speed ${kw}/${lowKw}` : `MCC ${kind} ${kw}`)}>
+          Generate combination
+        </button>
       </div>
     </div>
   );

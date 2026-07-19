@@ -189,6 +189,7 @@ export const api = {
     duplicate: (id: string) =>
       request<QtnRecordDto>(`/qtns/${id}/duplicate`, { method: "POST" }),
     submit: (id: string) => request<{ ok: true }>(`/qtns/${id}/submit`, { method: "POST" }),
+    unsubmit: (id: string) => request<{ ok: true }>(`/qtns/${id}/unsubmit`, { method: "POST" }),
   },
 
   // ── Docs & Support — retrieval-grounded AI answering ────────────────────────

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listQtns, createQtn, deleteQtn, duplicateQtn, nextQtnNumber, type QtnListItem } from "../lv/qtns";
+import { listQtns, createQtn, deleteQtn, duplicateQtn, amendQtn, supersededNumbers, nextQtnNumber, type QtnListItem } from "../lv/qtns";
 import { fmtEgp, DEFAULT_FACTORS } from "../lv/catalog";
 import { QtnNumberInput, qtnPrefix } from "../components/QtnNumberInput";
 
@@ -50,6 +50,15 @@ export default function LvQtnListPage() {
     const rec = await duplicateQtn(id);
     if (rec) navigate(`/lv/qtn/${rec.id}`);
   };
+  // Amend = open a new revision (QTN-…-N+1); the current revision is thereby cancelled.
+  const onAmend = async (e: React.MouseEvent, id: string, number: string) => {
+    e.stopPropagation();
+    if (!confirm(`Amend ${number}?\nThis opens a new revision and cancels ${number}.`)) return;
+    const rec = await amendQtn(id, number);
+    if (rec) navigate(`/lv/qtn/${rec.id}`);
+  };
+  // QTN numbers superseded by a higher revision — shown as "Cancelled".
+  const cancelled = supersededNumbers(qtns.map((q) => q.number));
 
   return (
     <div>
@@ -92,7 +101,10 @@ export default function LvQtnListPage() {
                   style={{ animationDelay: `${i * 0.04}s` }}
                   onClick={() => navigate(`/lv/qtn/${q.id}`)}>
                   <td className="px-4 py-3 font-bold text-ink">
-                    <span className="rounded-md bg-brand-light px-2 py-0.5 font-mono text-xs font-bold text-brand-dark">{q.number}</span>
+                    <span className={`rounded-md px-2 py-0.5 font-mono text-xs font-bold ${cancelled.has(q.number) ? "bg-surface text-muted line-through" : "bg-brand-light text-brand-dark"}`}>{q.number}</span>
+                    {cancelled.has(q.number) && (
+                      <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">Cancelled</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">{q.projectName || <span className="text-muted">—</span>}</td>
                   <td className="px-4 py-3 text-muted">{q.customer || "—"}</td>
@@ -101,6 +113,9 @@ export default function LvQtnListPage() {
                   <td className="px-4 py-3 text-xs text-muted">{new Date(q.updatedAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-3" onClick={(e) => e.stopPropagation()}>
+                      {!cancelled.has(q.number) && (
+                        <button onClick={(e) => onAmend(e, q.id, q.number)} className="font-semibold text-brand-dark hover:underline" title="Open a new revision — cancels this one">Amend</button>
+                      )}
                       <button onClick={(e) => onDuplicate(e, q.id)} className="font-semibold text-brand hover:underline">Duplicate</button>
                       <button onClick={(e) => onDelete(e, q.id)} className="text-red-500 hover:underline">Delete</button>
                     </div>

@@ -219,3 +219,20 @@ export async function submit(req: Request, res: Response) {
     fail(res, e);
   }
 }
+
+// POST /api/qtns/:id/unsubmit  — reopens a submitted quotation for editing (drops it
+// back out of the submitted counts until it is submitted again)
+export async function unsubmit(req: Request, res: Response) {
+  try {
+    const ownerId = req.userId as string;
+    const q = await prisma.lvQtn.findFirst({ where: { id: req.params.id, ownerId } });
+    if (!q) return res.status(404).json({ error: "Quotation not found." });
+    await prisma.lvQtn.update({
+      where: { id: q.id },
+      data: { submitted: false, submittedAt: null },
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    fail(res, e);
+  }
+}
