@@ -1868,20 +1868,22 @@ function PanelEditor({ s, p, upPanel }: {
 }) {
   const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
   const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
-  // Busbar Rating — the incomer breaker's ampere frame is offered as a grey placeholder
-  // EXAMPLE (like Short circuit's "e.g. 50 kA"); it is NOT committed until the user picks
-  // it. 0 means no incoming C.B.
+  // Busbar Rating — auto-selected from the incoming C.B's ampere frame; still editable.
+  // 0 (→ "— Select —") means no incoming C.B.
   const predictedRating = predictIncomerRating(p);
   const ratingOptions = p.ratingA && !INCOMER_RATINGS.includes(p.ratingA)
     ? [...INCOMER_RATINGS, p.ratingA].sort((a, b) => a - b) // keep a legacy custom value
     : INCOMER_RATINGS;
-  // Reset the field to "— Select —" the moment the incoming C.B is removed. The ref
-  // guards first load: only the "had an incomer → now none" transition clears, so a
-  // stored rating isn't wiped just because the incomer sits in an oddly-named section.
-  const hadIncomer = useRef(predictedRating > 0);
+  // Whenever the incoming C.B changes (its ampere frame → a new predictedRating),
+  // re-read it and snap the Busbar Rating to the suitable standard value — and clear
+  // it when the incomer is removed. The ref starts equal to the current prediction, so
+  // loading a panel (or switching panels) never overwrites its stored/manual rating;
+  // only a live change to the incomer moves the field. A manual override then sticks
+  // until the incomer changes again.
+  const prevPredicted = useRef(predictedRating);
   useEffect(() => {
-    if (hadIncomer.current && predictedRating === 0 && p.ratingA) u({ ratingA: 0 });
-    hadIncomer.current = predictedRating > 0;
+    if (predictedRating !== prevPredicted.current) u({ ratingA: predictedRating });
+    prevPredicted.current = predictedRating;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [predictedRating]);
   // Collapsible cost summary — the open/closed state is remembered across panels.
