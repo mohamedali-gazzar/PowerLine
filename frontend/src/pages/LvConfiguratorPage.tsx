@@ -1427,21 +1427,103 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
     </div>
   );
   return (
-    <div className="card max-w-3xl p-5 animate-fade-up">
-      <h2 className="sec-head">Pricing Settings</h2>
-      <p className="mb-3 text-xs text-muted">
-        Exchange rates, material costs, operations and margins — drives the EGP selling price live.
-      </p>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {num("factor", "Selling factor", { hint: "cost ÷ factor = selling price" })}
-        {num("copper", "Copper (EGP/KG)", { step: 1 })}
-        {num("sheetMetal", "Sheet metal (EGP/KG)", { step: 1 })}
-        {num("usd", "USD → EGP")}
-        {num("euro", "EUR → EGP")}
-        {num("operations", "Operations (%)", { pct: true })}
-        {num("abbDiscount", "ABB discount (%)", { pct: true, hint: "Applied to ABB products ONLY (RPT-01)" })}
-        {num("vat", "VAT (%)", { pct: true })}
+    <div className="flex flex-col items-start gap-4 animate-fade-up lg:flex-row">
+      <div className="card w-full max-w-3xl p-5">
+        <h2 className="sec-head">Pricing Settings</h2>
+        <p className="mb-3 text-xs text-muted">
+          Exchange rates, material costs, operations and margins — drives the EGP selling price live.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {num("factor", "Selling factor", { hint: "cost ÷ factor = selling price" })}
+          {num("copper", "Copper (EGP/KG)", { step: 1 })}
+          {num("sheetMetal", "Sheet metal (EGP/KG)", { step: 1 })}
+          {num("usd", "USD → EGP")}
+          {num("euro", "EUR → EGP")}
+          {num("operations", "Operations (%)", { pct: true })}
+          {num("abbDiscount", "ABB discount (%)", { pct: true, hint: "Applied to ABB products ONLY (RPT-01)" })}
+          {num("vat", "VAT (%)", { pct: true })}
+        </div>
       </div>
+      <LiveFxCard usd={f.usd} eur={f.euro} onApply={upF} />
+    </div>
+  );
+}
+
+// Live FX rates (EGP) for USD & EUR — fetched client-side from a free, no-key,
+// CORS-enabled source (with a fallback). Lets the estimator compare the live
+// market rate against the manual Pricing-Settings rate and apply it in one click.
+function LiveFxCard({ usd, eur, onApply }: { usd: number; eur: number; onApply: (k: "usd" | "euro", v: number) => void }) {
+  const [rates, setRates] = useState<null | { usd: number; eur: number; updated: string }>(null);
+  const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
+  const load = async () => {
+    setStatus("loading");
+    // Base USD → rates.EGP is USD→EGP; EUR→EGP = rates.EGP / rates.EUR.
+    for (const url of ["https://open.er-api.com/v6/latest/USD", "https://api.exchangerate-api.com/v4/latest/USD"]) {
+      try {
+        const j = await (await fetch(url)).json();
+        const egp = j?.rates?.EGP, eurPerUsd = j?.rates?.EUR;
+        if (!egp || !eurPerUsd) continue;
+        setRates({ usd: egp, eur: egp / eurPerUsd, updated: j.time_last_update_utc || j.date || "" });
+        setStatus("ok");
+        return;
+      } catch { /* try next source */ }
+    }
+    setStatus("error");
+  };
+  useEffect(() => { load(); }, []);
+  const rows: { code: string; key: "usd" | "euro"; live?: number; cur: number }[] = [
+    { code: "USD", key: "usd", live: rates?.usd, cur: usd },
+    { code: "EUR", key: "euro", live: rates?.eur, cur: eur },
+  ];
+  return (
+    <div className="card w-full p-5 lg:max-w-md">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="sec-head mb-0">Live Exchange Rates</h2>
+        <button type="button" onClick={load} disabled={status === "loading"} title="Refresh live rates"
+          className="rounded-full border border-line px-2.5 py-1 text-xs font-semibold text-muted hover:border-brand/40 hover:text-brand-dark disabled:opacity-40">
+          {status === "loading" ? "…" : "↻ Refresh"}
+        </button>
+      </div>
+      <p className="mb-3 text-xs text-muted">Market mid-rates in EGP — compare with your settings, or apply.</p>
+      {status === "error" ? (
+        <div className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-muted">
+          Couldn't load live rates. <button type="button" onClick={load} className="font-semibold text-brand hover:underline">Retry</button>
+        </div>
+      ) : (
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
+              <th className="py-1.5">Currency</th>
+              <th className="py-1.5 text-right">Live (EGP)</th>
+              <th className="py-1.5 text-right">Your rate</th>
+              <th className="py-1.5"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const live = r.live != null ? Math.round(r.live * 100) / 100 : null;
+              return (
+                <tr key={r.code} className="border-t border-line/70">
+                  <td className="py-1.5"><b className="text-ink">{r.code}</b> <span className="text-muted">→ EGP</span></td>
+                  <td className="py-1.5 text-right font-bold text-ink">{status === "loading" ? "…" : (live?.toFixed(2) ?? "—")}</td>
+                  <td className="py-1.5 text-right text-muted">{r.cur}</td>
+                  <td className="py-1.5 text-right">
+                    <button type="button" disabled={live == null || live === r.cur}
+                      onClick={() => live != null && onApply(r.key, live)}
+                      title={live != null ? `Set ${r.code} → EGP to ${live.toFixed(2)}` : ""}
+                      className="rounded border border-brand bg-white px-2 py-0.5 text-[11px] font-bold text-brand-dark hover:bg-brand-light disabled:opacity-30">
+                      Use
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      <p className="mt-3 text-[11px] text-muted">
+        Source: open.er-api.com{rates?.updated ? ` · updated ${rates.updated}` : ""}
+      </p>
     </div>
   );
 }
