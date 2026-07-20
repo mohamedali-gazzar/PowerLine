@@ -1444,7 +1444,7 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
           {num("vat", "VAT (%)", { pct: true })}
         </div>
       </div>
-      <LiveFxCard usd={f.usd} eur={f.euro} onApply={upF} />
+      <LiveFxCard usd={f.usd} eur={f.euro} sellEgp={grandTotals(s).sell} onApply={upF} />
     </div>
   );
 }
@@ -1452,7 +1452,7 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
 // Live FX rates (EGP) for USD & EUR — fetched client-side from a free, no-key,
 // CORS-enabled source (with a fallback). Lets the estimator compare the live
 // market rate against the manual Pricing-Settings rate and apply it in one click.
-function LiveFxCard({ usd, eur, onApply }: { usd: number; eur: number; onApply: (k: "usd" | "euro", v: number) => void }) {
+function LiveFxCard({ usd, eur, sellEgp, onApply }: { usd: number; eur: number; sellEgp: number; onApply: (k: "usd" | "euro", v: number) => void }) {
   const [rates, setRates] = useState<null | { usd: number; eur: number; updated: string }>(null);
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
   const load = async () => {
@@ -1475,8 +1475,13 @@ function LiveFxCard({ usd, eur, onApply }: { usd: number; eur: number; onApply: 
     { code: "USD", key: "usd", live: rates?.usd, cur: usd },
     { code: "EUR", key: "euro", live: rates?.eur, cur: eur },
   ];
+  // Project total selling (EGP, excl. VAT) → USD at the manual rate vs the live rate.
+  const fmtUsd = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
+  const sellUsdDefault = usd > 0 ? sellEgp / usd : 0;
+  const sellUsdLive = rates && rates.usd > 0 ? sellEgp / rates.usd : null;
   return (
-    <div className="card w-full p-5 lg:max-w-md">
+    <div className="flex w-full flex-col gap-3 lg:max-w-md">
+      <div className="card w-full p-5">
       <div className="flex items-center justify-between gap-2">
         <h2 className="sec-head mb-0">Live Exchange Rates</h2>
         <button type="button" onClick={load} disabled={status === "loading"} title="Refresh live rates"
@@ -1524,6 +1529,20 @@ function LiveFxCard({ usd, eur, onApply }: { usd: number; eur: number; onApply: 
       <p className="mt-3 text-[11px] text-muted">
         Source: open.er-api.com{rates?.updated ? ` · updated ${rates.updated}` : ""}
       </p>
+      </div>{/* /Live Exchange Rates card */}
+      {/* Total project selling in USD (excl. VAT): default (manual) rate vs live rate. */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="card p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Project selling · default rate</p>
+          <p className="mt-0.5 text-lg font-extrabold text-ink">{fmtUsd(sellUsdDefault)}</p>
+          <p className="text-[10px] text-muted">USD, excl. VAT · @ {usd} EGP/USD</p>
+        </div>
+        <div className="card border-brand/40 bg-brand-light/50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Project selling · live rate</p>
+          <p className="mt-0.5 text-lg font-extrabold text-brand-dark">{sellUsdLive != null ? fmtUsd(sellUsdLive) : "…"}</p>
+          <p className="text-[10px] text-muted">USD, excl. VAT · @ {rates?.usd != null ? rates.usd.toFixed(2) : "…"} EGP/USD</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1939,7 +1958,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
       <div className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
         {sel && (sel.spare
           ? <SpareEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />
-          : <PanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />)}
+          : <PanelEditor key={sel.id} s={s} p={sel} up={up} upPanel={upPanel} />)}
       </div>
     </div>
   );
@@ -2083,11 +2102,76 @@ function CopperBreakdownWindow({ which, p, calc, f, onClose }: {
   );
 }
 
-function PanelEditor({ s, p, upPanel }: {
+function PanelEditor({ s, p, up, upPanel }: {
   s: LvState; p: LvPanel;
+  up: (patch: Partial<LvState>) => void;
   upPanel: (id: string, patch: Partial<LvPanel>) => void;
 }) {
   const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
+  // In the first panel, each "common" field (ambient temp, form, neutral, earth,
+  // copper, incoming/outgoing cables) carries an "Apply to all" link that copies
+  // just that field onto every panel.
+  const isFirstPanel = s.panels[0]?.id === p.id;
+  type CommonKey = "ambTemp" | "form" | "neutral" | "earth" | "copperType" | "incomingCables" | "outgoingCables";
+  // "Apply to" — the first panel can copy any common field onto chosen panels: a
+  // checkbox popover lists the other panels, plus an "All panels" select-all.
+  const [applyOpen, setApplyOpen] = useState<CommonKey | null>(null);
+  const [applySel, setApplySel] = useState<Set<string>>(() => new Set());
+  const applyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!applyOpen) return;
+    const onDown = (e: MouseEvent) => { if (applyRef.current && !applyRef.current.contains(e.target as Node)) setApplyOpen(null); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [applyOpen]);
+  const applyTargets = s.panels.filter((pp) => pp.id !== p.id); // every panel except this (source) one
+  const doApply = (key: CommonKey) => {
+    const val = p[key];
+    up({ panels: s.panels.map((pp) => (applySel.has(pp.id) ? { ...pp, [key]: val } : pp)) });
+    setApplyOpen(null);
+  };
+  const commonField = (label: string, key: CommonKey, options: readonly string[], alignRight = false) => {
+    const open = applyOpen === key;
+    const allOn = applyTargets.length > 0 && applyTargets.every((pp) => applySel.has(pp.id));
+    return (
+      <div className="relative">
+        <div className="flex items-baseline justify-between gap-1.5">
+          <L>{label}</L>
+          {isFirstPanel && s.panels.length > 1 && (
+            <button type="button" onClick={() => { setApplySel(new Set()); setApplyOpen(open ? null : key); }}
+              title={`Copy this ${label} onto other panels`}
+              className="shrink-0 text-[10px] font-bold text-brand hover:underline">Apply to</button>
+          )}
+        </div>
+        <Sel value={p[key] as any} onChange={(v) => u({ [key]: v } as Partial<LvPanel>)} options={options as any} />
+        {open && (
+          <div ref={applyRef} className={`absolute ${alignRight ? "right-0" : "left-0"} top-full z-30 mt-1 w-56 rounded-lg border border-line bg-white p-2 text-left shadow-lift`}>
+            <p className="mb-1 px-0.5 text-[11px] font-bold text-ink">Apply {label} to…</p>
+            <label className="flex items-center gap-1.5 border-b border-line/60 px-0.5 pb-1.5 text-xs font-semibold text-ink">
+              <input type="checkbox" className="accent-brand" checked={allOn}
+                onChange={() => setApplySel(allOn ? new Set() : new Set(applyTargets.map((pp) => pp.id)))} />
+              All panels
+            </label>
+            <div className="max-h-40 overflow-auto py-1">
+              {applyTargets.map((pp) => (
+                <label key={pp.id} className="flex items-center gap-1.5 px-0.5 py-0.5 text-xs text-ink">
+                  <input type="checkbox" className="accent-brand" checked={applySel.has(pp.id)}
+                    onChange={() => setApplySel((prev) => { const n = new Set(prev); if (n.has(pp.id)) n.delete(pp.id); else n.add(pp.id); return n; })} />
+                  <span className="truncate">{s.panels.indexOf(pp) + 1}. {pp.name.trim() || "(unnamed)"}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-1.5 border-t border-line/60 pt-1.5">
+              <button type="button" onClick={() => setApplyOpen(null)}
+                className="rounded px-2 py-0.5 text-[11px] font-semibold text-muted hover:text-ink">Cancel</button>
+              <button type="button" disabled={applySel.size === 0} onClick={() => doApply(key)}
+                className="rounded bg-brand px-2.5 py-0.5 text-[11px] font-bold text-white hover:bg-brand-dark disabled:opacity-40">Apply ({applySel.size})</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
   const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
   // Busbar Rating — auto-selected from the incoming C.B's ampere frame; still editable.
   // 0 (→ "— Select —") means no incoming C.B.
@@ -2191,13 +2275,13 @@ function PanelEditor({ s, p, upPanel }: {
           </div>
           <div><L>Short circuit</L><input className="input" value={p.shortCircuit}
             placeholder="e.g. 50 kA" onChange={(e) => u({ shortCircuit: e.target.value })} /></div>
-          <div><L>Amb. temp</L><Sel value={p.ambTemp as any} onChange={(v) => u({ ambTemp: v })} options={AMB_TEMPS} /></div>
-          <div><L>Form</L><Sel value={p.form as any} onChange={(v) => u({ form: v })} options={FORMS} /></div>
-          <div><L>Neutral</L><Sel value={p.neutral as any} onChange={(v) => u({ neutral: v })} options={NEUTRAL_EARTH} /></div>
-          <div><L>Earth</L><Sel value={p.earth as any} onChange={(v) => u({ earth: v })} options={NEUTRAL_EARTH} /></div>
-          <div><L>Copper</L><Sel value={p.copperType as any} onChange={(v) => u({ copperType: v })} options={COPPER_TYPES} /></div>
-          <div><L>Incoming cables</L><Sel value={p.incomingCables as any} onChange={(v) => u({ incomingCables: v })} options={INCOMING_CABLES} /></div>
-          <div><L>Outgoing cables</L><Sel value={p.outgoingCables as any} onChange={(v) => u({ outgoingCables: v })} options={OUTGOING_CABLES} /></div>
+          {commonField("Amb. temp", "ambTemp", AMB_TEMPS, true)}
+          {commonField("Form", "form", FORMS)}
+          {commonField("Neutral", "neutral", NEUTRAL_EARTH)}
+          {commonField("Earth", "earth", NEUTRAL_EARTH, true)}
+          {commonField("Copper", "copperType", COPPER_TYPES)}
+          {commonField("Incoming cables", "incomingCables", INCOMING_CABLES)}
+          {commonField("Outgoing cables", "outgoingCables", OUTGOING_CABLES, true)}
           {(() => {
             const autoRaw = mainBusbarAutoRaw(p);   // family auto value, ignoring any override
             const isAutoFamily = autoRaw !== null;
@@ -3568,6 +3652,23 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
   useEffect(() => setType(types.includes(2) ? 2 : (types[0] ?? 1)), [types]); // default Type 2 when available
   const [withCtl, setWithCtl] = useState(true);
   const [qty, setQty] = useState(1); // RPT-1: quantity for this combination
+  // KVA → kW helper: kW = KVA × P.F, rounded UP to the nearest standard motor kW
+  // in the current list, then auto-selected in the Motor (kW) dropdown.
+  const [kva, setKva] = useState("");
+  const [pf, setPf] = useState("0.8");
+  const roundUpKw = (raw: number): string => {
+    const sorted = [...kws].sort((a, b) => parseFloat(a) - parseFloat(b));
+    for (const k of sorted) if (parseFloat(k) >= raw - 1e-9) return k; // smallest rating ≥ demand
+    return sorted[sorted.length - 1] ?? kw;                            // beyond the top rating → the max
+  };
+  const applyFromKva = (kvaStr: string, pfStr: string) => {
+    const raw = (parseFloat(kvaStr) || 0) * (parseFloat(pfStr) || 0);
+    if (raw > 0) setKw(roundUpKw(raw));
+  };
+  // Re-apply if the kW list changes (e.g. a different Starter) so the KVA stays honoured.
+  useEffect(() => { const raw = (parseFloat(kva) || 0) * (parseFloat(pf) || 0); if (raw > 0) setKw(roundUpKw(raw)); }, [kws]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rawKw = (parseFloat(kva) || 0) * (parseFloat(pf) || 0);
+  const pickedKw = rawKw > 0 ? roundUpKw(rawKw) : "";
   return (
     <div className="rounded-lg border border-line p-3">
       <div className="flex flex-wrap items-end gap-3">
@@ -3594,6 +3695,20 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
             twoSpeed ? `MCC Two Speed ${kw}/${lowKw}` : `MCC ${kind} ${kw}`)}>
           Generate combination
         </button>
+        {/* KVA → kW converter — fills the Motor (kW) above from KVA × P.F (rounded up). */}
+        <div className="ml-auto flex items-end gap-2 rounded-md border border-dashed border-brand/50 bg-brand-light/50 px-3 py-2">
+          <div><L>KVA</L>
+            <input className="input w-20" inputMode="decimal" placeholder="0" value={kva}
+              onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setKva(v); applyFromKva(v, pf); }} /></div>
+          <div><L>P.F</L>
+            <input className="input w-16" inputMode="decimal" value={pf}
+              onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setPf(v); applyFromKva(kva, v); }} /></div>
+          <div className="pb-1.5 text-[11px] font-semibold leading-tight text-brand-dark">
+            {rawKw > 0
+              ? <>= {rawKw.toFixed(2)} kW<br />→ selects <b>{pickedKw}</b></>
+              : <span className="text-muted">KVA × P.F<br />→ nearest kW</span>}
+          </div>
+        </div>
       </div>
     </div>
   );
