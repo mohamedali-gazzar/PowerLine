@@ -583,6 +583,7 @@ export interface MatRow {
   name?: string; // ABB-discount key fallback (enclosures whose reference is blank)
   stock: string;
   qty: number;
+  eur?: number; // ABB EUR list price (>0 ⇒ supplied from ABB ⇒ eligible for the ABB discount)
 }
 export interface MaterialList {
   abb: MatRow[];
@@ -614,6 +615,7 @@ export function buildMaterialList(s: LvState): MaterialList {
         reference: c.ref,
         stock: c.stock,
         qty: c.qty * mult,
+        eur: c.eur,
       });
       copperKg += cuKg(c) * c.qty * mult * buswayCopperMult(c.note); // busway rows carry extra copper
     }
@@ -625,6 +627,7 @@ export function buildMaterialList(s: LvState): MaterialList {
         name: it.name, // keeps the ABB-discount key aligned with calcPanel's abbKey(it)
         stock: "",
         qty: it.qty * mult,
+        eur: it.eur,
       });
     }
     copperKg += (mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) * mult;

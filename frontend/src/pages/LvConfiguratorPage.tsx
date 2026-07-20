@@ -4155,9 +4155,14 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   // Per-item ABB discount (%) — defaults to the Pricing-Settings global, editable
   // per item. Stored by reference||name; drives each ABB item's price in the quote.
   const globalPct = Math.round(s.factors.abbDiscount * 100);
-  // Default for a row: ABB products / enclosures follow the Pricing-Settings global; every
-  // other supplier (incl. cells) defaults to 0 — a per-item value still applies to any of them.
-  const defFor = (r: MatRow) => (r.supplier === "ABB" || r.supplier === "ABB Enclosure" ? globalPct : 0);
+  // Default for a row: ABB enclosures follow the Pricing-Settings global; ABB products
+  // follow it only when supplied from ABB (priced off the EUR import list, eur > 0) —
+  // locally-priced EGP items default to 0. Every other supplier (incl. cells) defaults
+  // to 0. A per-item value still applies to any of them.
+  const defFor = (r: MatRow) =>
+    r.supplier === "ABB Enclosure" ? globalPct
+    : r.supplier === "ABB" && (r.eur ?? 0) > 0 ? globalPct
+    : 0;
   const abbDisc: AbbDiscCtl = {
     globalPct,
     defaultFor: defFor,

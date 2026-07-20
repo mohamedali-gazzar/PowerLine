@@ -113,7 +113,10 @@ const sane = (kg: number) => (kg > 0 && kg < 200 ? kg : 0); // guard stray codes
  *  `itemFraction` (the per-item Material-List discount) applies to ANY brand when
  *  provided; without one, only ABB items follow the global factors.abbDiscount. */
 export function componentPriceEgp(c: { eur: number; egp: number; brand: string }, f: Factors, itemFraction?: number): number {
-  const frac = itemFraction != null ? itemFraction : c.brand === "ABB" ? f.abbDiscount : 0;
+  // The ABB discount only applies to items actually supplied from ABB — i.e. priced
+  // off ABB's EUR import list (eur > 0). Locally-priced EGP items (current
+  // transformers, digital meters, HRC fuses, surge protection, …) keep full price.
+  const frac = itemFraction != null ? itemFraction : c.brand === "ABB" && c.eur > 0 ? f.abbDiscount : 0;
   const base = c.eur > 0 ? c.eur * f.euro : c.egp;
   return base * (1 - frac);
 }
