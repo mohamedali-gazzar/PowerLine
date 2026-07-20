@@ -2084,7 +2084,7 @@ function PanelEditor({ s, p, upPanel }: {
             <span className={`text-[11px] text-muted transition-transform ${detailsOpen ? "rotate-90" : ""}`}>▶</span>
             Panel details
           </h2>
-          {p.name.trim() && <span className="truncate text-sm font-semibold text-muted">{p.name.trim()}</span>}
+          {p.name.trim() && <span className="truncate text-base font-semibold text-brand">{p.name.trim()}</span>}
         </button>
         {detailsOpen && (
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -2930,6 +2930,50 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
           )}
         </div>
       )}
+      {/* Single column header — shared by every section, pinned with this sticky block. */}
+      {p.components.some((c) => !isSpacer(c)) && (
+      <div className="mt-2 -mb-3 overflow-x-auto overflow-y-hidden">
+        <table className="w-full table-fixed text-[13px]">
+          <colgroup>
+            <col style={{ width: 24 }} />
+            <col />
+            <col style={{ width: 132 }} />
+            <col style={{ width: 64 }} />
+            <col style={{ width: 80 }} />
+            <col style={{ width: 112 }} />
+            <col style={{ width: 92 }} />
+            <col style={{ width: 92 }} />
+            <col style={{ width: 96 }} />
+          </colgroup>
+          <thead>
+            <tr className="text-left text-[12px] uppercase tracking-wide text-brand">
+              <th className="py-1"></th>
+              <th className="py-1 pr-2">Description</th>
+              <th className="py-1 pr-2">Ref</th>
+              <th className="py-1 pr-2">Qty</th>
+              <th className="py-1 pr-2">Adj.</th>
+              <th className="py-1 pr-2">Note</th>
+              <th className="py-1 pr-2 text-right">Unit cost</th>
+              <th className="py-1 pr-2 text-right">Total</th>
+              <th className="py-1 pr-1 text-right">
+                {(() => {
+                  // Select / clear ALL components across every section.
+                  const ids = p.components.filter((c) => !isSpacer(c)).map((c) => c.id);
+                  const sel = ids.filter((id) => selected.has(id)).length;
+                  return (
+                    <input type="checkbox" className="h-3.5 w-3.5 cursor-pointer accent-brand align-middle"
+                      checked={ids.length > 0 && sel === ids.length}
+                      ref={(el) => { if (el) el.indeterminate = sel > 0 && sel < ids.length; }}
+                      onChange={(e) => setSelected(e.target.checked ? new Set(ids) : new Set())}
+                      title="Select / clear all components" />
+                  );
+                })()}
+              </th>
+            </tr>
+          </thead>
+        </table>
+      </div>
+      )}
       </div>{/* /sticky header */}
 
       {/* table grouped by section */}
@@ -2948,6 +2992,18 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
             >
               <span>{sec}</span>
               <span className="flex items-center gap-0.5">
+                {(() => {
+                  // Select / clear every component in this section.
+                  const ids = p.components.filter((c) => c.section === sec && !isSpacer(c)).map((c) => c.id);
+                  const sel = ids.filter((id) => selected.has(id)).length;
+                  return (
+                    <input type="checkbox" className="mr-1 h-3.5 w-3.5 cursor-pointer accent-brand align-middle"
+                      checked={ids.length > 0 && sel === ids.length}
+                      ref={(el) => { if (el) el.indeterminate = sel > 0 && sel < ids.length; }}
+                      onChange={(e) => setSectionSel(sec, e.target.checked)}
+                      title="Select / clear all in this section" />
+                  );
+                })()}
                 <button type="button" title="Move section up" disabled={si === 0}
                   onClick={() => moveSection(sec, -1)}
                   className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark disabled:opacity-25">↑</button>
@@ -2970,32 +3026,6 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                   <col style={{ width: 92 }} />
                   <col style={{ width: 96 }} />
                 </colgroup>
-                <thead>
-                  <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
-                    <th className="py-1"></th>
-                    <th className="py-1 pr-2">Description</th>
-                    <th className="py-1 pr-2">Ref</th>
-                    <th className="py-1 pr-2">Qty</th>
-                    <th className="py-1 pr-2">Adj.</th>
-                    <th className="py-1 pr-2">Note</th>
-                    <th className="py-1 pr-2 text-right">Unit cost</th>
-                    <th className="py-1 pr-2 text-right">Total</th>
-                    <th className="py-1 pr-1 text-right">
-                      {(() => {
-                        // Section-wide select-all (Outgoings also keeps its per-group select-alls).
-                        const ids = p.components.filter((c) => c.section === sec && !isSpacer(c)).map((c) => c.id);
-                        const sel = ids.filter((id) => selected.has(id)).length;
-                        return (
-                          <input type="checkbox" className="h-3.5 w-3.5 cursor-pointer accent-brand align-middle"
-                            checked={ids.length > 0 && sel === ids.length}
-                            ref={(el) => { if (el) el.indeterminate = sel > 0 && sel < ids.length; }}
-                            onChange={(e) => setSectionSel(sec, e.target.checked)}
-                            title="Select / clear all in this section" />
-                        );
-                      })()}
-                    </th>
-                  </tr>
-                </thead>
                 <tbody>
                   {(() => {
                     const secComps = p.components.filter((c) => c.section === sec);
