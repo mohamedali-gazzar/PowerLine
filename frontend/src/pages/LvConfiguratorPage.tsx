@@ -4115,7 +4115,17 @@ function MatTable({ title, rows, withSupplier, note, abbDisc }: { title: string;
         <h3 className="text-sm font-bold text-brand-dark">{title}</h3>
         {note && <span className="text-[11px] text-muted">{note}</span>}
       </div>
-      <table className="w-full text-[13px]">
+      {/* table-fixed + a shared colgroup keep every table's columns at the same x,
+          so the headers of all Material-List tables line up with each other. */}
+      <table className="w-full table-fixed text-[13px]">
+        <colgroup>
+          <col />
+          <col style={{ width: 210 }} />
+          {abbDisc && <col style={{ width: 110 }} />}
+          {withSupplier && <col style={{ width: 150 }} />}
+          <col style={{ width: 96 }} />
+          <col style={{ width: 72 }} />
+        </colgroup>
         <thead>
           <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
             <th className="px-4 py-1.5">Description</th>
