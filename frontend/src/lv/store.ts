@@ -91,6 +91,7 @@ export interface LvPanel {
   encFam: string;        // legacy — superseded by panelItems
   encKey: string;        // legacy — superseded by panelItems
   mainBusbarKg: number;  // manual fallback (cells / families without an auto rule)
+  mainBusbarOverride?: boolean; // true = ignore the auto rule and use mainBusbarKg manually
   busbarPoles: number;   // main-busbar bar count (3 = 3P, 4 = 4P) for the auto rule
   sellFactor: number;    // per-panel selling-factor override; 0 = follow the global (Pricing Settings)
   copperTool: CopperTool; // RPT-1: per-rating copper lengths (Cells → Copper Tool)
@@ -437,7 +438,9 @@ function panelHeightMm(p: LvPanel): number {
   return m ? parseInt(m[1], 10) : 0;
 }
 /** Auto main-busbar copper weight (kg), or null when the rule doesn't apply / inputs missing. */
-export function mainBusbarAuto(p: LvPanel): number | null {
+/** The family-based auto main-busbar weight (SR-Basic / Unikit / Local), ignoring any
+ *  manual override — null when the panel/family/rating doesn't support the auto rule. */
+export function mainBusbarAutoRaw(p: LvPanel): number | null {
   if (p.sizingMode !== "panels") return null;
   if (!BUSBAR_AUTO_FAMILIES.has(p.panelsSizing?.family ?? "")) return null;
   const area = busbarBarAreaMm2(p.ratingA);
@@ -446,6 +449,11 @@ export function mainBusbarAuto(p: LvPanel): number | null {
   const poles = p.busbarPoles || 3;
   const dbl = p.panelsSizing.layout === "Double" ? 2 : 1;
   return area * height * poles * 0.000009 * dbl;
+}
+/** The EFFECTIVE auto weight — null when the panel isn't auto OR the user has overridden
+ *  it (a confirmed manual entry), in which case the calc falls back to mainBusbarKg. */
+export function mainBusbarAuto(p: LvPanel): number | null {
+  return p.mainBusbarOverride ? null : mainBusbarAutoRaw(p);
 }
 
 // ── Calculation engine (mirrors the validated sample tool) ───────────────────

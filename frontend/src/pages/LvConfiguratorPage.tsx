@@ -12,7 +12,7 @@ import {
 import {
   newPanel, newSparePanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, busbarBarAreaMm2, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
+  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarBarAreaMm2, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck,
 } from "../lv/store";
 import {
@@ -2033,8 +2033,10 @@ function PanelEditor({ s, p, upPanel }: {
 
   return (
     <div className="space-y-4">
-      {/* Cost summary (RPT-1: shown first, above the panel name & details) */}
-      <div className="card p-5">
+      {/* Panel details (left) + live cost (right) — one compact row. */}
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+      {/* Cost summary (live) */}
+      <div className="card px-4 py-3 order-2">
         <button type="button" onClick={toggleCost} className="flex w-full items-center justify-between gap-3 text-left">
           <h2 className="sec-head mb-0 flex items-center gap-1.5">
             <span className={`text-[11px] text-muted transition-transform ${costOpen ? "rotate-90" : ""}`}>▶</span>
@@ -2075,10 +2077,8 @@ function PanelEditor({ s, p, upPanel }: {
         )}
       </div>
 
-      {copperOpen && <CopperBreakdownWindow which={copperOpen} p={p} calc={calc} f={s.factors} onClose={() => setCopperOpen(null)} />}
-
       {/* Panel details */}
-      <div className="card p-5">
+      <div className="card px-4 py-3 order-1">
         <button type="button" onClick={toggleDetails} className="flex w-full items-center justify-between gap-3 text-left">
           <h2 className="sec-head mb-0 flex items-center gap-1.5">
             <span className={`text-[11px] text-muted transition-transform ${detailsOpen ? "rotate-90" : ""}`}>▶</span>
@@ -2113,28 +2113,43 @@ function PanelEditor({ s, p, upPanel }: {
           <div><L>Incoming cables</L><Sel value={p.incomingCables as any} onChange={(v) => u({ incomingCables: v })} options={INCOMING_CABLES} /></div>
           <div><L>Outgoing cables</L><Sel value={p.outgoingCables as any} onChange={(v) => u({ outgoingCables: v })} options={OUTGOING_CABLES} /></div>
           {(() => {
-            const auto = mainBusbarAuto(p);
-            const isAuto = auto !== null;
+            const autoRaw = mainBusbarAutoRaw(p);   // family auto value, ignoring any override
+            const isAutoFamily = autoRaw !== null;
+            const overridden = !!p.mainBusbarOverride;
             const area = busbarBarAreaMm2(p.ratingA);
+            const startOverride = () => {
+              if (!confirm("Override the auto-calculated Main Busbar weight?\nIt will stop updating from the rating / height — you'll enter the KG manually. You can revert to auto anytime.")) return;
+              u({ mainBusbarOverride: true, mainBusbarKg: parseFloat((autoRaw ?? 0).toFixed(2)) });
+            };
             return (
               <>
                 <div>
                   <L>Main Busbar (KG)</L>
-                  {isAuto ? (
+                  {isAutoFamily && !overridden ? (
                     <>
-                      <input className="input bg-surface text-muted" value={auto.toFixed(2)} readOnly tabIndex={-1} />
-                      <p className="mt-1 text-[11px] text-muted">
-                        auto · {area} mm² × height × {p.busbarPoles || 3}P × 0.000009
-                        {p.panelsSizing.layout === "Double" ? " × 2" : ""}
-                      </p>
+                      <input className="input bg-surface text-muted" value={autoRaw.toFixed(2)} readOnly tabIndex={-1} />
+                      <div className="mt-1 flex items-start justify-between gap-2">
+                        <p className="text-[11px] text-muted">
+                          auto · {area} mm² × height × {p.busbarPoles || 3}P × 0.000009
+                          {p.panelsSizing.layout === "Double" ? " × 2" : ""}
+                        </p>
+                        <button type="button" onClick={startOverride}
+                          className="shrink-0 text-[11px] font-semibold text-brand hover:underline" title="Enter the weight manually (asks to confirm)">✎ Edit</button>
+                      </div>
                     </>
                   ) : (
                     <>
                       <input className="input" type="number" min={0} step={0.5} value={p.mainBusbarKg || ""}
                         placeholder="0" onChange={(e) => u({ mainBusbarKg: parseFloat(e.target.value) || 0 })} />
-                      <p className="mt-1 text-[11px] text-muted">
-                        auto for SR-Basic / Unikit / Local · manual otherwise
-                      </p>
+                      <div className="mt-1 flex items-start justify-between gap-2">
+                        <p className="text-[11px] text-muted">
+                          {isAutoFamily ? "manual override · auto disabled" : "auto for SR-Basic / Unikit / Local · manual otherwise"}
+                        </p>
+                        {isAutoFamily && overridden && (
+                          <button type="button" onClick={() => u({ mainBusbarOverride: false })}
+                            className="shrink-0 text-[11px] font-semibold text-brand hover:underline" title={`Back to auto (${(autoRaw ?? 0).toFixed(2)} KG)`}>↺ Auto</button>
+                        )}
+                      </div>
                     </>
                   )}
                 </div>
@@ -2153,6 +2168,9 @@ function PanelEditor({ s, p, upPanel }: {
         </div>
         )}
       </div>
+      </div>{/* /details + cost row */}
+
+      {copperOpen && <CopperBreakdownWindow which={copperOpen} p={p} calc={calc} f={s.factors} onClose={() => setCopperOpen(null)} />}
 
       {/* Components (section pills + circuit-combination sub-row live inside this card) */}
       <ComponentsCard s={s} p={p} u={u} comboKind={comboKind} setComboKind={setComboKind} />
@@ -2750,7 +2768,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
               onDragOver={(e) => { if (dragId) { e.preventDefault(); if (overSec !== sec) setOverSec(sec); } }}
               onDragLeave={() => setOverSec((x) => (x === sec ? null : x))}
               onDrop={(e) => { e.preventDefault(); dropOnSection(sec); }}
-              className={`inline-flex items-center gap-1 rounded-full border px-5 py-2.5 text-sm font-semibold transition ${
+              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                 overSec === sec ? "border-brand bg-brand-light text-brand ring-2 ring-brand/50"
                 : active ? "border-brand bg-brand-light text-brand" : "border-line bg-white text-muted hover:border-brand/40"
               }`}>
@@ -2769,18 +2787,18 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
               {!isFixed(sec) && (
                 <span className="ml-1 inline-flex items-center gap-0.5 border-l border-line/70 pl-1">
                   <button type="button" title="Duplicate section with its components" onClick={() => duplicateSection(sec)}
-                    className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">⧉</button>
+                    className="grid h-5 w-5 place-items-center rounded text-xs leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">⧉</button>
                   <button type="button" title="Rename section" onClick={() => { setEditVal(sec); setEditingSec(sec); }}
-                    className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">✎</button>
+                    className="grid h-5 w-5 place-items-center rounded text-xs leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">✎</button>
                   <button type="button" title="Remove section" onClick={() => removeSection(sec)}
-                    className="grid h-6 w-6 place-items-center rounded text-sm leading-none text-red-500 hover:bg-red-100 hover:text-red-600">✕</button>
+                    className="grid h-5 w-5 place-items-center rounded text-xs leading-none text-red-500 hover:bg-red-100 hover:text-red-600">✕</button>
                 </span>
               )}
             </span>
             {sec === "Outgoings" && (
               <button type="button" title="Add a P.F.C combination — its own section beside Outgoings"
                 onClick={() => { setComboKind(comboKind === "pfc" ? null : "pfc"); setAddTarget(null); }}
-                className={`inline-flex items-center gap-1 rounded-full border px-5 py-2.5 text-sm font-semibold transition ${
+                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   comboKind === "pfc" ? "border-brand bg-brand-light text-brand" : "border-line bg-white text-muted hover:border-brand/40"
                 }`}>
                 + P.F.C
@@ -2789,7 +2807,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
             </Fragment>
           );
         })}
-        <input className="input h-10 w-40 rounded-full text-sm" placeholder="New section…" value={newSection}
+        <input className="input h-8 w-36 rounded-full text-xs" placeholder="New section…" value={newSection}
           onChange={(e) => setNewSection(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && newSection.trim()) {
@@ -2801,7 +2819,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
 
       {/* Row 2 — circuit combinations (smaller, secondary). Each is inserted as a GROUP inside the active section. */}
       <div className="mb-3 flex flex-wrap items-center gap-1">
-        <span className="mr-1 text-[10px] font-bold uppercase tracking-wide text-muted">Combinations</span>
+        <span className="mr-1 text-[12px] font-bold uppercase tracking-wide text-brand">Combinations</span>
         {COMBOS.map(([k, label]) => (
           <button key={k} type="button" title={`Add a ${label} combination as a group inside “${p.activeSection}”`}
             onClick={() => { setComboKind(comboKind === k ? null : k); setPreview([]); setTag(""); setAddTarget(null); }}
