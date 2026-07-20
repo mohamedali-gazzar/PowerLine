@@ -70,6 +70,14 @@ export const COMBOS = combosJson as {
 export const AMB_TEMPS = ["35°C", "40°C", "45°C", "50°C", "55°C"] as const;
 export const NEUTRAL_EARTH = ["25% Phase", "50% Phase", "100% Phase"] as const;
 export const COPPER_TYPES = ["Bare", "Raychem", "Tin-plated", "Silver-Plated Connections"] as const;
+// Plating/treatment cost premium on the Main Busbar copper weight, by copper type.
+export const COPPER_TYPE_FACTORS: Record<string, number> = {
+  "Bare": 1,
+  "Raychem": 1.02,
+  "Tin-plated": 1.05,
+  "Silver-Plated Connections": 1.15,
+};
+export const copperTypeFactor = (t?: string): number => COPPER_TYPE_FACTORS[t ?? "Bare"] ?? 1;
 export const INCOMING_CABLES = ["Bottom", "Top", "Top Busway"] as const;
 export const OUTGOING_CABLES = ["Bottom", "Top", "Top Busway", "Bottom & Top", "Bottom & Top Busway"] as const;
 export const FORMS = ["1", "2a", "2b", "3a", "3b", "4a", "4b"] as const;

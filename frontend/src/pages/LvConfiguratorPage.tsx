@@ -6,7 +6,7 @@ import { useStaff, SALES_MANAGER } from "../staff";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
   PANEL_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
-  COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp,
+  COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp, copperTypeFactor,
   type DbComponent, type DbEnclosure,
 } from "../lv/catalog";
 import {
@@ -1910,6 +1910,8 @@ function CopperBreakdownWindow({ which, p, calc, f, onClose }: {
 }) {
   const [min, setMin] = useState(false);
   const rate = f.copper; // EGP / kg copper
+  const cuFactor = copperTypeFactor(p.copperType); // busbar plating premium (Bare 1 · Raychem 1.02 · Tin-plated 1.05 · Silver-Plated 1.15)
+  const facStr = cuFactor !== 1 ? ` × ${cuFactor}` : ""; // shown in the cost equation only when it changes the price
   // Main-busbar pieces — mirror mainBusbarAuto() for display.
   const isAuto = mainBusbarAuto(p) !== null;
   const area = busbarBarAreaMm2(p.ratingA);
@@ -1952,13 +1954,15 @@ function CopperBreakdownWindow({ which, p, calc, f, onClose }: {
               <div>Bar section <b className="text-ink">{area} mm²</b> — from incomer rating <b className="text-ink">{p.ratingA} A</b></div>
               <div>Panel height <b className="text-ink">{height} mm</b> — from Sizing (1) “{slot1?.name}”</div>
               <div>Poles <b className="text-ink">{poles}</b> · copper density <b className="text-ink">0.000009</b> kg/mm³{isDouble && <> · <b className="text-ink">Double ×2</b></>}</div>
+              <div>Copper type <b className="text-ink">{p.copperType || "Bare"}</b> — busbar factor <b className="text-ink">×{cuFactor}</b></div>
               <div className={eq}>{area} × {height} × {poles} × 0.000009{isDouble ? " × 2" : ""} = <b>{fmtNum(calc.busbarKg)} kg</b></div>
-              <div className={eq}>{fmtNum(calc.busbarKg)} kg × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
+              <div className={eq}>{fmtNum(calc.busbarKg)} kg{facStr} × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
             </div>
           ) : (
             <div className="space-y-0.5 text-muted">
               <div>Manual value <b className="text-ink">{fmtNum(calc.busbarKg)} kg</b> — the auto rule applies only to SR-Basic / Unikit / Local panels with a rating and a Sizing (1).</div>
-              <div className={eq}>{fmtNum(calc.busbarKg)} kg × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
+              <div>Copper type <b className="text-ink">{p.copperType || "Bare"}</b> — busbar factor <b className="text-ink">×{cuFactor}</b></div>
+              <div className={eq}>{fmtNum(calc.busbarKg)} kg{facStr} × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
             </div>
           )}
           </>)}
@@ -4192,7 +4196,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   const abbNote = "ABB discount (%) is editable per item · defaults from Pricing Settings";
   const candidates: (Block | false)[] = [
     { kind: "table", title: "ABB Products", rows: ml.abb, note: abbNote },
-    !abbOnly && { kind: "table", title: "Other Suppliers", rows: ml.other, withSupplier: true },
+    !abbOnly && { kind: "table", title: "Other Suppliers", rows: ml.other },
     !abbOnly && { kind: "table", title: "PLP Cells", rows: ml.plpCells },
     { kind: "table", title: "ABB Enclosures", rows: ml.abbEnclosures, note: abbNote },
     !abbOnly && { kind: "table", title: "IS2", rows: ml.is2 },

@@ -10,6 +10,7 @@ import {
   DEFAULT_SUPPORT_ENGINEERS,
   SALES_MANAGER,
   componentPriceEgp,
+  copperTypeFactor,
   cuPanelKg,
   cuCellKg,
   cellPriceEgp,
@@ -554,8 +555,10 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   }
   const cuConnCost = cuWeight * f.copper;
   // Main busbar: auto rule for sheet-metal panels, else the manual entry.
+  // Copper TYPE (Bare / Tin-plated / Silver-Plated Connections / Raychem) adds a
+  // plating premium on the busbar weight — the Cu-connection copper is unaffected.
   const busbarKg = mainBusbarAuto(p) ?? (p.mainBusbarKg || 0);
-  const busbarCost = busbarKg * f.copper;
+  const busbarCost = busbarKg * f.copper * copperTypeFactor(p.copperType);
   // Kit = a % of the enclosure cost, per system (see kitRate).
   const kits = enclCost * kitRate(p);
   const unitCost = compCost + enclCost + cuConnCost + busbarCost + kits;
@@ -648,9 +651,13 @@ export function buildMaterialList(s: LvState): MaterialList {
 
   const rows = [...agg.values()];
   const isEnc = (r: MatRow) => r.supplier === "ABB Enclosure";
+  // "Supplied from ABB" = an ABB-branded item priced off ABB's EUR import list (eur > 0).
+  // ABB-branded items priced directly in EGP are locally sourced → they join every other
+  // non-ABB brand in the "Other Suppliers" table.
+  const isAbbSupplied = (r: MatRow) => r.supplier === "ABB" && (r.eur ?? 0) > 0;
   return {
-    abb: rows.filter((r) => r.supplier === "ABB" && !isEnc(r)),
-    other: rows.filter((r) => !["ABB", "Pro-E", "IS2", "PLP"].includes(r.supplier) && !isEnc(r)),
+    abb: rows.filter((r) => isAbbSupplied(r) && !isEnc(r)),
+    other: rows.filter((r) => !["Pro-E", "IS2", "PLP"].includes(r.supplier) && !isEnc(r) && !isAbbSupplied(r)),
     plpCells: rows.filter((r) => r.supplier === "PLP"),
     abbEnclosures: rows.filter(isEnc),
     is2: rows.filter((r) => r.supplier === "IS2"),
