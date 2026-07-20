@@ -13,7 +13,7 @@ import {
   newPanel, newSparePanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarBarAreaMm2, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
-  type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck,
+  type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
 } from "../lv/store";
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
@@ -35,7 +35,7 @@ import {
   COPPER_RATINGS, csaFor, copperWeight, copperTotal, roundUpRating, ratingForCsa, pctOf,
 } from "../lv/copper";
 
-type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity";
+type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "summary";
 const TABS: Tab[] = ["project", "pricing", "panels", "technical", "commercial", "material", "spare", "selectivity"];
 
 /** Effective combination group per component (id → group). A component keeps its
@@ -503,8 +503,8 @@ export default function LvConfiguratorPage() {
           solid band so content scrolls cleanly underneath. */}
       <div className="sticky top-0 z-30 -mx-4 mb-4 flex flex-wrap gap-1.5 border-b border-line/60 bg-surface px-4 py-2.5 no-print sm:-mx-6 sm:px-6">
         {((isSpareQtn
-          ? [["project", "Project"], ["pricing", "Pricing Settings"], ["spare", "Spare Parts"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"]]
-          : [["project", "Project"], ["pricing", "Pricing Settings"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"], ["selectivity", "Selectivity"]]) as [Tab, string][]).map(([t, label]) => (
+          ? [["project", "Project"], ["pricing", "Pricing Settings"], ["spare", "Spare Parts"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"], ["summary", "Summary"]]
+          : [["project", "Project"], ["pricing", "Pricing Settings"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"], ["selectivity", "Selectivity"], ["summary", "Summary"]]) as [Tab, string][]).map(([t, label]) => (
           <button key={t} onClick={() => goToTab(t)}
             className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
               tab === t ? "border-brand bg-brand text-white shadow-soft" : "border-line bg-white text-muted hover:border-brand/40"
@@ -531,6 +531,7 @@ export default function LvConfiguratorPage() {
         {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} />)}
         {tab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
         {tab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} />}
+        {tab === "summary" && <SummaryTab s={s} up={up} />}
       </div>
     </div>
   );
@@ -1415,17 +1416,26 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
 function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }) {
   const f = s.factors;
   const upF = (k: string, v: number) => up({ factors: { ...f, [k]: v } });
+  const fx = useLiveRates();
+  // Your USD/EUR rate must stay at or above the live rate — enforced as a field minimum.
+  const liveUsd = liveRate2dp(fx.rates?.usd);
+  const liveEur = liveRate2dp(fx.rates?.eur);
   // plain function (NOT a nested component) so inputs keep focus across re-renders
-  const num = (k: "euro" | "usd" | "copper" | "sheetMetal" | "operations" | "factor" | "abbDiscount" | "vat",
-    label: string, opts?: { step?: number; pct?: boolean; hint?: string }) => (
-    <div key={k}>
-      <L>{label}</L>
-      <input className="input" type="number" step={opts?.step ?? 0.01}
-        value={opts?.pct ? Math.round(f[k] * 10000) / 100 : f[k]}
-        onChange={(e) => upF(k, opts?.pct ? (parseFloat(e.target.value) || 0) / 100 : parseFloat(e.target.value) || 0)} />
-      {opts?.hint && <p className="mt-1 text-[11px] text-muted">{opts.hint}</p>}
-    </div>
-  );
+  const num = (k: "euro" | "usd" | "safetyFactor" | "copper" | "sheetMetal" | "operations" | "factor" | "abbDiscount" | "vat",
+    label: string, opts?: { step?: number; pct?: boolean; hint?: string; min?: number; max?: number }) => {
+    const capMax = (v: number) => (opts?.max != null ? Math.min(opts.max, v) : v);         // enforce max as you type
+    const clamp = (v: number) => Math.min(opts?.max ?? Infinity, Math.max(opts?.min ?? -Infinity, v)); // full clamp on blur
+    return (
+      <div key={k}>
+        <L>{label}</L>
+        <input className="input" type="number" step={opts?.step ?? 0.01} min={opts?.min} max={opts?.max}
+          value={opts?.pct ? Math.round(f[k] * 10000) / 100 : f[k]}
+          onChange={(e) => { const d = capMax(parseFloat(e.target.value) || 0); upF(k, opts?.pct ? d / 100 : d); }}
+          onBlur={(e) => { const d = clamp(parseFloat(e.target.value) || 0); upF(k, opts?.pct ? d / 100 : d); }} />
+        {opts?.hint && <p className="mt-1 text-[11px] text-muted">{opts.hint}</p>}
+      </div>
+    );
+  };
   return (
     <div className="flex flex-col items-start gap-4 animate-fade-up lg:flex-row">
       <div className="card w-full max-w-3xl p-5">
@@ -1437,22 +1447,28 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
           {num("factor", "Selling factor", { hint: "cost ÷ factor = selling price" })}
           {num("copper", "Copper (EGP/KG)", { step: 1 })}
           {num("sheetMetal", "Sheet metal (EGP/KG)", { step: 1 })}
-          {num("usd", "USD → EGP")}
-          {num("euro", "EUR → EGP")}
+          {num("euro", "EUR → EGP", { min: liveEur, hint: liveEur ? `must be ≥ live ${liveEur}` : undefined })}
+          {num("usd", "USD → EGP", { min: liveUsd, hint: liveUsd ? `must be ≥ live ${liveUsd}` : undefined })}
+          {num("safetyFactor", "Safety Factor (%)", { pct: true, min: 0, max: 5, hint: "0–5% only · 2% → ×1.02 · 0% = no change" })}
           {num("operations", "Operations (%)", { pct: true })}
           {num("abbDiscount", "ABB discount (%)", { pct: true, hint: "Applied to ABB products ONLY (RPT-01)" })}
           {num("vat", "VAT (%)", { pct: true })}
         </div>
       </div>
-      <LiveFxCard usd={f.usd} eur={f.euro} sellEgp={grandTotals(s).sell} onApply={upF} />
+      <LiveFxCard s={s} fx={fx} onApply={upF} />
+      <div className="card flex w-full flex-1 flex-col self-stretch p-5 lg:min-w-[15rem]">
+        <h2 className="sec-head mb-2">Record Results</h2>
+        <textarea className="input min-h-[220px] w-full flex-1 resize-y text-[13px]" placeholder="Record results, notes, decisions…"
+          value={s.recordResults ?? ""} onChange={(e) => up({ recordResults: e.target.value })} />
+      </div>
     </div>
   );
 }
 
-// Live FX rates (EGP) for USD & EUR — fetched client-side from a free, no-key,
-// CORS-enabled source (with a fallback). Lets the estimator compare the live
-// market rate against the manual Pricing-Settings rate and apply it in one click.
-function LiveFxCard({ usd, eur, sellEgp, onApply }: { usd: number; eur: number; sellEgp: number; onApply: (k: "usd" | "euro", v: number) => void }) {
+// Live FX (EGP) for USD & EUR — fetched client-side from a free, no-key, CORS-enabled
+// source (with a fallback). Shared so the Pricing fields' minimum and the LiveFxCard
+// both read the same rates without double-fetching.
+function useLiveRates() {
   const [rates, setRates] = useState<null | { usd: number; eur: number; updated: string }>(null);
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
   const load = async () => {
@@ -1471,17 +1487,29 @@ function LiveFxCard({ usd, eur, sellEgp, onApply }: { usd: number; eur: number; 
     setStatus("error");
   };
   useEffect(() => { load(); }, []);
+  return { rates, status, load };
+}
+type LiveRates = ReturnType<typeof useLiveRates>;
+/** 2-decimal live rate for a currency, or undefined until loaded. */
+const liveRate2dp = (v?: number) => (v && v > 0 ? Math.round(v * 100) / 100 : undefined);
+// Card comparing the live market rate against the manual Pricing-Settings rate, with
+// one-click "Use". The fetch is shared (see useLiveRates) and passed in as `fx`.
+function LiveFxCard({ s, fx, onApply }: { s: LvState; fx: LiveRates; onApply: (k: "usd" | "euro", v: number) => void }) {
+  const f = s.factors;
+  const { rates, status, load } = fx;
   const rows: { code: string; key: "usd" | "euro"; live?: number; cur: number }[] = [
-    { code: "USD", key: "usd", live: rates?.usd, cur: usd },
-    { code: "EUR", key: "euro", live: rates?.eur, cur: eur },
+    { code: "USD", key: "usd", live: rates?.usd, cur: f.usd },
+    { code: "EUR", key: "euro", live: rates?.eur, cur: f.euro },
   ];
-  // Project total selling (EGP, excl. VAT) → USD at the manual rate vs the live rate.
+  // Project selling in USD: LEFT uses the project's own rates; RIGHT re-prices the
+  // whole project at the LIVE rates (live EUR→EGP for cost, live USD→EGP to convert).
   const fmtUsd = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
-  const sellUsdDefault = usd > 0 ? sellEgp / usd : 0;
-  const sellUsdLive = rates && rates.usd > 0 ? sellEgp / rates.usd : null;
+  const sellUsdOwn = f.usd > 0 ? grandTotals(s).sell / f.usd : 0;
+  // Warn if a "your rate" is below the live rate (it must be equal or bigger).
+  const warnCodes = rows.filter((r) => r.live != null && r.cur < Math.round(r.live * 100) / 100).map((r) => r.code);
   return (
-    <div className="flex w-full flex-col gap-3 lg:max-w-md">
-      <div className="card w-full p-5">
+    <div className="flex w-full flex-col gap-3 self-stretch lg:max-w-md">
+      <div className="card flex w-full flex-1 flex-col p-5">
       <div className="flex items-center justify-between gap-2">
         <h2 className="sec-head mb-0">Live Exchange Rates</h2>
         <button type="button" onClick={load} disabled={status === "loading"} title="Refresh live rates"
@@ -1489,18 +1517,18 @@ function LiveFxCard({ usd, eur, sellEgp, onApply }: { usd: number; eur: number; 
           {status === "loading" ? "…" : "↻ Refresh"}
         </button>
       </div>
-      <p className="mb-3 text-xs text-muted">Market mid-rates in EGP — compare with your settings, or apply.</p>
+      <p className="mb-3 mt-3 text-xs text-muted">Market mid-rates in EGP — compare with your settings, or apply.</p>
+      <div className="flex-1">
       {status === "error" ? (
         <div className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-muted">
           Couldn't load live rates. <button type="button" onClick={load} className="font-semibold text-brand hover:underline">Retry</button>
         </div>
       ) : (
-        <table className="w-full text-[13px]">
+        <table className="h-full w-full text-[13px]">
           <thead>
             <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
               <th className="py-1.5">Currency</th>
               <th className="py-1.5 text-right">Live (EGP)</th>
-              <th className="py-1.5 text-right">Your rate</th>
               <th className="py-1.5"></th>
             </tr>
           </thead>
@@ -1511,7 +1539,6 @@ function LiveFxCard({ usd, eur, sellEgp, onApply }: { usd: number; eur: number; 
                 <tr key={r.code} className="border-t border-line/70">
                   <td className="py-1.5"><b className="text-ink">{r.code}</b> <span className="text-muted">→ EGP</span></td>
                   <td className="py-1.5 text-right font-bold text-ink">{status === "loading" ? "…" : (live?.toFixed(2) ?? "—")}</td>
-                  <td className="py-1.5 text-right text-muted">{r.cur}</td>
                   <td className="py-1.5 text-right">
                     <button type="button" disabled={live == null || live === r.cur}
                       onClick={() => live != null && onApply(r.key, live)}
@@ -1526,22 +1553,21 @@ function LiveFxCard({ usd, eur, sellEgp, onApply }: { usd: number; eur: number; 
           </tbody>
         </table>
       )}
+      </div>{/* /flex-1 table area */}
+      {status === "ok" && warnCodes.length > 0 && (
+        <p className="mt-2 rounded-md border border-red-400/50 bg-red-500/10 px-2 py-1 text-[11px] font-semibold text-red-500">
+          ⚠ Your rate is below the live rate for {warnCodes.join(" & ")} — check Pricing Settings.
+        </p>
+      )}
       <p className="mt-3 text-[11px] text-muted">
         Source: open.er-api.com{rates?.updated ? ` · updated ${rates.updated}` : ""}
       </p>
       </div>{/* /Live Exchange Rates card */}
-      {/* Total project selling in USD (excl. VAT): default (manual) rate vs live rate. */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="card p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Project selling · default rate</p>
-          <p className="mt-0.5 text-lg font-extrabold text-ink">{fmtUsd(sellUsdDefault)}</p>
-          <p className="text-[10px] text-muted">USD, excl. VAT · @ {usd} EGP/USD</p>
-        </div>
-        <div className="card border-brand/40 bg-brand-light/50 p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Project selling · live rate</p>
-          <p className="mt-0.5 text-lg font-extrabold text-brand-dark">{sellUsdLive != null ? fmtUsd(sellUsdLive) : "…"}</p>
-          <p className="text-[10px] text-muted">USD, excl. VAT · @ {rates?.usd != null ? rates.usd.toFixed(2) : "…"} EGP/USD</p>
-        </div>
+      {/* Project selling in USD at your (Pricing-Settings) rates. */}
+      <div className="card border-brand/40 bg-brand-light/50 p-3">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Project selling · USD</p>
+        <p className="mt-0.5 text-lg font-extrabold text-brand-dark">{fmtUsd(sellUsdOwn)}</p>
+        <p className="text-[10px] text-muted">EUR {f.euro} · ÷ {f.usd} EGP/USD · excl. VAT</p>
       </div>
     </div>
   );
@@ -1768,6 +1794,104 @@ function SpareEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: 
 // panel; Main Incoming & Adj are READ from the panel's Main-Incoming breaker (its
 // description and its ADJ. value, as set in the Panels tab).
 /** The panel's main incoming breaker — the first ACB/MCCB/MCB in a "Main Incoming" section. */
+// ── Summary tab: project overview + interactive sticky-note board ────────────
+const NOTE_COLORS: Record<string, string> = {
+  amber: "bg-amber-100 border-amber-300",
+  green: "bg-emerald-100 border-emerald-300",
+  blue: "bg-sky-100 border-sky-300",
+  pink: "bg-pink-100 border-pink-300",
+  slate: "bg-slate-100 border-slate-300",
+};
+const NOTE_KEYS = Object.keys(NOTE_COLORS);
+/** One draggable, resizable, editable, colourable sticky note. Live position/size
+ *  are kept locally while dragging and committed to state on release (one save). */
+function StickyNote({ note, onChange, onMove, onResize, onDelete }: {
+  note: SummaryNote; onChange: (patch: Partial<SummaryNote>) => void; onMove: (x: number, y: number) => void; onResize: (w: number, h: number) => void; onDelete: () => void;
+}) {
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const pos = drag ?? { x: note.x, y: note.y };
+  const dim = size ?? { w: note.w ?? 224, h: note.h ?? 176 };
+  // Generic pointer-drag helper: track from press, live-update via `set`, commit on release.
+  const dragWith = (e: React.PointerEvent, set: (ev: PointerEvent) => void, commit: (ev: PointerEvent) => void) => {
+    e.preventDefault();
+    const move = (ev: PointerEvent) => set(ev);
+    const end = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", end); commit(ev);
+    };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", end);
+  };
+  const startDrag = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest("textarea,button,[data-resize]")) return; // editing / colour / delete / resize — not a move
+    const sx = e.clientX, sy = e.clientY, ox = note.x, oy = note.y;
+    const at = (ev: PointerEvent) => ({ x: Math.max(0, ox + ev.clientX - sx), y: Math.max(0, oy + ev.clientY - sy) });
+    dragWith(e, (ev) => setDrag(at(ev)), (ev) => { const p = at(ev); setDrag(null); onMove(p.x, p.y); });
+  };
+  const startResize = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    const sx = e.clientX, sy = e.clientY, ow = note.w ?? 224, oh = note.h ?? 176;
+    const at = (ev: PointerEvent) => ({ w: Math.max(160, ow + ev.clientX - sx), h: Math.max(96, oh + ev.clientY - sy) });
+    dragWith(e, (ev) => setSize(at(ev)), (ev) => { const d = at(ev); setSize(null); onResize(d.w, d.h); });
+  };
+  return (
+    <div style={{ left: pos.x, top: pos.y, width: dim.w, height: dim.h }}
+      className={`absolute flex flex-col overflow-hidden rounded-md border shadow-soft ${NOTE_COLORS[note.color] ?? NOTE_COLORS.amber}`}>
+      <div onPointerDown={startDrag} className="flex cursor-move items-center justify-between px-2 py-1">
+        <div className="flex gap-1">
+          {NOTE_KEYS.map((c) => (
+            <button key={c} type="button" title={c} onClick={() => onChange({ color: c })}
+              className={`h-3.5 w-3.5 rounded-full border ${NOTE_COLORS[c]} ${note.color === c ? "ring-2 ring-brand ring-offset-1" : ""}`} />
+          ))}
+        </div>
+        <button type="button" onClick={onDelete} title="Delete note" className="px-1 text-base leading-none text-ink/40 hover:text-red-500">×</button>
+      </div>
+      <textarea value={note.text} onChange={(e) => onChange({ text: e.target.value })} placeholder="Type a note…"
+        className="w-full flex-1 resize-none bg-transparent px-2 pb-2 text-[13px] leading-snug text-ink placeholder:text-ink/40 focus:outline-none" />
+      <div data-resize onPointerDown={startResize} title="Drag to resize"
+        className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize"
+        style={{ backgroundImage: "linear-gradient(135deg, transparent 55%, rgb(0 0 0 / 0.28) 55%)" }} />
+    </div>
+  );
+}
+function SummaryTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }) {
+  const notes = s.summaryNotes ?? [];
+  const setNotes = (next: SummaryNote[]) => up({ summaryNotes: next });
+  const addNote = () => {
+    const n = notes.length;
+    setNotes([...notes, { id: uid(), text: "", color: NOTE_KEYS[n % NOTE_KEYS.length], x: 16 + (n % 5) * 28, y: 16 + (n % 5) * 28, w: 224, h: 176 }]);
+  };
+  const updateNote = (id: string, patch: Partial<SummaryNote>) => setNotes(notes.map((nn) => (nn.id === id ? { ...nn, ...patch } : nn)));
+  const removeNote = (id: string) => setNotes(notes.filter((nn) => nn.id !== id));
+  return (
+    <div className="space-y-4 animate-fade-up">
+      <div className="card p-5">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h2 className="sec-head mb-0">Notes &amp; sticky board</h2>
+            <p className="text-xs text-muted">Drag to arrange · click to edit · pick a colour. Saved with the QTN.</p>
+          </div>
+          <button type="button" onClick={addNote}
+            className="shrink-0 rounded-full border border-brand bg-brand px-4 py-1.5 text-xs font-bold text-white hover:bg-brand-dark">+ Add note</button>
+        </div>
+        <div className="relative mt-3 min-h-[460px] overflow-hidden rounded-lg border border-dashed border-line bg-surface/50"
+          style={{ backgroundImage: "radial-gradient(rgb(128 128 128 / 0.15) 1px, transparent 1px)", backgroundSize: "22px 22px" }}>
+          {notes.length === 0 && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-muted">
+              No notes yet — click “+ Add note” to jot reminders, decisions, customer requests…
+            </div>
+          )}
+          {notes.map((n) => (
+            <StickyNote key={n.id} note={n}
+              onChange={(patch) => updateNote(n.id, patch)}
+              onMove={(x, y) => updateNote(n.id, { x, y })}
+              onResize={(w, h) => updateNote(n.id, { w, h })}
+              onDelete={() => removeNote(n.id)} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 function selMainIncomer(p: LvPanel): PanelComponent | undefined {
   const isBreaker = (c: PanelComponent) => /\b(ACB|MCCB|MCB)\b/i.test(c.type || "");
   return p.components.find((c) => !isSpacer(c) && isBreaker(c) && /incom/i.test(c.section || ""));
@@ -3642,7 +3766,8 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
   const twoSpeed = kind === TWO_SPEED;
   const kws = useMemo(() => mccKws(kind), [kind]);
   const [kw, setKw] = useState(kws[0] ?? ""); // Two Speed: the HIGH-speed kW (primary)
-  useEffect(() => setKw(mccKws(kind)[0] ?? ""), [kind]);
+  // Two Speed defaults to High 11 kW (→ Low 5.5 kW); other starters use the first kW.
+  useEffect(() => { const list = mccKws(kind); setKw(kind === TWO_SPEED ? (list.find((k) => k === "11 kW") ?? list[0] ?? "") : (list[0] ?? "")); }, [kind]);
   // Two Speed low-speed kW — defaults to ~half the high speed (rounded to a standard),
   // still editable.
   const [lowKw, setLowKw] = useState("");

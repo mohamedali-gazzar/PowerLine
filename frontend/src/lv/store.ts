@@ -151,6 +151,20 @@ export interface LvState {
   // QTN kind chosen at creation: a normal panel quotation, or a spare-parts
   // quotation whose single "Spare parts" cell drives all offers.
   kind?: "panels" | "spare";
+  // Free-form sticky notes on the "Summary" tab (draggable/editable annotations).
+  summaryNotes?: SummaryNote[];
+  // Free-text "Record Results" box on the Pricing Settings tab.
+  recordResults?: string;
+}
+/** A draggable, resizable sticky note on the Summary tab. */
+export interface SummaryNote {
+  id: string;
+  text: string;
+  color: string; // palette key — amber | green | blue | pink | slate
+  x: number;     // px position within the board
+  y: number;
+  w?: number;    // px size (drag the corner to resize); defaults applied in the UI
+  h?: number;
 }
 
 /** Default General Terms & Conditions shown at the end of the commercial offer — editable.
@@ -324,6 +338,8 @@ export function initialState(): LvState {
     commercialTerms: DEFAULT_COMMERCIAL_TERMS.map((s) => ({ ...s })),
     commercialTermsAr: DEFAULT_COMMERCIAL_TERMS_AR.map((s) => ({ ...s })),
     abbItemDiscounts: {},
+    summaryNotes: [],
+    recordResults: "",
     kind: "panels",
   };
 }
@@ -518,7 +534,7 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
     const busbarCost = busbarKg * f.copper;
     const unitCost = compCost + busbarCost;
     const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
-    const sellUnit = factor > 0 ? unitCost / factor : unitCost;
+    const sellUnit = (factor > 0 ? unitCost / factor : unitCost) * (1 + (f.safetyFactor || 0));
     return { compCost, enclCost: 0, cuConnCost: 0, busbarCost, busbarKg, kits: 0, cuWeight: 0, unitCost, unitCostOps: unitCost, sellUnit, totalSell: sellUnit * p.qty };
   }
   let compCost = 0;
@@ -565,7 +581,7 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   const unitCostOps = unitCost * (1 + f.operations);
   // Per-panel selling factor overrides the global (Pricing Settings) when set (> 0).
   const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
-  const sellUnit = factor > 0 ? unitCostOps / factor : unitCostOps;
+  const sellUnit = (factor > 0 ? unitCostOps / factor : unitCostOps) * (1 + (f.safetyFactor || 0));
   return { compCost, enclCost, cuConnCost, busbarCost, busbarKg, kits, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
 }
 export function grandTotals(s: LvState) {

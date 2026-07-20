@@ -51,6 +51,11 @@ function normalize(state: LvState): LvState {
   state.notesGeneral ??= [...DEFAULT_GENERAL_NOTES];
   state.notesAdditional ??= [];
   state.abbItemDiscounts ??= {};
+  state.summaryNotes ??= [];
+  state.recordResults ??= "";
+  // Safety factor is now a % markup (selling × (1 + safetyFactor)); default 0 (no change).
+  // The old default was 1 (a ÷ divisor) — reset it to 0 so it doesn't double the price.
+  if (state.factors && (state.factors.safetyFactor == null || state.factors.safetyFactor === 1)) state.factors.safetyFactor = 0;
   // QTN kind: legacy QTNs (no kind) are panel quotations; a spare-parts QTN is one
   // whose cells are all spare cells.
   if (state.kind !== "spare") state.kind = "panels";

@@ -48,8 +48,9 @@ export const ENCLOSURES = enclosuresJson as DbEnclosure[];
 
 export interface Factors {
   factor: number;      // selling factor (cost ÷ factor = sell)
-  euro: number;        // EGP / EUR
-  usd: number;         // EGP / USD
+  euro: number;        // EGP / EUR (COST — EUR component prices × euro = EGP cost)
+  usd: number;         // EGP / USD (SELLING — EGP selling ÷ usd = selling in USD)
+  safetyFactor: number; // selling markup fraction: selling = (cost ÷ factor) × (1 + safetyFactor)
   copper: number;      // EGP / kg
   sheetMetal: number;  // EGP / kg
   operations: number;  // overhead fraction

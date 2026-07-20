@@ -194,14 +194,13 @@ export function buildMcc(kind: string, kw: string, type: number, withControl: bo
 }
 
 const kwNum = (kw: string) => parseFloat(kw) || 0;
-/** Default low-speed kW: half the high speed, rounded to the nearest lower standard DOL
- *  kW (so High 7.5 → Low 3). */
+/** Default low-speed kW: half the high speed, rounded UP to the nearest standard DOL
+ *  kW (so High 18.5 → 9.25 → Low 11; High 11 → 5.5 → Low 5.5). */
 export function prevSpeedKw(highKw: string): string {
   const ladder = dolType1Kws();
   const target = kwNum(highKw) / 2;
-  let best = ladder[0];
-  for (const k of ladder) if (kwNum(k) <= target + 1e-9) best = k;
-  return best;
+  for (const k of ladder) if (kwNum(k) >= target - 1e-9) return k; // smallest standard ≥ half the high speed
+  return ladder[ladder.length - 1];                                // beyond the top rating → the max
 }
 /** Merge identical component lines (same reference), summing their quantities. */
 function mergeLines(lines: ComboLine[]): ComboLine[] {

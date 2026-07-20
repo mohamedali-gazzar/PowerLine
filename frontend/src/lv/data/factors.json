@@ -2,6 +2,7 @@
  "factor": 0.7,
  "euro": 57.5,
  "usd": 50,
+ "safetyFactor": 0,
  "copper": 770,
  "sheetMetal": 115,
  "operations": 0.05,
