@@ -17,7 +17,7 @@ import {
 } from "../lv/store";
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
-  SYNC_TYPES, buildSync, type SyncTypeId,
+  buildSync, type SyncUnit,
   breakerPool, breakerAmps, buildPhotocell,
   MCC_KINDS, mccKws, mccTypes, buildMcc, buildTwoSpeed, prevSpeedKw, TWO_SPEED,
   PFC_DEFAULT, pfcTotalKvar, pfcHeader, buildPfc,
@@ -2489,6 +2489,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   const [q, setQ] = useState("");
   const [pasteMsg, setPasteMsg] = useState(""); // summary after a multi-item paste
   const [pastePreview, setPastePreview] = useState<null | { rows: { name: string; qty: number; match: DbComponent | null }[] }>(null);
+  const [pfcTab, setPfcTab] = useState<"known" | "calc">("known"); // P.F.C window: known-data entry vs calculation
+  const [pfcCalcKvar, setPfcCalcKvar] = useState<number | null>(null); // required kVAR from the calc tab → known tab
   const hits = useMemo(() => searchComponents(q, 40), [q]);
   const effGroup = effectiveGroups(p.components); // combination grouping incl. inherited groups
   // Current combination multiplier for a group (from an item's qty ÷ its base qty).
@@ -2585,6 +2587,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
       u({ sections, components: [...p.components, ...items], activeSection: section });
     } else {
       const sec = p.activeSection;
+      const cid = uid(); // one instance id for the whole combination → single "select all" checkbox
       const items = preview.map((l) => {
         // Indication Lamps + Push Buttons + Photocell + WD kit → flat items (no group header).
         if (comboKind === "lamps" || comboKind === "pushbtn" || comboKind === "photocell" || comboKind === "wd") {
@@ -2592,8 +2595,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
         }
         const grp = l.groupLabel || tag || "Combination";
         const c = l.comp ? toPanelComponent(l.comp, sec, l.qty, grp) : freeComponent(l.desc, sec, l.qty, grp);
-        // Custom combinations carry a ×N combination-qty control in their group header.
-        return { ...c, baseQty: l.baseQty ?? l.qty, ...(comboKind === "custom" ? { comboScalable: true } : {}) };
+        // Custom combinations + collected combo groups (e.g. "N Sources") carry a ×N combination-qty control.
+        return { ...c, baseQty: l.baseQty ?? l.qty, comboId: cid, ...(comboKind === "custom" || l.scalable ? { comboScalable: true } : {}) };
       });
       u({ components: [...p.components, ...items] });
     }
@@ -2723,10 +2726,10 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     const ids = p.components.filter((c) => c.section === sec && !isSpacer(c)).map((c) => c.id);
     setSelected((prev) => { const next = new Set(prev); ids.forEach((id) => (on ? next.add(id) : next.delete(id))); return next; });
   };
-  const setGroupSel = (sec: string, group: string, on: boolean) => {
-    const ids = p.components.filter((c) => c.section === sec && !isSpacer(c) && (effGroup.get(c.id) || "") === group).map((c) => c.id);
+  // Select / clear an explicit set of ids — used by the whole-combination checkbox (a
+  // combination can span several groups, e.g. Sync → Source 1 / Source 2 / Bus Coupler / Accessories).
+  const setIdsSel = (ids: string[], on: boolean) =>
     setSelected((prev) => { const next = new Set(prev); ids.forEach((id) => (on ? next.add(id) : next.delete(id))); return next; });
-  };
   const clearSel = () => { setSelected(new Set()); setLastPickId(null); };
   const selectedTotal = p.components.reduce((sum, c) => (selected.has(c.id) && !isSpacer(c) ? sum + itemPriceEgp(c, s) * c.qty : sum), 0);
   // The selection is a single existing combination when every selected row shares one non-empty group.
@@ -2772,6 +2775,10 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     p.components.forEach((c, i) => { if (!isSpacer(c) && fullGroup.has(keyOf(c))) lastIdx.set(keyOf(c), i); });
 
     const newIds = new Set<string>(), newName = new Map<string, string>(), stash = new Map<string, PanelComponent[]>();
+    // Duplicated full groups become an independent combination — remap comboId (old → one fresh id),
+    // so a whole-combo duplicate (several groups) stays unified while unlinking from the original.
+    const remapCombo = new Map<string, string>();
+    const freshCombo = (old?: string) => (old ? (remapCombo.get(old) ?? remapCombo.set(old, uid()).get(old)!) : undefined);
     const out: PanelComponent[] = [];
     p.components.forEach((c, i) => {
       out.push(c);
@@ -2779,7 +2786,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
       const k = keyOf(c);
       if (fullGroup.has(k)) { // whole group → gather copies, flush as one new group after the original
         if (!newName.has(k)) newName.set(k, uniqueName(effGroup.get(c.id) || "Combination", c.section));
-        const copy = { ...c, id: uid(), group: newName.get(k)! };
+        const copy = { ...c, id: uid(), group: newName.get(k)!, comboId: freshCombo(c.comboId) };
         newIds.add(copy.id);
         (stash.get(k) ?? stash.set(k, []).get(k)!).push(copy);
         if (i === lastIdx.get(k)) stash.get(k)!.forEach((cp) => out.push(cp));
@@ -2818,7 +2825,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     const used = new Set(p.components.filter((c) => c.section === target).map((c) => effGroup.get(c.id) || "").filter(Boolean));
     let name = "New Combination";
     for (let k = 2; used.has(name); k++) name = `New Combination ${k}`;
-    const moved = selReal.map((c) => ({ ...c, section: target, group: name, baseQty: c.baseQty ?? c.qty, comboScalable: true }));
+    const cid = uid(); // one instance id → the group's whole-combo select-all
+    const moved = selReal.map((c) => ({ ...c, section: target, group: name, baseQty: c.baseQty ?? c.qty, comboScalable: true, comboId: cid }));
     const rest = p.components.filter((c) => !isSel(c));
     const firstIdx = p.components.findIndex(isSel);
     let insertAt = 0;
@@ -2830,7 +2838,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   const uncombineSel = () => {
     const groups = new Set(p.components.filter((c) => selected.has(c.id) && !isSpacer(c)).map((c) => effGroup.get(c.id) || "").filter(Boolean));
     if (!groups.size) return;
-    u({ components: p.components.map((c) => (!isSpacer(c) && groups.has(effGroup.get(c.id) || "") ? { ...c, group: "", comboScalable: false } : c)) });
+    u({ components: p.components.map((c) => (!isSpacer(c) && groups.has(effGroup.get(c.id) || "") ? { ...c, group: "", comboScalable: false, comboId: undefined } : c)) });
     clearSel();
   };
   useEffect(() => {
@@ -3125,7 +3133,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
             </span>
             {sec === "Outgoings" && (
               <button type="button" title="Add a P.F.C combination — its own section beside Outgoings"
-                onClick={() => { setComboKind(comboKind === "pfc" ? null : "pfc"); setAddTarget(null); }}
+                onClick={() => { setComboKind(comboKind === "pfc" ? null : "pfc"); setPfcTab("known"); setPreview([]); setTag(""); setAddTarget(null); }}
                 className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   comboKind === "pfc" ? "border-brand bg-brand-light text-brand" : "border-line bg-white text-muted hover:border-brand/40"
                 }`}>
@@ -3276,12 +3284,12 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
       )}
       {/* Inline circuit-combination builder — pinned inside the sticky sub-header while open,
           so it stays visible until you generate or close it */}
-      {comboKind && (
+      {comboKind && comboKind !== "pfc" && (
         <div className="mb-3 rounded-lg border border-brand/40 bg-brand-tint/40 p-3">
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex items-center justify-between gap-3">
             <h3 className="text-sm font-bold text-brand-dark">
-              {comboKind === "pfc" ? "P.F.C combination" : comboKind === "custom" ? "New Combination" : `${COMBOS.find(([k]) => k === comboKind)?.[1] ?? "Combination"} combination`}
-              <span className="text-[11px] font-normal text-muted">{comboKind === "pfc" ? " — added as its own P.F.C section beside Outgoings" : ` — added as a group inside “${p.activeSection}”`}</span>
+              {comboKind === "custom" ? "New Combination" : `${COMBOS.find(([k]) => k === comboKind)?.[1] ?? "Combination"} combination`}
+              <span className="text-[11px] font-normal text-muted">{` — added as a group inside “${p.activeSection}”`}</span>
             </h3>
             <button type="button" onClick={() => { setComboKind(null); setPreview([]); setTag(""); }}
               className="text-xs font-semibold text-muted hover:text-red-600">✕ close</button>
@@ -3293,7 +3301,6 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
           {comboKind === "wd" && <WdBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "lamps" && <LampsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "pushbtn" && <PushButtonsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
-          {comboKind === "pfc" && <PfcBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "custom" && <CustomBuilder factors={s.factors} onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {preview.length > 0 && (
             <div className="mt-3 rounded-lg border border-line bg-white p-3">
@@ -3310,10 +3317,67 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                   </div>
                 ))}
               </div>
-              <button type="button" className="btn-primary mt-2" onClick={commitCombo}>{comboKind === "pfc" ? `Add as P.F.C section (${preview.length} items)` : `Add to “${p.activeSection}” (${preview.length} items)`}</button>
+              <button type="button" className="btn-primary mt-2" onClick={commitCombo}>{`Add to “${p.activeSection}” (${preview.length} items)`}</button>
             </div>
           )}
         </div>
+      )}
+      {/* P.F.C window — a modal with two tabs: enter a known/existing bank, or run the PF-correction calculator */}
+      {comboKind === "pfc" && createPortal(
+        <div className="fixed inset-0 z-[60] flex items-start justify-center p-3 no-print"
+          onKeyDown={(e) => { if (e.key === "Escape") { setComboKind(null); setPreview([]); setTag(""); } }}>
+          <div className="fixed inset-0 bg-ink/50 animate-fade-in" onClick={() => { setComboKind(null); setPreview([]); setTag(""); }} />
+          <div role="dialog" aria-modal="true" aria-label="P.F.C — Power Factor Correction"
+            className="relative my-3 flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl2 border border-line bg-white shadow-lift animate-pop">
+            <div className="flex items-center justify-between gap-3 border-b border-line px-6 pt-4">
+              <div className="pb-1">
+                <h2 className="text-lg font-extrabold tracking-tight text-ink">P.F.C — Power Factor Correction</h2>
+                <p className="text-xs text-muted">Added as its own P.F.C section beside Outgoings.</p>
+                {/* tabs */}
+                <div className="mt-3 flex gap-1">
+                  {([["known", "Existing / known P.F.C"], ["calc", "P.F.C calculation"]] as const).map(([k, label]) => (
+                    <button key={k} type="button" onClick={() => setPfcTab(k)}
+                      className={`rounded-t-lg border border-b-0 px-4 py-2 text-sm font-bold transition ${pfcTab === k ? "border-line bg-white text-brand-dark" : "border-transparent bg-transparent text-muted hover:text-brand-dark"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button className="self-start rounded-full px-2 text-2xl leading-none text-muted hover:text-ink"
+                onClick={() => { setComboKind(null); setPreview([]); setTag(""); }} aria-label="Close">×</button>
+            </div>
+
+            <div className="overflow-auto px-6 py-4">
+              {/* both tabs stay mounted so their state persists and the calc feeds the builder live */}
+              <div className={pfcTab === "known" ? "" : "hidden"}>
+                <p className="mb-3 text-[13px] text-muted">Enter a known / existing P.F.C bank — main breaker plus fixed &amp; variable steps — to add it directly to the quotation.</p>
+                <PfcBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} syncKvar={pfcCalcKvar} />
+                {preview.length > 0 && (
+                  <div className="mt-3 rounded-lg border border-line bg-white p-3">
+                    <div className="mb-1.5 text-xs font-bold text-ink">Preview — {preview.length} items{tag ? ` (${tag})` : ""}</div>
+                    <div className="max-h-52 overflow-auto">
+                      {preview.map((l, i) => (
+                        <div key={i} className="flex justify-between gap-3 border-t border-line/60 py-0.5 text-xs first:border-0">
+                          <span>
+                            {l.groupLabel && <span className="mr-1 rounded bg-surface px-1 text-[9px] font-bold text-muted">{l.groupLabel}</span>}
+                            {l.desc}
+                            {!l.comp && <span className="ml-1 text-amber-600" title="Not matched in component DB — added without price">⚠ no price</span>}
+                          </span>
+                          <span className="shrink-0 font-semibold">×{l.qty}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <button type="button" className="btn-primary mt-2" onClick={commitCombo}>Add as P.F.C section ({preview.length} items)</button>
+                  </div>
+                )}
+              </div>
+              <div className={pfcTab === "calc" ? "" : "hidden"}>
+                <PfcCalculator onResult={setPfcCalcKvar} />
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
       {/* Single column header — shared by every section, pinned with this sticky block. */}
       {p.components.some((c) => !isSpacer(c)) && (
@@ -3524,9 +3588,13 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                           // Combination-qty (×N) control: MCC groups (by name) + custom combinations (flagged).
                           const scalable = /\(Type \d+\)/.test(g) ||
                             !!secComps.find((x) => !isSpacer(x) && (effGroup.get(x.id) || "") === g)?.comboScalable;
-                          const isOut = sec === "Outgoings"; // Outgoings groups get their own select-all
                           const gIds = secComps.filter((c) => !isSpacer(c) && (effGroup.get(c.id) || "") === g).map((c) => c.id);
-                          const gSel = gIds.filter((id) => selected.has(id)).length;
+                          // This group's combination instance (if any). One combo can span several
+                          // groups (Sync → Source 1 / Source 2 / Bus Coupler / Accessories), so its
+                          // select-all covers EVERY row of the combo across the panel — one tick, whole combo.
+                          const gComboId = secComps.find((x) => !isSpacer(x) && (effGroup.get(x.id) || "") === g)?.comboId || "";
+                          const selIds = gComboId ? p.components.filter((c) => !isSpacer(c) && c.comboId === gComboId).map((c) => c.id) : gIds;
+                          const selOn = selIds.filter((id) => selected.has(id)).length;
                           rows.push(
                             <tr key={`grp-${sec}-${g}`} className="align-middle">
                               <td className="py-1" />
@@ -3585,14 +3653,15 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                                   )}
                                 </div>
                               </td>
-                              {/* Last column — Outgoings per-group select-all */}
+                              {/* Last column — select-all for this combination (whole combo when it
+                                  spans several groups) / this group otherwise. Shown in every section. */}
                               <td className="py-1 pr-1 text-right">
-                                {isOut && gIds.length > 0 && (
+                                {selIds.length > 0 && (
                                   <input type="checkbox" className="h-3.5 w-3.5 cursor-pointer accent-brand align-middle"
-                                    checked={gSel === gIds.length}
-                                    ref={(el) => { if (el) el.indeterminate = gSel > 0 && gSel < gIds.length; }}
-                                    onChange={(e) => setGroupSel(sec, g, e.target.checked)}
-                                    title="Select / clear all in this group" />
+                                    checked={selOn === selIds.length}
+                                    ref={(el) => { if (el) el.indeterminate = selOn > 0 && selOn < selIds.length; }}
+                                    onChange={(e) => setIdsSel(selIds, e.target.checked)}
+                                    title={gComboId ? "Select / clear the whole combination" : "Select / clear all in this group"} />
                                 )}
                               </td>
                             </tr>
@@ -3825,58 +3894,55 @@ function AtsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
   );
 }
 
-// Synchronization — same breaker/frame selection as ATS, but the ATS control circuit
-// is dropped and synchronising modules are fitted (one per source, + a generator
-// bus-tie module in the bus coupler for 2-out-of-3).
+// Synchronization — a dynamic list of sources + bus couplers (no interlock). Each source
+// gets a synchronising module + control accessories (relay, lamps, start/stop); the first
+// source also gets a 3-position selector. Each bus coupler gets a generator bus-tie module.
 function SyncBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
   const pool = useMemo(() => atsBreakerPool(), []);
-  const [type, setType] = useState<SyncTypeId>("1oo2");
-  const [breakers, setBreakers] = useState<(DbComponent | null)[]>([null, null]);
-  const meta = SYNC_TYPES.find((t) => t.id === type)!;
+  const [units, setUnits] = useState<SyncUnit[]>([{ kind: "source", breaker: null }, { kind: "source", breaker: null }]);
 
-  // Picking C.B (1) auto-fills all remaining incomers with the same breaker; each stays editable.
-  const pick = (i: number, c: DbComponent) => {
-    setBreakers((old) => {
-      const next = [...old];
-      next[i] = c;
-      if (i === 0) for (let j = 1; j < meta.incomers; j++) next[j] = c;
-      return next;
-    });
-  };
-  useEffect(() => {
-    setBreakers((old) => Array.from({ length: meta.incomers }, (_, i) => old[i] ?? old[0] ?? null));
-  }, [type]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Picking the first breaker auto-fills any empty units with the same breaker (each stays editable).
+  const pick = (i: number, c: DbComponent) => setUnits((old) => {
+    const next = old.map((u, j) => (j === i ? { ...u, breaker: c } : u));
+    return i === 0 ? next.map((u) => (u.breaker ? u : { ...u, breaker: c })) : next;
+  });
+  const addUnit = (kind: "source" | "bus") => setUnits((old) => [...old, { kind, breaker: old[0]?.breaker ?? null }]);
+  const removeUnit = (i: number) => setUnits((old) => (old.length > 1 ? old.filter((_, j) => j !== i) : old));
 
-  const frame = breakers[0] ? frameOf(breakers[0]) : null;
-  const ready = breakers.slice(0, meta.incomers).every(Boolean) && frame;
-  const cbLabel = (i: number) => (type === "2oo3" && i === meta.incomers - 1 ? "Bus Coupler" : `Source (${i + 1})`);
+  // Display labels: Source (1), Source (2)…; Bus Coupler (or Bus Coupler (1/2…) when several).
+  const busCount = units.filter((u) => u.kind === "bus").length;
+  const labels = (() => { let s = 0, b = 0; return units.map((u) => (u.kind === "source" ? `Source (${++s})` : busCount > 1 ? `Bus Coupler (${++b})` : "Bus Coupler")); })();
+  const filled = units.filter((u) => u.breaker);
+  const ready = filled.some((u) => u.kind === "source"); // at least one source with a breaker
 
   return (
     <div className="rounded-lg border border-line p-3">
       <div className="mb-2 flex flex-wrap gap-1.5">
-        {SYNC_TYPES.map((t) => (
-          <button key={t.id} onClick={() => setType(t.id)}
-            className={`rounded-md border px-3 py-1 text-xs font-bold ${
-              type === t.id ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted"
-            }`}>
-            {t.label}
-          </button>
-        ))}
+        <button type="button" onClick={() => addUnit("source")}
+          className="rounded-full border border-brand/40 bg-white px-3 py-1 text-[11px] font-bold text-brand-dark transition hover:border-brand hover:bg-brand-light">+ Add source</button>
+        <button type="button" onClick={() => addUnit("bus")}
+          className="rounded-full border border-brand/40 bg-white px-3 py-1 text-[11px] font-bold text-brand-dark transition hover:border-brand hover:bg-brand-light">+ Add bus coupler</button>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        {Array.from({ length: meta.incomers }, (_, i) => (
-          <BreakerSelect key={i} label={`${cbLabel(i)}${i > 0 ? " — auto-filled, editable" : ""}`}
-            value={breakers[i] ?? null} onPick={(c) => pick(i, c)} pool={pool} />
+        {units.map((u, i) => (
+          <div key={i} className="relative">
+            {units.length > 1 && (
+              <button type="button" onClick={() => removeUnit(i)} title="Remove"
+                className="absolute right-0 top-0 text-[11px] font-semibold text-muted hover:text-red-600">✕</button>
+            )}
+            <BreakerSelect label={`${labels[i]}${u.kind === "bus" ? " — bus tie" : ""}`}
+              value={u.breaker} onPick={(c) => pick(i, c)} pool={pool} />
+          </div>
         ))}
       </div>
-      {frame && <p className="mt-2 text-[11px] text-muted">Detected frame: <b>{frame}</b> · ATS accessories kept (control-circuit module removed)</p>}
-      <p className="mt-1 text-[11px] text-muted">
-        {type === "1oo2"
-          ? "Fits 2 × Synchronising & Load Sharing Auto Start Control Module — 1 in each source. Keeps the ATS control accessories under “Accessories” (without the control-circuit module)."
-          : "Fits 2 × Synchronising & Load Sharing Auto Start Control Module (1 per source) + 1 × Synchronising Generator Bus Tie Control Module in the bus coupler. Keeps the ATS control accessories under “Accessories” (without the control-circuit module)."}
+      <p className="mt-2 text-[11px] leading-relaxed text-muted">
+        Each <b>source</b> = breaker + operating accessories + a synchronising &amp; load-sharing module + control set
+        (relay, 2 red / 3 green / 2 yellow lamps, start &amp; stop). Each <b>bus coupler</b> = breaker + operating accessories +
+        a generator bus-tie module + control set (relay, 1 red / 2 green / 1 yellow, start &amp; stop). One 3-position master
+        selector is added for the panel. <b>Identical units are collected</b> into “N × each contain…” with per-unit &amp; total pricing. No mechanical interlock.
       </p>
       <button className="btn-ghost mt-2" disabled={!ready}
-        onClick={() => ready && onPreview(buildSync(type, frame!, breakers.filter(Boolean) as DbComponent[]), `Synchronization ${meta.label}`)}>
+        onClick={() => ready && onPreview(buildSync(units), "Synchronization")}>
         Generate combination
       </button>
     </div>
@@ -3988,55 +4054,125 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
   );
 }
 
-function PfcBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
+// ── Power Factor Correction — required-kVAR calculator (the "P.F.C calculation" tab) ──
+// From the measured load & target PF it computes the required capacitor rating
+// Qc = P·(tanφ₁−tanφ₂). The result is pushed (onResult) into the "Required kVAR" field
+// of the "Existing / known P.F.C" tab. Advisory — verify against network measurements.
+function PfcCalculator({ onResult }: { onResult: (kvar: number) => void }) {
+  const [loadVal, setLoadVal] = useState(1000);
+  const [loadUnit, setLoadUnit] = useState<"kVA" | "kW">("kVA");
+  const [pf1, setPf1] = useState(0.8);
+  const [pf2, setPf2] = useState(0.95);
+  const [volt, setVolt] = useState(400);
+  const [freq, setFreq] = useState(50);
+
+  const cP = Math.min(0.999, Math.max(0.05, pf1)), cT = Math.min(0.999, Math.max(0.05, pf2));
+  const P = loadUnit === "kVA" ? loadVal * cP : loadVal;                    // active power kW
+  const qc = Math.max(0, P * (Math.tan(Math.acos(cP)) - Math.tan(Math.acos(cT)))); // exact required kVAR (Qc)
+  const qcExact = Math.round(qc);
+  const qc25 = Math.ceil(qc / 25) * 25;                                     // rounded UP to the nearest 25 kVAR (standard bank step)
+  // Push the rounded (nearest-25) value into the known-P.F.C tab's Required kVAR.
+  useEffect(() => { onResult(qc25); }, [qc25]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const f = (x: number, d = 0) => (Number.isFinite(x) ? x.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }) : "—");
+  // plain functions (not nested components) so inputs keep focus while typing
+  const numF = (label: string, value: number, set: (v: number) => void, st = 1, hint?: string) => (
+    <div>
+      <L>{label}{hint && <span className="text-[10px] font-normal normal-case text-muted"> {hint}</span>}</L>
+      <input className="input h-9" type="number" step={st} value={value} onChange={(e) => set(parseFloat(e.target.value) || 0)} />
+    </div>
+  );
+  return (
+        <div className="grid gap-4">
+          {/* Installation data (editable) */}
+          <section className="rounded-lg border border-brand/30 bg-brand-tint/40 p-3">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-brand-dark">Installation data</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div>
+                <L>Total load</L>
+                <div className="flex gap-1">
+                  <input className="input h-9" type="number" value={loadVal} onChange={(e) => setLoadVal(parseFloat(e.target.value) || 0)} />
+                  <select className="input h-9 w-20 cursor-pointer" value={loadUnit} onChange={(e) => setLoadUnit(e.target.value as "kVA" | "kW")}><option>kVA</option><option>kW</option></select>
+                </div>
+              </div>
+              {numF("Existing PF", pf1, setPf1, 0.01, "cosφ₁ lag")}
+              {numF("Target PF", pf2, setPf2, 0.01, "cosφ₂")}
+              {numF("Voltage (V)", volt, setVolt, 10, "line-line")}
+              {numF("Frequency (Hz)", freq, setFreq, 10)}
+              <div>
+                <L>Required kVAR <span className="text-[10px] font-normal normal-case text-muted">nearest 25 kVAR</span></L>
+                <div className="flex h-9 items-center justify-start rounded-md border border-brand/50 bg-white px-3 text-sm font-extrabold text-brand-dark">{f(qc25)} kVAR</div>
+                <p className="mt-1 text-[10px] leading-snug text-muted">Rounded <b>up</b> to the nearest 25 kVAR (standard bank step). Exact required: <b>{f(qcExact)} kVAR</b>.</p>
+              </div>
+            </div>
+            <p className="mt-2 text-[11px] text-muted">↳ the rounded value ({f(qc25)} kVAR) is sent to <b>Required kVAR</b> in the “Existing / known P.F.C” tab.</p>
+          </section>
+        </div>
+  );
+}
+
+function PfcBuilder({ onPreview, syncKvar }: { onPreview: (l: ComboLine[], tag: string) => void; syncKvar?: number | null }) {
   const pool = useMemo(() => breakerPool(), []);
   const [cb, setCb] = useState<DbComponent | null>(null);
   const [i, setI] = useState({ ...PFC_DEFAULT });
+  // The P.F.C-calculation tab feeds its computed required kVAR into this field.
+  useEffect(() => { if (syncKvar != null && syncKvar > 0) setI((x) => ({ ...x, kvar: syncKvar })); }, [syncKvar]);
   const tot = pfcTotalKvar(i);
   const header = pfcHeader(i);
   // plain functions (not nested components) so inputs keep focus while typing
   const num = (k: "kvar" | "fixedSteps" | "var1Steps" | "var2Steps", label: string) => (
     <div key={k}>
       <L>{label}</L>
-      <input className="input w-28" type="number" min={0} value={i[k]}
+      <input className="input w-full" type="number" min={0} value={i[k]}
         onChange={(e) => setI({ ...i, [k]: parseInt(e.target.value) || 0 })} />
     </div>
   );
   const kvarSel = (k: "fixedKvar" | "var1Kvar" | "var2Kvar", label: string) => (
     <div key={k}>
       <L>{label}</L>
-      <select className="input w-28 cursor-pointer" value={i[k]} onChange={(e) => setI({ ...i, [k]: +e.target.value as 25 | 50 })}>
+      <select className="input w-full cursor-pointer" value={i[k]} onChange={(e) => setI({ ...i, [k]: +e.target.value as 25 | 50 })}>
         <option value={25}>25 kVAR</option><option value={50}>50 kVAR</option>
       </select>
     </div>
   );
+  const ok = tot >= i.kvar;
   return (
-    <div className="rounded-lg border border-line p-3">
-      <p className="mb-2 text-[11px] text-muted">Phase 1: 400 V systems, 25/50 kVAR steps only (RPT-03).</p>
-      {/* P.F.C. main circuit breaker — pick from the catalogue (rating auto-derived), or type a rating */}
-      <div className="mb-2 grid gap-2 sm:grid-cols-2">
-        <BreakerSelect label="P.F.C. circuit breaker *" value={cb}
-          onPick={(c) => { setCb(c); setI((x) => ({ ...x, cbRating: breakerAmps(c) })); }} pool={pool} />
+    <div className="rounded-xl border border-line bg-white p-4">
+      <p className="mb-3 text-[11px] text-muted">Phase 1: 400 V systems, 25/50 kVAR steps only (RPT-03).</p>
+      {/* One shared 4-column grid so every field lines up across all three rows:
+          breaker (×2) · required kVAR · C.B rating  /  fixed bank · variable-1 bank  /  summary (×2) · variable-2 bank. */}
+      <div className="grid grid-cols-2 items-start gap-x-3 gap-y-4 sm:grid-cols-4">
+        {/* Row 1 — breaker · required kVAR · C.B rating */}
+        <div className="sm:col-span-2">
+          <BreakerSelect label="P.F.C. circuit breaker *" value={cb}
+            onPick={(c) => { setCb(c); setI((x) => ({ ...x, cbRating: breakerAmps(c) })); }} pool={pool} />
+        </div>
+        {num("kvar", "Required kVAR")}
         <div>
-          <L>C.B rating (A) <span className="text-[11px] font-normal text-muted">— auto from C.B, or type manually</span></L>
+          <L>C.B rating (A) <span className="text-[11px] font-normal text-muted">— auto</span></L>
           <input className={`input ${!i.cbRating ? "border-red-400 bg-red-50/40" : ""}`} inputMode="numeric"
             value={i.cbRating || ""} placeholder="e.g. 250"
             onChange={(e) => { setI({ ...i, cbRating: parseInt(e.target.value.replace(/[^\d]/g, "")) || 0 }); setCb(null); }} />
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {num("kvar", "Required kVAR")}
-        <div />
-        {/* Fixed part on the left column, variable steps on the right */}
-        {num("var1Steps", "Var. steps 1")}{kvarSel("var1Kvar", "Var.1 step kVAR")}
+
+        {/* Row 2 — fixed bank + first variable bank */}
         {num("fixedSteps", "Fixed steps")}{kvarSel("fixedKvar", "Fixed step kVAR")}
+        {num("var1Steps", "Var. steps 1")}{kvarSel("var1Kvar", "Var.1 step kVAR")}
+
+        {/* Row 3 — live summary card + optional second variable bank (aligned under variable-1) */}
+        <div className={`flex h-full flex-col justify-center rounded-lg border px-3 py-2 sm:col-span-2 ${ok ? "border-green-200 bg-green-50/60" : "border-amber-200 bg-amber-50/60"}`}>
+          <p className={`flex items-center gap-1.5 text-xs font-bold ${ok ? "text-green-700" : "text-amber-700"}`}>
+            <span className="text-sm leading-none">{ok ? "✓" : "⚠"}</span>
+            Configured {tot} kVAR{i.kvar ? ` of ${i.kvar} required` : ""}{ok ? "" : ` — short by ${i.kvar - tot}`}
+          </p>
+          <p className="mt-1.5 border-t border-line/70 pt-1.5 text-[11px] leading-snug text-muted">
+            <span className="font-semibold text-ink">Header:</span> {header}
+          </p>
+        </div>
         {num("var2Steps", "Var. steps 2")}{kvarSel("var2Kvar", "Var.2 step kVAR")}
       </div>
-      <p className={`mt-2 text-xs font-semibold ${tot >= i.kvar ? "text-green-700" : "text-amber-700"}`}>
-        Configured: {tot} kVAR {i.kvar ? `of ${i.kvar} required` : ""} {tot >= i.kvar ? "✓" : "— short by " + (i.kvar - tot)}
-      </p>
-      <div className="mt-2 rounded bg-surface px-2 py-1 text-[11px] font-semibold text-ink">Header: {header}</div>
-      <button className="btn-ghost mt-2" disabled={!i.cbRating}
+
+      <button className="btn-ghost mt-4 sm:px-6" disabled={!i.cbRating}
         onClick={() => i.cbRating && onPreview(buildPfc(i, cb ?? undefined), "P.F.C")}>Generate combination</button>
     </div>
   );

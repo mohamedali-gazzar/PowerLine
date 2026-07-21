@@ -9,6 +9,7 @@ export interface ComboLine {
   desc: string;          // template description (display)
   comp?: DbComponent;    // resolved DB component (price/ref) when found
   groupLabel: string;    // e.g. "Source (1)"
+  scalable?: boolean;    // group carries a combination-qty (×N) control — "N each contain:"
 }
 
 // ── ATS ──────────────────────────────────────────────────────────────────────
@@ -105,45 +106,88 @@ export function buildAts(type: AtsTypeId, frame: string, breakers: DbComponent[]
 }
 
 // ── Synchronization (generator sets) ─────────────────────────────────────────
-// Reuses the ATS frame templates (same breaker selection, interlock, bus coupler)
-// and fits synchronising / load-sharing modules:
-//   • 1 out of 2 → one "Synchronising & Load Sharing Auto Start Control Module"
-//     per source (1 in each source).
-//   • 2 out of 3 → the same source modules PLUS one "Synchronising Generator Bus
-//     Tie Control Module" in the bus coupler.
-// The ATS "Control Circuit & Acc." group is kept — renamed "Accessories" — but the
-// ATS control-circuit module itself ("Control Circuit N out of M") is dropped; every
-// other accessory carries over at the same quantity.
-export const SYNC_TYPES = [
-  { id: "1oo2", label: "1 Out of 2", incomers: 2, available: true },
-  { id: "2oo3", label: "2 Out of 3", incomers: 3, available: true },
-] as const;
-export type SyncTypeId = (typeof SYNC_TYPES)[number]["id"];
+// A dynamic list of sources + bus couplers (no mechanical interlock). Each unit reuses
+// the ATS per-incomer breaker accessories (UVR / AUX / motor operator) for its frame:
+//   • Source     → breaker + operating accessories + one "Synchronising & Load Sharing
+//     Auto Start Control Module" + a control-accessory set (monitoring relay, pilot
+//     lights, start/stop). The FIRST source also gets a 3-position selector.
+//   • Bus coupler → breaker + operating accessories + one "Synchronising Generator Bus
+//     Tie Control Module".
+export interface SyncUnit { kind: "source" | "bus"; breaker: DbComponent | null; }
 
 const SYNC_SOURCE_MODULE = "Synchronising & Load Sharing Auto Start Control Module";
 const SYNC_BUSTIE_MODULE = "Synchronising Generator Bus Tie Control Module";
+const SYNC_SELECTOR = "Selector 3 Position"; // one master selector for the whole panel
+// Per-source control accessories (fixed quantities).
+const SYNC_SOURCE_ACC: { qty: number; desc: string }[] = [
+  { qty: 1, desc: "CM-PVS.41S Three-phase monitoring relay" },
+  { qty: 2, desc: "Pilot Light Red LED 230V AC" },
+  { qty: 3, desc: "Pilot Light Green LED 230V AC" },
+  { qty: 2, desc: "Pilot Light Yellow LED 230V AC" },
+  { qty: 1, desc: "CP1-10G-10 Pushbutton" },
+  { qty: 1, desc: "CP1-10R-01 Pushbutton" },
+];
+// Per-bus-coupler control accessories (fewer than a source).
+const SYNC_BUS_ACC: { qty: number; desc: string }[] = [
+  { qty: 1, desc: "CM-PVS.41S Three-phase monitoring relay" },
+  { qty: 1, desc: "Pilot Light Red LED 230V AC" },
+  { qty: 2, desc: "Pilot Light Green LED 230V AC" },
+  { qty: 1, desc: "Pilot Light Yellow LED 230V AC" },
+  { qty: 1, desc: "CP1-10G-10 Pushbutton" },
+  { qty: 1, desc: "CP1-10R-01 Pushbutton" },
+];
 
-/** Build the Synchronization BOM: the ATS frame BOM with the control-circuit module
- *  dropped (its accessories kept under an "Accessories" header), then a synchronising
- *  module in each source (+ a bus-tie module for 2-out-of-3). */
-export function buildSync(type: SyncTypeId, frame: string, breakers: DbComponent[]): ComboLine[] {
-  const isControlModule = (l: ComboLine) => /^control circuit\b/i.test(l.desc.trim()); // the ATS controller line
-  // Reuse the ATS BOM: drop the control-circuit module, rename its group "Accessories".
-  const out = buildAts(type as AtsTypeId, frame, breakers)
-    .filter((l) => !(l.groupLabel === "Control CT" && isControlModule(l)))
-    .map((l) => (l.groupLabel === "Control CT" ? { ...l, groupLabel: "Accessories" } : l));
-  // Drop a line at the end of the named group, so each group stays contiguous.
-  const insertAfterGroup = (group: string, line: ComboLine) => {
-    let last = -1;
-    out.forEach((l, i) => { if (l.groupLabel === group) last = i; });
-    if (last >= 0) out.splice(last + 1, 0, line); else out.push(line);
+/** The ATS per-incomer operating accessories (UVR / AUX / motor operator) for a frame —
+ *  the breaker placeholder ("C.B (n)") is dropped, since the chosen breaker is added
+ *  separately. Reads the Source (1) template for the frame. */
+function atsBreakerAccessories(frame: string | null): { qty: number; desc: string }[] {
+  if (!frame) return [];
+  const tpl = (COMBOS.ats as any)["1oo2"]?.[frame] as { group: string; items: { qty: number; desc: string }[] }[] | undefined;
+  const g = tpl?.find((x) => /source\s*\(?\s*1/i.test(x.group));
+  return (g?.items ?? []).filter((it) => !/^C\.B \(\d\)$/.test(it.desc.trim()));
+}
+
+/** Build the Synchronization BOM from the source / bus-coupler list. Identical units
+ *  (same breaker) are collected into one scalable group ("N each contain:") so the
+ *  BOM lists per-unit quantities once and the ×N drives the total. The 3-position
+ *  master selector is emitted once, separately from the (now identical) sources. */
+export function buildSync(units: SyncUnit[]): ComboLine[] {
+  const out: ComboLine[] = [];
+  // Per-unit line list (excluding the master selector), for a source or a bus coupler.
+  const unitLines = (b: DbComponent, kind: "source" | "bus"): { qty: number; desc: string; comp?: DbComponent }[] => [
+    { qty: 1, desc: b.n, comp: b },                                                              // breaker
+    ...atsBreakerAccessories(frameOf(b)).map((a) => ({ qty: a.qty, desc: a.desc, comp: findByName(atsAlias(a.desc)) })), // UVR / AUX / MOE
+    kind === "source"
+      ? { qty: 1, desc: SYNC_SOURCE_MODULE, comp: findByName(SYNC_SOURCE_MODULE) }
+      : { qty: 1, desc: SYNC_BUSTIE_MODULE, comp: findByName(SYNC_BUSTIE_MODULE) },
+    ...(kind === "source" ? SYNC_SOURCE_ACC : SYNC_BUS_ACC).map((a) => ({ qty: a.qty, desc: a.desc, comp: findByName(a.desc) })),
+  ];
+  // Collapse a unit list into distinct groups keyed by breaker, preserving first-seen order.
+  const collect = (list: SyncUnit[]) => {
+    const order: string[] = [], map = new Map<string, { b: DbComponent; count: number }>();
+    for (const u of list) {
+      if (!u.breaker) continue;
+      const key = `${u.breaker.ref}|${u.breaker.n}`;
+      const ex = map.get(key);
+      if (ex) ex.count += 1; else { map.set(key, { b: u.breaker, count: 1 }); order.push(key); }
+    }
+    return order.map((k) => map.get(k)!);
   };
-  const sourceModule = (group: string): ComboLine =>
-    ({ qty: 1, desc: SYNC_SOURCE_MODULE, comp: findByName(SYNC_SOURCE_MODULE), groupLabel: group });
-  insertAfterGroup("Source 1", sourceModule("Source 1")); // 1 module in each source
-  insertAfterGroup("Source 2", sourceModule("Source 2"));
-  if (type === "2oo3")
-    insertAfterGroup("Bus Coupler", { qty: 1, desc: SYNC_BUSTIE_MODULE, comp: findByName(SYNC_BUSTIE_MODULE), groupLabel: "Bus Coupler" });
+  const emit = (groups: { b: DbComponent; count: number }[], kind: "source" | "bus", singular: string, plural: string) => {
+    groups.forEach((g, gi) => {
+      const scalable = g.count > 1;
+      const base = scalable ? plural : singular;
+      const grp = groups.length === 1 ? base : `${base} ${gi + 1}`;
+      for (const l of unitLines(g.b, kind))
+        out.push({ qty: l.qty * (scalable ? g.count : 1), baseQty: l.qty, desc: l.desc, comp: l.comp, groupLabel: grp, scalable });
+    });
+  };
+
+  const srcGroups = collect(units.filter((u) => u.kind === "source"));
+  emit(srcGroups, "source", "Source", "Sources");
+  // One 3-position selector for the whole sync panel (kept out of the collected sources).
+  if (srcGroups.length) out.push({ qty: 1, desc: SYNC_SELECTOR, comp: findByName(SYNC_SELECTOR), groupLabel: "Selector" });
+  emit(collect(units.filter((u) => u.kind === "bus")), "bus", "Bus Coupler", "Bus Couplers");
   return out;
 }
 

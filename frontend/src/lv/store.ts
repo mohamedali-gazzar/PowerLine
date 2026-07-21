@@ -44,6 +44,7 @@ export interface PanelComponent {
   qty: number;
   baseQty?: number; // per-combination base qty — combo qty = qty / baseQty (combination scaling)
   comboScalable?: boolean; // group shows a "Combination qty" (×N) control (MCC + custom combinations)
+  comboId?: string; // instance id shared by every row of one committed combination (ATS/Sync/…) → whole-combo select
   adj: string;      // RPT-01: adjustable rating (free text)
   comment: string;  // RPT-01: free text
   note: string;     // RPT-01: free text
