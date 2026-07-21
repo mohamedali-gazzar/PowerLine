@@ -104,6 +104,49 @@ export function buildAts(type: AtsTypeId, frame: string, breakers: DbComponent[]
   return out;
 }
 
+// ── Synchronization (generator sets) ─────────────────────────────────────────
+// Reuses the ATS frame templates (same breaker selection, interlock, bus coupler)
+// and fits synchronising / load-sharing modules:
+//   • 1 out of 2 → one "Synchronising & Load Sharing Auto Start Control Module"
+//     per source (1 in each source).
+//   • 2 out of 3 → the same source modules PLUS one "Synchronising Generator Bus
+//     Tie Control Module" in the bus coupler.
+// The ATS "Control Circuit & Acc." group is kept — renamed "Accessories" — but the
+// ATS control-circuit module itself ("Control Circuit N out of M") is dropped; every
+// other accessory carries over at the same quantity.
+export const SYNC_TYPES = [
+  { id: "1oo2", label: "1 Out of 2", incomers: 2, available: true },
+  { id: "2oo3", label: "2 Out of 3", incomers: 3, available: true },
+] as const;
+export type SyncTypeId = (typeof SYNC_TYPES)[number]["id"];
+
+const SYNC_SOURCE_MODULE = "Synchronising & Load Sharing Auto Start Control Module";
+const SYNC_BUSTIE_MODULE = "Synchronising Generator Bus Tie Control Module";
+
+/** Build the Synchronization BOM: the ATS frame BOM with the control-circuit module
+ *  dropped (its accessories kept under an "Accessories" header), then a synchronising
+ *  module in each source (+ a bus-tie module for 2-out-of-3). */
+export function buildSync(type: SyncTypeId, frame: string, breakers: DbComponent[]): ComboLine[] {
+  const isControlModule = (l: ComboLine) => /^control circuit\b/i.test(l.desc.trim()); // the ATS controller line
+  // Reuse the ATS BOM: drop the control-circuit module, rename its group "Accessories".
+  const out = buildAts(type as AtsTypeId, frame, breakers)
+    .filter((l) => !(l.groupLabel === "Control CT" && isControlModule(l)))
+    .map((l) => (l.groupLabel === "Control CT" ? { ...l, groupLabel: "Accessories" } : l));
+  // Drop a line at the end of the named group, so each group stays contiguous.
+  const insertAfterGroup = (group: string, line: ComboLine) => {
+    let last = -1;
+    out.forEach((l, i) => { if (l.groupLabel === group) last = i; });
+    if (last >= 0) out.splice(last + 1, 0, line); else out.push(line);
+  };
+  const sourceModule = (group: string): ComboLine =>
+    ({ qty: 1, desc: SYNC_SOURCE_MODULE, comp: findByName(SYNC_SOURCE_MODULE), groupLabel: group });
+  insertAfterGroup("Source 1", sourceModule("Source 1")); // 1 module in each source
+  insertAfterGroup("Source 2", sourceModule("Source 2"));
+  if (type === "2oo3")
+    insertAfterGroup("Bus Coupler", { qty: 1, desc: SYNC_BUSTIE_MODULE, comp: findByName(SYNC_BUSTIE_MODULE), groupLabel: "Bus Coupler" });
+  return out;
+}
+
 // ── Photocell ────────────────────────────────────────────────────────────────
 export const PHOTOCELL_RATINGS = COMBOS.photocell.ratings.map((r) => r.a);
 

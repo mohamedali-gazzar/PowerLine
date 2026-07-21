@@ -17,6 +17,7 @@ import {
 } from "../lv/store";
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
+  SYNC_TYPES, buildSync, type SyncTypeId,
   breakerPool, breakerAmps, buildPhotocell,
   MCC_KINDS, mccKws, mccTypes, buildMcc, buildTwoSpeed, prevSpeedKw, TWO_SPEED,
   PFC_DEFAULT, pfcTotalKvar, pfcHeader, buildPfc,
@@ -2600,7 +2601,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
   };
   // Row-2 circuit combinations (smaller sub-row under the section pills). P.F.C is NOT here —
   // it's triggered from the sections row (beside Outgoings) since it builds its own section.
-  const COMBOS = [["lamps", "Indication Lamps"], ["pushbtn", "Push Buttons"], ["ats", "ATS"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"], ["custom", "New Combination"]] as const;
+  const COMBOS = [["lamps", "Indication Lamps"], ["pushbtn", "Push Buttons"], ["ats", "ATS"], ["sync", "Synchronization"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"], ["custom", "New Combination"]] as const;
   // Word-style row inserter: drop an empty row (spacer) after a given component, or at
   // the top of the section when afterId is null.
   const insertSpacerAfter = (sec: string, afterId: string | null) => {
@@ -3286,6 +3287,7 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
               className="text-xs font-semibold text-muted hover:text-red-600">✕ close</button>
           </div>
           {comboKind === "ats" && <AtsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
+          {comboKind === "sync" && <SyncBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "photocell" && <PhotocellBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "mcc" && <MccBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "wd" && <WdBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
@@ -3750,7 +3752,7 @@ function ComponentEditSelect({ current, onPick, onClose }: {
 }
 
 // ── Combination builders (RPT-03) ────────────────────────────────────────────
-type ComboKind = "ats" | "photocell" | "mcc" | "pfc" | "wd" | "lamps" | "pushbtn" | "custom";
+type ComboKind = "ats" | "sync" | "photocell" | "mcc" | "pfc" | "wd" | "lamps" | "pushbtn" | "custom";
 function BreakerSelect({ label, value, onPick, pool, placeholder = "Search breaker…" }: {
   label: string; value: DbComponent | null; onPick: (c: DbComponent) => void; pool: DbComponent[]; placeholder?: string;
 }) {
@@ -3817,6 +3819,64 @@ function AtsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
       {frame && <p className="mt-2 text-[11px] text-muted">Detected frame: <b>{frame}</b> · identical incomers (Phase 1)</p>}
       <button className="btn-ghost mt-2" disabled={!ready}
         onClick={() => ready && onPreview(buildAts(type, frame!, breakers.filter(Boolean) as DbComponent[]), `ATS ${meta.label}`)}>
+        Generate combination
+      </button>
+    </div>
+  );
+}
+
+// Synchronization — same breaker/frame selection as ATS, but the ATS control circuit
+// is dropped and synchronising modules are fitted (one per source, + a generator
+// bus-tie module in the bus coupler for 2-out-of-3).
+function SyncBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
+  const pool = useMemo(() => atsBreakerPool(), []);
+  const [type, setType] = useState<SyncTypeId>("1oo2");
+  const [breakers, setBreakers] = useState<(DbComponent | null)[]>([null, null]);
+  const meta = SYNC_TYPES.find((t) => t.id === type)!;
+
+  // Picking C.B (1) auto-fills all remaining incomers with the same breaker; each stays editable.
+  const pick = (i: number, c: DbComponent) => {
+    setBreakers((old) => {
+      const next = [...old];
+      next[i] = c;
+      if (i === 0) for (let j = 1; j < meta.incomers; j++) next[j] = c;
+      return next;
+    });
+  };
+  useEffect(() => {
+    setBreakers((old) => Array.from({ length: meta.incomers }, (_, i) => old[i] ?? old[0] ?? null));
+  }, [type]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const frame = breakers[0] ? frameOf(breakers[0]) : null;
+  const ready = breakers.slice(0, meta.incomers).every(Boolean) && frame;
+  const cbLabel = (i: number) => (type === "2oo3" && i === meta.incomers - 1 ? "Bus Coupler" : `Source (${i + 1})`);
+
+  return (
+    <div className="rounded-lg border border-line p-3">
+      <div className="mb-2 flex flex-wrap gap-1.5">
+        {SYNC_TYPES.map((t) => (
+          <button key={t.id} onClick={() => setType(t.id)}
+            className={`rounded-md border px-3 py-1 text-xs font-bold ${
+              type === t.id ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted"
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {Array.from({ length: meta.incomers }, (_, i) => (
+          <BreakerSelect key={i} label={`${cbLabel(i)}${i > 0 ? " — auto-filled, editable" : ""}`}
+            value={breakers[i] ?? null} onPick={(c) => pick(i, c)} pool={pool} />
+        ))}
+      </div>
+      {frame && <p className="mt-2 text-[11px] text-muted">Detected frame: <b>{frame}</b> · ATS accessories kept (control-circuit module removed)</p>}
+      <p className="mt-1 text-[11px] text-muted">
+        {type === "1oo2"
+          ? "Fits 2 × Synchronising & Load Sharing Auto Start Control Module — 1 in each source. Keeps the ATS control accessories under “Accessories” (without the control-circuit module)."
+          : "Fits 2 × Synchronising & Load Sharing Auto Start Control Module (1 per source) + 1 × Synchronising Generator Bus Tie Control Module in the bus coupler. Keeps the ATS control accessories under “Accessories” (without the control-circuit module)."}
+      </p>
+      <button className="btn-ghost mt-2" disabled={!ready}
+        onClick={() => ready && onPreview(buildSync(type, frame!, breakers.filter(Boolean) as DbComponent[]), `Synchronization ${meta.label}`)}>
         Generate combination
       </button>
     </div>
