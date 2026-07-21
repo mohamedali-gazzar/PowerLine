@@ -459,3 +459,15 @@ export function buildPushButtons(): ComboLine[] {
     groupLabel: "Push Buttons",
   }));
 }
+
+// ── Fire ─────────────────────────────────────────────────────────────────────
+// Fixed fire-alarm interface set — added as a "Fire" group.
+export const FIRE_SET: { qty: number; desc: string }[] = [
+  { qty: 1, desc: "Relay 8 - 220VAC ( 2 CO )" },
+  { qty: 1, desc: "Relay Base 8 PIN ( 2 CO )" },
+  { qty: 1, desc: "Power Supply 24Vdc" },
+];
+
+export function buildFire(): ComboLine[] {
+  return FIRE_SET.map((l) => ({ qty: l.qty, desc: l.desc, comp: findByName(l.desc), groupLabel: "Fire" }));
+}

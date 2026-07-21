@@ -22,7 +22,7 @@ import {
   MCC_KINDS, mccKws, mccTypes, buildMcc, buildTwoSpeed, prevSpeedKw, TWO_SPEED,
   PFC_DEFAULT, pfcTotalKvar, pfcHeader, buildPfc,
   WD_OPTIONS, buildWd,
-  buildIndicationLamps, buildPushButtons,
+  buildIndicationLamps, buildPushButtons, buildFire,
   type ComboLine, type AtsTypeId,
 } from "../lv/combos";
 import { rankSearchOptions } from "../lv/search";
@@ -2616,7 +2616,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   };
   // Row-2 circuit combinations (smaller sub-row under the section pills). P.F.C is NOT here —
   // it's triggered from the sections row (beside Outgoings) since it builds its own section.
-  const COMBOS = [["lamps", "Indication Lamps"], ["pushbtn", "Push Buttons"], ["ats", "ATS"], ["sync", "Synchronization"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"], ["custom", "New Combination"]] as const;
+  const COMBOS = [["lamps", "Indication Lamps"], ["pushbtn", "Push Buttons"], ["fire", "Fire"], ["ats", "ATS"], ["sync", "Synchronization"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"], ["custom", "New Combination"]] as const;
   // Word-style row inserter: drop an empty row (spacer) after a given component, or at
   // the top of the section when afterId is null.
   const insertSpacerAfter = (sec: string, afterId: string | null) => {
@@ -3321,6 +3321,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
           {comboKind === "wd" && <WdBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "lamps" && <LampsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "pushbtn" && <PushButtonsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
+          {comboKind === "fire" && <FireBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "custom" && <CustomBuilder factors={s.factors} onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {preview.length > 0 && (
             <div className="mt-3 rounded-lg border border-line bg-white p-3">
@@ -3954,7 +3955,7 @@ function ReplaceComponentModal({ s, replaceComponent, factors, onClose }: {
 }
 
 // ── Combination builders (RPT-03) ────────────────────────────────────────────
-type ComboKind = "ats" | "sync" | "photocell" | "mcc" | "pfc" | "wd" | "lamps" | "pushbtn" | "custom";
+type ComboKind = "ats" | "sync" | "photocell" | "mcc" | "pfc" | "wd" | "lamps" | "pushbtn" | "fire" | "custom";
 function BreakerSelect({ label, value, onPick, pool, placeholder = "Search breaker…" }: {
   label: string; value: DbComponent | null; onPick: (c: DbComponent) => void; pool: DbComponent[]; placeholder?: string;
 }) {
@@ -4339,6 +4340,12 @@ function LampsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) 
 function PushButtonsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
   // Fixed set — generate on open so the "Add to …" step shows directly (no Generate step, no blurb).
   useEffect(() => { onPreview(buildPushButtons(), "Push Buttons"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+// Fire: fixed fire-alarm interface set (relay + base + 24 Vdc supply), added as a "Fire" group.
+function FireBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
+  useEffect(() => { onPreview(buildFire(), "Fire"); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
 
