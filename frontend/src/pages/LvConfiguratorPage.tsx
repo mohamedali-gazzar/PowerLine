@@ -2486,6 +2486,8 @@ function PanelEditor({ s, p, up, upPanel }: {
 // ── Components card ──────────────────────────────────────────────────────────
 function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void; comboKind: ComboKind | null; setComboKind: (k: ComboKind | null) => void }) {
   const [q, setQ] = useState("");
+  const [pasteMsg, setPasteMsg] = useState(""); // summary after a multi-item paste
+  const [pastePreview, setPastePreview] = useState<null | { rows: { name: string; qty: number; match: DbComponent | null }[] }>(null);
   const hits = useMemo(() => searchComponents(q, 40), [q]);
   const effGroup = effectiveGroups(p.components); // combination grouping incl. inherited groups
   // Current combination multiplier for a group (from an item's qty ÷ its base qty).
@@ -3026,6 +3028,37 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
     refocusSearch();
     revealRow(nc.id);
   };
+  // Bulk paste: one component per line, "<name/reference> <qty>" — tab- or comma-separated,
+  // qty as the first or last field (no qty ⇒ 1). Excel two-column paste works directly.
+  const parsePasteLine = (line: string): { name: string; qty: number } | null => {
+    const t = line.trim();
+    if (!t) return null;
+    const parts = (t.includes("\t") ? t.split("\t") : t.split(",")).map((x) => x.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      if (/^\d+$/.test(parts[parts.length - 1])) return { name: parts.slice(0, -1).join(" "), qty: parseInt(parts[parts.length - 1], 10) };
+      if (/^\d+$/.test(parts[0])) return { name: parts.slice(1).join(" "), qty: parseInt(parts[0], 10) };
+    }
+    return { name: t, qty: 1 };
+  };
+  const addPasted = (text: string) => {
+    const parsed = text.split(/\r?\n/).map(parsePasteLine).filter((x): x is { name: string; qty: number } => !!x);
+    if (!parsed.length) return;
+    setPasteMsg("");
+    if (parsed.length === 1) { setQ(parsed[0].name); return; } // single → just search it in the dropdown, as before
+    // Multiple → best-match each and show a review table (Add / Cancel) before inserting.
+    setPastePreview({ rows: parsed.map(({ name, qty }) => ({ name, qty, match: searchComponents(name, 1)[0] ?? null })) });
+  };
+  const setPreviewQty = (i: number, v: string) => setPastePreview((pv) => pv && { rows: pv.rows.map((r, j) => (j === i ? { ...r, qty: Math.max(1, parseInt(v.replace(/[^\d]/g, ""), 10) || 1) } : r)) });
+  const dropPreviewRow = (i: number) => setPastePreview((pv) => { const rows = (pv?.rows ?? []).filter((_, j) => j !== i); return rows.length ? { rows } : null; });
+  const confirmPaste = () => {
+    const rows = pastePreview?.rows ?? [];
+    const added = rows.filter((r) => r.match).map((r) => toPanelComponent(r.match!, p.activeSection, Math.max(1, r.qty)));
+    const missing = rows.filter((r) => !r.match).length;
+    if (added.length) u({ components: [...p.components, ...added] });
+    setPastePreview(null);
+    setPasteMsg(`Added ${added.length} component${added.length === 1 ? "" : "s"} to “${p.activeSection}”${missing ? ` · ${missing} skipped (not found)` : ""}`);
+    refocusSearch();
+  };
   // Shift+Enter in the search box drops a blank spacer row at the end of the active
   // section (Word-style separator) — same append behaviour as adding a component.
   const addSpacer = () => {
@@ -3128,7 +3161,8 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
       {/* search */}
       <div ref={searchWrapRef} className="relative">
         <input ref={searchRef} className="input" placeholder={addTarget ? `Search components → drop into combination “${addTarget.group}”` : `Search components (name / reference / type / rating) → adds to “${p.activeSection}”`}
-          value={q} onChange={(e) => setQ(e.target.value)}
+          value={q} onChange={(e) => { setQ(e.target.value); if (pasteMsg) setPasteMsg(""); }}
+          onPaste={(e) => { const text = e.clipboardData.getData("text"); if (/[\r\n\t]/.test(text)) { e.preventDefault(); addPasted(text); } }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); if (!pending) addSpacer(); return; } // ⇧Enter → spacer row
             if (pending || !q) return;
@@ -3173,7 +3207,62 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
             </div>
           </div>
         )}
+        {/* paste-many review — shows the best catalogue match for every pasted line before anything is added */}
+        {pastePreview && (() => {
+          const matched = pastePreview.rows.filter((r) => r.match).length;
+          const missing = pastePreview.rows.length - matched;
+          return (
+            <div className="absolute z-40 mt-1 w-full rounded-lg border border-brand/50 bg-white p-3 shadow-lift">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs font-bold text-ink">Review {pastePreview.rows.length} pasted components → “{p.activeSection}”</p>
+                <button type="button" onClick={() => setPastePreview(null)} title="Discard" className="px-1 text-muted hover:text-ink">✕</button>
+              </div>
+              <div className="max-h-60 overflow-auto">
+                <table className="w-full border-collapse text-[12px]">
+                  <thead>
+                    <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
+                      <th className="py-1 pr-2 font-semibold">Pasted</th>
+                      <th className="py-1 pr-2 font-semibold">Matched component</th>
+                      <th className="py-1 pr-2 text-right font-semibold">Qty</th>
+                      <th className="py-1" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pastePreview.rows.map((r, i) => (
+                      <tr key={i} className={`border-t border-line/60 ${r.match ? "" : "bg-red-50"}`}>
+                        <td className="py-1 pr-2 align-top text-muted">{r.name}</td>
+                        <td className="py-1 pr-2 align-top">
+                          {r.match
+                            ? <><span className="font-semibold text-ink">{r.match.n}</span> <span className="text-[11px] text-muted">{r.match.ref} · {r.match.brand}</span></>
+                            : <span className="font-bold text-red-500">⚠ not found</span>}
+                        </td>
+                        <td className="py-1 pr-2 text-right align-top">
+                          <input inputMode="numeric" value={r.qty} disabled={!r.match} onChange={(e) => setPreviewQty(i, e.target.value)}
+                            className="w-14 rounded border border-line px-1.5 py-0.5 text-right disabled:bg-surface disabled:text-muted" />
+                        </td>
+                        <td className="py-1 text-right align-top">
+                          <button type="button" onClick={() => dropPreviewRow(i)} title="Remove line" className="px-1 text-ink/40 hover:text-red-500">×</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {missing > 0 && (
+                <p className="mt-2 text-[11px] font-semibold text-red-500">⚠ {missing} not found — {matched > 0 ? "they’ll be skipped." : "nothing to add."}</p>
+              )}
+              <div className="mt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setPastePreview(null)} className="btn-ghost h-8 px-3 text-xs">Cancel</button>
+                <button type="button" disabled={matched === 0} onClick={confirmPaste} className="btn-primary h-8 px-4 text-xs disabled:opacity-40">
+                  Add {matched} component{matched === 1 ? "" : "s"}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
+      {pasteMsg && <p className="mt-1.5 text-[11px] font-semibold text-brand-dark">{pasteMsg}</p>}
+      {!addTarget && !pasteMsg && !pastePreview && <p className="mt-1 text-[10px] text-muted">Tip: paste a list (one component per line, optional qty via tab/comma) to add many at once.</p>}
       {addTarget && (
         <div className="mt-1.5 flex items-center gap-2 text-[11px]">
           <span className="inline-flex items-center gap-1 rounded-full bg-brand-light px-2 py-0.5 font-semibold text-brand-dark">
