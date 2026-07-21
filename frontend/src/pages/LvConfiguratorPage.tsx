@@ -2233,6 +2233,17 @@ function PanelEditor({ s, p, up, upPanel }: {
   upPanel: (id: string, patch: Partial<LvPanel>) => void;
 }) {
   const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
+  // Replace every catalogue instance (matched by reference + name) with `nc`, across the
+  // given panels — keeps each instance's qty / adjustments / group / section and swaps only
+  // the catalogue fields (name, ref, brand, price, poles, copper). Prices recompute.
+  const replaceComponent = (matchRef: string, matchName: string, nc: DbComponent, panelIds: Set<string>) => {
+    const swap = (x: PanelComponent): PanelComponent =>
+      (!isSpacer(x) && x.ref === matchRef && x.name === matchName)
+        ? { ...x, name: nc.n, desc: nc.d, ref: nc.ref, type: nc.t, brand: nc.brand, rating: nc.r,
+            eur: nc.eur, egp: nc.egp, poles: nc.poles, cuP: nc.cuP, cuC: nc.cuC, stock: nc.stock }
+        : x;
+    up({ panels: s.panels.map((pp) => (panelIds.has(pp.id) ? { ...pp, components: pp.components.map(swap) } : pp)) });
+  };
   // In the first panel, each "common" field (ambient temp, form, neutral, earth,
   // copper, incoming/outgoing cables) carries an "Apply to all" link that copies
   // just that field onto every panel.
@@ -2468,7 +2479,7 @@ function PanelEditor({ s, p, up, upPanel }: {
       {copperOpen && <CopperBreakdownWindow which={copperOpen} p={p} calc={calc} f={s.factors} onClose={() => setCopperOpen(null)} />}
 
       {/* Components (section pills + circuit-combination sub-row live inside this card) */}
-      <ComponentsCard s={s} p={p} u={u} comboKind={comboKind} setComboKind={setComboKind} />
+      <ComponentsCard s={s} p={p} u={u} replaceComponent={replaceComponent} comboKind={comboKind} setComboKind={setComboKind} />
 
       {/* Panel type — placed after Components (enclosure sizings as component-like items) */}
       <SizingCard p={p} u={u} factors={s.factors} />
@@ -2485,12 +2496,13 @@ function PanelEditor({ s, p, up, upPanel }: {
 }
 
 // ── Components card ──────────────────────────────────────────────────────────
-function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void; comboKind: ComboKind | null; setComboKind: (k: ComboKind | null) => void }) {
+function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void; replaceComponent: (matchRef: string, matchName: string, nc: DbComponent, panelIds: Set<string>) => void; comboKind: ComboKind | null; setComboKind: (k: ComboKind | null) => void }) {
   const [q, setQ] = useState("");
   const [pasteMsg, setPasteMsg] = useState(""); // summary after a multi-item paste
   const [pastePreview, setPastePreview] = useState<null | { rows: { name: string; qty: number; match: DbComponent | null }[] }>(null);
   const [pfcTab, setPfcTab] = useState<"known" | "calc">("known"); // P.F.C window: known-data entry vs calculation
   const [pfcCalcKvar, setPfcCalcKvar] = useState<number | null>(null); // required kVAR from the calc tab → known tab
+  const [replaceOpen, setReplaceOpen] = useState(false); // "Replace component" (across panels) window
   const hits = useMemo(() => searchComponents(q, 40), [q]);
   const effGroup = effectiveGroups(p.components); // combination grouping incl. inherited groups
   // Current combination multiplier for a group (from an item's qty ÷ its base qty).
@@ -3078,7 +3090,15 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
 
   return (
     <div ref={cardRef} className="card relative p-5">
-      <h2 className="sec-head">Components</h2>
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <h2 className="sec-head !mb-0">Components</h2>
+        <button type="button" onClick={() => setReplaceOpen(true)}
+          title="Find a component used in this quotation and replace it across all / selected panels"
+          className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-white px-3 py-1 text-[11px] font-bold text-brand-dark transition hover:border-brand hover:bg-brand-light">
+          ⇄ Replace component
+        </button>
+      </div>
+      {replaceOpen && <ReplaceComponentModal s={s} replaceComponent={replaceComponent} factors={s.factors} onClose={() => setReplaceOpen(false)} />}
 
       {/* Sticky header: section tabs + search bar stay pinned below the tab bar while
           the component list scrolls; unpins automatically when this card ends. */}
@@ -3531,8 +3551,13 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
                       <td className="max-w-[330px] py-1 pr-2">
                         {c.name}
                         {editComp === c.id && (
-                          <ComponentEditSelect current={c}
-                            onPick={(nc) => { replaceComp(c.id, nc); setEditComp(null); }}
+                          <ComponentEditSelect current={c} panelCount={s.panels.length}
+                            onPick={(nc, scope) => {
+                              if (scope === "all") replaceComponent(c.ref, c.name, nc, new Set(s.panels.map((pp) => pp.id)));
+                              else if (scope === "panel") replaceComponent(c.ref, c.name, nc, new Set([p.id]));
+                              else replaceComp(c.id, nc); // this item only
+                              setEditComp(null);
+                            }}
                             onClose={() => setEditComp(null)} />
                         )}
                       </td>
@@ -3757,10 +3782,11 @@ function ComponentsCard({ s, p, u, comboKind, setComboKind }: { s: LvState; p: L
 // RPT: re-select a component from the database. Shows the full list in database
 // order with the current component highlighted in its original position (scrolls
 // to it on open), plus a search box. Picking one updates technical + pricing data.
-function ComponentEditSelect({ current, onPick, onClose }: {
-  current: PanelComponent; onPick: (c: DbComponent) => void; onClose: () => void;
+function ComponentEditSelect({ current, panelCount, onPick, onClose }: {
+  current: PanelComponent; panelCount: number; onPick: (c: DbComponent, scope: "item" | "panel" | "all") => void; onClose: () => void;
 }) {
   const [q, setQ] = useState("");
+  const [scope, setScope] = useState<"item" | "panel" | "all">("item"); // replace this item / all identical in this panel / all panels
   const [active, setActive] = useState(0); // keyboard-highlighted row index into `shown`
   const activeRef = useRef<HTMLButtonElement>(null);
   const isCurrent = (c: DbComponent) => c.ref === current.ref && c.n === current.name;
@@ -3784,7 +3810,7 @@ function ComponentEditSelect({ current, onPick, onClose }: {
     if (e.key === "Escape") onClose();
     else if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, shown.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
-    else if (e.key === "Enter") { e.preventDefault(); const c = shown[active]; if (c) onPick(c); }
+    else if (e.key === "Enter") { e.preventDefault(); const c = shown[active]; if (c) onPick(c, scope); }
   };
   // Portal to <body>: rendered inline in a table row, this fixed overlay would otherwise be
   // captured by the panels tab's animate-fade-up transform — placing it near the top of the tall
@@ -3798,6 +3824,15 @@ function ComponentEditSelect({ current, onPick, onClose }: {
           <p className="mb-1.5 text-xs font-bold text-ink">Change component <span className="font-normal text-muted">— current: {current.name}</span><span className="ml-1 font-normal text-muted/80">· ↑↓ to move · Enter to pick</span></p>
           <input autoFocus className="input h-9 text-sm" placeholder="Search name / reference / type / rating…"
             value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} />
+          <div className="mt-2 flex items-center gap-1.5 text-[11px]">
+            <span className="font-semibold text-muted">Replace:</span>
+            {([["item", "This item"], ["panel", "All identical · this panel"], ["all", `All identical · all panels (${panelCount})`]] as const).map(([k, label]) => (
+              <button key={k} type="button" onMouseDown={(e) => { e.preventDefault(); setScope(k); }}
+                className={`rounded-full border px-2 py-0.5 font-bold transition ${scope === k ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="max-h-[55vh] overflow-auto">
           {shown.length === 0 && <div className="px-3 py-3 text-xs text-muted">No matches.</div>}
@@ -3805,7 +3840,7 @@ function ComponentEditSelect({ current, onPick, onClose }: {
             const cur = isCurrent(c), act = i === active;
             return (
               <button key={c.ref + c.n} ref={act ? activeRef : undefined} type="button"
-                onMouseDown={() => onPick(c)} onMouseEnter={() => setActive(i)}
+                onMouseDown={() => onPick(c, scope)} onMouseEnter={() => setActive(i)}
                 className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${act ? "bg-brand-tint" : cur ? "bg-brand-light" : ""} ${cur ? "font-bold text-brand-dark" : ""}`}
                 style={act ? { boxShadow: "inset 2px 0 0 #F16722" } : undefined}>
                 <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{c.t}</span>
@@ -3814,6 +3849,104 @@ function ComponentEditSelect({ current, onPick, onClose }: {
               </button>
             );
           })}
+        </div>
+      </div>
+    </div>, document.body
+  );
+}
+
+// ── Replace component across panels (the "⇄ Replace component" tool) ──
+// Pick a catalogue part used somewhere in the QTN and swap every instance of it (matched
+// by reference + name) for another catalogue part, across all or selected panels. Each
+// instance keeps its qty / adjustments / group; only the catalogue fields change.
+function ReplaceComponentModal({ s, replaceComponent, factors, onClose }: {
+  s: LvState;
+  replaceComponent: (matchRef: string, matchName: string, nc: DbComponent, panelIds: Set<string>) => void;
+  factors: LvState["factors"]; onClose: () => void;
+}) {
+  // Distinct catalogue parts in use across the QTN (instance + panel counts).
+  const used = useMemo(() => {
+    const map = new Map<string, { ref: string; name: string; brand: string; count: number; panels: Set<string> }>();
+    for (const pp of s.panels) for (const c of pp.components) {
+      if (isSpacer(c) || !c.ref) continue;
+      const key = `${c.ref}|${c.name}`;
+      const ex = map.get(key);
+      if (ex) { ex.count += 1; ex.panels.add(pp.id); } else map.set(key, { ref: c.ref, name: c.name, brand: c.brand, count: 1, panels: new Set([pp.id]) });
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [s.panels]);
+
+  const [findKey, setFindKey] = useState("");
+  const [repl, setRepl] = useState<DbComponent | null>(null);
+  const [allPanels, setAllPanels] = useState(true);
+  const [sel, setSel] = useState<Set<string>>(() => new Set(s.panels.map((pp) => pp.id)));
+  const find = used.find((u) => `${u.ref}|${u.name}` === findKey) ?? null;
+
+  const inSel = (pp: LvPanel) => allPanels || sel.has(pp.id);
+  const instInPanel = (pp: LvPanel) => (find ? pp.components.filter((c) => !isSpacer(c) && c.ref === find.ref && c.name === find.name).length : 0);
+  let instTotal = 0, panelsTotal = 0;
+  if (find) for (const pp of s.panels) if (inSel(pp)) { const n = instInPanel(pp); if (n) { instTotal += n; panelsTotal += 1; } }
+  const ready = !!find && !!repl && instTotal > 0;
+  const panelName = (pp: LvPanel, i: number) => (pp.name?.trim() || `Panel ${i + 1}`);
+  const apply = () => { if (!ready) return; replaceComponent(find!.ref, find!.name, repl!, new Set(s.panels.filter(inSel).map((pp) => pp.id))); onClose(); };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/40 p-4 pt-16 no-print"
+      onMouseDown={onClose} onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
+      <div className="w-full max-w-2xl overflow-hidden rounded-xl2 border border-line bg-white shadow-lift animate-pop" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-line px-5 py-3">
+          <h2 className="text-base font-extrabold tracking-tight text-ink">⇄ Replace component</h2>
+          <button className="rounded-full px-2 text-xl leading-none text-muted hover:text-ink" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className="max-h-[75vh] space-y-4 overflow-auto p-5">
+          {used.length === 0 ? (
+            <p className="text-sm text-muted">No components in this quotation yet.</p>
+          ) : (
+            <>
+              <div>
+                <L>Find — a part used in this quotation</L>
+                <SearchSelect value={findKey} placeholder="Search a part used across the panels…"
+                  options={used.map((u) => ({ key: `${u.ref}|${u.name}`, label: u.name, hint: `${u.ref} · ${u.count}× · ${u.panels.size} panel${u.panels.size === 1 ? "" : "s"}` }))}
+                  onPick={setFindKey} />
+              </div>
+              <div>
+                <L>Replace with — any catalogue component</L>
+                <ComponentSearch factors={factors} placeholder="Search the catalogue…" onPick={(c) => setRepl(c)} />
+                {repl && <p className="mt-1 text-[12px] font-semibold text-brand-dark">→ {repl.n} <span className="font-normal text-muted">{repl.ref} · {repl.brand} · {fmtEgp(componentPriceEgp(repl, factors))} EGP</span></p>}
+              </div>
+              <div>
+                <L>Apply to</L>
+                <div className="flex gap-2 text-xs">
+                  <button type="button" onClick={() => setAllPanels(true)} className={`rounded-full border px-3 py-1 font-bold transition ${allPanels ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"}`}>All panels ({s.panels.length})</button>
+                  <button type="button" onClick={() => setAllPanels(false)} className={`rounded-full border px-3 py-1 font-bold transition ${!allPanels ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"}`}>Selected panels</button>
+                </div>
+                {!allPanels && (
+                  <div className="mt-2 max-h-44 space-y-0.5 overflow-auto rounded-lg border border-line p-2">
+                    {s.panels.map((pp, i) => {
+                      const n = instInPanel(pp);
+                      return (
+                        <label key={pp.id} className={`flex items-center gap-2 rounded px-1.5 py-0.5 text-[13px] ${n ? "hover:bg-brand-tint" : "opacity-45"}`}>
+                          <input type="checkbox" className="accent-brand" checked={sel.has(pp.id)} disabled={!n}
+                            onChange={(e) => setSel((prev) => { const nx = new Set(prev); if (e.target.checked) nx.add(pp.id); else nx.delete(pp.id); return nx; })} />
+                          <span className="flex-1 truncate">{panelName(pp, i)}</span>
+                          <span className="text-[11px] text-muted">{n ? `${n}×` : "not used"}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="rounded-lg bg-surface px-3 py-2 text-[13px] font-semibold text-ink">
+                {find
+                  ? <>Will replace <b className="text-brand-dark">{instTotal}</b> instance{instTotal === 1 ? "" : "s"} of <b>{find.name}</b>{repl ? <> with <b className="text-brand-dark">{repl.n}</b></> : ""} across <b>{panelsTotal}</b> panel{panelsTotal === 1 ? "" : "s"}.</>
+                  : "Pick a part to find, then its replacement."}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-line px-5 py-3">
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary disabled:opacity-40" disabled={!ready} onClick={apply}>Replace{ready ? ` ${instTotal}` : ""}</button>
         </div>
       </div>
     </div>, document.body
