@@ -2981,6 +2981,24 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
 
   // Drop a dragged row onto another row: it takes the target's section (move
   // across sections) and is inserted just before it (reorder).
+  // When a loose row lands inside a scalable combination (a group with a ×N qty), give it the
+  // group's ×N so a component added by dragging scales like the rest — same as the group's "+ Add".
+  const applyGroupScaling = (arr: PanelComponent[], idx: number) => {
+    const c = arr[idx];
+    if (isSpacer(c) || c.group) return; // only loose rows adopt a group by position
+    let prev = "", next = ""; // infer the group from same-section grouped neighbours (mirrors effectiveGroups)
+    for (let j = idx - 1; j >= 0 && arr[j].section === c.section; j--) { if (isSpacer(arr[j])) continue; const g = arr[j].group; if (g) { prev = g; break; } }
+    for (let j = idx + 1; j < arr.length && arr[j].section === c.section; j++) { if (isSpacer(arr[j])) continue; const g = arr[j].group; if (g) { next = g; break; } }
+    const grp = prev && prev === next ? prev : "";
+    if (!grp) return;
+    const members = arr.filter((x) => x.section === c.section && !isSpacer(x) && x.group === grp);
+    if (!(/\(Type \d+\)/.test(grp) || members.some((x) => x.comboScalable))) return; // group isn't scalable → nothing to apply
+    const first = members[0];
+    const fb = first?.baseQty ?? first?.qty ?? 1;
+    const cq = fb > 0 ? Math.max(1, Math.round((first?.qty ?? 0) / fb)) : 1; // the group's current ×N
+    const base = c.baseQty ?? c.qty;
+    arr[idx] = { ...c, group: grp, baseQty: base, qty: base * cq, comboScalable: true };
+  };
   const dropOnRow = (targetId: string) => {
     setOverRow(null);
     const dId = dragId;
@@ -2994,6 +3012,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     arr.splice(from, 1);
     const tIdx = arr.findIndex((c) => c.id === targetId);
     arr.splice(tIdx, 0, moved);
+    applyGroupScaling(arr, tIdx); // scale it to the combination's ×N if it landed inside one
     u({ components: arr });
   };
 
@@ -3028,7 +3047,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     if (t) {
       // Drop into an existing combination: same group label, inserted right after the
       // group's last row, and scaled to the group's current ×N if the combination is scalable.
-      const scalable = /\(Type \d+\)/.test(t.group) || !!p.components.find((x) => x.section === t.sec && !isSpacer(x) && (effGroup.get(x.id) || "") === t.group)?.comboScalable;
+      const scalable = /\(Type \d+\)/.test(t.group) || p.components.some((x) => x.section === t.sec && !isSpacer(x) && (effGroup.get(x.id) || "") === t.group && x.comboScalable);
       const cq = scalable ? comboQtyOf(p.components.filter((x) => x.section === t.sec), t.group) : 1;
       const nc: PanelComponent = { ...toPanelComponent(c, t.sec, base * cq, t.group), baseQty: base, ...(scalable ? { comboScalable: true } : {}) };
       const arr = [...p.components];
@@ -3073,8 +3092,28 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   const dropPreviewRow = (i: number) => setPastePreview((pv) => { const rows = (pv?.rows ?? []).filter((_, j) => j !== i); return rows.length ? { rows } : null; });
   const confirmPaste = () => {
     const rows = pastePreview?.rows ?? [];
-    const added = rows.filter((r) => r.match).map((r) => toPanelComponent(r.match!, p.activeSection, Math.max(1, r.qty)));
-    const missing = rows.filter((r) => !r.match).length;
+    const matched = rows.filter((r) => r.match);
+    const missing = rows.length - matched.length;
+    const t = addTarget;
+    if (t) {
+      // Into a targeted combination — apply its ×N and group, inserted after the group's last row.
+      const scalable = /\(Type \d+\)/.test(t.group) || p.components.some((x) => x.section === t.sec && !isSpacer(x) && (effGroup.get(x.id) || "") === t.group && x.comboScalable);
+      const cq = scalable ? comboQtyOf(p.components.filter((x) => x.section === t.sec), t.group) : 1;
+      const items = matched.map((r) => {
+        const base = Math.max(1, r.qty);
+        return { ...toPanelComponent(r.match!, t.sec, base * cq, t.group), baseQty: base, ...(scalable ? { comboScalable: true } : {}) };
+      });
+      const arr = [...p.components];
+      let lastIdx = -1;
+      arr.forEach((x, i) => { if (x.section === t.sec && !isSpacer(x) && (effGroup.get(x.id) || "") === t.group) lastIdx = i; });
+      if (lastIdx >= 0) arr.splice(lastIdx + 1, 0, ...items); else arr.push(...items);
+      u({ components: arr });
+      setPastePreview(null);
+      setPasteMsg(`Added ${items.length} component${items.length === 1 ? "" : "s"} to combination “${t.group}”${missing ? ` · ${missing} skipped (not found)` : ""}`);
+      refocusSearch();
+      return;
+    }
+    const added = matched.map((r) => toPanelComponent(r.match!, p.activeSection, Math.max(1, r.qty)));
     if (added.length) u({ components: [...p.components, ...added] });
     setPastePreview(null);
     setPasteMsg(`Added ${added.length} component${added.length === 1 ? "" : "s"} to “${p.activeSection}”${missing ? ` · ${missing} skipped (not found)` : ""}`);
@@ -3243,7 +3282,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
           return (
             <div className="absolute z-40 mt-1 w-full rounded-lg border border-brand/50 bg-white p-3 shadow-lift">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-xs font-bold text-ink">Review {pastePreview.rows.length} pasted components → “{p.activeSection}”</p>
+                <p className="text-xs font-bold text-ink">Review {pastePreview.rows.length} pasted components → {addTarget ? `combination “${addTarget.group}”` : `“${p.activeSection}”`}</p>
                 <button type="button" onClick={() => setPastePreview(null)} title="Discard" className="px-1 text-muted hover:text-ink">✕</button>
               </div>
               <div className="max-h-60 overflow-auto">
