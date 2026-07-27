@@ -307,6 +307,8 @@ export const api = {
         `/pricing/lv?${s.toString()}`
       );
     },
+    lvAdd: (draft: Record<string, unknown>) =>
+      request<{ ok: true; row: LvRow }>("/pricing/lv", { method: "POST", body: JSON.stringify(draft) }),
     lvFacets: () => request<{ types: string[]; brands: string[]; families: string[] }>("/pricing/lv/facets"),
     lvSetPrice: (id: string, kind: "components" | "enclosures", eur: number, egp: number) =>
       request<{ ok: true; row: LvRow }>(`/pricing/lv/${id}?kind=${kind}`, {

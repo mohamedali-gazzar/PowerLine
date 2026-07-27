@@ -3,6 +3,8 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import App from "./App";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { installCachedCatalog, refreshCatalog } from "./lv/catalogSource";
+import { getToken } from "./api";
 import AuthPage from "./pages/AuthPage";
 import HomeDashboard from "./pages/HomeDashboard";
 import OffersListPage from "./pages/OffersListPage";
@@ -27,6 +29,10 @@ import "./index.css";
 /** Login wall: shows the auth page until the user is signed in, then the app. */
 function Gate() {
   const { user, loading } = useAuth();
+  // Pull the published prices once the user is known (the endpoint needs a login).
+  React.useEffect(() => {
+    if (user) void refreshCatalog(getToken());
+  }, [user]);
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-surface">
@@ -58,6 +64,12 @@ function Gate() {
     </Routes>
   );
 }
+
+// Prices: start from the catalogue this browser last saw (synchronous, so the
+// first render already has the right prices), then quietly fetch the published
+// one. Both are no-ops on failure — the app always has the bundled catalogue
+// underneath, so it can never start without prices.
+installCachedCatalog();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

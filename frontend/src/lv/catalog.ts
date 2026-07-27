@@ -150,11 +150,14 @@ function cellNorm(fam: string, s: string): string {
   return s.replace(/\s+/g, "").toLowerCase().replace(/2mm/g, "2m");
 }
 const CELL_DB: Record<string, Map<string, DbEnclosure>> = {};
-for (const fam of ["Pro-E", "IS2", "PLP"]) {
-  const m = new Map<string, DbEnclosure>();
-  ENCLOSURES.filter((e) => e.fam === fam).forEach((e) => m.set(cellNorm(fam, e.name), e));
-  CELL_DB[fam] = m;
+function rebuildCellDb(): void {
+  for (const fam of ["Pro-E", "IS2", "PLP"]) {
+    const m = new Map<string, DbEnclosure>();
+    ENCLOSURES.filter((e) => e.fam === fam).forEach((e) => m.set(cellNorm(fam, e.name), e));
+    CELL_DB[fam] = m;
+  }
 }
+rebuildCellDb();
 /** Find the priced enclosure for a cell-table row (by family + description). */
 export function findCellEnclosure(type: string, desc: string): DbEnclosure | undefined {
   const m = CELL_DB[type];
@@ -183,6 +186,19 @@ export const fmt2 = (n: number) =>
 // Distinct component types for the picker, in catalog order.
 export const COMPONENT_TYPES: string[] = [...new Set(COMPONENTS.map((c) => c.t).filter(Boolean))];
 export const ENCLOSURE_FAMILIES: string[] = [...new Set(ENCLOSURES.map((e) => e.fam))];
+
+/** Rebuild everything derived from COMPONENTS / ENCLOSURES.
+ *  Call this after the catalogue contents are replaced (see lv/catalogSource.ts).
+ *  These lists and the cell index are built once at load, so without this a new
+ *  or re-priced item is in the catalogue but invisible in the pickers, and cell
+ *  prices keep resolving against the previous data. */
+export function rebuildDerived(): void {
+  COMPONENT_TYPES.length = 0;
+  COMPONENT_TYPES.push(...new Set(COMPONENTS.map((c) => c.t).filter(Boolean)));
+  ENCLOSURE_FAMILIES.length = 0;
+  ENCLOSURE_FAMILIES.push(...new Set(ENCLOSURES.map((e) => e.fam)));
+  rebuildCellDb();
+}
 
 /** Find a DB component whose display name matches a combination-template description. */
 export function findByName(desc: string): DbComponent | undefined {

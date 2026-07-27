@@ -248,6 +248,66 @@ export async function updateLvPrice(req: Request, res: Response) {
   }
 }
 
+const newComponentSchema = z.object({
+  t: z.string().trim().min(1, "Choose or type the Type."),
+  f: z.string().trim().min(1, "Enter the Family."),
+  r: z.string().trim().min(1, "Enter the Rating."),
+  d: z.string().trim().min(3, "Enter a Description (at least 3 characters)."),
+  ref: z.string().trim().min(2, "Enter the Reference."),
+  brand: z.string().trim().min(1, "Enter the Brand."),
+  poles: z.number().int().min(0, "Enter the number of poles."),
+  eur: z.number().min(0),
+  egp: z.number().min(0).default(0),
+});
+
+/** POST /api/pricing/lv — add a new LV component.
+ *  Only components: enclosures and cells are matched by NAME against generated
+ *  cell tables, so a hand-added one would never be found by the calculator. */
+export async function createLvComponent(req: Request, res: Response) {
+  try {
+    const v = newComponentSchema.parse(req.body);
+    if (!(v.eur > 0) && !(v.egp > 0)) {
+      return res.status(400).json({ error: "Enter a price (EUR, or EGP if the item is not priced in euro)." });
+    }
+    if (v.eur > 0 && v.egp > 0) {
+      return res.status(400).json({ error: "Price the item in ONE currency — set the other to 0." });
+    }
+
+    const clash = await prisma.lvComponent.findFirst({ where: { ref: v.ref } });
+    if (clash) {
+      return res.status(409).json({ error: `Reference "${v.ref}" already exists — edit that item instead.` });
+    }
+
+    // Append after the current catalogue: the ORDER is load-bearing (the
+    // combination builders take the first description match), so a new item must
+    // never be inserted in front of an existing one.
+    const last = await prisma.lvComponent.findFirst({ orderBy: { sortIndex: "desc" }, select: { sortIndex: true } });
+    const sortIndex = (last?.sortIndex ?? -1) + 1;
+    const by = req.userEmail ?? "";
+
+    const row = await prisma.lvComponent.create({
+      data: {
+        sortIndex,
+        t: v.t, f: v.f, r: v.r, d: v.d, n: v.d, ref: v.ref,
+        brand: v.brand, poles: v.poles, eur: v.eur, egp: v.egp,
+        search: [v.t, v.f, v.r, v.d, v.ref, v.brand].join(" ").toLowerCase(),
+        updatedBy: by,
+      },
+    });
+    await prisma.priceChange.create({
+      data: {
+        domain: "LV", entity: "LvComponent", entityId: row.id,
+        label: row.d, field: "__created",
+        newValue: v.eur > 0 ? `${v.eur} EUR` : `${v.egp} EGP`,
+        actorId: req.userId ?? null, actorEmail: by,
+      },
+    });
+    res.status(201).json({ ok: true, row });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
 /** Rebuild the LV catalogue payload from the draft rows — the exact shape the
  *  frontend catalogue expects, in sortIndex order (the order is load-bearing:
  *  the combination builders take the FIRST description match). */

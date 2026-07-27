@@ -33,6 +33,7 @@ import {
   listLvPrices,
   getLvFacets,
   updateLvPrice,
+  createLvComponent,
   getLvCatalog,
 } from "./controllers/pricing-lv.controller";
 import { withPriceBook } from "./middleware/priceBook";
@@ -108,6 +109,7 @@ export function createApp() {
   app.get("/api/pricing/lv", requireAuth, requirePriceAdmin, listLvPrices);
   app.get("/api/pricing/lv/facets", requireAuth, requirePriceAdmin, getLvFacets);
   app.patch("/api/pricing/lv/:id", requireAuth, requirePriceAdmin, updateLvPrice);
+  app.post("/api/pricing/lv", requireAuth, requirePriceAdmin, createLvComponent);
   app.post("/api/pricing/lv/seed-chunk", requireAuth, requirePriceAdmin, postLvSeedChunk);
   app.post("/api/pricing/lv/settings", requireAuth, requirePriceAdmin, postLvSettings);
 

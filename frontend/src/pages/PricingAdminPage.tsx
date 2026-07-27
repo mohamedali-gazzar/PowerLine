@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type PricingStatus, type RmuPriceRow, type PriceChangeRow, type LvRow } from "../api";
 import { COMPONENTS, ENCLOSURES, DEFAULT_FACTORS } from "../lv/catalog";
 
@@ -27,6 +27,7 @@ export default function PricingAdminPage() {
   const [confirming, setConfirming] = useState(false);
   const [progress, setProgress] = useState("");
   const [section, setSection] = useState<"RMU" | "LV">("RMU");
+  const autoImported = useRef(false); // guard: import the LV catalogue once per visit
 
   const loadAll = async () => {
     setError("");
@@ -37,6 +38,15 @@ export default function PricingAdminPage() {
         const [l, p] = await Promise.all([api.pricing.list(), api.pricing.pending()]);
         setRows(l.rows);
         setPending(p.changes);
+        // The LV catalogue is small and copying it changes no prices, so import
+        // it automatically rather than making the owner press a button for it.
+        if (s.counts.lvComponents === 0 && !autoImported.current) {
+          autoImported.current = true;
+          importLvCatalogue()
+            .then(() => api.pricing.status().then(setStatus))
+            .catch((e) => setError((e as Error).message))
+            .finally(() => setProgress(""));
+        }
       }
     } catch (e) {
       setError((e as Error).message);
@@ -64,23 +74,6 @@ export default function PricingAdminPage() {
     }
     setProgress("Saving pricing factors…");
     await api.pricing.lvSettings(DEFAULT_FACTORS);
-  };
-
-  /** Import LV on its own — for a price list that was set up before the LV
-   *  catalogue existed, which would otherwise be stuck with zero LV items. */
-  const importLvOnly = async () => {
-    setBusy("lv");
-    setError("");
-    try {
-      await importLvCatalogue();
-      setToast(`Imported ${COMPONENTS.length} components and ${ENCLOSURES.length} enclosures.`);
-      await loadAll();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setProgress("");
-      setBusy("");
-    }
   };
 
   const setUp = async () => {
@@ -314,25 +307,16 @@ export default function PricingAdminPage() {
           </div>
 
           {section === "LV" && status.counts.lvComponents === 0 && (
-            <div className="card p-6">
-              <h2 className="sec-head">Import the LV price list</h2>
-              <p className="text-sm text-muted">
-                The LV catalogue hasn&apos;t been imported yet — this price list was set up before
-                the LV part existed. Press the button to copy the {COMPONENTS.length.toLocaleString()}{" "}
-                components and {ENCLOSURES.length} enclosures the app is using right now into the
-                database, so you can edit them here. <b>Prices stay exactly the same.</b>
-              </p>
-              <button className="btn-primary mt-4" onClick={importLvOnly} disabled={busy === "lv"}>
-                {busy === "lv" ? "Importing…" : "Import the LV price list →"}
-              </button>
-              {progress && <p className="mt-2 text-sm font-semibold text-brand-dark">{progress}</p>}
+            <div className="card p-6 text-center">
+              <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+              <p className="mt-3 text-sm font-semibold text-ink">Loading the LV price list…</p>
+              <p className="text-xs text-muted">{progress || "Copying your current prices — they do not change."}</p>
             </div>
           )}
           {section === "LV" && status.counts.lvComponents > 0 && <LvPrices />}
 
           {section === "RMU" && (
             <>
-              <AddProduct onAdded={loadAll} />
               <input
                 className="input mb-3"
                 placeholder="Search a product or price code…"
@@ -401,6 +385,114 @@ export default function PricingAdminPage() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/** Add an LV component. Every field is required — an item missing its type,
+ *  description or reference cannot be found or priced by the calculator. */
+function AddLvComponent({
+  types,
+  brands,
+  onAdded,
+}: {
+  types: string[];
+  brands: string[];
+  onAdded: () => void;
+}) {
+  const empty = { t: "", f: "", r: "", d: "", ref: "", brand: "ABB", poles: "3", eur: "", egp: "" };
+  const [open, setOpen] = useState(false);
+  const [v, setV] = useState<Record<string, string>>(empty);
+  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+  const set = (k: string, val: string) => setV((s) => ({ ...s, [k]: val }));
+
+  const submit = async () => {
+    setErr("");
+    setSaving(true);
+    try {
+      await api.pricing.lvAdd({
+        t: v.t.trim(),
+        f: v.f.trim(),
+        r: v.r.trim(),
+        d: v.d.trim(),
+        ref: v.ref.trim(),
+        brand: v.brand.trim(),
+        poles: Number(v.poles) || 0,
+        eur: Number(v.eur) || 0,
+        egp: Number(v.egp) || 0,
+      });
+      setV(empty);
+      setOpen(false);
+      onAdded();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open)
+    return (
+      <button className="btn-ghost mb-3" onClick={() => setOpen(true)}>
+        + Add a component
+      </button>
+    );
+
+  const F = ({ k, label, ph, list }: { k: string; label: string; ph?: string; list?: string[] }) => (
+    <div>
+      <label className="label">{label}</label>
+      <input
+        className="input"
+        value={v[k]}
+        placeholder={ph}
+        list={list ? `dl-${k}` : undefined}
+        onChange={(e) => set(k, e.target.value)}
+      />
+      {list && (
+        <datalist id={`dl-${k}`}>
+          {list.map((x) => (
+            <option key={x} value={x} />
+          ))}
+        </datalist>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="card mb-3 border-brand/40 p-4">
+      <h2 className="sec-head">Add a component</h2>
+      <p className="mb-3 text-xs text-muted">All fields are required. It is added to the end of the catalogue.</p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <F k="t" label="Type" ph="MCCB" list={types} />
+        <F k="f" label="Family" ph="XT2S" />
+        <F k="r" label="Rating" ph="160A" />
+        <div className="sm:col-span-3">
+          <label className="label">Description</label>
+          <input className="input" value={v.d} placeholder="MCCB XT2S 160A 3P" onChange={(e) => set("d", e.target.value)} />
+        </div>
+        <F k="ref" label="Reference" ph="1SDA067xxxR1" />
+        <F k="brand" label="Brand" list={brands} />
+        <div>
+          <label className="label">Poles</label>
+          <input className="input" type="number" min={0} value={v.poles} onChange={(e) => set("poles", e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Price EUR</label>
+          <input className="input" type="number" min={0} step="0.01" value={v.eur} onChange={(e) => { set("eur", e.target.value); if (e.target.value) set("egp", ""); }} />
+        </div>
+        <div>
+          <label className="label">or Price EGP</label>
+          <input className="input" type="number" min={0} step="0.01" value={v.egp} onChange={(e) => { set("egp", e.target.value); if (e.target.value) set("eur", ""); }} />
+        </div>
+      </div>
+      {err && <p className="mt-2 text-sm font-semibold text-red-700">{err}</p>}
+      <div className="mt-4 flex gap-2">
+        <button className="btn-primary" onClick={submit} disabled={saving}>
+          {saving ? "Adding…" : "Add component"}
+        </button>
+        <button className="btn-ghost" onClick={() => { setOpen(false); setErr(""); }}>Cancel</button>
+      </div>
     </div>
   );
 }
@@ -482,6 +574,24 @@ function LvPrices() {
           </button>
         ))}
       </div>
+
+      {/* Add a component (components only — enclosures and cells are matched by
+          name against generated cell tables, so a hand-added one would never be
+          found by the calculator). */}
+      {kind === "components" && (
+        <AddLvComponent
+          types={facets?.types ?? []}
+          brands={facets?.brands ?? []}
+          onAdded={() => {
+            setPage(0);
+            setQ("");
+            api.pricing.lvList({ kind, take }).then((r) => {
+              setRows(r.rows);
+              setTotal(r.total);
+            });
+          }}
+        />
+      )}
 
       {/* Excel-style filter bar */}
       <div className="card mb-3 flex flex-wrap items-end gap-2 p-3">
@@ -742,184 +852,6 @@ function AccessPanel() {
           ))}
         </ul>
       )}
-    </div>
-  );
-}
-
-/** Add a product. Every field shown is required; the product CODE is derived by
- *  the server from what you choose, so it always matches what the configurator
- *  looks for — you can never save a product the app cannot find. */
-function AddProduct({ onAdded }: { onAdded: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [kind, setKind] = useState<RmuPriceRow["kind"]>("PANEL");
-  const [f, setF] = useState<Record<string, unknown>>({ family: "P-SEC", voltageKv: 24, nalCount: 2, nalfCount: 1 });
-  const [price, setPrice] = useState("");
-  const [label, setLabel] = useState("");
-  const [preview, setPreview] = useState<{ key: string; exists: boolean } | null>(null);
-  const [err, setErr] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const draft = { kind, ...f, label, priceUsd: Number(price) || 1 };
-
-  // Live code preview — the server derives it with the same builder the
-  // configurator uses, so what you see is exactly what will be looked up.
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    api.pricing
-      .deriveKey(draft)
-      .then((r) => !cancelled && setPreview({ key: r.key, exists: r.exists }))
-      .catch(() => !cancelled && setPreview(null));
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, kind, JSON.stringify(f), label]);
-
-  const submit = async () => {
-    setErr("");
-    if (!(Number(price) > 0)) return setErr("Enter a price greater than 0.");
-    setSaving(true);
-    try {
-      await api.pricing.add({ ...draft, priceUsd: Number(price) });
-      setOpen(false);
-      setPrice("");
-      setLabel("");
-      onAdded();
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const num = (k: string, v: string) => setF((s) => ({ ...s, [k]: Number(v) }));
-
-  if (!open)
-    return (
-      <button className="btn-ghost mb-4" onClick={() => setOpen(true)}>
-        + Add a product
-      </button>
-    );
-
-  return (
-    <div className="card mb-4 border-brand/40 p-4">
-      <h2 className="sec-head">Add a product</h2>
-      <p className="mb-3 text-xs text-muted">
-        Fill in every field. The product code is created for you so it always matches what the
-        configurator asks for.
-      </p>
-
-      <label className="label">What are you adding?</label>
-      <select className="input mb-3" value={kind} onChange={(e) => setKind(e.target.value as RmuPriceRow["kind"])}>
-        <option value="PANEL">RMU panel</option>
-        <option value="LUCY">Lucy AEGIS PLUS configuration</option>
-        <option value="RTU">Smart / RTU level</option>
-        <option value="ADDON">Add-on</option>
-      </select>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        {kind === "PANEL" && (
-          <>
-            <div>
-              <label className="label">Family</label>
-              <select className="input" value={String(f.family ?? "P-SEC")} onChange={(e) => setF((s) => ({ ...s, family: e.target.value }))}>
-                <option value="P-RAL">P-RAL (air)</option>
-                <option value="P-SEC">P-SEC (SF6)</option>
-                <option value="P-SEC.M">P-SEC.M (Murge)</option>
-              </select>
-            </div>
-            <div>
-              <label className="label">Voltage</label>
-              <select className="input" value={Number(f.voltageKv ?? 24)} onChange={(e) => num("voltageKv", e.target.value)}>
-                <option value={12}>12 kV</option>
-                <option value={24}>24 kV</option>
-              </select>
-            </div>
-          </>
-        )}
-
-        {(kind === "PANEL" || kind === "LUCY") && (
-          <>
-            <div>
-              <label className="label">{kind === "LUCY" ? "Feeders" : "Ring ways (N)"}</label>
-              <input className="input" type="number" min={0} max={5} value={Number(f.nalCount ?? 2)} onChange={(e) => num("nalCount", e.target.value)} />
-            </div>
-            <div>
-              <label className="label">{kind === "LUCY" ? "Transformers" : "Transformer ways (F)"}</label>
-              <input className="input" type="number" min={0} max={2} value={Number(f.nalfCount ?? 1)} onChange={(e) => num("nalfCount", e.target.value)} />
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={!!f.hasMetering} onChange={(e) => setF((s) => ({ ...s, hasMetering: e.target.checked }))} />
-              Includes metering
-            </label>
-            {kind === "PANEL" && (
-              <label className={`flex items-center gap-2 text-sm ${f.hasMetering ? "" : "opacity-40"}`}>
-                <input type="checkbox" disabled={!f.hasMetering} checked={!!f.withFuse} onChange={(e) => setF((s) => ({ ...s, withFuse: e.target.checked }))} />
-                VT with fuse
-              </label>
-            )}
-          </>
-        )}
-
-        {kind === "RTU" && (
-          <>
-            <div>
-              <label className="label">Product</label>
-              <select className="input" value={String(f.productType ?? "PSEC")} onChange={(e) => setF((s) => ({ ...s, productType: e.target.value }))}>
-                <option value="PSEC">PSEC</option>
-                <option value="LUCY">LUCY</option>
-              </select>
-            </div>
-            <div>
-              <label className="label">Level</label>
-              <select className="input" value={String(f.rtuLevel ?? "SMART1")} onChange={(e) => setF((s) => ({ ...s, rtuLevel: e.target.value }))}>
-                {["READY1", "READY2", "SMART1", "SMART2"].map((x) => (
-                  <option key={x} value={x}>{x}</option>
-                ))}
-              </select>
-            </div>
-          </>
-        )}
-
-        {kind === "ADDON" && (
-          <div>
-            <label className="label">Which add-on</label>
-            <select className="input" value={String(f.addOnKey ?? "shuntTrip")} onChange={(e) => setF((s) => ({ ...s, addOnKey: e.target.value }))}>
-              <option value="outdoorEnclosure">Outdoor enclosure</option>
-              <option value="shuntTrip">Shunt trip</option>
-              <option value="auxiliarySwitch">Auxiliary switch</option>
-            </select>
-          </div>
-        )}
-
-        {(kind === "ADDON" || kind === "RTU") && (
-          <div className="sm:col-span-2">
-            <label className="label">Name printed on the customer's offer</label>
-            <input className="input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Outdoor Enclosure" />
-          </div>
-        )}
-
-        <div>
-          <label className="label">Price (USD)</label>
-          <input className="input" type="number" min={1} value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 8500" />
-        </div>
-      </div>
-
-      {preview && (
-        <p className={`mt-3 rounded-lg p-2 text-xs ${preview.exists ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
-          Product code: <b className="font-mono">{preview.key}</b>
-          {preview.exists ? " — already in the list, edit that row instead." : " — matches what the configurator asks for ✓"}
-        </p>
-      )}
-      {err && <p className="mt-2 text-sm font-semibold text-red-700">{err}</p>}
-
-      <div className="mt-4 flex gap-2">
-        <button className="btn-primary" onClick={submit} disabled={saving || (preview?.exists ?? false)}>
-          {saving ? "Adding…" : "Add product"}
-        </button>
-        <button className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
-      </div>
     </div>
   );
 }
