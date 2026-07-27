@@ -3244,6 +3244,11 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
           value={q} onChange={(e) => { setQ(e.target.value); if (pasteMsg) setPasteMsg(""); }}
           onPaste={(e) => { const text = e.clipboardData.getData("text"); if (/[\r\n\t]/.test(text)) { e.preventDefault(); addPasted(text); } }}
           onKeyDown={(e) => {
+            if (pastePreview) { // paste review open → Enter adds the matched rows, Esc cancels
+              if (e.key === "Enter") { e.preventDefault(); if (pastePreview.rows.some((r) => r.match)) confirmPaste(); }
+              else if (e.key === "Escape") setPastePreview(null);
+              return;
+            }
             if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); if (!pending) addSpacer(); return; } // ⇧Enter → spacer row
             if (pending || !q) return;
             if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, hits.length - 1)); }
@@ -3292,7 +3297,8 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
           const matched = pastePreview.rows.filter((r) => r.match).length;
           const missing = pastePreview.rows.length - matched;
           return (
-            <div className="absolute z-40 mt-1 w-full rounded-lg border border-brand/50 bg-white p-3 shadow-lift">
+            <div className="absolute z-40 mt-1 w-full rounded-lg border border-brand/50 bg-white p-3 shadow-lift"
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (matched > 0) confirmPaste(); } else if (e.key === "Escape") setPastePreview(null); }}>
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-xs font-bold text-ink">Review {pastePreview.rows.length} pasted components → {addTarget ? `combination “${addTarget.group}”` : `“${p.activeSection}”`}</p>
                 <button type="button" onClick={() => setPastePreview(null)} title="Discard" className="px-1 text-muted hover:text-ink">✕</button>
