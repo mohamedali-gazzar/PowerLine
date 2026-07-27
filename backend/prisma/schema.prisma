@@ -80,6 +80,9 @@ model Offer {
   // pricedAt == null means "created before snapshots existed" → live fallback.
   priceBookVersion Int?
   pricedAt         DateTime?
+  /// true when the offer was priced while the price database was unreachable and
+  /// the bundled fallback list was used — lets us find and re-price them later.
+  pricedFromStale  Boolean   @default(false)
   snapPriceKey     String?
   snapBasePriceUsd Float?
   snapListPriceUsd Float?
@@ -180,4 +183,213 @@ model LvQtn {
 
   @@unique([ownerId, number])
   @@index([ownerId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRICE BOOK — the online price list
+// ═══════════════════════════════════════════════════════════════════════════════
+// Prices are edited as DRAFT rows (RmuPrice / LvComponent / LvEnclosure /
+// PriceSetting). Nothing reaches a customer until "Update price list & database"
+// PUBLISHES them: an immutable PriceSnapshot is written and PriceBook.version is
+// bumped atomically. Readers compare the version they hold against PriceBook and
+// refresh — so a publish is live on the very next request, with no redeploy.
+//
+// Every column here is String/Int/Float/Boolean/DateTime and every addition is
+// nullable or defaulted, because `prisma db push --accept-data-loss` runs on
+// every deploy: nothing may ever require a destructive migration.
+
+/// Single row (id = "singleton"): which price book version is live.
+model PriceBook {
+  id          String   @id @default("singleton")
+  /// 0 = never published; the bundled JSON is still authoritative.
+  version     Int      @default(0)
+  publishedAt DateTime @default(now())
+  publishedBy String   @default("")
+  note        String   @default("")
+  /// "db" = serve the published snapshot | "json" = serve the bundled JSON.
+  /// The emergency kill switch. Deliberately a DB field, not an env var, so
+  /// recovering never requires a redeploy.
+  source      String   @default("db")
+  /// "EMPTY" | "SEEDING" | "READY" — drives the resumable first-time import.
+  seedState   String   @default("EMPTY")
+  seedCursor  Int      @default(0)
+  seedStage   String   @default("")
+}
+
+/// An immutable published price list. ONE row read serves the whole catalogue,
+/// so a cold serverless function never queries thousands of rows.
+model PriceSnapshot {
+  id        String   @id @default(cuid())
+  domain    String // "RMU" | "LV"
+  version   Int
+  payload   String // JSON (same precedent as LvQtn.state)
+  rowCount  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([domain, version])
+  @@index([version])
+}
+
+/// One RMU price. `key` is DERIVED server-side from the attributes below using
+/// the same builder the configurator uses — never typed by hand — so a row that
+/// nothing can look up is structurally impossible.
+model RmuPrice {
+  id       String  @id @default(cuid())
+  kind     String // "PANEL" | "LUCY" | "RTU" | "ADDON"
+  key      String // "P-SEC24N2F1M1-With Fuse" | "2+1+M" | "PSEC:SMART1" | "outdoorEnclosure"
+  priceUsd Float
+  label    String  @default("") // ADDON: the text printed on the customer offer
+  active   Boolean @default(true)
+
+  // PANEL + LUCY attributes (LUCY reuses nalCount=feeders, nalfCount=transformers)
+  family      String? // "P-RAL" | "P-SEC" | "P-SEC.M"
+  voltageKv   Int? // 12 | 24
+  nalCount    Int?
+  nalfCount   Int?
+  hasMetering Boolean @default(false)
+  withFuse    Boolean @default(false)
+
+  // RTU attributes
+  productType String? // "PSEC" | "LUCY"
+  rtuLevel    String? // "READY1" | "READY2" | "SMART1" | "SMART2"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  updatedBy String   @default("")
+
+  @@unique([kind, key])
+  @@index([kind, active])
+}
+
+/// Mirrors DbComponent in frontend/src/lv/catalog.ts field-for-field.
+model LvComponent {
+  id String @id @default(cuid())
+  /// Catalogue ORDER, seeded from the current array index. Load-bearing: the
+  /// combination builders resolve parts by description and take the FIRST match.
+  sortIndex Int    @unique
+  t         String @default("") // Type (MCB, MCCB, ACB…)
+  f         String @default("") // Family
+  r         String @default("") // Rating
+  d         String // short description — combination lookup key
+  n         String // display name    — combination lookup key
+  ref       String @default("") // catalogue reference
+
+  eur    Float   @default(0)
+  egp    Float   @default(0)
+  poles  Int     @default(0)
+  cuP    Float   @default(0) // copper kg/pole — panels
+  cuC    Float   @default(0) // copper kg/pole — cells
+  brand  String  @default("ABB")
+  stock  String  @default("")
+  active Boolean @default(true)
+
+  /// Lowercased "t f r d ref brand". Searching one lowercase column keeps local
+  /// SQLite and production Postgres identical (Prisma case-insensitive mode is
+  /// Postgres-only and would silently diverge between them).
+  search String @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  updatedBy String   @default("")
+
+  @@index([active, sortIndex])
+  @@index([t])
+  @@index([ref])
+}
+
+/// Mirrors DbEnclosure. Also the price book for Pro-E / IS2 / PLP cells, which
+/// are matched by a normalised form of `name` — so renaming one is significant.
+model LvEnclosure {
+  id        String  @id @default(cuid())
+  sortIndex Int     @unique
+  fam       String
+  name      String // IDENTITY: cell matching parses this
+  ref       String  @default("")
+  abb       String  @default("")
+  eur       Float   @default(0)
+  egp       Float   @default(0)
+  ip        String  @default("")
+  H         Int     @default(0)
+  W         Int     @default(0)
+  D         Int     @default(0)
+  mount     String  @default("")
+  ral       String  @default("7035")
+  active    Boolean @default(true)
+  search    String  @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  updatedBy String   @default("")
+
+  @@unique([fam, name])
+  @@index([active, sortIndex])
+  @@index([fam])
+}
+
+/// Scalars. scope "RMU": vatPct, currency.
+/// scope "LV": factor, euro, usd, safetyFactor, copper, sheetMetal, operations,
+///             abbDiscount, vat, forms.1 … forms.4b
+model PriceSetting {
+  id        String   @id @default(cuid())
+  scope     String
+  key       String
+  num       Float?
+  text      String?
+  updatedAt DateTime @updatedAt
+  updatedBy String   @default("")
+
+  @@unique([scope, key])
+}
+
+/// Audit trail + undo. One row per changed field.
+model PriceChange {
+  id         String   @id @default(cuid())
+  version    Int? // null = not yet published; stamped at publish
+  domain     String // "RMU" | "LV"
+  entity     String // "RmuPrice" | "LvComponent" | "LvEnclosure" | "PriceSetting"
+  entityId   String
+  label      String   @default("") // human-readable line, e.g. "Outdoor Enclosure"
+  field      String // "priceUsd" | "eur" | "__created" | "__retired" | "__restored"
+  oldValue   String?
+  newValue   String?
+  batchId    String? // groups one import / one publish / one undo
+  actorId    String?
+  actorEmail String   @default("")
+  createdAt  DateTime @default(now())
+
+  @@index([version])
+  @@index([domain, createdAt])
+  @@index([batchId])
+  @@index([entity, entityId])
+}
+
+/// A staged bulk edit: preview first, apply second. Stored because the two steps
+/// can land on different serverless instances.
+model PriceImportBatch {
+  id         String   @id @default(cuid())
+  domain     String
+  status     String   @default("PENDING") // PENDING | APPLIED | CANCELLED
+  rows       String // JSON: parsed rows exactly as previewed
+  diff       String // JSON: [{entity,label,field,from,to,kind}]
+  warnings   String   @default("[]")
+  actorId    String?
+  actorEmail String   @default("")
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([status, expiresAt])
+}
+
+/// Regression guard for the LV combination builders (ATS / MCC / photocell),
+/// which find their parts by DESCRIPTION. One row per distinct description, with
+/// the part it resolves to today. Publishing is refused if any of them stops
+/// resolving or starts resolving to a different part — which is how a new or
+/// renamed component could otherwise silently re-price a saved combination.
+model LvComboRef {
+  id         String   @id @default(cuid())
+  desc       String   @unique
+  expectRef  String   @default("")
+  expectName String   @default("")
+  source     String   @default("combos.json")
+  updatedAt  DateTime @updatedAt
 }
