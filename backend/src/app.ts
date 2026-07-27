@@ -9,7 +9,6 @@ import {
   history,
   weeklyStats,
 } from "./controllers/account.controller";
-import { askAi } from "./controllers/support.controller";
 import {
   PRODUCT_TYPES,
   VOLTAGES,
@@ -59,9 +58,6 @@ export function createApp() {
   app.put("/api/profile", requireAuth, updateProfile);
   app.get("/api/account/history", requireAuth, history);
   app.get("/api/stats/weekly", requireAuth, weeklyStats);
-
-  // Docs & Support — AI fallback only (the chat answers locally by default).
-  app.post("/api/support/ai", requireAuth, askAi);
 
   // RMU offers — optionalAuth records a signed-in user as the offer's owner.
   app.use("/api/offers", optionalAuth, offersRouter);

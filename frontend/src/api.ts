@@ -192,20 +192,6 @@ export const api = {
     unsubmit: (id: string) => request<{ ok: true }>(`/qtns/${id}/unsubmit`, { method: "POST" }),
   },
 
-  // ── Docs & Support — retrieval-grounded AI answering ────────────────────────
-  support: {
-    ai: (
-      question: string,
-      context: { doc: string; page?: number | null; text: string }[],
-      history: { role: "user" | "assistant"; text: string }[] = [],
-      topic?: string
-    ) =>
-      request<{ answer: string }>("/support/ai", {
-        method: "POST",
-        body: JSON.stringify({ question, context, history, topic }),
-      }),
-  },
-
   // ── Account (profile, history, stats) ───────────────────────────────────────
   account: {
     updateProfile: (data: { name?: string; photo?: string | null }) =>
