@@ -11,7 +11,10 @@ import OfferDetailPage from "./pages/OfferDetailPage";
 import KioskSelectorPage from "./pages/KioskSelectorPage";
 import LvQtnListPage from "./pages/LvQtnListPage";
 import LvConfiguratorPage from "./pages/LvConfiguratorPage";
-import PricingAdminPage from "./pages/PricingAdminPage";
+// Loaded on demand: the price screen is used occasionally, so its code is only
+// downloaded when someone actually opens /pricing — it never weighs on the
+// everyday app or on first load.
+const PricingAdminPage = React.lazy(() => import("./pages/PricingAdminPage"));
 // Brand fonts — self-hosted via @fontsource so local dev stays offline-capable.
 import "@fontsource/poppins/300.css";
 import "@fontsource/poppins/400.css";
@@ -38,7 +41,14 @@ function Gate() {
         <Route index element={<HomeDashboard />} />
         <Route path="rmu" element={<OffersListPage />} />
         <Route path="kiosks" element={<KioskSelectorPage />} />
-        <Route path="pricing" element={<PricingAdminPage />} />
+        <Route
+          path="pricing"
+          element={
+            <React.Suspense fallback={<div className="skeleton h-64" />}>
+              <PricingAdminPage />
+            </React.Suspense>
+          }
+        />
         <Route path="lv" element={<LvQtnListPage />} />
         <Route path="lv/qtn/:id" element={<LvConfiguratorPage />} />
         <Route path="offers/new" element={<NewOfferPage />} />

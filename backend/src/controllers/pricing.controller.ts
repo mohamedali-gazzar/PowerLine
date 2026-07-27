@@ -105,7 +105,7 @@ export async function postSeed(req: Request, res: Response) {
       await prisma.user.update({ where: { id: req.userId }, data: { role: "OWNER" } });
     }
 
-    await refreshPriceBook();
+    await refreshPriceBook(true);
     res.json({ ...result, role: "OWNER" });
   } catch (e) {
     fail(res, e);
@@ -207,7 +207,7 @@ export async function postPublish(req: Request, res: Response) {
     });
     await prisma.priceChange.updateMany({ where: { version: null }, data: { version } });
 
-    await refreshPriceBook();
+    await refreshPriceBook(true); // force: the publisher must never see stale numbers
     res.json({ ok: true, version });
   } catch (e) {
     fail(res, e);

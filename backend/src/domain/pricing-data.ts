@@ -38,6 +38,14 @@ let DATA: RmuPricingData = BUNDLED;
 let activeVersion = 0; // 0 = serving the bundled JSON
 let activeSource: "bundled" | "db" = "bundled";
 let lastError: string | null = null;
+let lastCheckedAt = 0;
+
+/** How long a loaded price list is trusted before we re-check the version.
+ *  Prices change a few times a month, so re-querying on EVERY request would be
+ *  pure overhead. At 10s a publish is still effectively instant for a person,
+ *  while ~all requests skip the database entirely. Publishing forces a refresh,
+ *  so the person who published never sees stale numbers. */
+const TTL_MS = Number(process.env.PRICE_BOOK_TTL_MS ?? 10_000);
 
 /** Where the prices currently being served came from (for the UI + diagnostics). */
 export function priceBookInfo(): {
@@ -58,7 +66,11 @@ export function priceBookInfo(): {
  *  Never throws. If the database is unreachable we keep serving the last good
  *  data (or the bundled list) and flag it as stale, so a blip degrades reads
  *  instead of failing them. */
-export async function refreshPriceBook(): Promise<void> {
+export async function refreshPriceBook(force = false): Promise<void> {
+  // Skip the database entirely while the cached list is still fresh — this keeps
+  // the price feature off the hot path of normal app usage.
+  if (!force && lastCheckedAt > 0 && Date.now() - lastCheckedAt < TTL_MS && !lastError) return;
+  lastCheckedAt = Date.now();
   try {
     const book = await prisma.priceBook.findUnique({ where: { id: "singleton" } });
 
