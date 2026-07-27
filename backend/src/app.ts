@@ -20,11 +20,15 @@ import {
   retireRmuPrice,
   createRmuPrice,
   postDeriveKey,
+  getHistory,
+  postUndo,
+  listUsers,
+  setUserRole,
   getPending,
   postPublish,
 } from "./controllers/pricing.controller";
 import { withPriceBook } from "./middleware/priceBook";
-import { requirePriceAdmin } from "./middleware/roles";
+import { requirePriceAdmin, requireOwner } from "./middleware/roles";
 import {
   PRODUCT_TYPES,
   VOLTAGES,
@@ -91,6 +95,11 @@ export function createApp() {
   app.post("/api/pricing/rmu/:id/retire", requireAuth, requirePriceAdmin, retireRmuPrice);
   app.post("/api/pricing/rmu/derive-key", requireAuth, requirePriceAdmin, postDeriveKey);
   app.post("/api/pricing/rmu", requireAuth, requirePriceAdmin, createRmuPrice);
+  app.get("/api/pricing/history", requireAuth, requirePriceAdmin, getHistory);
+  app.post("/api/pricing/changes/:id/undo", requireAuth, requirePriceAdmin, postUndo);
+  // Granting access is owner-only — a price admin cannot promote themselves.
+  app.get("/api/pricing/users", requireAuth, requireOwner, listUsers);
+  app.post("/api/pricing/users/:id/role", requireAuth, requireOwner, setUserRole);
   app.get("/api/pricing/pending", requireAuth, requirePriceAdmin, getPending);
   app.post("/api/pricing/publish", requireAuth, requirePriceAdmin, postPublish);
 

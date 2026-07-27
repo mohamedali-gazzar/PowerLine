@@ -266,6 +266,11 @@ export const api = {
         body: JSON.stringify({ active }),
       }),
     pending: () => request<{ changes: PriceChangeRow[] }>("/pricing/pending"),
+    history: () => request<{ changes: PriceChangeRow[] }>("/pricing/history"),
+    undo: (id: string) => request<{ ok: true }>(`/pricing/changes/${id}/undo`, { method: "POST" }),
+    users: () => request<{ users: { id: string; email: string; name: string; role: string }[] }>("/pricing/users"),
+    setRole: (id: string, role: string) =>
+      request<{ ok: true }>(`/pricing/users/${id}/role`, { method: "POST", body: JSON.stringify({ role }) }),
     publish: (note?: string) =>
       request<{ ok: true; version: number }>("/pricing/publish", {
         method: "POST",

@@ -398,6 +398,124 @@ export async function postPublish(req: Request, res: Response) {
   }
 }
 
+/** GET /api/pricing/history — who changed what, newest first. */
+export async function getHistory(_req: Request, res: Response) {
+  try {
+    const changes = await prisma.priceChange.findMany({ orderBy: { createdAt: "desc" }, take: 150 });
+    res.json({ changes });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+/** POST /api/pricing/changes/:id/undo — reverse one change.
+ *
+ *  Applied as a NEW forward change, never by rewriting history: the audit trail
+ *  stays a complete record of what happened, including the undo itself. */
+export async function postUndo(req: Request, res: Response) {
+  try {
+    const change = await prisma.priceChange.findUnique({ where: { id: req.params.id } });
+    if (!change) return res.status(404).json({ error: "Change not found." });
+    if (change.entity !== "RmuPrice") {
+      return res.status(400).json({ error: "That change cannot be undone automatically." });
+    }
+    const row = await prisma.rmuPrice.findUnique({ where: { id: change.entityId } });
+    if (!row) return res.status(404).json({ error: "That product no longer exists." });
+
+    const user = req.userId ? await prisma.user.findUnique({ where: { id: req.userId } }) : null;
+    const actor = { actorId: req.userId ?? null, actorEmail: user?.email ?? "" };
+    let field = "";
+    let oldValue = "";
+    let newValue = "";
+
+    if (change.field === "priceUsd" && change.oldValue != null) {
+      const back = Number(change.oldValue);
+      if (!Number.isFinite(back) || back <= 0) return res.status(400).json({ error: "The previous price is not valid." });
+      await prisma.rmuPrice.update({ where: { id: row.id }, data: { priceUsd: back, updatedBy: actor.actorEmail } });
+      field = "priceUsd";
+      oldValue = String(row.priceUsd);
+      newValue = String(back);
+    } else if (change.field === "__retired" || change.field === "__created") {
+      // undo a retire → offer it again;  undo an add → stop offering it
+      const active = change.field === "__retired";
+      await prisma.rmuPrice.update({ where: { id: row.id }, data: { active, updatedBy: actor.actorEmail } });
+      field = active ? "__restored" : "__retired";
+      oldValue = row.active ? "offered" : "retired";
+      newValue = active ? "offered" : "retired";
+    } else if (change.field === "__restored") {
+      await prisma.rmuPrice.update({ where: { id: row.id }, data: { active: false, updatedBy: actor.actorEmail } });
+      field = "__retired";
+      oldValue = "offered";
+      newValue = "retired";
+    } else {
+      return res.status(400).json({ error: "That change cannot be undone automatically." });
+    }
+
+    await prisma.priceChange.create({
+      data: {
+        domain: "RMU",
+        entity: "RmuPrice",
+        entityId: row.id,
+        label: row.label || row.key,
+        field,
+        oldValue,
+        newValue,
+        ...actor,
+      },
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+/** GET /api/pricing/users — who can edit prices (owner only). */
+export async function listUsers(_req: Request, res: Response) {
+  try {
+    const users = await prisma.user.findMany({
+      select: { id: true, email: true, name: true, role: true },
+      orderBy: { email: "asc" },
+    });
+    res.json({ users });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+/** POST /api/pricing/users/:id/role — grant or remove price-editing access. */
+export async function setUserRole(req: Request, res: Response) {
+  try {
+    const role = String(req.body?.role ?? "");
+    if (!["USER", "PRICE_ADMIN", "OWNER"].includes(role)) {
+      return res.status(400).json({ error: "Unknown access level." });
+    }
+    if (req.params.id === req.userId && role !== "OWNER") {
+      return res.status(400).json({ error: "You cannot remove your own owner access — ask another owner to do it." });
+    }
+    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!target) return res.status(404).json({ error: "User not found." });
+
+    const actor = req.userId ? await prisma.user.findUnique({ where: { id: req.userId } }) : null;
+    await prisma.user.update({ where: { id: target.id }, data: { role } });
+    await prisma.priceChange.create({
+      data: {
+        domain: "RMU",
+        entity: "User",
+        entityId: target.id,
+        label: target.email,
+        field: "role",
+        oldValue: target.role,
+        newValue: role,
+        actorId: req.userId ?? null,
+        actorEmail: actor?.email ?? "",
+      },
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
 /** GET /api/pricing/verify — proves the database reproduces the shipped price
  *  list exactly. Used after the import and before trusting the switch-over. */
 export async function getVerify(_req: Request, res: Response) {
