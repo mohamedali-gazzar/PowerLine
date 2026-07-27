@@ -10,6 +10,14 @@ import {
   weeklyStats,
 } from "./controllers/account.controller";
 import {
+  getVersion,
+  getStatus,
+  getRmuCatalog,
+  postSeed,
+  getVerify,
+} from "./controllers/pricing.controller";
+import { withPriceBook } from "./middleware/priceBook";
+import {
   PRODUCT_TYPES,
   VOLTAGES,
   RTU_TYPES,
@@ -59,8 +67,19 @@ export function createApp() {
   app.get("/api/account/history", requireAuth, history);
   app.get("/api/stats/weekly", requireAuth, weeklyStats);
 
+  // ── Price list ─────────────────────────────────────────────────────────────
+  // Prices come from the published snapshot in the database (see pricing-data.ts).
+  // withPriceBook refreshes the in-process cache when the version changed, which
+  // is what makes a publish live on the next request with no redeploy.
+  app.get("/api/pricing/version", requireAuth, getVersion);
+  app.get("/api/pricing/status", requireAuth, getStatus);
+  app.get("/api/pricing/verify", requireAuth, getVerify);
+  app.post("/api/pricing/seed", requireAuth, postSeed);
+  app.get("/api/catalog/rmu", requireAuth, withPriceBook, getRmuCatalog);
+
   // RMU offers — optionalAuth records a signed-in user as the offer's owner.
-  app.use("/api/offers", optionalAuth, offersRouter);
+  // withPriceBook ensures an offer is priced against the current published list.
+  app.use("/api/offers", optionalAuth, withPriceBook, offersRouter);
 
   return app;
 }

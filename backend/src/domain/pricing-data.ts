@@ -1,21 +1,27 @@
 // RMU pricing provider — the ONLY module that knows where prices come from.
 //
-// Today: prices load from src/data/rmu-pricing.json (statically imported, so it
-// bundles into the Vercel serverless function with zero config). That JSON is
-// generated from pricing/RMU-Pricing.xlsx via `node tools/pricing-import.cjs rmu`.
+// Prices live in the database as a published PriceSnapshot, pointed at by the
+// one-row PriceBook.version. `refreshPriceBook()` (called by the withPriceBook
+// middleware, once per request) loads that snapshot into the module-level cache
+// below; the four lookups stay SYNCHRONOUS, so priceList.ts, offer.service.ts
+// and offers.controller.ts need no async refactor.
 //
-// ERP integration later: replace the internals of these functions with ERP
-// lookups (or point a sync job at regenerating rmu-pricing.json on a schedule).
+// The bundled src/data/rmu-pricing.json remains in the repo as three things:
+//   1. the seed for the first import,
+//   2. the cold-start / database-unreachable fallback, and
+//   3. the kill switch — setting PriceBook.source = "json" serves it again
+//      instantly, with no redeploy.
 // Consumers (priceList.ts, lucy.ts, commercial.service.ts) never change.
 
 import pricingJson from "../data/rmu-pricing.json";
+import { prisma } from "../lib/prisma";
 
 export interface AddOnPrice {
   name: string;
   price: number;
 }
 
-interface RmuPricingData {
+export interface RmuPricingData {
   currency: string;
   vatPct: number;
   panels: Record<string, number>;
@@ -24,7 +30,69 @@ interface RmuPricingData {
   addOns: Record<string, AddOnPrice>;
 }
 
-const DATA = pricingJson as unknown as RmuPricingData;
+/** The price list shipped with the code — fallback and seed, never edited at runtime. */
+export const BUNDLED = pricingJson as unknown as RmuPricingData;
+
+/** What the synchronous lookups below read. Swapped wholesale by refreshPriceBook. */
+let DATA: RmuPricingData = BUNDLED;
+let activeVersion = 0; // 0 = serving the bundled JSON
+let activeSource: "bundled" | "db" = "bundled";
+let lastError: string | null = null;
+
+/** Where the prices currently being served came from (for the UI + diagnostics). */
+export function priceBookInfo(): {
+  version: number;
+  source: "bundled" | "db";
+  stale: boolean;
+  error: string | null;
+} {
+  return { version: activeVersion, source: activeSource, stale: lastError != null, error: lastError };
+}
+
+/** Load the published price list if the live version differs from the cached one.
+ *
+ *  Cheap: one indexed primary-key read per request, and the (larger) snapshot
+ *  read only when the version actually changed — which is what makes a publish
+ *  visible on the very next request without a redeploy.
+ *
+ *  Never throws. If the database is unreachable we keep serving the last good
+ *  data (or the bundled list) and flag it as stale, so a blip degrades reads
+ *  instead of failing them. */
+export async function refreshPriceBook(): Promise<void> {
+  try {
+    const book = await prisma.priceBook.findUnique({ where: { id: "singleton" } });
+
+    // Not seeded yet, or the kill switch is on → serve the bundled list.
+    if (!book || book.version === 0 || book.source === "json") {
+      DATA = BUNDLED;
+      activeVersion = 0;
+      activeSource = "bundled";
+      lastError = null;
+      return;
+    }
+
+    if (activeSource === "db" && activeVersion === book.version) {
+      lastError = null; // already current
+      return;
+    }
+
+    const snap = await prisma.priceSnapshot.findUnique({
+      where: { domain_version: { domain: "RMU", version: book.version } },
+    });
+    if (!snap) {
+      // Pointer with no snapshot — keep whatever we have rather than serve nothing.
+      lastError = `no RMU snapshot for version ${book.version}`;
+      return;
+    }
+
+    DATA = JSON.parse(snap.payload) as RmuPricingData;
+    activeVersion = book.version;
+    activeSource = "db";
+    lastError = null;
+  } catch (e) {
+    lastError = (e as Error).message;
+  }
+}
 
 /** Minimum (floor) USD price for a PRAL/PSEC panel by its price key, or null. */
 export function panelPrice(priceKey: string): number | null {
