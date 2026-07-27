@@ -15,8 +15,13 @@ import {
   getRmuCatalog,
   postSeed,
   getVerify,
+  listRmuPrices,
+  updateRmuPrice,
+  getPending,
+  postPublish,
 } from "./controllers/pricing.controller";
 import { withPriceBook } from "./middleware/priceBook";
+import { requirePriceAdmin } from "./middleware/roles";
 import {
   PRODUCT_TYPES,
   VOLTAGES,
@@ -76,6 +81,12 @@ export function createApp() {
   app.get("/api/pricing/verify", requireAuth, getVerify);
   app.post("/api/pricing/seed", requireAuth, postSeed);
   app.get("/api/catalog/rmu", requireAuth, withPriceBook, getRmuCatalog);
+  // Editing — price-admin only. Saves go to the DRAFT; customers only see them
+  // once "Update price list & database" (publish) is pressed.
+  app.get("/api/pricing/rmu", requireAuth, requirePriceAdmin, listRmuPrices);
+  app.patch("/api/pricing/rmu/:id", requireAuth, requirePriceAdmin, updateRmuPrice);
+  app.get("/api/pricing/pending", requireAuth, requirePriceAdmin, getPending);
+  app.post("/api/pricing/publish", requireAuth, requirePriceAdmin, postPublish);
 
   // RMU offers — optionalAuth records a signed-in user as the offer's owner.
   // withPriceBook ensures an offer is priced against the current published list.

@@ -120,6 +120,34 @@ export interface HistoryItem {
   submitted: boolean;
   link: string;
 }
+export interface PricingStatus {
+  role: string;
+  canEdit: boolean;
+  version: number;
+  source: "bundled" | "db";
+  stale: boolean;
+  seedState: "EMPTY" | "SEEDING" | "READY";
+  counts: { rmuPrices: number; settings: number; lvComponents: number; lvEnclosures: number };
+}
+export interface RmuPriceRow {
+  id: string;
+  kind: "PANEL" | "LUCY" | "RTU" | "ADDON";
+  key: string;
+  priceUsd: number;
+  label: string;
+  active: boolean;
+  updatedBy: string;
+  updatedAt: string;
+}
+export interface PriceChangeRow {
+  id: string;
+  label: string;
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  actorEmail: string;
+  createdAt: string;
+}
 export interface WeekStat {
   weekStart: string;
   label: string;
@@ -206,6 +234,28 @@ export const api = {
       request<QtnRecordDto>(`/qtns/${id}/duplicate`, { method: "POST" }),
     submit: (id: string) => request<{ ok: true }>(`/qtns/${id}/submit`, { method: "POST" }),
     unsubmit: (id: string) => request<{ ok: true }>(`/qtns/${id}/unsubmit`, { method: "POST" }),
+  },
+
+  // ── Price list (online, database-backed) ────────────────────────────────────
+  pricing: {
+    status: () => request<PricingStatus>("/pricing/status"),
+    setUp: () => request<{ ok: boolean; version: number; counts: Record<string, number>; mismatches?: string[] }>(
+      "/pricing/seed",
+      { method: "POST" }
+    ),
+    verify: () => request<{ identical: boolean; mismatches: string[]; counts: Record<string, number> }>("/pricing/verify"),
+    list: () => request<{ rows: RmuPriceRow[]; pendingChanges: number }>("/pricing/rmu"),
+    setPrice: (id: string, priceUsd: number) =>
+      request<{ ok: true; row: RmuPriceRow }>(`/pricing/rmu/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ priceUsd }),
+      }),
+    pending: () => request<{ changes: PriceChangeRow[] }>("/pricing/pending"),
+    publish: (note?: string) =>
+      request<{ ok: true; version: number }>("/pricing/publish", {
+        method: "POST",
+        body: JSON.stringify({ note: note ?? "" }),
+      }),
   },
 
   // ── Account (profile, history, stats) ───────────────────────────────────────
