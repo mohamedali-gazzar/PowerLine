@@ -17,6 +17,7 @@ import {
   getVerify,
   listRmuPrices,
   updateRmuPrice,
+  retireRmuPrice,
   getPending,
   postPublish,
 } from "./controllers/pricing.controller";
@@ -85,6 +86,7 @@ export function createApp() {
   // once "Update price list & database" (publish) is pressed.
   app.get("/api/pricing/rmu", requireAuth, requirePriceAdmin, listRmuPrices);
   app.patch("/api/pricing/rmu/:id", requireAuth, requirePriceAdmin, updateRmuPrice);
+  app.post("/api/pricing/rmu/:id/retire", requireAuth, requirePriceAdmin, retireRmuPrice);
   app.get("/api/pricing/pending", requireAuth, requirePriceAdmin, getPending);
   app.post("/api/pricing/publish", requireAuth, requirePriceAdmin, postPublish);
 

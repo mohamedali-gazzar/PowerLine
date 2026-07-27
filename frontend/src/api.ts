@@ -250,6 +250,11 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify({ priceUsd }),
       }),
+    retire: (id: string, active: boolean) =>
+      request<{ ok: true; row: RmuPriceRow }>(`/pricing/rmu/${id}/retire`, {
+        method: "POST",
+        body: JSON.stringify({ active }),
+      }),
     pending: () => request<{ changes: PriceChangeRow[] }>("/pricing/pending"),
     publish: (note?: string) =>
       request<{ ok: true; version: number }>("/pricing/publish", {

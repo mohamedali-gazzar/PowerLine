@@ -159,6 +159,47 @@ export async function updateRmuPrice(req: Request, res: Response) {
   }
 }
 
+/** POST /api/pricing/rmu/:id/retire — stop offering a product, or bring it back.
+ *
+ *  Never a hard delete: the row stays so quotations already saved keep resolving
+ *  their price. It simply stops being offered from the next publish. */
+export async function retireRmuPrice(req: Request, res: Response) {
+  try {
+    const active = req.body?.active === true; // false (or missing) = retire
+    const row = await prisma.rmuPrice.findUnique({ where: { id: req.params.id } });
+    if (!row) return res.status(404).json({ error: "Price not found." });
+    if (row.active === active) return res.json({ ok: true, unchanged: true, row });
+
+    // Guard: the outdoor enclosure is applied automatically to OUTDOOR offers,
+    // so retiring it would silently drop that charge from future quotations.
+    if (!active && row.kind === "ADDON" && row.key === "outdoorEnclosure") {
+      return res.status(400).json({
+        error:
+          "The Outdoor Enclosure cannot be retired — outdoor offers would lose that charge. Change its price instead.",
+      });
+    }
+
+    const user = req.userId ? await prisma.user.findUnique({ where: { id: req.userId } }) : null;
+    const updated = await prisma.rmuPrice.update({ where: { id: row.id }, data: { active, updatedBy: user?.email ?? "" } });
+    await prisma.priceChange.create({
+      data: {
+        domain: "RMU",
+        entity: "RmuPrice",
+        entityId: row.id,
+        label: row.label || row.key,
+        field: active ? "__restored" : "__retired",
+        oldValue: row.active ? "offered" : "retired",
+        newValue: active ? "offered" : "retired",
+        actorId: req.userId ?? null,
+        actorEmail: user?.email ?? "",
+      },
+    });
+    res.json({ ok: true, row: updated });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
 /** GET /api/pricing/pending — the review list shown before publishing. */
 export async function getPending(_req: Request, res: Response) {
   try {

@@ -77,6 +77,28 @@ export default function PricingAdminPage() {
     }
   };
 
+  const toggleRetire = async (row: RmuPriceRow) => {
+    if (
+      row.active &&
+      !window.confirm(
+        `Retire "${row.label || row.key}"?\n\nIt stops being offered from the next publish. ` +
+          `Quotations already saved keep this product and its price, and are not affected.`
+      )
+    )
+      return;
+    setBusy(row.id);
+    setError("");
+    try {
+      const r = await api.pricing.retire(row.id, !row.active);
+      setRows((rs) => (rs ? rs.map((x) => (x.id === row.id ? r.row : x)) : rs));
+      setPending(await api.pricing.pending().then((p) => p.changes));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
+
   const publish = async () => {
     setBusy("publish");
     setError("");
@@ -236,25 +258,41 @@ export default function PricingAdminPage() {
                   <table className="w-full text-sm">
                     <tbody>
                       {list.map((r) => (
-                        <tr key={r.id} className="border-t border-line">
+                        <tr key={r.id} className={`border-t border-line ${r.active ? "" : "bg-slate-50/70"}`}>
                           <td className="px-5 py-2">
-                            <div className="font-medium text-ink">{r.label || r.key}</div>
+                            <div className={`font-medium ${r.active ? "text-ink" : "text-muted line-through"}`}>
+                              {r.label || r.key}
+                            </div>
                             {r.label && <div className="font-mono text-[11px] text-muted">{r.key}</div>}
+                            {!r.active && (
+                              <span className="mt-0.5 inline-block rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
+                                RETIRED — not offered
+                              </span>
+                            )}
                           </td>
-                          <td className="w-44 px-5 py-2 text-right">
-                            <div className="flex items-center justify-end gap-1">
+                          <td className="w-56 px-5 py-2 text-right">
+                            <div className="flex items-center justify-end gap-2">
                               <span className="text-xs text-muted">USD</span>
                               <input
                                 type="number"
                                 min={1}
                                 defaultValue={r.priceUsd}
-                                disabled={busy === r.id}
+                                disabled={busy === r.id || !r.active}
                                 onBlur={(e) => savePrice(r, e.target.value)}
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                                 }}
-                                className="input w-32 text-right"
+                                className="input w-28 text-right"
                               />
+                              <button
+                                type="button"
+                                title={r.active ? "Stop offering this product" : "Offer this product again"}
+                                onClick={() => toggleRetire(r)}
+                                disabled={busy === r.id}
+                                className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-muted transition hover:bg-surface hover:text-ink"
+                              >
+                                {r.active ? "Retire" : "Restore"}
+                              </button>
                             </div>
                           </td>
                         </tr>
