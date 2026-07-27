@@ -2,7 +2,10 @@
 // Editing endpoints arrive in Stage 2.
 
 import type { Request, Response } from "express";
+import { z } from "zod";
 import { prisma } from "../lib/prisma";
+import { buildPriceKey, type RmuConfigInput } from "../domain/assembly";
+import { lucyKey } from "../domain/lucy";
 import { fail } from "../lib/http";
 import { priceBookInfo, refreshPriceBook } from "../domain/pricing-data";
 import { roleOf } from "../middleware/roles";
@@ -154,6 +157,146 @@ export async function updateRmuPrice(req: Request, res: Response) {
       },
     });
     res.json({ ok: true, row: updated });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+// ── Adding a product ─────────────────────────────────────────────────────────
+// The price key is DERIVED here from the attributes, using the very same builder
+// the configurator uses to look a price up. A person never types it — which is
+// what makes it impossible to save a row that nothing can ever find. (The old
+// Excel sheet accepted any hand-typed key, so a typo became a dead price that
+// silently never applied.)
+
+const ADDON_KEYS = ["outdoorEnclosure", "shuntTrip", "auxiliarySwitch"] as const;
+
+const createSchema = z
+  .object({
+    kind: z.enum(["PANEL", "LUCY", "RTU", "ADDON"]),
+    priceUsd: z.number().positive("Enter a price greater than 0."),
+    // PANEL
+    family: z.enum(["P-RAL", "P-SEC", "P-SEC.M"]).optional(),
+    voltageKv: z.union([z.literal(12), z.literal(24)]).optional(),
+    // PANEL + LUCY
+    nalCount: z.number().int().min(0).max(5).optional(),
+    nalfCount: z.number().int().min(0).max(2).optional(),
+    hasMetering: z.boolean().optional(),
+    withFuse: z.boolean().optional(),
+    // RTU
+    productType: z.enum(["PSEC", "LUCY"]).optional(),
+    rtuLevel: z.enum(["READY1", "READY2", "SMART1", "SMART2"]).optional(),
+    // ADDON
+    addOnKey: z.enum(ADDON_KEYS).optional(),
+    label: z.string().trim().max(120).optional(),
+  })
+  .superRefine((v, ctx) => {
+    const need = (ok: boolean, message: string) => {
+      if (!ok) ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+    };
+    if (v.kind === "PANEL") {
+      need(!!v.family, "Choose the product family.");
+      need(v.voltageKv === 12 || v.voltageKv === 24, "Choose the voltage.");
+      need(v.nalCount != null, "Enter the number of ring ways.");
+      need(v.nalfCount != null, "Enter the number of transformer ways.");
+    } else if (v.kind === "LUCY") {
+      need(v.nalCount != null, "Enter the number of feeders.");
+      need(v.nalfCount != null, "Enter the number of transformers.");
+    } else if (v.kind === "RTU") {
+      need(!!v.productType, "Choose the product.");
+      need(!!v.rtuLevel, "Choose the Smart/RTU level.");
+    } else if (v.kind === "ADDON") {
+      need(!!v.addOnKey, "Choose which add-on this is.");
+      need(!!v.label && v.label.trim().length >= 3, "Enter the name printed on the customer's offer.");
+    }
+  });
+
+type CreateInput = z.infer<typeof createSchema>;
+
+/** Build the price key the configurator will look for. */
+function derivePriceKeyFor(v: CreateInput): string {
+  if (v.kind === "PANEL") {
+    const productType = v.family === "P-RAL" ? "PRAL" : "PSEC";
+    const lbsBrand = v.family === "P-SEC.M" ? "MURGE" : "ABB";
+    return buildPriceKey({
+      productType,
+      lbsBrand,
+      clientSpec: "EECH",
+      voltageKv: v.voltageKv,
+      nalCount: v.nalCount,
+      nalfCount: v.nalfCount,
+      hasMetering: !!v.hasMetering,
+      meteringWithFuse: !!v.hasMetering && !!v.withFuse,
+      rtuType: "NONE",
+      installation: "INDOOR",
+      busbarCurrentA: 630,
+    } as unknown as RmuConfigInput);
+  }
+  if (v.kind === "LUCY") {
+    return lucyKey({ nalCount: v.nalCount!, nalfCount: v.nalfCount!, hasMetering: !!v.hasMetering });
+  }
+  if (v.kind === "RTU") return `${v.productType}:${v.rtuLevel}`;
+  return v.addOnKey!;
+}
+
+/** POST /api/pricing/rmu/derive-key — live preview of the code, so the person
+ *  adding a product sees exactly what the app will look for before saving. */
+export async function postDeriveKey(req: Request, res: Response) {
+  try {
+    const input = createSchema.parse({ ...req.body, priceUsd: req.body?.priceUsd || 1 });
+    const key = derivePriceKeyFor(input);
+    const existing = await prisma.rmuPrice.findUnique({ where: { kind_key: { kind: input.kind, key } } });
+    res.json({ key, exists: !!existing, existingPrice: existing?.priceUsd ?? null });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+/** POST /api/pricing/rmu — add a product to the DRAFT price list. */
+export async function createRmuPrice(req: Request, res: Response) {
+  try {
+    const input = createSchema.parse(req.body);
+    const key = derivePriceKeyFor(input);
+
+    const existing = await prisma.rmuPrice.findUnique({ where: { kind_key: { kind: input.kind, key } } });
+    if (existing) {
+      return res.status(409).json({
+        error: `That product is already in the list as ${key} — edit its price instead of adding it again.`,
+        key,
+      });
+    }
+
+    const user = req.userId ? await prisma.user.findUnique({ where: { id: req.userId } }) : null;
+    const row = await prisma.rmuPrice.create({
+      data: {
+        kind: input.kind,
+        key,
+        priceUsd: input.priceUsd,
+        label: input.label ?? "",
+        family: input.family ?? null,
+        voltageKv: input.voltageKv ?? null,
+        nalCount: input.nalCount ?? null,
+        nalfCount: input.nalfCount ?? null,
+        hasMetering: !!input.hasMetering,
+        withFuse: !!input.withFuse,
+        productType: input.productType ?? null,
+        rtuLevel: input.rtuLevel ?? null,
+        updatedBy: user?.email ?? "",
+      },
+    });
+    await prisma.priceChange.create({
+      data: {
+        domain: "RMU",
+        entity: "RmuPrice",
+        entityId: row.id,
+        label: row.label || row.key,
+        field: "__created",
+        newValue: String(row.priceUsd),
+        actorId: req.userId ?? null,
+        actorEmail: user?.email ?? "",
+      },
+    });
+    res.status(201).json({ ok: true, row });
   } catch (e) {
     fail(res, e);
   }

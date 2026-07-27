@@ -238,6 +238,7 @@ export default function PricingAdminPage() {
       {/* ── The prices ───────────────────────────────────────────────────── */}
       {status.seedState === "READY" && (
         <>
+          <AddProduct onAdded={loadAll} />
           <input
             className="input mb-3"
             placeholder="Search a product or price code…"
@@ -304,6 +305,184 @@ export default function PricingAdminPage() {
             })}
         </>
       )}
+    </div>
+  );
+}
+
+/** Add a product. Every field shown is required; the product CODE is derived by
+ *  the server from what you choose, so it always matches what the configurator
+ *  looks for — you can never save a product the app cannot find. */
+function AddProduct({ onAdded }: { onAdded: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<RmuPriceRow["kind"]>("PANEL");
+  const [f, setF] = useState<Record<string, unknown>>({ family: "P-SEC", voltageKv: 24, nalCount: 2, nalfCount: 1 });
+  const [price, setPrice] = useState("");
+  const [label, setLabel] = useState("");
+  const [preview, setPreview] = useState<{ key: string; exists: boolean } | null>(null);
+  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const draft = { kind, ...f, label, priceUsd: Number(price) || 1 };
+
+  // Live code preview — the server derives it with the same builder the
+  // configurator uses, so what you see is exactly what will be looked up.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    api.pricing
+      .deriveKey(draft)
+      .then((r) => !cancelled && setPreview({ key: r.key, exists: r.exists }))
+      .catch(() => !cancelled && setPreview(null));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, kind, JSON.stringify(f), label]);
+
+  const submit = async () => {
+    setErr("");
+    if (!(Number(price) > 0)) return setErr("Enter a price greater than 0.");
+    setSaving(true);
+    try {
+      await api.pricing.add({ ...draft, priceUsd: Number(price) });
+      setOpen(false);
+      setPrice("");
+      setLabel("");
+      onAdded();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const num = (k: string, v: string) => setF((s) => ({ ...s, [k]: Number(v) }));
+
+  if (!open)
+    return (
+      <button className="btn-ghost mb-4" onClick={() => setOpen(true)}>
+        + Add a product
+      </button>
+    );
+
+  return (
+    <div className="card mb-4 border-brand/40 p-4">
+      <h2 className="sec-head">Add a product</h2>
+      <p className="mb-3 text-xs text-muted">
+        Fill in every field. The product code is created for you so it always matches what the
+        configurator asks for.
+      </p>
+
+      <label className="label">What are you adding?</label>
+      <select className="input mb-3" value={kind} onChange={(e) => setKind(e.target.value as RmuPriceRow["kind"])}>
+        <option value="PANEL">RMU panel</option>
+        <option value="LUCY">Lucy AEGIS PLUS configuration</option>
+        <option value="RTU">Smart / RTU level</option>
+        <option value="ADDON">Add-on</option>
+      </select>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {kind === "PANEL" && (
+          <>
+            <div>
+              <label className="label">Family</label>
+              <select className="input" value={String(f.family ?? "P-SEC")} onChange={(e) => setF((s) => ({ ...s, family: e.target.value }))}>
+                <option value="P-RAL">P-RAL (air)</option>
+                <option value="P-SEC">P-SEC (SF6)</option>
+                <option value="P-SEC.M">P-SEC.M (Murge)</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Voltage</label>
+              <select className="input" value={Number(f.voltageKv ?? 24)} onChange={(e) => num("voltageKv", e.target.value)}>
+                <option value={12}>12 kV</option>
+                <option value={24}>24 kV</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {(kind === "PANEL" || kind === "LUCY") && (
+          <>
+            <div>
+              <label className="label">{kind === "LUCY" ? "Feeders" : "Ring ways (N)"}</label>
+              <input className="input" type="number" min={0} max={5} value={Number(f.nalCount ?? 2)} onChange={(e) => num("nalCount", e.target.value)} />
+            </div>
+            <div>
+              <label className="label">{kind === "LUCY" ? "Transformers" : "Transformer ways (F)"}</label>
+              <input className="input" type="number" min={0} max={2} value={Number(f.nalfCount ?? 1)} onChange={(e) => num("nalfCount", e.target.value)} />
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={!!f.hasMetering} onChange={(e) => setF((s) => ({ ...s, hasMetering: e.target.checked }))} />
+              Includes metering
+            </label>
+            {kind === "PANEL" && (
+              <label className={`flex items-center gap-2 text-sm ${f.hasMetering ? "" : "opacity-40"}`}>
+                <input type="checkbox" disabled={!f.hasMetering} checked={!!f.withFuse} onChange={(e) => setF((s) => ({ ...s, withFuse: e.target.checked }))} />
+                VT with fuse
+              </label>
+            )}
+          </>
+        )}
+
+        {kind === "RTU" && (
+          <>
+            <div>
+              <label className="label">Product</label>
+              <select className="input" value={String(f.productType ?? "PSEC")} onChange={(e) => setF((s) => ({ ...s, productType: e.target.value }))}>
+                <option value="PSEC">PSEC</option>
+                <option value="LUCY">LUCY</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Level</label>
+              <select className="input" value={String(f.rtuLevel ?? "SMART1")} onChange={(e) => setF((s) => ({ ...s, rtuLevel: e.target.value }))}>
+                {["READY1", "READY2", "SMART1", "SMART2"].map((x) => (
+                  <option key={x} value={x}>{x}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
+
+        {kind === "ADDON" && (
+          <div>
+            <label className="label">Which add-on</label>
+            <select className="input" value={String(f.addOnKey ?? "shuntTrip")} onChange={(e) => setF((s) => ({ ...s, addOnKey: e.target.value }))}>
+              <option value="outdoorEnclosure">Outdoor enclosure</option>
+              <option value="shuntTrip">Shunt trip</option>
+              <option value="auxiliarySwitch">Auxiliary switch</option>
+            </select>
+          </div>
+        )}
+
+        {(kind === "ADDON" || kind === "RTU") && (
+          <div className="sm:col-span-2">
+            <label className="label">Name printed on the customer's offer</label>
+            <input className="input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Outdoor Enclosure" />
+          </div>
+        )}
+
+        <div>
+          <label className="label">Price (USD)</label>
+          <input className="input" type="number" min={1} value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 8500" />
+        </div>
+      </div>
+
+      {preview && (
+        <p className={`mt-3 rounded-lg p-2 text-xs ${preview.exists ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+          Product code: <b className="font-mono">{preview.key}</b>
+          {preview.exists ? " — already in the list, edit that row instead." : " — matches what the configurator asks for ✓"}
+        </p>
+      )}
+      {err && <p className="mt-2 text-sm font-semibold text-red-700">{err}</p>}
+
+      <div className="mt-4 flex gap-2">
+        <button className="btn-primary" onClick={submit} disabled={saving || (preview?.exists ?? false)}>
+          {saving ? "Adding…" : "Add product"}
+        </button>
+        <button className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
     </div>
   );
 }

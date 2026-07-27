@@ -250,6 +250,16 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify({ priceUsd }),
       }),
+    deriveKey: (draft: Record<string, unknown>) =>
+      request<{ key: string; exists: boolean; existingPrice: number | null }>("/pricing/rmu/derive-key", {
+        method: "POST",
+        body: JSON.stringify(draft),
+      }),
+    add: (draft: Record<string, unknown>) =>
+      request<{ ok: true; row: RmuPriceRow }>("/pricing/rmu", {
+        method: "POST",
+        body: JSON.stringify(draft),
+      }),
     retire: (id: string, active: boolean) =>
       request<{ ok: true; row: RmuPriceRow }>(`/pricing/rmu/${id}/retire`, {
         method: "POST",
