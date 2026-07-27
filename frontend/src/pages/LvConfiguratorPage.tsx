@@ -2512,6 +2512,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     const base = first.baseQty ?? first.qty;
     return base > 0 ? Math.max(1, Math.round(first.qty / base)) : 1;
   };
+  // The combination-instance id shared by a group's rows (for the whole-combo select-all).
+  const groupComboId = (sec: string, group: string): string | undefined =>
+    p.components.find((x) => x.section === sec && !isSpacer(x) && (effGroup.get(x.id) || "") === group && x.comboId)?.comboId;
   // Scale every item of a combination group to N units (qty = base × N).
   const setComboQty = (group: string, sec: string, n: number) => {
     const qn = Math.max(1, Math.round(n) || 1);
@@ -2992,12 +2995,19 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     const grp = prev && prev === next ? prev : "";
     if (!grp) return;
     const members = arr.filter((x) => x.section === c.section && !isSpacer(x) && x.group === grp);
-    if (!(/\(Type \d+\)/.test(grp) || members.some((x) => x.comboScalable))) return; // group isn't scalable → nothing to apply
-    const first = members[0];
-    const fb = first?.baseQty ?? first?.qty ?? 1;
-    const cq = fb > 0 ? Math.max(1, Math.round((first?.qty ?? 0) / fb)) : 1; // the group's current ×N
-    const base = c.baseQty ?? c.qty;
-    arr[idx] = { ...c, group: grp, baseQty: base, qty: base * cq, comboScalable: true };
+    const cid = members.find((m) => m.comboId)?.comboId;       // the combination instance (whole-combo select-all)
+    const scalable = /\(Type \d+\)/.test(grp) || members.some((x) => x.comboScalable);
+    if (!scalable && !cid) return; // not a combination → inference already handles the display, nothing to apply
+    const idPatch = cid ? { comboId: cid } : {};
+    if (scalable) {
+      const first = members[0];
+      const fb = first?.baseQty ?? first?.qty ?? 1;
+      const cq = fb > 0 ? Math.max(1, Math.round((first?.qty ?? 0) / fb)) : 1; // the group's current ×N
+      const base = c.baseQty ?? c.qty;
+      arr[idx] = { ...c, group: grp, baseQty: base, qty: base * cq, comboScalable: true, ...idPatch };
+    } else {
+      arr[idx] = { ...c, group: grp, ...idPatch }; // non-scalable combination — just join it
+    }
   };
   const dropOnRow = (targetId: string) => {
     setOverRow(null);
@@ -3049,7 +3059,8 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       // group's last row, and scaled to the group's current ×N if the combination is scalable.
       const scalable = /\(Type \d+\)/.test(t.group) || p.components.some((x) => x.section === t.sec && !isSpacer(x) && (effGroup.get(x.id) || "") === t.group && x.comboScalable);
       const cq = scalable ? comboQtyOf(p.components.filter((x) => x.section === t.sec), t.group) : 1;
-      const nc: PanelComponent = { ...toPanelComponent(c, t.sec, base * cq, t.group), baseQty: base, ...(scalable ? { comboScalable: true } : {}) };
+      const cid = groupComboId(t.sec, t.group); // join the combination instance → whole-combo select-all covers it
+      const nc: PanelComponent = { ...toPanelComponent(c, t.sec, base * cq, t.group), baseQty: base, ...(scalable ? { comboScalable: true } : {}), ...(cid ? { comboId: cid } : {}) };
       const arr = [...p.components];
       let lastIdx = -1;
       arr.forEach((x, i) => { if (x.section === t.sec && !isSpacer(x) && (effGroup.get(x.id) || "") === t.group) lastIdx = i; });
@@ -3099,9 +3110,10 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       // Into a targeted combination — apply its ×N and group, inserted after the group's last row.
       const scalable = /\(Type \d+\)/.test(t.group) || p.components.some((x) => x.section === t.sec && !isSpacer(x) && (effGroup.get(x.id) || "") === t.group && x.comboScalable);
       const cq = scalable ? comboQtyOf(p.components.filter((x) => x.section === t.sec), t.group) : 1;
+      const cid = groupComboId(t.sec, t.group); // join the combination instance → whole-combo select-all covers them
       const items = matched.map((r) => {
         const base = Math.max(1, r.qty);
-        return { ...toPanelComponent(r.match!, t.sec, base * cq, t.group), baseQty: base, ...(scalable ? { comboScalable: true } : {}) };
+        return { ...toPanelComponent(r.match!, t.sec, base * cq, t.group), baseQty: base, ...(scalable ? { comboScalable: true } : {}), ...(cid ? { comboId: cid } : {}) };
       });
       const arr = [...p.components];
       let lastIdx = -1;
