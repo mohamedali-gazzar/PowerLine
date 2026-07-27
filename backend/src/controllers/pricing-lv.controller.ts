@@ -308,6 +308,47 @@ export async function createLvComponent(req: Request, res: Response) {
   }
 }
 
+/** POST /api/pricing/lv/:id/retire — stop offering an LV item, or bring it back.
+ *  Soft only: the row is kept, so quotations already saved are untouched (they
+ *  carry their own copy of the item) and the change can be reversed. */
+export async function retireLvItem(req: Request, res: Response) {
+  try {
+    const kind = req.query.kind === "enclosures" ? "enclosures" : "components";
+    const active = req.body?.active === true;
+    const by = req.userEmail ?? "";
+
+    if (kind === "components") {
+      const row = await prisma.lvComponent.findUnique({ where: { id: req.params.id } });
+      if (!row) return res.status(404).json({ error: "Item not found." });
+      const updated = await prisma.lvComponent.update({ where: { id: row.id }, data: { active, updatedBy: by } });
+      await prisma.priceChange.create({
+        data: {
+          domain: "LV", entity: "LvComponent", entityId: row.id, label: row.d || row.ref,
+          field: active ? "__restored" : "__retired",
+          oldValue: row.active ? "offered" : "retired", newValue: active ? "offered" : "retired",
+          actorId: req.userId ?? null, actorEmail: by,
+        },
+      });
+      return res.json({ ok: true, row: updated });
+    }
+
+    const row = await prisma.lvEnclosure.findUnique({ where: { id: req.params.id } });
+    if (!row) return res.status(404).json({ error: "Item not found." });
+    const updated = await prisma.lvEnclosure.update({ where: { id: row.id }, data: { active, updatedBy: by } });
+    await prisma.priceChange.create({
+      data: {
+        domain: "LV", entity: "LvEnclosure", entityId: row.id, label: row.name || row.ref,
+        field: active ? "__restored" : "__retired",
+        oldValue: row.active ? "offered" : "retired", newValue: active ? "offered" : "retired",
+        actorId: req.userId ?? null, actorEmail: by,
+      },
+    });
+    res.json({ ok: true, row: updated });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
 /** Rebuild the LV catalogue payload from the draft rows — the exact shape the
  *  frontend catalogue expects, in sortIndex order (the order is load-bearing:
  *  the combination builders take the FIRST description match). */
@@ -328,14 +369,17 @@ export async function buildLvPayload() {
   }
 
   return {
+    // Retired items stay in the payload with active:false — removing them
+    // outright would break the combination builders, which find their parts by
+    // description. The pickers filter on this flag instead.
     components: components.map((c) => ({
       t: c.t, f: c.f, r: c.r, d: c.d, n: c.n, ref: c.ref,
       eur: c.eur, egp: c.egp, poles: c.poles, cuP: c.cuP, cuC: c.cuC,
-      brand: c.brand, stock: c.stock,
+      brand: c.brand, stock: c.stock, active: c.active,
     })),
     enclosures: enclosures.map((e) => ({
       fam: e.fam, name: e.name, ref: e.ref, abb: e.abb, eur: e.eur, egp: e.egp,
-      ip: e.ip, H: e.H, W: e.W, D: e.D, mount: e.mount, ral: e.ral,
+      ip: e.ip, H: e.H, W: e.W, D: e.D, mount: e.mount, ral: e.ral, active: e.active,
     })),
     factors,
   };

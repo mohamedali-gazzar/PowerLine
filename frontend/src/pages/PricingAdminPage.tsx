@@ -549,6 +549,29 @@ function LvPrices() {
     }
   };
 
+  const toggleRetire = async (row: LvRow) => {
+    const removing = row.active !== false;
+    if (
+      removing &&
+      !window.confirm(
+        `Remove "${row.d || row.name || row.ref}" from the price list?\n\n` +
+          `It stops being offered for new work from the next publish. Quotations already saved keep ` +
+          `this item and its price. You can restore it at any time.`
+      )
+    )
+      return;
+    setBusy(row.id);
+    setErr("");
+    try {
+      const r = await api.pricing.lvRetire(row.id, kind, !removing);
+      setRows((rs) => (rs ? rs.map((x) => (x.id === row.id ? r.row : x)) : rs));
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
+
   const clearFilters = () => {
     setQ("");
     setType("");
@@ -674,13 +697,21 @@ function LvPrices() {
                 <th className="px-4 py-2 w-28">{kind === "components" ? "Type" : "Family"}</th>
                 <th className="px-4 py-2 w-28 text-right">Price EUR</th>
                 <th className="px-4 py-2 w-28 text-right">Price EGP</th>
+                <th className="px-4 py-2 w-20"></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-t border-line">
+                <tr key={r.id} className={`border-t border-line ${r.active === false ? "bg-slate-50/70" : ""}`}>
                   <td className="px-4 py-2">
-                    <div className="font-medium text-ink">{r.d || r.name || r.n || r.ref}</div>
+                    <div className={`font-medium ${r.active === false ? "text-muted line-through" : "text-ink"}`}>
+                      {r.d || r.name || r.n || r.ref}
+                      {r.active === false && (
+                        <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
+                          REMOVED
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[11px] text-muted">
                       {[r.ref, r.brand, r.f, r.r, r.ip].filter(Boolean).join(" · ")}
                     </div>
@@ -707,6 +738,17 @@ function LvPrices() {
                         if (v !== r.egp) save(r, v > 0 ? 0 : r.eur, v);
                       }}
                     />
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    <button
+                      type="button"
+                      disabled={busy === r.id}
+                      title={r.active === false ? "Offer this item again" : "Stop offering this item"}
+                      onClick={() => toggleRetire(r)}
+                      className="rounded-md px-2 py-1 text-xs font-semibold text-muted transition hover:bg-surface hover:text-ink"
+                    >
+                      {r.active === false ? "Restore" : "Remove"}
+                    </button>
                   </td>
                 </tr>
               ))}

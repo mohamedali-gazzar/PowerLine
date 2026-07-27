@@ -144,6 +144,8 @@ export interface LvRow {
   sortIndex: number;
   eur: number;
   egp: number;
+  /** false = removed from the price list (kept, so saved quotations still work) */
+  active?: boolean;
   // components
   t?: string;
   f?: string;
@@ -309,6 +311,11 @@ export const api = {
     },
     lvAdd: (draft: Record<string, unknown>) =>
       request<{ ok: true; row: LvRow }>("/pricing/lv", { method: "POST", body: JSON.stringify(draft) }),
+    lvRetire: (id: string, kind: "components" | "enclosures", active: boolean) =>
+      request<{ ok: true; row: LvRow }>(`/pricing/lv/${id}/retire?kind=${kind}`, {
+        method: "POST",
+        body: JSON.stringify({ active }),
+      }),
     lvFacets: () => request<{ types: string[]; brands: string[]; families: string[] }>("/pricing/lv/facets"),
     lvSetPrice: (id: string, kind: "components" | "enclosures", eur: number, egp: number) =>
       request<{ ok: true; row: LvRow }>(`/pricing/lv/${id}?kind=${kind}`, {
