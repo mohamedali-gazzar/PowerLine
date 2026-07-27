@@ -385,6 +385,22 @@ export async function postPublish(req: Request, res: Response) {
         rowCount: Object.keys(built.panels).length + Object.keys(built.lucy).length,
       },
     });
+
+    // Publish the LV catalogue at the SAME version, so both halves of the price
+    // book always move together and can be rolled back as one.
+    const lvCount = await prisma.lvComponent.count();
+    if (lvCount > 0) {
+      const { buildLvPayload } = await import("./pricing-lv.controller");
+      const lv = await buildLvPayload();
+      await prisma.priceSnapshot.create({
+        data: {
+          domain: "LV",
+          version,
+          payload: JSON.stringify(lv),
+          rowCount: lv.components.length + lv.enclosures.length,
+        },
+      });
+    }
     await prisma.priceBook.update({
       where: { id: "singleton" },
       data: { version, publishedAt: new Date(), publishedBy: user?.email ?? "", note, source: "db" },

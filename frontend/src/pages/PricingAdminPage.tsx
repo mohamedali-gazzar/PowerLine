@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type PricingStatus, type RmuPriceRow, type PriceChangeRow } from "../api";
+import { api, type PricingStatus, type RmuPriceRow, type PriceChangeRow, type LvRow } from "../api";
+import { COMPONENTS, ENCLOSURES, DEFAULT_FACTORS } from "../lv/catalog";
 
 // Price list — the owner-facing screen.
 //
@@ -24,6 +25,8 @@ export default function PricingAdminPage() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [confirming, setConfirming] = useState(false);
+  const [progress, setProgress] = useState("");
+  const [section, setSection] = useState<"RMU" | "LV">("RMU");
 
   const loadAll = async () => {
     setError("");
@@ -47,17 +50,41 @@ export default function PricingAdminPage() {
   const setUp = async () => {
     setBusy("setup");
     setError("");
+    setProgress("Importing RMU prices…");
     try {
+      // 1) RMU — verified against the built-in list before it goes live.
       const r = await api.pricing.setUp();
       if (!r.ok) {
         setError("Import stopped: the database did not match the app's price list, so nothing was published.");
-      } else {
-        setToast(`Price list created — ${Object.values(r.counts).reduce((a, b) => a + b, 0)} items imported.`);
-        await loadAll();
+        return;
       }
+
+      // 2) LV — sent from the browser in chunks, because the catalogue lives in
+      //    the app bundle and 2,374 rows is too much for one request. Each chunk
+      //    is idempotent, so a retry can never duplicate rows.
+      const CHUNK = 300;
+      for (let i = 0; i < COMPONENTS.length; i += CHUNK) {
+        const slice = COMPONENTS.slice(i, i + CHUNK).map((c, j) => ({ ...c, sortIndex: i + j }));
+        await api.pricing.lvSeedChunk("LV_COMPONENTS", i, slice);
+        setProgress(`Importing LV components… ${Math.min(i + CHUNK, COMPONENTS.length)} of ${COMPONENTS.length}`);
+      }
+      for (let i = 0; i < ENCLOSURES.length; i += CHUNK) {
+        const slice = ENCLOSURES.slice(i, i + CHUNK).map((e, j) => ({ ...e, sortIndex: i + j }));
+        await api.pricing.lvSeedChunk("LV_ENCLOSURES", i, slice);
+        setProgress(`Importing enclosures… ${Math.min(i + CHUNK, ENCLOSURES.length)} of ${ENCLOSURES.length}`);
+      }
+      setProgress("Saving pricing factors…");
+      await api.pricing.lvSettings(DEFAULT_FACTORS);
+
+      setToast(
+        `Price list created — ${Object.values(r.counts).reduce((a, b) => a + b, 0)} RMU prices, ` +
+          `${COMPONENTS.length} components and ${ENCLOSURES.length} enclosures imported.`
+      );
+      await loadAll();
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      setProgress("");
       setBusy("");
     }
   };
@@ -178,6 +205,7 @@ export default function PricingAdminPage() {
           <button className="btn-primary mt-4" onClick={setUp} disabled={busy === "setup"}>
             {busy === "setup" ? "Setting up…" : "Set up the price list →"}
           </button>
+          {progress && <p className="mt-2 text-sm font-semibold text-brand-dark">{progress}</p>}
         </div>
       )}
 
@@ -238,17 +266,42 @@ export default function PricingAdminPage() {
       {/* ── The prices ───────────────────────────────────────────────────── */}
       {status.seedState === "READY" && (
         <>
+          {/* Which price list are you editing? */}
+          <div className="mb-4 flex gap-2 border-b border-line">
+            {(["RMU", "LV"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSection(s)}
+                className={`-mb-px border-b-2 px-4 py-2 text-sm font-bold transition ${
+                  section === s
+                    ? "border-brand text-brand-dark"
+                    : "border-transparent text-muted hover:text-brand-dark"
+                }`}
+              >
+                {s === "RMU" ? "⚡ RMU / MV prices" : "🔌 LV prices"}
+                <span className="ml-2 text-[11px] font-semibold text-muted">
+                  {s === "RMU" ? status.counts.rmuPrices : status.counts.lvComponents + status.counts.lvEnclosures}
+                </span>
+              </button>
+            ))}
+          </div>
+
           <div className="mb-3 flex flex-wrap gap-2">
             <History onChanged={loadAll} />
             {status.role === "OWNER" && <AccessPanel />}
           </div>
-          <AddProduct onAdded={loadAll} />
-          <input
-            className="input mb-3"
-            placeholder="Search a product or price code…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+
+          {section === "LV" && <LvPrices />}
+
+          {section === "RMU" && (
+            <>
+              <AddProduct onAdded={loadAll} />
+              <input
+                className="input mb-3"
+                placeholder="Search a product or price code…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
           {!filtered && <div className="skeleton h-64" />}
           {filtered &&
             GROUPS.map((g) => {
@@ -307,8 +360,217 @@ export default function PricingAdminPage() {
                 </div>
               );
             })}
+            </>
+          )}
         </>
       )}
+    </div>
+  );
+}
+
+/** LV price list — 2,121 components and 253 enclosures, with Excel-style
+ *  filtering. Filtering and paging happen on the SERVER (50 rows at a time), so
+ *  the screen stays fast no matter how big the catalogue gets. */
+function LvPrices() {
+  const [kind, setKind] = useState<"components" | "enclosures">("components");
+  const [rows, setRows] = useState<LvRow[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [q, setQ] = useState("");
+  const [type, setType] = useState("");
+  const [brand, setBrand] = useState("");
+  const [fam, setFam] = useState("");
+  const [noPrice, setNoPrice] = useState(false);
+  const [facets, setFacets] = useState<{ types: string[]; brands: string[]; families: string[] } | null>(null);
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  const take = 50;
+
+  useEffect(() => {
+    api.pricing.lvFacets().then(setFacets).catch(() => setFacets(null));
+  }, []);
+
+  // Debounced so typing in the search box doesn't fire a request per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setRows(null);
+      api.pricing
+        .lvList({ kind, q, type, brand, fam, noPrice, page, take })
+        .then((r) => {
+          setRows(r.rows);
+          setTotal(r.total);
+        })
+        .catch((e) => setErr((e as Error).message));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [kind, q, type, brand, fam, noPrice, page]);
+
+  useEffect(() => setPage(0), [kind, q, type, brand, fam, noPrice]);
+
+  const save = async (row: LvRow, eur: number, egp: number) => {
+    setBusy(row.id);
+    setErr("");
+    try {
+      const r = await api.pricing.lvSetPrice(row.id, kind, eur, egp);
+      setRows((rs) => (rs ? rs.map((x) => (x.id === row.id ? r.row : x)) : rs));
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const clearFilters = () => {
+    setQ("");
+    setType("");
+    setBrand("");
+    setFam("");
+    setNoPrice(false);
+  };
+  const filtersOn = !!(q || type || brand || fam || noPrice);
+  const pages = Math.ceil(total / take);
+
+  return (
+    <div>
+      <div className="mb-3 flex gap-1">
+        {(["components", "enclosures"] as const).map((k) => (
+          <button
+            key={k}
+            onClick={() => setKind(k)}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold capitalize transition ${
+              kind === k ? "bg-brand text-white" : "bg-brand-tint/60 text-brand-dark hover:bg-brand-tint"
+            }`}
+          >
+            {k === "components" ? "Components" : "Enclosures & cells"}
+          </button>
+        ))}
+      </div>
+
+      {/* Excel-style filter bar */}
+      <div className="card mb-3 flex flex-wrap items-end gap-2 p-3">
+        <div className="min-w-[200px] flex-1">
+          <label className="label">Search</label>
+          <input
+            className="input"
+            placeholder="Type, family, rating, description, reference…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+        {kind === "components" ? (
+          <>
+            <div>
+              <label className="label">Type</label>
+              <select className="input w-44" value={type} onChange={(e) => setType(e.target.value)}>
+                <option value="">All types</option>
+                {facets?.types.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Brand</label>
+              <select className="input w-36" value={brand} onChange={(e) => setBrand(e.target.value)}>
+                <option value="">All brands</option>
+                {facets?.brands.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        ) : (
+          <div>
+            <label className="label">Family</label>
+            <select className="input w-44" value={fam} onChange={(e) => setFam(e.target.value)}>
+              <option value="">All families</option>
+              {facets?.families.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        <label className="flex items-center gap-2 pb-2 text-sm">
+          <input type="checkbox" checked={noPrice} onChange={(e) => setNoPrice(e.target.checked)} />
+          Only items with no price
+        </label>
+        {filtersOn && (
+          <button className="btn-ghost mb-0.5" onClick={clearFilters}>Clear filters</button>
+        )}
+      </div>
+
+      {err && <p className="mb-2 rounded bg-red-50 p-2 text-sm font-semibold text-red-700">{err}</p>}
+
+      <div className="mb-2 flex items-center justify-between text-xs text-muted">
+        <span>
+          {total.toLocaleString()} item{total === 1 ? "" : "s"}
+          {filtersOn ? " match your filter" : ""}
+        </span>
+        {pages > 1 && (
+          <span className="flex items-center gap-2">
+            <button className="btn-ghost px-2 py-1" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>‹ Prev</button>
+            Page {page + 1} of {pages}
+            <button className="btn-ghost px-2 py-1" disabled={page + 1 >= pages} onClick={() => setPage((p) => p + 1)}>Next ›</button>
+          </span>
+        )}
+      </div>
+
+      {!rows && <div className="skeleton h-64" />}
+      {rows && rows.length === 0 && (
+        <div className="card p-8 text-center text-sm text-muted">Nothing matches those filters.</div>
+      )}
+      {rows && rows.length > 0 && (
+        <div className="card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-brand-tint text-left text-[11px] uppercase tracking-wide text-brand-dark">
+              <tr>
+                <th className="px-4 py-2">Item</th>
+                <th className="px-4 py-2 w-28">{kind === "components" ? "Type" : "Family"}</th>
+                <th className="px-4 py-2 w-28 text-right">Price EUR</th>
+                <th className="px-4 py-2 w-28 text-right">Price EGP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t border-line">
+                  <td className="px-4 py-2">
+                    <div className="font-medium text-ink">{r.d || r.name || r.n || r.ref}</div>
+                    <div className="text-[11px] text-muted">
+                      {[r.ref, r.brand, r.f, r.r, r.ip].filter(Boolean).join(" · ")}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2 text-xs text-muted">{r.t || r.fam}</td>
+                  <td className="px-4 py-2 text-right">
+                    <input
+                      type="number" min={0} step="0.01" defaultValue={r.eur} disabled={busy === r.id}
+                      className="input w-24 text-right"
+                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                      onBlur={(e) => {
+                        const v = Number(e.target.value);
+                        if (v !== r.eur) save(r, v, v > 0 ? 0 : r.egp);
+                      }}
+                    />
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    <input
+                      type="number" min={0} step="0.01" defaultValue={r.egp} disabled={busy === r.id}
+                      className="input w-24 text-right"
+                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                      onBlur={(e) => {
+                        const v = Number(e.target.value);
+                        if (v !== r.egp) save(r, v > 0 ? 0 : r.eur, v);
+                      }}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="mt-2 text-[11px] text-muted">
+        Each item is priced in ONE currency — filling EUR clears EGP and vice versa, exactly as the
+        calculator expects.
+      </p>
     </div>
   );
 }

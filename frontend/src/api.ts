@@ -139,6 +139,25 @@ export interface RmuPriceRow {
   updatedBy: string;
   updatedAt: string;
 }
+export interface LvRow {
+  id: string;
+  sortIndex: number;
+  eur: number;
+  egp: number;
+  // components
+  t?: string;
+  f?: string;
+  r?: string;
+  d?: string;
+  n?: string;
+  ref?: string;
+  brand?: string;
+  poles?: number;
+  // enclosures
+  fam?: string;
+  name?: string;
+  ip?: string;
+}
 export interface PriceChangeRow {
   id: string;
   label: string;
@@ -266,6 +285,44 @@ export const api = {
         body: JSON.stringify({ active }),
       }),
     pending: () => request<{ changes: PriceChangeRow[] }>("/pricing/pending"),
+    lvList: (p: {
+      kind: "components" | "enclosures";
+      q?: string;
+      type?: string;
+      brand?: string;
+      fam?: string;
+      noPrice?: boolean;
+      page?: number;
+      take?: number;
+    }) => {
+      const s = new URLSearchParams({ kind: p.kind });
+      if (p.q) s.set("q", p.q);
+      if (p.type) s.set("type", p.type);
+      if (p.brand) s.set("brand", p.brand);
+      if (p.fam) s.set("fam", p.fam);
+      if (p.noPrice) s.set("noPrice", "1");
+      s.set("page", String(p.page ?? 0));
+      s.set("take", String(p.take ?? 50));
+      return request<{ kind: string; rows: LvRow[]; total: number; page: number; take: number }>(
+        `/pricing/lv?${s.toString()}`
+      );
+    },
+    lvFacets: () => request<{ types: string[]; brands: string[]; families: string[] }>("/pricing/lv/facets"),
+    lvSetPrice: (id: string, kind: "components" | "enclosures", eur: number, egp: number) =>
+      request<{ ok: true; row: LvRow }>(`/pricing/lv/${id}?kind=${kind}`, {
+        method: "PATCH",
+        body: JSON.stringify({ eur, egp }),
+      }),
+    lvSeedChunk: (stage: "LV_COMPONENTS" | "LV_ENCLOSURES", offset: number, rows: unknown[]) =>
+      request<{ ok: true; components: number; enclosures: number }>("/pricing/lv/seed-chunk", {
+        method: "POST",
+        body: JSON.stringify({ stage, offset, rows }),
+      }),
+    lvSettings: (factors: unknown) =>
+      request<{ ok: true; saved: number }>("/pricing/lv/settings", {
+        method: "POST",
+        body: JSON.stringify({ factors }),
+      }),
     history: () => request<{ changes: PriceChangeRow[] }>("/pricing/history"),
     undo: (id: string) => request<{ ok: true }>(`/pricing/changes/${id}/undo`, { method: "POST" }),
     users: () => request<{ users: { id: string; email: string; name: string; role: string }[] }>("/pricing/users"),

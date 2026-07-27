@@ -27,6 +27,14 @@ import {
   getPending,
   postPublish,
 } from "./controllers/pricing.controller";
+import {
+  postLvSeedChunk,
+  postLvSettings,
+  listLvPrices,
+  getLvFacets,
+  updateLvPrice,
+  getLvCatalog,
+} from "./controllers/pricing-lv.controller";
 import { withPriceBook } from "./middleware/priceBook";
 import { requirePriceAdmin, requireOwner } from "./middleware/roles";
 import {
@@ -95,6 +103,14 @@ export function createApp() {
   app.post("/api/pricing/rmu/:id/retire", requireAuth, requirePriceAdmin, retireRmuPrice);
   app.post("/api/pricing/rmu/derive-key", requireAuth, requirePriceAdmin, postDeriveKey);
   app.post("/api/pricing/rmu", requireAuth, requirePriceAdmin, createRmuPrice);
+  // LV catalogue (2,121 components + 253 enclosures)
+  app.get("/api/catalog/lv", requireAuth, getLvCatalog);
+  app.get("/api/pricing/lv", requireAuth, requirePriceAdmin, listLvPrices);
+  app.get("/api/pricing/lv/facets", requireAuth, requirePriceAdmin, getLvFacets);
+  app.patch("/api/pricing/lv/:id", requireAuth, requirePriceAdmin, updateLvPrice);
+  app.post("/api/pricing/lv/seed-chunk", requireAuth, requirePriceAdmin, postLvSeedChunk);
+  app.post("/api/pricing/lv/settings", requireAuth, requirePriceAdmin, postLvSettings);
+
   app.get("/api/pricing/history", requireAuth, requirePriceAdmin, getHistory);
   app.post("/api/pricing/changes/:id/undo", requireAuth, requirePriceAdmin, postUndo);
   // Granting access is owner-only — a price admin cannot promote themselves.
