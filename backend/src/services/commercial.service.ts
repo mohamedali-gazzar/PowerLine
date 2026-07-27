@@ -4,9 +4,6 @@
 import { round2 } from "./pricing";
 import type { GeneratedOffer } from "../domain/assembly";
 import type { ConfigPricing } from "../domain/priceList";
-import { VAT_PCT } from "../domain/pricing-data";
-
-export { VAT_PCT }; // Egypt VAT — from the pricing master (rmu-pricing.json)
 
 export interface CommercialItem {
   description: string;
@@ -77,10 +74,14 @@ interface OfferLike {
   offerDate?: string | null;
 }
 
+/** @param vatPctValue VAT rate to apply, passed in (never read from the pricing
+ *  master here) so an offer issued at 14 % still prints 14 % after the rate is
+ *  changed. Callers pass the offer's frozen rate, or the current one for new work. */
 export function buildCommercial(
   offer: OfferLike,
   g: GeneratedOffer,
-  pricing: ConfigPricing | null
+  pricing: ConfigPricing | null,
+  vatPctValue: number
 ): CommercialData {
   // Panel unit price: the offer's price if set, else the base (floor) price.
   // Add-ons (e.g. Outdoor Enclosure) are shown as their own line items.
@@ -115,7 +116,7 @@ export function buildCommercial(
   const subtotal = round2(items.reduce((s, i) => s + i.total, 0));
   const discountAmount = round2(subtotal * (offer.discountPct / 100));
   const totalExclVat = round2(subtotal - discountAmount);
-  const vatAmount = round2(totalExclVat * (VAT_PCT / 100));
+  const vatAmount = round2(totalExclVat * (vatPctValue / 100));
   const totalInclVat = round2(totalExclVat + vatAmount);
 
   return {
@@ -141,7 +142,7 @@ export function buildCommercial(
     discountPct: offer.discountPct,
     discountAmount,
     totalExclVat,
-    vatPct: VAT_PCT,
+    vatPct: vatPctValue,
     vatAmount,
     totalInclVat,
     validityDays: offer.validityDays,

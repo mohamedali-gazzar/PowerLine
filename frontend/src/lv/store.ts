@@ -14,6 +14,7 @@ import {
   cuPanelKg,
   cuCellKg,
   cellPriceEgp,
+  enclosurePriceEgp,
   type DbComponent,
   type DbEnclosure,
   type Factors,
@@ -567,7 +568,14 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
       if (r.qty <= 0) continue;
       // Cells honour a per-item Material-List discount too (keyed by description, like the list row).
       const ov = abbDiscounts?.[abbKey({ description: r.desc })];
-      enclCost += cellPriceEgp(p.cellConfig.type, r.desc, f) * (1 - (ov != null ? ov / 100 : 0)) * r.qty;
+      // Use the price frozen onto the row; fall back to the live catalogue lookup
+      // only for rows saved before prices were stamped. KEEP THIS FALLBACK — it is
+      // what stops older quotations from silently costing 0.
+      const cellBase =
+        (r.eur ?? 0) > 0 || (r.egp ?? 0) > 0
+          ? enclosurePriceEgp({ eur: r.eur ?? 0, egp: r.egp ?? 0 }, f)
+          : cellPriceEgp(p.cellConfig.type, r.desc, f);
+      enclCost += cellBase * (1 - (ov != null ? ov / 100 : 0)) * r.qty;
     }
   }
   const cuConnCost = cuWeight * f.copper;

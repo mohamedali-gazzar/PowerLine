@@ -63,11 +63,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.status === 204 ? (undefined as T) : res.json();
 }
 
+/** Build an authenticated file URL (token + optional download flag), so callers
+ *  never hand-append query strings and collide with each other. */
+function pdfLink(path: string, dl?: boolean): string {
+  const p = new URLSearchParams();
+  const token = getToken();
+  if (token) p.set("t", token);
+  if (dl) p.set("dl", "1");
+  const q = p.toString();
+  return `${BASE}${path}${q ? `?${q}` : ""}`;
+}
+
 export interface AuthUser {
   id: string;
   email: string;
   name: string;
   photo: string | null;
+  /** "USER" | "PRICE_ADMIN" | "OWNER" — drives which screens are offered. */
+  role: string;
 }
 export interface AuthResult {
   token: string;
@@ -123,9 +136,12 @@ export const api = {
   deleteOffer: (id: string) => request<void>(`/offers/${id}`, { method: "DELETE" }),
   previewConfig: (cfg: RmuConfigInput) =>
     request<GeneratedOffer>("/offers/preview", { method: "POST", body: JSON.stringify(cfg) }),
-  pdfUrl: (id: string) => `${BASE}/offers/${id}/pdf`,
-  commercialPdfUrl: (id: string) => `${BASE}/offers/${id}/commercial-pdf`,
-  sldPdfUrl: (id: string) => `${BASE}/offers/${id}/sld-pdf`,
+  // PDFs open as plain browser navigations (<a href> / anchor download), which
+  // cannot send the Authorization header — so the token travels as ?t=. The
+  // backend accepts it for GET only, and serves the file only to the owner.
+  pdfUrl: (id: string, dl?: boolean) => pdfLink(`/offers/${id}/pdf`, dl),
+  commercialPdfUrl: (id: string, dl?: boolean) => pdfLink(`/offers/${id}/commercial-pdf`, dl),
+  sldPdfUrl: (id: string, dl?: boolean) => pdfLink(`/offers/${id}/sld-pdf`, dl),
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   auth: {

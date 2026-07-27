@@ -47,8 +47,15 @@ export function addOnPrice(key: string): AddOnPrice | null {
   return a ? { ...a } : null;
 }
 
-/** VAT percentage applied on commercial offers (e.g. 14 for Egypt). */
-export const VAT_PCT: number = DATA.vatPct;
+/** VAT percentage applied on commercial offers (e.g. 14 for Egypt).
+ *  A FUNCTION, not a const: once the price list is editable online this value can
+ *  change while the server is running, and a module-load constant would freeze it
+ *  until the next deploy. Callers must read it per request. */
+export function vatPct(): number {
+  return DATA.vatPct;
+}
 
-/** Pricing currency of the master data ("USD"). */
-export const PRICING_CURRENCY: string = DATA.currency;
+/** Pricing currency of the master data ("USD"). Function for the same reason. */
+export function pricingCurrency(): string {
+  return DATA.currency;
+}

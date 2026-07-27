@@ -1,11 +1,13 @@
 import { prisma } from "../lib/prisma";
 import type { CreateOfferInput } from "../validation/offer.schema";
 import { computePricing } from "./pricing";
-import { priceForConfig } from "../domain/priceList";
+import { priceForConfig, type ConfigPricing } from "../domain/priceList";
+import { vatPct } from "../domain/pricing-data";
 import { buildCommercial } from "./commercial.service";
 import {
   assembleOffer,
   buildCode,
+  buildProductCode,
   type RmuConfigInput,
   type LbsBrand,
   type ClientSpec,
@@ -62,6 +64,69 @@ export function toConfigInput(rmu: StoredRmu): RmuConfigInput {
   };
 }
 
+/** The frozen price columns carried by a stored offer (all nullable — offers
+ *  created before snapshots existed have them unset). */
+export type PriceSnapshotFields = {
+  pricedAt?: Date | null;
+  snapPriceKey?: string | null;
+  snapBasePriceUsd?: number | null;
+  snapListPriceUsd?: number | null;
+  snapAddOnsJson?: string | null;
+  snapVatPct?: number | null;
+  snapPriceFound?: boolean | null;
+};
+
+export interface ResolvedPricing {
+  pricing: ConfigPricing | null;
+  vatPct: number;
+  /** true when the numbers came from the offer's own frozen snapshot. */
+  fromSnapshot: boolean;
+}
+
+/** THE rule for what an offer costs.
+ *
+ *  Prefers the prices frozen onto the offer when it was created, so changing the
+ *  price list never rewrites a quotation that has already gone to a customer.
+ *  Falls back to a live lookup only for legacy offers created before snapshots
+ *  existed (`pricedAt == null`) — which reproduces exactly today's behaviour for
+ *  them, so this change is invisible on deploy day.
+ *
+ *  Both the JSON API (`decorate`) and the commercial PDF must go through here —
+ *  if they diverge, the screen and the PDF can show different money. */
+export function resolvePricing(
+  offer: PriceSnapshotFields,
+  config: RmuConfigInput | null
+): ResolvedPricing {
+  if (offer.pricedAt && offer.snapPriceKey != null) {
+    let addOns: { name: string; price: number }[] = [];
+    try {
+      const parsed = offer.snapAddOnsJson ? JSON.parse(offer.snapAddOnsJson) : [];
+      if (Array.isArray(parsed)) addOns = parsed;
+    } catch {
+      addOns = []; // corrupt snapshot → no add-on lines rather than a 500
+    }
+    return {
+      pricing: {
+        // panelCode is derived from the configuration, not from prices, so it is
+        // always safe (and correct) to recompute it.
+        panelCode: config ? buildProductCode(config) : "",
+        priceKey: offer.snapPriceKey,
+        basePrice: offer.snapBasePriceUsd ?? null,
+        addOns,
+        listPrice: offer.snapListPriceUsd ?? null,
+        found: offer.snapPriceFound ?? false,
+      },
+      vatPct: offer.snapVatPct ?? vatPct(),
+      fromSnapshot: true,
+    };
+  }
+  return {
+    pricing: config ? priceForConfig(config) : null,
+    vatPct: vatPct(),
+    fromSnapshot: false,
+  };
+}
+
 /** Generate a sequential offer number like PL-2026-0007. */
 /** Next offer number = highest existing PL-{year}-#### + 1 (survives deletions). */
 async function nextOfferNumber(): Promise<string> {
@@ -81,12 +146,25 @@ async function nextOfferNumber(): Promise<string> {
 
 export async function createOffer(input: CreateOfferInput) {
   const offerNumber = input.offerNumber?.trim() || (await nextOfferNumber());
-  const configCode = buildCode(input.rmu as RmuConfigInput);
+  const cfg = input.rmu as RmuConfigInput;
+  const configCode = buildCode(cfg);
+
+  // Freeze the list prices and VAT rate this offer is quoted at. From here on the
+  // offer prints these numbers forever, whatever happens to the price list.
+  const snap = priceForConfig(cfg);
+  const snapVat = vatPct();
 
   const offer = await prisma.offer.create({
     data: {
       offerNumber,
       category: input.category,
+      pricedAt: new Date(),
+      snapPriceKey: snap.priceKey,
+      snapBasePriceUsd: snap.basePrice,
+      snapListPriceUsd: snap.listPrice,
+      snapAddOnsJson: JSON.stringify(snap.addOns),
+      snapVatPct: snapVat,
+      snapPriceFound: snap.found,
       salesNumber: input.salesNumber ?? null,
       orderNumber: input.orderNumber ?? null,
       quotationNo: input.quotationNo ?? null,
@@ -171,7 +249,7 @@ export async function deleteOffer(id: string) {
 
 // Attach the assembled technical offer + computed commercial totals.
 function decorate<
-  T extends {
+  T extends PriceSnapshotFields & {
     currency: string;
     discountPct: number;
     unitPrice: number;
@@ -186,10 +264,11 @@ function decorate<
   });
   const config = offer.rmu ? toConfigInput(offer.rmu) : null;
   const generated = config ? assembleOffer(config) : null;
-  const listPricing = config ? priceForConfig(config) : null;
+  // Frozen prices when the offer has them, live lookup only for legacy offers.
+  const { pricing: listPricing, vatPct: offerVatPct } = resolvePricing(offer, config);
   const commercial =
     generated && offer && "offerNumber" in offer
-      ? buildCommercial(offer as never, generated, listPricing)
+      ? buildCommercial(offer as never, generated, listPricing, offerVatPct)
       : null;
   return { ...offer, pricing, generated, listPricing, commercial };
 }

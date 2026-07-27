@@ -13,7 +13,14 @@ declare global {
 
 function readToken(req: Request): string | null {
   const h = req.headers.authorization;
-  return h && h.startsWith("Bearer ") ? h.slice(7) : null;
+  if (h && h.startsWith("Bearer ")) return h.slice(7);
+  // PDF links are plain browser navigations (<a href> / anchor download), which
+  // cannot carry an Authorization header — so a token may also travel as ?t=.
+  // Restricted to GET/HEAD: a URL can then only ever read, never change state.
+  if ((req.method === "GET" || req.method === "HEAD") && typeof req.query.t === "string") {
+    return req.query.t || null;
+  }
+  return null;
 }
 
 /** Requires a valid JWT; responds 401 otherwise. */

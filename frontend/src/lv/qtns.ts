@@ -14,6 +14,7 @@ import {
   DEFAULT_COMMERCIAL_TERMS_AR,
   type LvState,
 } from "./store";
+import { DEFAULT_FACTORS, findCellEnclosure } from "./catalog";
 
 export interface QtnRecord {
   id: string;
@@ -48,6 +49,11 @@ function summaryOf(state: LvState): QtnSummaryInput {
 
 /** Forward-compatible defaults for a state loaded from the server. */
 function normalize(state: LvState): LvState {
+  // Merge in any factor key added since this QTN was saved. Without this a new
+  // key is `undefined` on every server-loaded quotation and turns the whole
+  // calculation chain into NaN — critical now that factors can change centrally.
+  // Existing values always win, so a quotation keeps the rates it was made with.
+  if (state.factors) state.factors = { ...DEFAULT_FACTORS, ...state.factors };
   state.notesGeneral ??= [...DEFAULT_GENERAL_NOTES];
   state.notesAdditional ??= [];
   state.abbItemDiscounts ??= {};
@@ -67,6 +73,20 @@ function normalize(state: LvState): LvState {
   if (!Array.isArray(state.commercialTermsAr))
     state.commercialTermsAr = DEFAULT_COMMERCIAL_TERMS_AR.map((x) => ({ ...x }));
   state.panels.forEach((p) => {
+    // Freeze cell prices onto quotations saved before rows carried them, using
+    // today's catalogue — exactly the value the old live lookup was producing —
+    // so the quotation total stays identical while becoming immune to later edits.
+    if (p.cellConfig && Array.isArray(p.cellConfig.rows)) {
+      for (const r of p.cellConfig.rows) {
+        if (r.eur == null && r.egp == null) {
+          const e = findCellEnclosure(p.cellConfig.type, r.desc);
+          if (e) {
+            r.eur = e.eur;
+            r.egp = e.egp;
+          }
+        }
+      }
+    }
     p.code ??= "";
     p.shortCircuit ??= "";
     p.busbarPoles ??= 3;

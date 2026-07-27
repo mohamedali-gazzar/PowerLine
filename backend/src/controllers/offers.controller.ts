@@ -12,10 +12,11 @@ import {
   getOfferRaw,
   deleteOffer,
   toConfigInput,
+  resolvePricing,
 } from "../services/offer.service";
 import { assembleOffer, type RmuConfigInput } from "../domain/assembly";
 import { priceForConfig } from "../domain/priceList";
-import { VAT_PCT } from "../domain/pricing-data";
+import { vatPct } from "../domain/pricing-data";
 import { generateOfferPdf } from "../services/pdf.service";
 import { buildCommercial } from "../services/commercial.service";
 import { generateCommercialPdf } from "../services/pdf-commercial.service";
@@ -46,7 +47,7 @@ export function postPreview(req: Request, res: Response) {
     const generated = assembleOffer(cfg);
     const listPricing = priceForConfig(cfg);
     // vatPct from the pricing master so the on-screen totals match the PDFs.
-    res.json({ ...generated, listPricing, vatPct: VAT_PCT });
+    res.json({ ...generated, listPricing, vatPct: vatPct() });
   } catch (err) {
     handleError(err, res);
   }
@@ -89,7 +90,9 @@ export async function deleteOfferById(req: Request, res: Response) {
 export async function getOfferPdf(req: Request, res: Response) {
   try {
     const offer = await getOfferRaw(req.params.id);
-    if (!offer || !offer.rmu) {
+    // Owner-only: these are customer quotations. The token may arrive as ?t=
+    // because a PDF link is a plain browser navigation (see middleware/auth).
+    if (!offer || !offer.rmu || !req.userId || offer.ownerId !== req.userId) {
       return res.status(404).json({ error: "Offer not found" });
     }
     const generated = assembleOffer(toConfigInput(offer.rmu));
@@ -108,12 +111,15 @@ export async function getOfferPdf(req: Request, res: Response) {
 export async function getCommercialPdf(req: Request, res: Response) {
   try {
     const offer = await getOfferRaw(req.params.id);
-    if (!offer || !offer.rmu) {
+    if (!offer || !offer.rmu || !req.userId || offer.ownerId !== req.userId) {
       return res.status(404).json({ error: "Offer not found" });
     }
     const config = toConfigInput(offer.rmu);
     const generated = assembleOffer(config);
-    const data = buildCommercial(offer, generated, priceForConfig(config));
+    // Same frozen prices the offer screen shows — never a fresh lookup, or a
+    // re-downloaded PDF could disagree with the quotation already sent.
+    const { pricing, vatPct: offerVatPct } = resolvePricing(offer, config);
+    const data = buildCommercial(offer, generated, pricing, offerVatPct);
     const pdf = await generateCommercialPdf(data);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
@@ -129,7 +135,9 @@ export async function getCommercialPdf(req: Request, res: Response) {
 export async function getSldPdf(req: Request, res: Response) {
   try {
     const offer = await getOfferRaw(req.params.id);
-    if (!offer || !offer.rmu) return res.status(404).json({ error: "Offer not found" });
+    if (!offer || !offer.rmu || !req.userId || offer.ownerId !== req.userId) {
+      return res.status(404).json({ error: "Offer not found" });
+    }
     const generated = assembleOffer(toConfigInput(offer.rmu));
     const pdf = await generateSldPdf(offer, generated);
     res.setHeader("Content-Type", "application/pdf");

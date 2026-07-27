@@ -72,6 +72,21 @@ model Offer {
   ownerId     String?
   submittedAt DateTime?
 
+  // ─ Price snapshot ──────────────────────────────────────────────────────────
+  // The list prices this offer was quoted at, frozen when it was created. Without
+  // these, re-reading an offer (or re-generating its PDF) re-prices it against
+  // the CURRENT price list — silently rewriting quotations already sent to
+  // customers whenever a price changes. All USD, pre-currency-conversion.
+  // pricedAt == null means "created before snapshots existed" → live fallback.
+  priceBookVersion Int?
+  pricedAt         DateTime?
+  snapPriceKey     String?
+  snapBasePriceUsd Float?
+  snapListPriceUsd Float?
+  snapAddOnsJson   String? // JSON: [{ name, price }]
+  snapVatPct       Float?
+  snapPriceFound   Boolean?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -119,6 +134,10 @@ model User {
   passwordHash  String
   photo         String? // base64 data URL, e.g. "data:image/png;base64,..."
   emailVerified Boolean  @default(false)
+  /// Access level: "USER" (default) | "PRICE_ADMIN" (may edit prices) | "OWNER"
+  /// (may edit prices AND grant access). Read from the DB per request — never
+  /// trusted from the JWT, so revoking access takes effect immediately.
+  role          String   @default("USER")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

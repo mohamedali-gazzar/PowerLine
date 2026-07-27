@@ -93,7 +93,11 @@ export async function register(req: Request, res: Response) {
     // so accounts can be created without SMTP. This stops automatically the moment
     // SMTP_HOST/SMTP_USER are set (emailConfigured), after which codes require email.
     const code = await issueCode(email, "signup");
-    res.json({ ok: true, ...(!emailConfigured ? { devCode: code } : {}) });
+    // DEV guard matches forgot() below: never return the code from production,
+    // even if SMTP is unconfigured — otherwise anyone could self-register an
+    // address, read the verification code straight out of the HTTP response and
+    // sign in as a member of staff.
+    res.json({ ok: true, ...(!emailConfigured && DEV ? { devCode: code } : {}) });
   } catch (e) {
     fail(res, e);
   }
