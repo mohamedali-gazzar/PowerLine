@@ -47,6 +47,42 @@ export default function PricingAdminPage() {
     loadAll();
   }, []);
 
+  /** Send the LV catalogue from the browser in chunks — it lives in the app
+   *  bundle, and 2,374 rows will not fit in one serverless request. Each chunk
+   *  replaces its own slice, so re-running this can never duplicate rows. */
+  const importLvCatalogue = async () => {
+    const CHUNK = 300;
+    for (let i = 0; i < COMPONENTS.length; i += CHUNK) {
+      const slice = COMPONENTS.slice(i, i + CHUNK).map((c, j) => ({ ...c, sortIndex: i + j }));
+      await api.pricing.lvSeedChunk("LV_COMPONENTS", i, slice);
+      setProgress(`Importing components… ${Math.min(i + CHUNK, COMPONENTS.length)} of ${COMPONENTS.length}`);
+    }
+    for (let i = 0; i < ENCLOSURES.length; i += CHUNK) {
+      const slice = ENCLOSURES.slice(i, i + CHUNK).map((e, j) => ({ ...e, sortIndex: i + j }));
+      await api.pricing.lvSeedChunk("LV_ENCLOSURES", i, slice);
+      setProgress(`Importing enclosures… ${Math.min(i + CHUNK, ENCLOSURES.length)} of ${ENCLOSURES.length}`);
+    }
+    setProgress("Saving pricing factors…");
+    await api.pricing.lvSettings(DEFAULT_FACTORS);
+  };
+
+  /** Import LV on its own — for a price list that was set up before the LV
+   *  catalogue existed, which would otherwise be stuck with zero LV items. */
+  const importLvOnly = async () => {
+    setBusy("lv");
+    setError("");
+    try {
+      await importLvCatalogue();
+      setToast(`Imported ${COMPONENTS.length} components and ${ENCLOSURES.length} enclosures.`);
+      await loadAll();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setProgress("");
+      setBusy("");
+    }
+  };
+
   const setUp = async () => {
     setBusy("setup");
     setError("");
@@ -59,22 +95,8 @@ export default function PricingAdminPage() {
         return;
       }
 
-      // 2) LV — sent from the browser in chunks, because the catalogue lives in
-      //    the app bundle and 2,374 rows is too much for one request. Each chunk
-      //    is idempotent, so a retry can never duplicate rows.
-      const CHUNK = 300;
-      for (let i = 0; i < COMPONENTS.length; i += CHUNK) {
-        const slice = COMPONENTS.slice(i, i + CHUNK).map((c, j) => ({ ...c, sortIndex: i + j }));
-        await api.pricing.lvSeedChunk("LV_COMPONENTS", i, slice);
-        setProgress(`Importing LV components… ${Math.min(i + CHUNK, COMPONENTS.length)} of ${COMPONENTS.length}`);
-      }
-      for (let i = 0; i < ENCLOSURES.length; i += CHUNK) {
-        const slice = ENCLOSURES.slice(i, i + CHUNK).map((e, j) => ({ ...e, sortIndex: i + j }));
-        await api.pricing.lvSeedChunk("LV_ENCLOSURES", i, slice);
-        setProgress(`Importing enclosures… ${Math.min(i + CHUNK, ENCLOSURES.length)} of ${ENCLOSURES.length}`);
-      }
-      setProgress("Saving pricing factors…");
-      await api.pricing.lvSettings(DEFAULT_FACTORS);
+      // 2) LV — the catalogue itself.
+      await importLvCatalogue();
 
       setToast(
         `Price list created — ${Object.values(r.counts).reduce((a, b) => a + b, 0)} RMU prices, ` +
@@ -291,7 +313,22 @@ export default function PricingAdminPage() {
             {status.role === "OWNER" && <AccessPanel />}
           </div>
 
-          {section === "LV" && <LvPrices />}
+          {section === "LV" && status.counts.lvComponents === 0 && (
+            <div className="card p-6">
+              <h2 className="sec-head">Import the LV price list</h2>
+              <p className="text-sm text-muted">
+                The LV catalogue hasn&apos;t been imported yet — this price list was set up before
+                the LV part existed. Press the button to copy the {COMPONENTS.length.toLocaleString()}{" "}
+                components and {ENCLOSURES.length} enclosures the app is using right now into the
+                database, so you can edit them here. <b>Prices stay exactly the same.</b>
+              </p>
+              <button className="btn-primary mt-4" onClick={importLvOnly} disabled={busy === "lv"}>
+                {busy === "lv" ? "Importing…" : "Import the LV price list →"}
+              </button>
+              {progress && <p className="mt-2 text-sm font-semibold text-brand-dark">{progress}</p>}
+            </div>
+          )}
+          {section === "LV" && status.counts.lvComponents > 0 && <LvPrices />}
 
           {section === "RMU" && (
             <>
