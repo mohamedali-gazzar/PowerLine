@@ -1430,7 +1430,7 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
       <div key={k}>
         <L>{label}</L>
         <input className="input" type="number" step={opts?.step ?? 0.01} min={opts?.min} max={opts?.max}
-          value={opts?.pct ? Math.round(f[k] * 10000) / 100 : f[k]}
+          value={(opts?.pct ? Math.round(f[k] * 10000) / 100 : f[k]) || ""}
           onChange={(e) => { const d = capMax(parseFloat(e.target.value) || 0); upF(k, opts?.pct ? d / 100 : d); }}
           onBlur={(e) => { const d = clamp(parseFloat(e.target.value) || 0); upF(k, opts?.pct ? d / 100 : d); }} />
         {opts?.hint && <p className="mt-1 text-[11px] text-muted">{opts.hint}</p>}
@@ -1450,7 +1450,7 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
           {num("sheetMetal", "Sheet metal (EGP/KG)", { step: 1 })}
           {num("euro", "EUR → EGP", { min: liveEur, hint: liveEur ? `must be ≥ live ${liveEur}` : undefined })}
           {num("usd", "USD → EGP", { min: liveUsd, hint: liveUsd ? `must be ≥ live ${liveUsd}` : undefined })}
-          {num("safetyFactor", "Safety Factor (%)", { pct: true, min: 0, max: 5, hint: "0–5% only · 2% → ×1.02 · 0% = no change" })}
+          {num("safetyFactor", "Safety Factor (%)", { pct: true, min: 0, max: 10, hint: "0–10% only · 2% → ×1.02 · 0% = no change" })}
           {num("operations", "Operations (%)", { pct: true })}
           {num("abbDiscount", "ABB discount (%)", { pct: true, hint: "Applied to ABB products ONLY (RPT-01)" })}
           {num("vat", "VAT (%)", { pct: true })}
@@ -3626,7 +3626,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                         {c.baseQty != null ? (
                           // Combo item: the Qty column is the PER-UNIT qty (1 per unit); the group's
                           // combination qty (×N) multiplies the total, not this number.
-                          <input className="input h-7 px-1.5 text-center text-xs" type="number" min={0} value={c.baseQty}
+                          <input className="input h-7 px-1.5 text-center text-xs" type="number" min={0} value={c.baseQty || ""}
                             title="Per-unit qty — the combination qty (×N) multiplies the total"
                             onChange={(e) => {
                               const per = Math.max(0, parseFloat(e.target.value) || 0);
@@ -3634,7 +3634,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                               setComp(c.id, { baseQty: per, qty: per * n });
                             }} />
                         ) : (
-                          <input className="input h-7 px-1.5 text-center text-xs" type="number" min={0} value={c.qty}
+                          <input className="input h-7 px-1.5 text-center text-xs" type="number" min={0} value={c.qty || ""}
                             onChange={(e) => setComp(c.id, { qty: Math.max(0, parseFloat(e.target.value) || 0) })} />
                         )}
                       </td>
@@ -4270,7 +4270,7 @@ function PfcCalculator({ onResult }: { onResult: (kvar: number) => void }) {
   const numF = (label: string, value: number, set: (v: number) => void, st = 1, hint?: string) => (
     <div>
       <L>{label}{hint && <span className="text-[10px] font-normal normal-case text-muted"> {hint}</span>}</L>
-      <input className="input h-9" type="number" step={st} value={value} onChange={(e) => set(parseFloat(e.target.value) || 0)} />
+      <input className="input h-9" type="number" step={st} value={value || ""} onChange={(e) => set(parseFloat(e.target.value) || 0)} />
     </div>
   );
   return (
@@ -4282,7 +4282,7 @@ function PfcCalculator({ onResult }: { onResult: (kvar: number) => void }) {
               <div>
                 <L>Total load</L>
                 <div className="flex gap-1">
-                  <input className="input h-9" type="number" value={loadVal} onChange={(e) => setLoadVal(parseFloat(e.target.value) || 0)} />
+                  <input className="input h-9" type="number" value={loadVal || ""} onChange={(e) => setLoadVal(parseFloat(e.target.value) || 0)} />
                   <select className="input h-9 w-20 cursor-pointer" value={loadUnit} onChange={(e) => setLoadUnit(e.target.value as "kVA" | "kW")}><option>kVA</option><option>kW</option></select>
                 </div>
               </div>
@@ -4314,7 +4314,7 @@ function PfcBuilder({ onPreview, syncKvar }: { onPreview: (l: ComboLine[], tag: 
   const num = (k: "kvar" | "fixedSteps" | "var1Steps" | "var2Steps", label: string) => (
     <div key={k}>
       <L>{label}</L>
-      <input className="input w-full" type="number" min={0} value={i[k]}
+      <input className="input w-full" type="number" min={0} value={i[k] || ""}
         onChange={(e) => setI({ ...i, [k]: parseInt(e.target.value) || 0 })} />
     </div>
   );
@@ -4797,7 +4797,7 @@ function SizingCard({ p, u, factors }: {
                       return (
                         <div className="inline-flex items-stretch">
                           <input className={`input h-7 w-12 rounded-r-none px-1.5 text-center text-xs ${r.locked ? "bg-surface" : ""}`}
-                            type="number" min={0} value={r.qty} disabled={r.locked}
+                            type="number" min={0} value={r.qty || ""} disabled={r.locked}
                             onChange={(e) => setQty(parseInt(e.target.value) || 0)} />
                           <div className="flex flex-col">
                             <button type="button" title="Increase" disabled={r.locked} onClick={() => setQty(r.qty + 1)}
@@ -4951,7 +4951,7 @@ function MatTable({ title, rows, withSupplier, note, abbDisc }: { title: string;
                     className={`w-16 rounded border px-1.5 py-0.5 text-right text-[12px] focus:outline-none ${
                       abbDisc.isOverride(r) ? "border-brand bg-brand-light font-bold text-brand-dark" : "border-line bg-white text-ink"
                     }`}
-                    value={abbDisc.valueFor(r)}
+                    value={abbDisc.valueFor(r) || ""}
                     title={abbDisc.isOverride(r) ? "Custom — click and clear to follow the default" : `Default ${abbDisc.defaultFor(r)}%${abbDisc.defaultFor(r) === abbDisc.globalPct ? " (Pricing Settings)" : ""}`}
                     onChange={(e) => abbDisc.onChange(r, Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))} />
                 </td>
