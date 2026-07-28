@@ -1,0 +1,2540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PCSS Engineering Selector Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  
+  <style>
+    :root {
+      --color-bg-main: #ffffff;
+      --color-card-bg: #ffffff;
+      --color-text-primary: #1e293b;
+      --color-text-secondary: #64748b;
+      --color-border: #cbd5e1;
+      --color-border-light: #e2e8f0;
+      --color-brand: #EA580C;
+      --color-brand-light: #FDECE1;
+      --color-brand-dark: #9A3412;
+      --color-surface: #f8fafc;
+      --color-surface-alt: #f1f5f9;
+      --color-crumb-bg: #1e293b;
+      --color-crumb-text: #cbd5e1;
+      --border-radius-lg: 16px;
+      --border-radius-md: 8px;
+    }
+
+    body.dark {
+      --color-bg-main: #0f172a;
+      --color-card-bg: #1e293b;
+      --color-text-primary: #f1f5f9;
+      --color-text-secondary: #94a3b8;
+      --color-border: #475569;
+      --color-border-light: #334155;
+      --color-brand: #FB923C;
+      --color-brand-light: rgba(251, 146, 60, 0.16);
+      --color-brand-dark: #FDBA74;
+      --color-surface: #16213a;
+      --color-surface-alt: #1e2c47;
+      --color-crumb-bg: #334155;
+      --color-crumb-text: #e2e8f0;
+    }
+
+    body { transition: background 0.2s ease, color 0.2s ease; }
+    .panel, .step, .opt, .qty-btn, .custom-row button, .filter-btn, .result-card, .sel-field, .crumb {
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+
+    body {
+      background: var(--color-bg-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 24px;
+      color: var(--color-text-primary);
+    }
+
+    .dashboard-header {
+      max-width: 1600px;
+      margin: 0 auto 20px auto;
+      color: var(--color-text-primary);
+    }
+
+    .dashboard-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .theme-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 38px;
+      padding: 0 16px;
+      border-radius: 99px;
+      border: 1px solid var(--color-border);
+      background: var(--color-card-bg);
+      color: var(--color-text-primary);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .theme-toggle:hover {
+      border-color: var(--color-brand);
+      color: var(--color-brand);
+    }
+
+    .theme-toggle i { font-size: 16px; }
+
+    .dashboard-header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .dashboard-header p {
+      color: var(--color-text-secondary);
+      font-size: 14px;
+      margin: 0;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      max-width: 1600px;
+      margin: auto;
+      align-items: start;
+    }
+
+    @media (max-width: 1100px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: var(--color-card-bg);
+      border: 1px solid var(--color-border-light);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 4px 24px rgba(15, 23, 42, .06);
+    }
+
+    .step {
+      background: var(--color-surface);
+      padding: 20px;
+      border-radius: 16px;
+      margin-bottom: 20px;
+      border: 1px solid var(--color-border-light);
+      transition: all 0.2s ease;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .step.hidden {
+      display: none;
+    }
+
+    .step-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.5rem;
+    }
+
+    .step-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+    
+    .opt {
+      background: var(--color-card-bg);
+      border: 1px solid var(--color-border-light);
+      border-radius: var(--border-radius-md);
+      padding: 14px;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      transition: all 0.15s ease;
+    }
+
+    .opt:hover {
+      border-color: var(--color-border);
+      background: var(--color-surface-alt);
+    }
+
+    .opt.active {
+      border: 2px solid var(--color-brand);
+      background: var(--color-brand-light);
+    }
+
+    .opt .ot { font-size: 14px; font-weight: 600; color: var(--color-text-primary); }
+    .opt.active .ot { color: var(--color-brand-dark); }
+    .opt .os { font-size: 12px; color: var(--color-text-secondary); margin-top: 4px; line-height: 1.4; }
+    .opt.active .os { color: var(--color-brand); }
+    .opt .oi { font-size: 20px; color: var(--color-text-secondary); margin-bottom: 6px; }
+    .opt.active .oi { color: var(--color-brand); }
+
+    .opt-h { display: flex; align-items: center; gap: 14px; }
+    .opt-h .oi { font-size: 30px; margin-bottom: 0; flex-shrink: 0; line-height: 1; }
+    .opt-h .ot-wrap { display: flex; flex-direction: column; gap: 2px; }
+    .opt-h .ot { margin-top: 0; }
+    .opt-h .os { margin-top: 0; }
+
+    .breadcrumb-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .breadcrumb {
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      flex: 1;
+    }
+
+    .reset-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 32px;
+      padding: 0 12px;
+      border-radius: 99px;
+      border: 1px solid var(--color-border);
+      background: var(--color-card-bg);
+      color: var(--color-text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .reset-btn:hover {
+      border-color: #ef4444;
+      color: #ef4444;
+    }
+
+    .reset-btn i { font-size: 14px; }
+
+    .notice-red {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: #b91c1c;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: var(--border-radius-md);
+      padding: 10px 12px;
+      margin: 10px 0 6px;
+    }
+
+    .notice-red i { font-size: 16px; flex-shrink: 0; }
+
+    body.dark .notice-red {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+    }
+
+    .crumb {
+      background: var(--color-crumb-bg);
+      border-radius: var(--border-radius-md);
+      padding: 4px 10px;
+      color: var(--color-crumb-text);
+    }
+
+    .cb-table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+    .cb-table th { font-size: 11px; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--color-border-light); }
+    .cb-table td { padding: 8px 10px; border-bottom: 1px solid var(--color-border-light); font-size: 13px; vertical-align: middle; }
+    .cb-table tr:last-child td { border-bottom: none; }
+    
+    .qty-ctrl { display: flex; align-items: center; gap: 6px; }
+    .qty-btn { width: 28px; height: 28px; border: 1px solid var(--color-border); border-radius: var(--border-radius-md); background: var(--color-card-bg); cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; color: var(--color-text-primary); }
+    .qty-btn:hover { background: var(--color-border-light); }
+    .qty-val { min-width: 24px; text-align: center; font-weight: 600; font-size: 14px; }
+    
+    .custom-row { display: flex; gap: 8px; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+    .custom-row input { height: 36px; width: 140px; padding: 0 10px; font-size: 13px; border: 1px solid var(--color-border); border-radius: var(--border-radius-md); background: var(--color-card-bg); color: var(--color-text-primary); }
+    .custom-row button { height: 36px; padding: 0 16px; font-size: 13px; border: 1px solid var(--color-border); border-radius: var(--border-radius-md); background: var(--color-card-bg); cursor: pointer; font-weight: 500; }
+    .custom-row button:hover { background: var(--color-border-light); }
+
+    .mccb-form {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .mccb-label {
+      display: block;
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--color-text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .mccb-form .sel-field { margin-bottom: 0; }
+    .mccb-form input.sel-field { height: 42px; padding: 0 12px; }
+
+    .custom-row-btn {
+      height: 36px;
+      padding: 0 16px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius-md);
+      background: var(--color-card-bg);
+      color: var(--color-text-primary);
+      cursor: pointer;
+      margin-bottom: 12px;
+    }
+
+    .custom-row-btn:hover { background: var(--color-border-light); }
+
+    .pf-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+      cursor: pointer;
+      margin-bottom: 4px;
+    }
+
+    .pf-toggle input { width: 16px; height: 16px; accent-color: var(--color-brand); cursor: pointer; }
+
+    .pf-details {
+      margin-top: 10px;
+      border: 1px solid var(--color-border-light);
+      background: var(--color-surface);
+      border-radius: var(--border-radius-md);
+      padding: 12px 14px;
+    }
+
+    .pf-details-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+    }
+
+    .pf-item .cr-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-secondary); margin-bottom: 3px; }
+    .pf-item .cr-value { font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
+
+    .pf-no-match { font-size: 12px; color: var(--color-text-secondary); font-style: italic; }
+
+    .recommended-badge {
+      display: inline-block;
+      font-size: 9.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--color-brand);
+      background: var(--color-brand-light);
+      border-radius: 99px;
+      padding: 2px 8px;
+      margin-bottom: 6px;
+    }
+
+    .switchfuse-amp-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
+
+    .sf-amp-btn {
+      height: 42px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius-md);
+      background: var(--color-card-bg);
+      color: var(--color-text-primary);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .sf-amp-btn:hover { border-color: var(--color-brand); color: var(--color-brand); }
+
+    .space-bar-wrap { background: var(--color-surface); padding: 16px; border-radius: 12px; border: 1px solid var(--color-border-light); margin-bottom: 1.5rem; }
+    .space-bar-label { display: flex; justify-content: space-between; font-size: 13px; color: var(--color-text-secondary); margin-bottom: 6px; }
+    .space-bar-label strong { color: var(--color-text-primary); }
+    .space-bar-bg { height: 12px; background: var(--color-border-light); border-radius: 99px; overflow: hidden; }
+    .space-bar-fill { height: 100%; border-radius: 99px; transition: width 0.3s ease; }
+    
+    .space-ok { background: #10b981; }
+    .space-warn { background: #f59e0b; }
+    .space-over { background: #ef4444; }
+    .space-note { font-size: 12px; margin-top: 6px; font-weight: 500; }
+    .space-note.ok { color: #065f46; }
+    .space-note.warn { color: #92400e; }
+    .space-note.over { color: #991b1b; }
+
+    .summary-bar { background: var(--color-surface-alt); border-radius: var(--border-radius-md); padding: 12px 16px; font-size: 13px; color: var(--color-text-secondary); margin-bottom: 1rem; line-height: 1.5; }
+    .summary-bar strong { color: var(--color-text-primary); }
+    
+    .filter-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; }
+    .filter-btn { font-size: 12px; font-weight: 500; padding: 6px 14px; border: 1px solid var(--color-border); border-radius: 99px; background: var(--color-card-bg); cursor: pointer; color: var(--color-text-secondary); }
+    .filter-btn.active { background: var(--color-brand-light); border-color: var(--color-brand); color: var(--color-brand-dark); font-weight: 600; }
+    
+    .result-card { background: var(--color-card-bg); border: 1px solid var(--color-border-light); border-radius: var(--border-radius-lg); padding: 16px; margin-bottom: 12px; transition: opacity 0.2s ease; }
+    .result-card.compatible { border-left: 4px solid #10b981; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .result-card.incompatible { opacity: 0.35; }
+    
+    .result-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .result-name { font-size: 15px; font-weight: 600; }
+    
+    .badge { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: var(--border-radius-md); }
+    .badge-ok { background: #d1fae5; color: #065f46; }
+    .badge-no { background: #f1f5f9; color: var(--color-text-secondary); }
+    
+    .spec-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; background: var(--color-surface); padding: 10px; border-radius: 8px; }
+    .spec { font-size: 11px; color: var(--color-text-secondary); }
+    .spec span { display: block; color: var(--color-text-primary); font-size: 13px; font-weight: 600; margin-top: 2px; }
+    
+    .tag { display: inline-block; font-size: 11px; font-weight: 500; background: var(--color-surface-alt); border-radius: var(--border-radius-md); padding: 3px 8px; color: var(--color-text-secondary); margin-top: 8px; margin-right: 4px; }
+    .tag.blue { background: var(--color-brand-light); color: var(--color-brand-dark); }
+    .tag.green { background: #d1fae5; color: #065f46; }
+    
+    .sel-field {
+      width: 100%;
+      height: 42px;
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+      background: var(--color-card-bg);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius-md);
+      margin-bottom: 4px;
+      appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 16px;
+      cursor: pointer;
+    }
+    .sel-field:disabled { background-color: var(--color-surface-alt); color: var(--color-text-secondary); cursor: not-allowed; }
+    .sel-field:focus { outline: none; border-color: var(--color-brand); }
+
+    .no-results { text-align: center; padding: 3rem; color: var(--color-text-secondary); font-size: 14px; }
+    .section-hdr { font-size: 11px; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.07em; margin: 1.25rem 0 0.5rem; }
+
+    .config-complete {
+      border: 1.5px solid var(--color-brand);
+      background: var(--color-brand-light);
+      border-radius: var(--border-radius-lg);
+      padding: 18px;
+      margin-bottom: 1.25rem;
+    }
+
+    .config-complete-hdr {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--color-brand-dark);
+      margin-bottom: 14px;
+    }
+
+    .config-complete-hdr i { font-size: 18px; }
+
+    .config-recap-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .config-recap-item {
+      background: var(--color-card-bg);
+      border: 1px solid var(--color-border-light);
+      border-radius: var(--border-radius-md);
+      padding: 10px 12px;
+    }
+
+    .config-recap-item .cr-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .config-recap-item .cr-value {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="dashboard-header">
+    <div class="dashboard-header-row">
+      <div>
+        <h1>PCSS <span style="color: var(--color-brand);">System Design</span> Dashboard</h1>
+        <p>Real-time technical design optimization & sizing engine</p>
+      </div>
+      <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">
+        <i class="ti ti-moon" id="theme-icon" aria-hidden="true"></i>
+        <span id="theme-label">Dark mode</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    
+    <div class="panel">
+      <div class="breadcrumb-row">
+        <div id="bc" class="breadcrumb">Select specifications below to begin configuration...</div>
+        <button class="reset-btn" id="reset-btn" onclick="resetConfig()">
+          <i class="ti ti-refresh" aria-hidden="true"></i> Start Over
+        </button>
+      </div>
+
+      <div class="step" id="s0">
+        <div class="step-label">Step 1 of 7</div>
+        <div class="step-title">Project data</div>
+        <div id="proj-status" class="notice-red hidden"></div>
+
+        <div class="grid-2">
+          <div>
+            <div class="section-hdr" style="margin-top:0">Project name <span style="color:#ef4444;">*</span></div>
+            <input class="sel-field" id="proj-name" placeholder="e.g. New Cairo Substation" oninput="onProjectFieldChange('projectName', this.value)">
+          </div>
+          <div>
+            <div class="section-hdr" style="margin-top:0">Customer <span style="color:#ef4444;">*</span></div>
+            <input class="sel-field" id="proj-customer" placeholder="Customer / client name" oninput="onProjectFieldChange('customer', this.value)">
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top: 1.25rem;">
+          <div>
+            <div class="section-hdr" style="margin-top:0">Quotation no. <span style="color:#ef4444;">*</span></div>
+            <input class="sel-field" id="proj-qtn" placeholder="QTN-00000" oninput="onProjectFieldChange('qtnNo', this.value)">
+          </div>
+          <div>
+            <div class="section-hdr" style="margin-top:0">Revision no. <span style="color:#ef4444;">*</span></div>
+            <input class="sel-field" id="proj-rev" placeholder="e.g. 0" oninput="onProjectFieldChange('revisionNo', this.value)">
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top: 1.25rem;">
+          <div>
+            <div class="section-hdr" style="margin-top:0">Opportunity no. <span style="color:#ef4444;">*</span></div>
+            <input class="sel-field" id="proj-opty" placeholder="OPTY-00000" oninput="onProjectFieldChange('optyNo', this.value)">
+          </div>
+          <div>
+            <div class="section-hdr" style="margin-top:0">Date <span style="color:#ef4444;">*</span></div>
+            <input class="sel-field" id="proj-date" type="date" oninput="onProjectFieldChange('projectDate', this.value)">
+          </div>
+        </div>
+
+        <div class="section-hdr">Sales support engineer <span style="color:#ef4444;">*</span></div>
+        <select class="sel-field" id="proj-support-eng" onchange="onProjectFieldChange('supportEngineer', this.value)">
+          <option value="">— select —</option>
+        </select>
+
+        <div class="grid-2" style="margin-top: 1.25rem;">
+          <div>
+            <div class="section-hdr" style="margin-top:0">Sales manager</div>
+            <input class="sel-field" id="proj-sales-manager" value="Ali Kamal" readonly>
+          </div>
+          <div>
+            <div class="section-hdr" style="margin-top:0">Manager phone</div>
+            <input class="sel-field" id="proj-manager-phone" placeholder="Auto-filled" readonly>
+          </div>
+        </div>
+        <div class="section-hdr">Manager email</div>
+        <input class="sel-field" id="proj-manager-email" placeholder="Auto-filled" readonly>
+
+        <div class="grid-2" style="margin-top: 1.25rem;">
+          <div>
+            <div class="section-hdr" style="margin-top:0">Sales person <span style="color:#ef4444;">*</span></div>
+            <select class="sel-field" id="proj-sales-person" onchange="onSalesPersonChange('person', this.value)">
+              <option value="">— select —</option>
+            </select>
+          </div>
+          <div>
+            <div class="section-hdr" style="margin-top:0">Sales person phone</div>
+            <input class="sel-field" id="proj-person-phone" placeholder="Auto-filled" readonly>
+          </div>
+        </div>
+        <div class="section-hdr">Sales person email</div>
+        <input class="sel-field" id="proj-person-email" placeholder="Auto-filled" readonly>
+      </div>
+
+      <div class="step" id="s1">
+        <div class="step-label">Step 2 of 7</div>
+        <div class="step-title">Select MV panel (RMU) type</div>
+        <div class="grid-2" id="rmu-grid"></div>
+      </div>
+
+      <div class="step hidden" id="s2">
+        <div class="step-label">Step 3 of 7</div>
+        <div class="step-title">Select switching configuration</div>
+        <div class="grid-3" id="cfg-grid"></div>
+      </div>
+
+      <div class="step hidden" id="s-smart">
+        <div class="step-label">Step 4 of 7</div>
+        <div class="step-title">Select smart switchgear type</div>
+        <div class="grid-3" id="smart-grid"></div>
+      </div>
+
+      <div class="step hidden" id="s-trf">
+        <div class="step-label">Step 5 of 7</div>
+        <div class="step-title">Transformer specification</div>
+
+        <div class="section-hdr" style="margin-top:0">Transformer presence</div>
+        <div class="grid-2" id="trpresence-grid"></div>
+
+        <div id="trf-rating-block" class="hidden">
+          <div class="section-hdr">Transformer rating (KVA)</div>
+          <select class="sel-field" id="trrating-sel" onchange="onTrRatingChange(this.value)">
+            <option value="">Select rating…</option>
+          </select>
+          <div style="font-size:11px;color:var(--color-text-secondary);margin:2px 0 0;">5ST series ≤ 500 KVA · 10ST series 500–1000 KVA · 16ST series 1000–2000 KVA</div>
+        </div>
+
+        <div id="trf-with-fields" class="hidden">
+          <div class="section-hdr" style="margin-top:0">Transformer brand</div>
+          <select class="sel-field" id="trbrand-sel" onchange="onTrBrandChange(this.value)">
+            <option value="">Select brand…</option>
+          </select>
+
+          <div class="section-hdr">Insulation type</div>
+          <div class="grid-2" id="trtype-grid"></div>
+
+          <div class="section-hdr">Step type</div>
+          <div class="grid-2" id="trconn-grid"></div>
+
+          <div class="grid-2" style="margin-top: 1.25rem;">
+            <div>
+              <div class="section-hdr" style="margin-top:0">Primary voltage</div>
+              <select class="sel-field" id="primaryv-sel" onchange="onPrimaryChange(this.value)"></select>
+            </div>
+            <div>
+              <div class="section-hdr" style="margin-top:0">Secondary voltage</div>
+              <select class="sel-field" id="secondaryv-sel" onchange="onSecondaryChange(this.value)"></select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step hidden" id="s4">
+        <div class="step-label">Step 6 of 7</div>
+        <div class="step-title">Select LV Configuration</div>
+        <div class="grid-2" id="iec-grid"></div>
+      </div>
+
+      <div class="step hidden" id="s5">
+        <div class="step-label">Step 7 of 7</div>
+        <div class="step-title">Select LV circuit breakers</div>
+
+        <div class="section-hdr" style="margin-top:0">Breaker configuration</div>
+        <div class="grid-2" id="lvcfg-grid"></div>
+
+        <div id="incoming-only-notice" class="hidden notice-red">
+          <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+          Incoming Only: LV panel fixed at <strong>1400 mm</strong> · limited to a single breaker selection
+        </div>
+
+        <div id="metering-section" class="hidden">
+          <div class="section-hdr" id="metering-section-hdr">EEHC Metering — Incoming CB (Fixed)</div>
+          <div id="metering-details"></div>
+        </div>
+
+        <div id="mainInc-section" class="hidden">
+          <div class="section-hdr" id="mainInc-hdr">Main incoming breaker</div>
+          <div class="grid-3" id="mainInc-grid"></div>
+          <div id="mainInc-brand-row"></div>
+        </div>
+
+        <div id="lvmode-block" class="hidden">
+          <div class="section-hdr">Selection mode</div>
+          <div class="grid-2" id="lvmode-grid"></div>
+        </div>
+
+        <div id="ptype-block" class="hidden">
+          <div class="section-hdr" style="margin-top:0">Protection type</div>
+          <div class="grid-2" id="ptype-grid"></div>
+        </div>
+
+        <div id="sizing-section">
+          <div id="cb-table-wrap">
+            <div class="section-hdr" style="margin-top:0" id="cb-table-hdr">Outgoing breakers</div>
+            <table class="cb-table" id="cb-table"></table>
+          </div>
+
+          <div id="switchfuse-block" class="hidden">
+            <div class="section-hdr" style="margin-top:0">Switch fuse ampere</div>
+            <div class="switchfuse-amp-row" id="switchfuse-amp-row"></div>
+            <div style="font-size:11px;color:var(--color-text-secondary);margin:6px 0 10px;">Each switch fuse added automatically includes a set of 3 fuse links at the same ampere rating.</div>
+            <div id="switchfuse-list"></div>
+          </div>
+
+          <div class="section-hdr">Custom width</div>
+          <div class="custom-row">
+            <input id="cust-name" placeholder="Name (e.g. XT7)" maxlength="12">
+            <input id="cust-w" placeholder="Width (mm)" type="number" min="1" max="999">
+            <button onclick="addCustom()"><i class="ti ti-plus" aria-hidden="true"></i> Add</button>
+          </div>
+          <div id="custom-list"></div>
+        </div>
+
+        <div id="mccb-section" class="hidden">
+          <div class="section-hdr">Circuit breaker catalog selection (Technical Offer)</div>
+          <div class="mccb-form">
+            <div>
+              <label class="mccb-label">Brand</label>
+              <select class="sel-field" id="mccb-brand" onchange="onMccbBrandChange(this.value)">
+                <option value="">Select brand…</option>
+              </select>
+            </div>
+            <div>
+              <label class="mccb-label">Ampere</label>
+              <select class="sel-field" id="mccb-amp" onchange="onMccbAmpChange(this.value)" disabled>
+                <option value="">Select brand first…</option>
+              </select>
+            </div>
+            <div>
+              <label class="mccb-label">Short-Circuit Level</label>
+              <select class="sel-field" id="mccb-sc" onchange="onMccbScChange(this.value)" disabled>
+                <option value="">Select ampere first…</option>
+              </select>
+            </div>
+            <div>
+              <label class="mccb-label">Trip Unit</label>
+              <select class="sel-field" id="mccb-trip" onchange="onMccbTripChange(this.value)" disabled>
+                <option value="">Select SC level first…</option>
+              </select>
+            </div>
+            <div>
+              <label class="mccb-label">Circuit Breaker</label>
+              <select class="sel-field" id="mccb-model" disabled>
+                <option value="">Auto from previous selections…</option>
+              </select>
+            </div>
+            <div>
+              <label class="mccb-label">Qty</label>
+              <input class="sel-field" id="mccb-qty" type="number" min="1" value="1">
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--color-text-secondary);margin:-4px 0 10px;">Footprint sizing is driven automatically from the quantities added below — no separate dimension entry needed.</div>
+          <button class="custom-row-btn" onclick="addMccbItem()"><i class="ti ti-plus" aria-hidden="true"></i> Add to Technical Offer</button>
+        </div>
+
+        <div id="tech-switchfuse-block" class="hidden">
+          <div class="section-hdr">Switch fuse (Technical Offer)</div>
+          <div class="switchfuse-amp-row" id="techsf-amp-row"></div>
+          <div style="font-size:11px;color:var(--color-text-secondary);margin:6px 0 10px;">Each switch fuse added automatically includes a set of 3 fuse links at the same ampere rating.</div>
+        </div>
+
+        <div id="tech-offer-list-wrap" class="hidden">
+          <div class="section-hdr">Technical offer items</div>
+          <div id="mccb-list"></div>
+        </div>
+
+        <div id="pf-section" class="hidden">
+          <div class="section-hdr">EEHC Fixed Power Factor Correction</div>
+          <label class="pf-toggle">
+            <input type="checkbox" id="pf-toggle" onchange="onPfToggle(this.checked)">
+            Include EEHC Fixed P.F. Correction Panel
+          </label>
+          <div id="pf-details"></div>
+        </div>
+
+        <button class="reset-btn" style="margin-top: 1.25rem;" onclick="resetBreakers()">
+          <i class="ti ti-refresh" aria-hidden="true"></i> Clear Breakers
+        </button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="step-label" style="margin-bottom: 12px;">Live Execution & Output Pane</div>
+      
+      <div id="space-wrap">
+        <div class="no-results" style="padding: 1rem; border: 1px dashed var(--color-border); border-radius: 12px;">
+          Space validation will load upon breaker configuration steps.
+        </div>
+      </div>
+      
+      <div id="config-summary"></div>
+
+      <div class="filter-row">
+        <button class="filter-btn active" onclick="setFilter('all',event)">All series</button>
+        <button class="filter-btn" onclick="setFilter('5ST',event)">5ST</button>
+        <button class="filter-btn" onclick="setFilter('10ST',event)">10ST</button>
+        <button class="filter-btn" onclick="setFilter('16ST',event)">16ST</button>
+      </div>
+
+      <div class="summary-bar" id="sum-bar">Please complete your system specifications to evaluate compatibility parameters.</div>
+      <div id="results"></div>
+    </div>
+
+  </div>
+
+<script>
+const SMART_ELIGIBLE_RMUS = ["psec50", "psec375", "murge", "lucy"];
+
+const SMART_TYPES = [
+  { id:"basic",  label:"Basic",                       sub:"Standard manual switchgear, no smart provisions",              icon:"ti-manual-gearbox" },
+  { id:"ready1", label:"Ready to be Smart Type 1",     sub:"Pre-wired / prepped for future monitoring-only upgrade",       icon:"ti-plug-connected" },
+  { id:"ready2", label:"Ready to be Smart Type 2",     sub:"Pre-wired / prepped for future monitor & control upgrade",     icon:"ti-plug-connected" },
+  { id:"smart1", label:"Smart Type 1",                 sub:"Factory-fitted · Monitoring only",                            icon:"ti-cpu" },
+  { id:"smart2", label:"Smart Type 2",                 sub:"Factory-fitted · Monitor and Control",                        icon:"ti-cpu" },
+];
+
+const MCCB_CATALOG = [{"brand": "ABB", "model": "XT1N 160", "amp": 16, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1N 160", "amp": 20, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1N 160", "amp": 25, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1N 160", "amp": 32, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1N 160", "amp": 40, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1N 160", "amp": 50, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1N 160", "amp": 63, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1N 160", "amp": 80, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1N 160", "amp": 100, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1N 160", "amp": 125, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1N 160", "amp": 160, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1S 160", "amp": 16, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1S 160", "amp": 20, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1S 160", "amp": 25, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1S 160", "amp": 32, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1S 160", "amp": 40, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1S 160", "amp": 50, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1S 160", "amp": 63, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1S 160", "amp": 80, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1S 160", "amp": 100, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1S 160", "amp": 125, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT1S 160", "amp": 160, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT2N 160", "amp": 16, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2N 160", "amp": 20, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2N 160", "amp": 25, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2N 160", "amp": 32, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2N 160", "amp": 40, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2N 160", "amp": 50, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2N 160", "amp": 63, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2N 160", "amp": 80, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2N 160", "amp": 100, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2N 160", "amp": 125, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2N 160", "amp": 160, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2S 160", "amp": 16, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2S 160", "amp": 20, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2S 160", "amp": 25, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2S 160", "amp": 32, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2S 160", "amp": 40, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2S 160", "amp": 50, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2S 160", "amp": 63, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2S 160", "amp": 80, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2S 160", "amp": 100, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2S 160", "amp": 125, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT2S 160", "amp": 160, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT3N 250", "amp": 160, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT3N 250", "amp": 180, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT3N 250", "amp": 200, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT3N 250", "amp": 225, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT3N 250", "amp": 250, "sc": "36 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT3S 250", "amp": 160, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT3S 250", "amp": 180, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT3S 250", "amp": 200, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT3S 250", "amp": 225, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT3S 250", "amp": 250, "sc": "50 kA", "trip": "TMD"}, {"brand": "ABB", "model": "XT4N 250", "amp": 160, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT4N 250", "amp": 180, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT4N 250", "amp": 200, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT4N 250", "amp": 225, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT4N 250", "amp": 250, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT4S 250", "amp": 160, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT4S 250", "amp": 180, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT4S 250", "amp": 200, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT4S 250", "amp": 225, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT4S 250", "amp": 250, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT5N 400", "amp": 250, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT5N 400", "amp": 320, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT5N 400", "amp": 400, "sc": "36 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT5H 400", "amp": 250, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT5H 400", "amp": 320, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT5H 400", "amp": 400, "sc": "50 kA", "trip": "TMA / Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT5N 630", "amp": 500, "sc": "36 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT5N 630", "amp": 630, "sc": "36 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT5H 630", "amp": 500, "sc": "50 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT5H 630", "amp": 630, "sc": "50 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT6N 800", "amp": 630, "sc": "36 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT6N 800", "amp": 700, "sc": "36 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT6N 800", "amp": 800, "sc": "36 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT6S 800", "amp": 630, "sc": "50 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT6S 800", "amp": 700, "sc": "50 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT6S 800", "amp": 800, "sc": "50 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT7N 1250", "amp": 800, "sc": "36 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT7N 1250", "amp": 1000, "sc": "36 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT7N 1250", "amp": 1250, "sc": "36 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT7S 1250", "amp": 800, "sc": "50 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT7S 1250", "amp": 1000, "sc": "50 kA", "trip": "Ekip DIP LS/I"}, {"brand": "ABB", "model": "XT7S 1250", "amp": 1250, "sc": "50 kA", "trip": "Ekip DIP LS/I"}, {"brand": "Himel", "model": "HMW1-160", "amp": 16, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW1-160", "amp": 20, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW1-160", "amp": 25, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW1-160", "amp": 32, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW1-160", "amp": 40, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW1-160", "amp": 50, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW1-160", "amp": 63, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW1-160", "amp": 80, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW1-160", "amp": 100, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW1-160", "amp": 125, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW1-160", "amp": 160, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW2-250", "amp": 160, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW2-250", "amp": 180, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW2-250", "amp": 200, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW2-250", "amp": 225, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW2-250", "amp": 250, "sc": "36 kA", "trip": "TMD"}, {"brand": "Himel", "model": "HMW3-400", "amp": 250, "sc": "36 kA", "trip": "TMA"}, {"brand": "Himel", "model": "HMW3-400", "amp": 320, "sc": "36 kA", "trip": "TMA"}, {"brand": "Himel", "model": "HMW3-400", "amp": 400, "sc": "36 kA", "trip": "TMA"}, {"brand": "Himel", "model": "HMW4-630", "amp": 400, "sc": "36 kA", "trip": "TMA"}, {"brand": "Himel", "model": "HMW4-630", "amp": 500, "sc": "36 kA", "trip": "TMA"}, {"brand": "Himel", "model": "HMW4-630", "amp": 630, "sc": "36 kA", "trip": "TMA"}, {"brand": "Himel", "model": "HMW5-800", "amp": 630, "sc": "50 kA", "trip": "Electronic LS/I"}, {"brand": "Himel", "model": "HMW5-800", "amp": 700, "sc": "50 kA", "trip": "Electronic LS/I"}, {"brand": "Himel", "model": "HMW5-800", "amp": 800, "sc": "50 kA", "trip": "Electronic LS/I"}, {"brand": "Himel", "model": "HMW6-1250", "amp": 800, "sc": "50 kA", "trip": "Electronic LSI"}, {"brand": "Himel", "model": "HMW6-1250", "amp": 1000, "sc": "50 kA", "trip": "Electronic LSI"}, {"brand": "Himel", "model": "HMW6-1250", "amp": 1250, "sc": "50 kA", "trip": "Electronic LSI"}]
+;
+
+const RMUS = [
+  { id:"psec50",  label:"PSEC ABB 50 cm",    sub:"ABB ring main unit",         icon:"ti-bolt",                configs:["2+1","3+1","2+1+M","3+1+M"] },
+  { id:"psec375", label:"PSEC ABB 37.5 cm",  sub:"ABB compact RMU",            icon:"ti-bolt",                configs:["2+1+M","3+1+M"] },
+  { id:"murge",   label:"PSEC Murge",         sub:"Murge switchgear",           icon:"ti-circuit-switchboard", configs:["2+1","2+1+M","3+1","3+1+M"] },
+  { id:"lucy",    label:"Lucy",               sub:"Lucy switchgear",            icon:"ti-circuit-switchboard", configs:["2+1","2+1+M","3+1","3+1+M"] },
+  { id:"pral12",  label:"PRAL12",             sub:"190×190×80 cm compact · 12 kV rated",      icon:"ti-box",                 configs:["2+1","3+1","2+1+M"] },
+  { id:"pral24",  label:"PRAL24",             sub:"220×205×110 cm compact · 24 kV rated",     icon:"ti-box",                 configs:["2+1","3+1","2+1+M"] },
+];
+
+const TR_ICON_OIL = `<svg width="52" height="52" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="26" y="4" width="3" height="10" rx="1.5" fill="currentColor"/>
+  <rect x="35" y="4" width="3" height="10" rx="1.5" fill="currentColor"/>
+  <rect x="20" y="12" width="24" height="8" rx="3" fill="currentColor" opacity="0.85"/>
+  <rect x="12" y="20" width="40" height="28" rx="4" fill="currentColor" opacity="0.15" stroke="currentColor" stroke-width="2.5"/>
+  <rect x="4" y="24" width="6" height="20" rx="2" fill="currentColor" opacity="0.6"/>
+  <rect x="54" y="24" width="6" height="20" rx="2" fill="currentColor" opacity="0.6"/>
+  <line x1="17" y1="28" x2="47" y2="28" stroke="currentColor" stroke-width="1.5" opacity="0.35"/>
+  <line x1="17" y1="34" x2="47" y2="34" stroke="currentColor" stroke-width="1.5" opacity="0.35"/>
+  <line x1="17" y1="40" x2="47" y2="40" stroke="currentColor" stroke-width="1.5" opacity="0.35"/>
+  <rect x="8" y="50" width="48" height="5" rx="2" fill="currentColor"/>
+  <circle cx="18" cy="59" r="3.5" fill="currentColor"/>
+  <circle cx="46" cy="59" r="3.5" fill="currentColor"/>
+</svg>`;
+
+const TR_ICON_DRY = `<svg width="52" height="52" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="9" y="13" width="13" height="35" rx="6.5" fill="currentColor" opacity="0.15" stroke="currentColor" stroke-width="2.5"/>
+  <rect x="25.5" y="8" width="13" height="40" rx="6.5" fill="currentColor" opacity="0.25" stroke="currentColor" stroke-width="2.5"/>
+  <rect x="42" y="13" width="13" height="35" rx="6.5" fill="currentColor" opacity="0.15" stroke="currentColor" stroke-width="2.5"/>
+  <line x1="9" y1="23" x2="22" y2="23" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>
+  <line x1="9" y1="31" x2="22" y2="31" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>
+  <line x1="9" y1="39" x2="22" y2="39" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>
+  <line x1="25.5" y1="18" x2="38.5" y2="18" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>
+  <line x1="25.5" y1="26" x2="38.5" y2="26" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>
+  <line x1="25.5" y1="34" x2="38.5" y2="34" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>
+  <line x1="42" y1="23" x2="55" y2="23" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>
+  <line x1="42" y1="31" x2="55" y2="31" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>
+  <line x1="42" y1="39" x2="55" y2="39" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>
+  <rect x="5" y="50" width="54" height="6" rx="2" fill="currentColor"/>
+</svg>`;
+
+const TR_PRESENCE = [
+  { id:"with",    label:"With Transformer",    sub:"Includes integrated TR compartment", icon:"ti-plug-connected" },
+  { id:"without", label:"Without Transformer", sub:"Switching station only, no TR bay",   icon:"ti-plug-connected-x" },
+];
+
+const TR_BRANDS = ["Hitachi", "Elsewedy", "Egytrafo", "Powerline", "Matelec"];
+
+const SALES_SUPPORT_ENGINEERS = [
+  "Rana Hazem", "Fatma Ibrahim", "Sara Mohamed", "Yasmina Mohamed", "Reham ElHusseiny", "H.Hassan",
+  "Esraa Emara", "Merna Magdy", "Mayar Hamdy", "Mariam Yasser", "Amr Fouad", "Mohamed Tamer",
+];
+
+const SALES_PEOPLE = [
+  { name:"Ali Kamal",             mobile:"0100 000 2147", email:"ali.kamal@powerline.com.eg" },
+  { name:"Ehab Magdy",            mobile:"0106 486 0832", email:"ehab.magdy@powerline.com.eg" },
+  { name:"Alaa Essam",            mobile:"0100 444 7445", email:"alaa.essam@powerline.com.eg" },
+  { name:"Ahmed Behiry",          mobile:"0111 090 9303", email:"a.bahiry@powerline.com.eg" },
+  { name:"Mai Metwally",          mobile:"0122 349 2317", email:"mai.metwally@powerline.com.eg" },
+  { name:"Mohamed Yahia",         mobile:"0106 098 0263", email:"mohamed.yahia@powerline.com.eg" },
+  { name:"Menna-Allah Hassan",    mobile:"0102 621 9415", email:"menna.hassan@powerline.com.eg" },
+  { name:"Mahmoud Abdelrahman",   mobile:"0102 723 4124", email:"mahmoud.abdelrahman@powerline.com.eg" },
+  { name:"Salma Samy",            mobile:"0102 411 4462", email:"salma.samy@powerline.com.eg" },
+  { name:"Shady Sayed",           mobile:"0109 659 9179", email:"shady.sayed@powerline.com.eg" },
+  { name:"Aya Wael",              mobile:"0105 009 4130", email:"aya.moustafa@powerline.com.eg" },
+  { name:"Ramez Hany",            mobile:"0106 909 0657", email:"ramez.hani@powerline.com.eg" },
+];
+
+const TR_TYPES = [
+  { id:"dry", label:"Dry Type", sub:"Cast-resin, air-cooled transformer", icon:TR_ICON_DRY },
+  { id:"oil", label:"Oil Type",  sub:"Oil-immersed, liquid-cooled transformer", icon:TR_ICON_OIL },
+];
+
+const TR_CONNECTIONS = [
+  { id:"stepup",   label:"Step-Up",   sub:"Primary 0.4 kV → Secondary MV", icon:"ti-arrow-up" },
+  { id:"stepdown", label:"Step-Down", sub:"Primary MV → Secondary 0.4 kV", icon:"ti-arrow-down" },
+];
+
+const MV_VOLTAGES = ["3.3","6.6","11","22"];
+const TR_RATINGS = [50,63,80,100,125,160,200,250,300,400,500,630,800,1000,1250,1500,1600,2000];
+
+const LV_PANELS = [
+  { id:"175", label:"LV panel 175 cm", sub:"Empty distance: 136 cm · suits 5ST-A only",  emptyMm:1360, series:["5ST"] },
+  { id:"210", label:"LV panel 210 cm", sub:"Empty distance: 171 cm · suits 5ST / 10ST", emptyMm:1710, series:["5ST","10ST"] },
+  { id:"230", label:"LV panel 230 cm", sub:"Empty distance: 191 cm · suits 16ST",       emptyMm:1910, series:["16ST"] },
+  { id:"1400", label:"LV panel 1400 mm", sub:"Fixed size · Incoming Only configuration", emptyMm:1400, series:["5ST","10ST","16ST"] },
+  { id:"any", label:"Any / not specified", sub:"Show all regardless of LV panel",        emptyMm:null, series:["5ST","10ST","16ST"] },
+];
+
+const STD_BREAKERS = [
+  { id:"xt1", label:"XT1", widthMm:76  },
+  { id:"xt2", label:"XT2", widthMm:90  },
+  { id:"xt3", label:"XT3", widthMm:105 },
+  { id:"xt4", label:"XT4", widthMm:105 },
+  { id:"xt5", label:"XT5", widthMm:140 },
+  { id:"xt6", label:"XT6", widthMm:209 },
+  { id:"xt7", label:"XT7", widthMm:210 },
+];
+
+const EEHC_ITEMS = [
+  { id:"eehc",   label:"EEHC Standard",  sub:"60 mm gaps between breakers · 20 mm between Switch Fuse units", icon:"ti-certificate" },
+  { id:"noeehc", label:"No EEHC Spacing", sub:"Direct zero-clearance component density",                      icon:"ti-certificate-off" },
+];
+
+const LV_CONFIGS = [
+  { id:"incoming", label:"Incoming Only",          sub:"Emax 1.2 / Emax 2.2 / Emax 4.2 + XT1–XT7", icon:"ti-arrow-bar-to-right" },
+  { id:"inout",    label:"Incoming & Outgoing",     sub:"XT1–XT7 + Switch Fuse",                    icon:"ti-arrows-left-right" },
+];
+
+const LV_MODES = [
+  { id:"sizing",    label:"Sizing",    sub:"Physical dimensions only — no ampere/brand data", icon:"ti-ruler-2" },
+  { id:"technical", label:"Technical", sub:"Full catalog spec for the technical offer BOM",   icon:"ti-file-text" },
+];
+
+const PROTECTION_TYPES = [
+  { id:"cb",         label:"Circuit Breaker", sub:"XT1–XT7 standard breakers",          icon:"ti-circuit-switch-open" },
+  { id:"switchfuse", label:"Switch Fuse",     sub:"Switch-disconnector + fuse links",   icon:"ti-bolt-off" },
+];
+
+const SWITCHFUSE_AMPS = [160, 250, 400, 630];
+const SWITCHFUSE_WIDTH = { 160:500, 250:105, 400:105, 630:105 };
+let switchFuseItems = []; // { amp, qty }
+
+const MCCB_WIDTH_MAP = { "XT1":76, "XT2":90, "XT3":105, "XT4":105, "XT5":140, "XT6":209, "XT7":210,
+  "HMW1":76, "HMW2":105, "HMW3":140, "HMW4":140, "HMW5":209, "HMW6":210 };
+
+function mccbWidthMm(model, amp) {
+  if (model === "Switch Fuse") return SWITCHFUSE_WIDTH[Number(amp)] || 0;
+  if (model === "Fuse Link (Set of 3)") return 0;
+  const m = model.match(/^(XT\d|HMW\d)/);
+  return m ? (MCCB_WIDTH_MAP[m[1]] || 0) : 0;
+}
+
+const METERING_DATABASE = [
+  { trRating:50,   incoming:"100 A MCCB",  amp:100,  type:"MCCB", ct:"3 × CT 100/5",  brand:"ABB", model:"XT1S 160",    flc:72,   trip:"TMD" },
+  { trRating:100,  incoming:"160 A MCCB",  amp:160,  type:"MCCB", ct:"3 × CT 150/5",  brand:"ABB", model:"XT1S 160",    flc:144,  trip:"TMD" },
+  { trRating:160,  incoming:"250 A MCCB",  amp:250,  type:"MCCB", ct:"3 × CT 250/5",  brand:"ABB", model:"XT4S 250",    flc:231,  trip:"TMA / Ekip DIP LS/I" },
+  { trRating:200,  incoming:"320 A MCCB",  amp:320,  type:"MCCB", ct:"3 × CT 300/5",  brand:"ABB", model:"XT5H 400",    flc:289,  trip:"TMA / Ekip DIP LS/I" },
+  { trRating:250,  incoming:"400 A MCCB",  amp:400,  type:"MCCB", ct:"3 × CT 400/5",  brand:"ABB", model:"XT5H 400",    flc:361,  trip:"TMA / Ekip DIP LS/I" },
+  { trRating:315,  incoming:"500 A MCCB",  amp:500,  type:"MCCB", ct:"3 × CT 500/5",  brand:"ABB", model:"XT5H 630",    flc:455,  trip:"Ekip DIP LS/I" },
+  { trRating:400,  incoming:"630 A MCCB",  amp:630,  type:"MCCB", ct:"3 × CT 600/5",  brand:"ABB", model:"XT5H 630",    flc:577,  trip:"Ekip DIP LS/I" },
+  { trRating:500,  incoming:"800 A MCCB",  amp:800,  type:"MCCB", ct:"3 × CT 800/5",  brand:"ABB", model:"XT6S 800",    flc:722,  trip:"Ekip DIP LS/I" },
+  { trRating:630,  incoming:"1000 A MCCB", amp:1000, type:"MCCB", ct:"3 × CT 1000/5", brand:"ABB", model:"XT7S 1250",   flc:909,  trip:"Ekip DIP LS/I" },
+  { trRating:800,  incoming:"1250 A MCCB", amp:1250, type:"MCCB", ct:"3 × CT 1200/5", brand:"ABB", model:"XT7S 1250",   flc:1155, trip:"Ekip DIP LS/I" },
+  { trRating:1000, incoming:"1600 A ACB",  amp:1600, type:"ACB",  ct:"3 × CT 1500/5", brand:"ABB", model:"Emax 2 E2.2", flc:1443, trip:"Ekip Touch LI" },
+  { trRating:1250, incoming:"2000 A ACB",  amp:2000, type:"ACB",  ct:"3 × CT 2000/5", brand:"ABB", model:"Emax 2 E2.2", flc:1804, trip:"Ekip Touch LI" },
+  { trRating:1600, incoming:"2500 A ACB",  amp:2500, type:"ACB",  ct:"3 × CT 2500/5", brand:"ABB", model:"Emax 2 E4.2", flc:2309, trip:"Ekip Touch LI" },
+  { trRating:2000, incoming:"3200 A ACB",  amp:3200, type:"ACB",  ct:"3 × CT 4000/5", brand:"ABB", model:"Emax 2 E4.2", flc:2887, trip:"Ekip Touch LI" },
+  { trRating:2500, incoming:"4000 A ACB",  amp:4000, type:"ACB",  ct:"3 × CT 4000/5", brand:"ABB", model:"Emax 2 E6.2", flc:3608, trip:"Ekip Touch LI" },
+];
+const METERING_COMMON = { ammeters:3, voltmeter:1, voltSelector:"7 Position", ampSelector:"3 Position", kwhSpace:1, lamps:"Set of 3", meteringType:"EEHC" };
+
+function getMeteringForRating(rating) {
+  const r = Number(rating);
+  if (!r) return null;
+  const match = METERING_DATABASE.find(m => m.trRating >= r);
+  return match || METERING_DATABASE[METERING_DATABASE.length - 1];
+}
+
+function recommendedMainIncomingId() {
+  const m = getMeteringForRating(sel.trRating);
+  if (!m) return null;
+  const xt = m.model.match(/^XT(\d)/);
+  if (xt) return "xt" + xt[1];
+  if (m.model.includes("E2.2")) return "emax22";
+  if (m.model.includes("E4.2")) return "emax42";
+  if (m.model.includes("E6.2")) return "emax42"; // largest available in the standard breaker list
+  return "emax12";
+}
+
+const CAP_STEP_RATED_525 = 25;    // nameplate rating per 25 kVAr step at 525V
+const CAP_STEP_EFFECTIVE_400 = 14.7; // actual delivered kVAr per step at 400V system voltage
+
+const PF_DATABASE = [
+  { min:0,    max:800,  steps:2, relay:"12-Step",
+    capCurrent:72,  mccbAmp:80,  abbModel:"XT2S 160", himelModel:"HMW1-160", trip:"TMA / Ekip DIP LS/I", contactors:2 },
+  { min:1000, max:1250, steps:4, relay:"12-Step",
+    capCurrent:144, mccbAmp:160, abbModel:"XT2S 160", himelModel:"HMW1-160", trip:"TMA / Ekip DIP LS/I", contactors:4 },
+  { min:1500, max:1600, steps:5, relay:"12-Step",
+    capCurrent:180, mccbAmp:180, abbModel:"XT4S 250", himelModel:"HMW2-250", trip:"TMA / Ekip DIP LS/I", contactors:5 },
+  { min:2000, max:2000, steps:7, relay:"12-Step",
+    capCurrent:252, mccbAmp:250, abbModel:"XT4S 250", himelModel:"HMW2-250", trip:"TMA / Ekip DIP LS/I", contactors:7 },
+];
+
+function getPfForRating(rating) {
+  const r = Number(rating);
+  if (!r) return null;
+  return PF_DATABASE.find(p => r >= p.min && r <= p.max) || null;
+}
+
+function pfEffectiveKvar(pf) {
+  return Math.round(pf.steps * CAP_STEP_EFFECTIVE_400 * 10) / 10;
+}
+
+function pfStepConfigLabel(pf) {
+  return `${pf.steps} × ${CAP_STEP_RATED_525} kVAr@525V (${CAP_STEP_EFFECTIVE_400} kVAr@400V each)`;
+}
+
+const INCOMING_ONLY_BREAKERS = [
+  { id:"emax12", label:"Emax 1.2", widthMm:210 },
+  { id:"emax22", label:"Emax 2.2", widthMm:276 },
+  { id:"emax42", label:"Emax 4.2", widthMm:384 },
+  ...STD_BREAKERS,
+];
+
+const INOUT_BREAKERS = [
+  ...STD_BREAKERS,
+];
+
+const ALL_BREAKERS = [...INCOMING_ONLY_BREAKERS, ...INOUT_BREAKERS.filter(b=>!INCOMING_ONLY_BREAKERS.some(x=>x.id===b.id))];
+
+const DESIGNS = [
+  { name:"P-CSS 5ST-A",  outer:"215×95×208",  lv:50,tr:156,inner:"195×85×199",  kg:1520,series:"5ST",  lvp:"175",
+    psec50:{"2+1":1,"3+1":1,"2+1+M":1,"3+1+M":1},psec375:{"2+1+M":0,"3+1+M":0},murge:{"2+1":1,"2+1+M":1,"3+1":1,"3+1+M":1},lucy:{"2+1":1,"2+1+M":1,"3+1":1,"3+1+M":1},pral12:{"2+1":1,"3+1":1,"2+1+M":1},pral24:{"2+0":0,"2+1+M":0,"3+1":0}},
+  { name:"P-CSS 5ST-C",  outer:"240×130×208", lv:50,tr:156,inner:"220×120×199", kg:1647,series:"5ST",  lvp:"210",
+    psec50:{"2+1":1,"3+1":1,"2+1+M":1,"3+1+M":1},psec375:{"2+1+M":1,"3+1+M":1},murge:{"2+1":1,"2+1+M":1,"3+1":1,"3+1+M":1},lucy:{"2+1":1,"2+1+M":1,"3+1":1,"3+1+M":1},pral12:{"2+0":0,"3+1":0,"2+1+M":0},pral24:{"2+1":0,"2+1+M":0,"3+1":0}},
+  { name:"P-CSS 10ST-I", outer:"240×95×218",  lv:50,tr:156,inner:"220×85×209",  kg:1647,series:"10ST", lvp:"210",
+    psec50:{"2+1":0,"3+1":0,"2+1+M":0,"3+1+M":0},psec375:{"2+1+M":0,"3+1+M":0},murge:{"2+1":0,"2+1+M":0,"3+1":0,"3+1+M":0},lucy:{"2+1":0,"2+1+M":0,"3+1":0,"3+1+M":0},pral12:{"2+1":1,"3+1":1,"2+1+M":1},pral24:{"2+1":0,"2+1+M":0,"3+1":0}},
+  { name:"P-CSS 10ST-K", outer:"240×140×226", lv:50,tr:180,inner:"220×130×216", kg:1837,series:"10ST", lvp:"210",
+    psec50:{"2+1":1,"3+1":1,"2+1+M":1,"3+1+M":1},psec375:{"2+1+M":1,"3+1+M":1},murge:{"2+1":1,"2+1+M":1,"3+1":1,"3+1+M":1},lucy:{"2+1":1,"2+1+M":1,"3+1":1,"3+1+M":1},pral12:{"2+1":0,"3+1":0,"2+1+M":0},pral24:{"2+1":0,"2+1+M":0,"3+1":0}},
+  { name:"P-CSS 16ST-U", outer:"260×95×226",  lv:50,tr:205,inner:"240×85×216",  kg:1948,series:"16ST", lvp:"230",
+    psec50:{"2+1":0,"3+1":0,"2+1+M":0,"3+1+M":0},psec375:{"2+1+M":0,"3+1+M":0},murge:{"2+1":1,"3+1":1,"2+1+M":1,"3+1+M":1},lucy:{"2+1":1,"3+1":1,"2+1+M":1,"3+1+M":1},pral12:{"2+1":1,"3+1":1,"2+1+M":1},pral24:{"2+1":0,"2+1+M":0,"3+1":0}},
+  { name:"P-CSS 16ST-V", outer:"260×130×238", lv:50,tr:205,inner:"240×120×228", kg:2040,series:"16ST", lvp:"230",
+    psec50:{"2+1":1,"3+1":1,"2+1+M":1,"3+1+M":1},psec375:{"2+1+M":1,"3+1+M":1},murge:{"2+1":1,"2+1+M":1,"3+1":1,"3+1+M":1},lucy:{"2+1":1,"2+1+M":1,"3+1":1,"3+1+M":1},pral12:{"2+1":0,"3+1":0,"2+1+M":0},pral24:{"2+1":1,"2+1+M":1,"3+1":1}},
+];
+
+let sel = { rmu:null, cfg:null, trPower:null, lv:null, iec:null, trType:null, trConn:null, trRating:null, primaryV:null, secondaryV:null, lvConfig:null, trPresence:null, smartType:null, lvMode:"sizing", includePf:false, meteringBrand:null, trBrand:null, protectionType:"cb", pfBrand:null, mainIncoming:null, mainIncomingBrand:null, projectName:"", customer:"", qtnNo:"", revisionNo:"", projectDate:"", optyNo:"", supportEngineer:"", salesManager:"", salesPerson:"" };
+let qtys = {}; 
+let customs = []; 
+let activeFilter = "all";
+let customIdCtr = 0;
+let mccbItems = [];
+let mccbIdCtr = 0;
+
+ALL_BREAKERS.forEach(b => qtys[b.id] = 0);
+
+function show(id){ document.getElementById(id).classList.remove("hidden"); }
+function hide(id){ document.getElementById(id).classList.add("hidden"); }
+
+function renderTrPresenceGrid() {
+  renderGrid("trpresence-grid", TR_PRESENCE, sel.trPresence, p=>`<div class="oi"><i class="ti ${p.icon}" aria-hidden="true"></i></div><div class="ot">${p.label}</div><div class="os">${p.sub}</div>`, selectTrPresence);
+}
+
+function selectTrPresence(id) {
+  sel.trPresence = id;
+  renderTrPresenceGrid();
+  const ratingBlock = document.getElementById("trf-rating-block");
+  const fieldsWrap = document.getElementById("trf-with-fields");
+
+  ratingBlock.classList.remove("hidden");
+
+  if (id === "without") {
+    sel.trType = null; sel.trConn = null;
+    sel.primaryV = null; sel.secondaryV = null;
+    fieldsWrap.classList.add("hidden");
+  } else {
+    fieldsWrap.classList.remove("hidden");
+  }
+
+  sel.trPower = trBand(sel.trRating);
+  autoSelectLv();
+  updateBreadcrumb();
+
+  const ready = id === "without" ? !!sel.trRating : (!!sel.trRating && !!sel.trConn);
+  if (ready) {
+    show("s4"); renderIecGrid();
+    ["s5"].forEach(hide);
+  } else {
+    ["s4","s5"].forEach(hide);
+  }
+  renderResults();
+}
+
+function renderTrTypeGrid() {
+  document.getElementById("trtype-grid").innerHTML = TR_TYPES.map(t=>`
+    <button class="opt opt-h${sel.trType===t.id?' active':''}" onclick="selectTrType('${t.id}')">
+      <div class="oi">${t.icon}</div>
+      <div class="ot-wrap"><div class="ot">${t.label}</div><div class="os">${t.sub}</div></div>
+    </button>`).join("");
+}
+
+function renderTrConnGrid() {
+  renderGrid("trconn-grid", TR_CONNECTIONS, sel.trConn, c=>`<div class="oi"><i class="ti ${c.icon}" aria-hidden="true"></i></div><div class="ot">${c.label}</div><div class="os">${c.sub}</div>`, selectTrConn);
+}
+
+function selectTrType(id) {
+  sel.trType = id;
+  renderTrTypeGrid();
+  updateBreadcrumb();
+}
+
+function selectTrConn(id) {
+  sel.trConn = id;
+  sel.primaryV = null; sel.secondaryV = null;
+  renderTrConnGrid();
+  renderPrimarySecondary();
+  autoSelectLv();
+  updateBreadcrumb();
+  if (sel.trRating) { show("s4"); renderIecGrid(); ["s5"].forEach(hide); }
+  renderResults();
+}
+
+function trBand(rating) {
+  const r = Number(rating);
+  if (!r) return null;
+  if (r <= 500) return "500";
+  if (r <= 1000) return "1000";
+  return "1500";
+}
+
+function populateTrRatingSelect() {
+  const s = document.getElementById("trrating-sel");
+  s.innerHTML = `<option value="">Select rating…</option>` +
+    TR_RATINGS.map(r=>`<option value="${r}"${String(sel.trRating)===String(r)?' selected':''}>${r} KVA</option>`).join("");
+}
+
+function populateTrBrandSelect() {
+  const s = document.getElementById("trbrand-sel");
+  s.innerHTML = `<option value="">Select brand…</option>` +
+    TR_BRANDS.map(b=>`<option value="${b}"${sel.trBrand===b?' selected':''}>${b}</option>`).join("");
+}
+
+function onTrBrandChange(v) {
+  sel.trBrand = v || null;
+  updateBreadcrumb();
+  renderResults();
+}
+
+const PROJECT_REQUIRED_FIELDS = [
+  { key:"projectName",      label:"Project name" },
+  { key:"customer",         label:"Customer" },
+  { key:"qtnNo",            label:"Quotation no." },
+  { key:"revisionNo",       label:"Revision no." },
+  { key:"optyNo",           label:"Opportunity no." },
+  { key:"projectDate",      label:"Date" },
+  { key:"supportEngineer",  label:"Sales support engineer" },
+  { key:"salesPerson",      label:"Sales person" },
+];
+
+function isProjectDataComplete() {
+  return PROJECT_REQUIRED_FIELDS.every(f => !!sel[f.key]);
+}
+
+function updateProjectStatus() {
+  const el = document.getElementById("proj-status");
+  if (!el) return;
+  const missing = PROJECT_REQUIRED_FIELDS.filter(f => !sel[f.key]);
+  if (missing.length) {
+    el.classList.remove("hidden");
+    el.innerHTML = `<i class="ti ti-alert-triangle" aria-hidden="true"></i> All project data fields are required — missing: ${missing.map(f=>f.label).join(", ")}`;
+  } else {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+  }
+}
+
+function onProjectFieldChange(field, value) {
+  sel[field] = value;
+  updateProjectStatus();
+  renderConfigSummary();
+}
+
+function populateProjectSelects() {
+  const engSel = document.getElementById("proj-support-eng");
+  if (engSel) {
+    engSel.innerHTML = `<option value="">— select —</option>` +
+      SALES_SUPPORT_ENGINEERS.map(n => `<option value="${n}"${sel.supportEngineer===n?' selected':''}>${n}</option>`).join("");
+  }
+  const personSel = document.getElementById("proj-sales-person");
+  const opts = `<option value="">— select —</option>` +
+    SALES_PEOPLE.map(p => `<option value="${p.name}">${p.name}</option>`).join("");
+  if (personSel) personSel.innerHTML = opts;
+
+  // Sales Manager is fixed to Ali Kamal
+  const manager = SALES_PEOPLE.find(p => p.name === "Ali Kamal");
+  if (manager) {
+    sel.salesManager = manager.name;
+    document.getElementById("proj-manager-phone").value = manager.mobile;
+    document.getElementById("proj-manager-email").value = manager.email;
+  }
+}
+
+function onSalesPersonChange(role, name) {
+  const person = SALES_PEOPLE.find(p => p.name === name);
+  if (role === "manager") {
+    sel.salesManager = name || "";
+    document.getElementById("proj-manager-phone").value = person ? person.mobile : "";
+    document.getElementById("proj-manager-email").value = person ? person.email : "";
+  } else {
+    sel.salesPerson = name || "";
+    document.getElementById("proj-person-phone").value = person ? person.mobile : "";
+    document.getElementById("proj-person-email").value = person ? person.email : "";
+  }
+  renderConfigSummary();
+  updateProjectStatus();
+}
+
+function getAllowedVoltages() {
+  if (sel.rmu === "pral12") {
+    return ["12"];
+  }
+  if (sel.rmu === "pral24") {
+    return ["24"];
+  }
+  return MV_VOLTAGES;
+}
+
+function renderPrimarySecondary() {
+  const pSel = document.getElementById("primaryv-sel");
+  const sSel = document.getElementById("secondaryv-sel");
+  const voltages = getAllowedVoltages();
+
+  if (sel.trConn === "stepup") {
+    pSel.disabled = true;
+    pSel.innerHTML = `<option value="0.4" selected>0.4 kV</option>`;
+    sel.primaryV = "0.4";
+    if (voltages.length === 1) sel.secondaryV = voltages[0];
+    sSel.disabled = voltages.length === 1;
+    sSel.innerHTML = `<option value="">Select secondary voltage…</option>` +
+      voltages.map(v=>`<option value="${v}"${sel.secondaryV===v?' selected':''}>${v} kV</option>`).join("");
+  } else if (sel.trConn === "stepdown") {
+    sSel.disabled = true;
+    sSel.innerHTML = `<option value="0.4" selected>0.4 kV</option>`;
+    sel.secondaryV = "0.4";
+    if (voltages.length === 1) sel.primaryV = voltages[0];
+    pSel.disabled = voltages.length === 1;
+    pSel.innerHTML = `<option value="">Select primary voltage…</option>` +
+      voltages.map(v=>`<option value="${v}"${sel.primaryV===v?' selected':''}>${v} kV</option>`).join("");
+  } else {
+    pSel.disabled = true; sSel.disabled = true;
+    pSel.innerHTML = `<option value="">Select step type first…</option>`;
+    sSel.innerHTML = `<option value="">Select step type first…</option>`;
+  }
+}
+
+function autoSelectLv() {
+  if (sel.lvConfig === "incoming") {
+    sel.lv = "1400";
+    return;
+  }
+  sel.lv = computeEffectiveLvPanel(); // null only if transformer rating not yet chosen
+}
+
+function onTrRatingChange(v) {
+  sel.trRating = v || null;
+  sel.trPower = trBand(sel.trRating);
+  sel.iec = null; sel.lvConfig = null;
+  autoSelectLv();
+  updateBreadcrumb();
+  const ready = sel.trPresence === "without" ? !!sel.trRating : (!!sel.trRating && !!sel.trConn);
+  if (ready) {
+    show("s4"); renderIecGrid();
+    ["s5"].forEach(hide);
+  } else {
+    ["s4","s5"].forEach(hide);
+  }
+  renderResults();
+}
+function onPrimaryChange(v) { sel.primaryV = v || null; updateBreadcrumb(); }
+function onSecondaryChange(v) { sel.secondaryV = v || null; updateBreadcrumb(); }
+
+const TR_BAND_RANK = { "500":1, "1000":2, "1500":3 };
+const BAND_LV_PANEL = { 1:"175", 2:"210", 3:"230" };
+
+function computeEffectiveLvPanel() {
+  // Fixed overrides — physically forced to 230 regardless of transformer size
+  if (sel.rmu === "pral24") return "230";
+  if (sel.rmu === "psec50" && sel.cfg === "2+1+M") return "230";
+  if (sel.rmu === "murge" && sel.cfg === "2+1+M") return "230";
+  if (sel.rmu === "lucy" && sel.cfg === "2+1+M") return "230";
+  if (sel.rmu === "psec375" && sel.cfg === "3+1+M") return "230";
+
+  if (!sel.trPower) return null;
+  let rank = TR_BAND_RANK[sel.trPower] || 1;
+  const { total } = totalUsedMm();
+
+  // Start at the minimum band required by the transformer rating; escalate if either:
+  //  (a) no P-CSS design at that band is physically compatible with this RMU/config, or
+  //  (b) the actual breaker/switch fuse footprint doesn't fit that band's LV depth.
+  while (rank < 3) {
+    const panelId = BAND_LV_PANEL[rank];
+    const panel = LV_PANELS.find(p => p.id === panelId);
+    const hasCompatibleDesign = DESIGNS.some(d => d.lvp === panelId && checkDesignCompatibility(d));
+    const fits = !panel || total <= panel.emptyMm;
+    if (hasCompatibleDesign && fits) break;
+    rank++;
+  }
+  return BAND_LV_PANEL[rank];
+}
+
+function getAllowedLvPanels() {
+  if (sel.lvConfig === "incoming") return ["1400"];
+  const panel = computeEffectiveLvPanel();
+  if (!panel) return ["175", "210", "230", "any"];
+  return [panel, "any"];
+}
+
+function getActiveBreakers() {
+  return sel.lvConfig === "incoming" ? INCOMING_ONLY_BREAKERS : INOUT_BREAKERS;
+}
+
+function totalUsedMm() {
+  let total = 0, count = 0;
+  const useCatalog = sel.lvConfig === "inout" && sel.lvMode === "technical";
+  const inoutSizing = sel.lvConfig === "inout" && sel.lvMode === "sizing";
+
+  if (useCatalog) {
+    mccbItems.filter(i => !i.excludeFromSizing).forEach(i => { total += mccbWidthMm(i.model, i.amp) * i.qty; count += i.qty; });
+  } else {
+    getActiveBreakers().forEach(b => { total += qtys[b.id] * b.widthMm; count += qtys[b.id]; });
+    if (inoutSizing) {
+      switchFuseItems.forEach(i => { total += (SWITCHFUSE_WIDTH[i.amp] || 0) * i.qty; count += i.qty; });
+      if (sel.mainIncoming) {
+        const mb = INCOMING_ONLY_BREAKERS.find(x => x.id === sel.mainIncoming);
+        if (mb) { total += mb.widthMm; count += 1; }
+      }
+    }
+    customs.forEach(c => { total += c.qty * c.widthMm; count += c.qty; });
+  }
+
+  let stdGaps = 0, swGaps = 0;
+  if (sel.iec === "eehc" && count > 0) {
+    const numGaps = count + 1;
+    const switchFuseQty = inoutSizing ? switchFuseItems.reduce((s,i)=>s+i.qty, 0) : 0;
+    swGaps = Math.min(switchFuseQty, numGaps);
+    stdGaps = numGaps - swGaps;
+    total += stdGaps * 60 + swGaps * 20;
+  }
+  return { total, count, stdGaps, swGaps };
+}
+
+function emptyMm() {
+  const lv = LV_PANELS.find(p => p.id === sel.lv);
+  return lv ? lv.emptyMm : null;
+}
+
+function updateSpaceBar() {
+  autoSelectLv(); // recompute from scratch each time — escalates only if the current footprint no longer fits, de-escalates if it shrinks back
+  const wrap = document.getElementById("space-wrap");
+  const em = emptyMm();
+  if (!em) { 
+    wrap.innerHTML = `<div class="no-results" style="padding: 1rem; border: 1px dashed var(--color-border); border-radius: 12px;">Select an explicit LV Panel layout sizing to calculate spatial clearance margins.</div>`; 
+    return; 
+  }
+  const { total, count, stdGaps, swGaps } = totalUsedMm();
+  const pct = Math.min((total / em) * 100, 100);
+  const remain = em - total;
+  const cls = remain < 0 ? "over" : remain < em * 0.1 ? "warn" : "ok";
+  const barCls = remain < 0 ? "space-over" : remain < em * 0.1 ? "space-warn" : "space-ok";
+  let gapNote = "";
+  if (sel.iec === "eehc" && count > 0) {
+    const parts = [];
+    if (stdGaps > 0) parts.push(`${stdGaps}× 60mm`);
+    if (swGaps > 0) parts.push(`${swGaps}× 20mm switch fuse`);
+    gapNote = ` (incl. ${parts.join(" + ")} EEHC gaps)`;
+  } else if (count > 0) {
+    gapNote = ` (no-EEHC, 0mm gaps)`;
+  }
+  
+  wrap.innerHTML = `
+    <div class="space-bar-label">
+      <span>Space Allocated: <strong>${total} mm</strong> / ${em} mm${gapNote}</span>
+      <span>Remaining: <strong>${remain} mm</strong></span>
+    </div>
+    <div class="space-bar-bg"><div class="space-bar-fill ${barCls}" style="width:${pct}%"></div></div>
+    <div class="space-note ${cls}">${remain < 0 ? '⚠ Structural Deficit! Exceeds limit by ' + Math.abs(remain) + ' mm.' : remain === 0 ? '✔ Max Utilization Reached.' : '✔ ' + remain + ' mm remaining structural buffer.'}</div>`;
+}
+
+function renderCbTable() {
+  const hdr = document.getElementById("cb-table-hdr");
+  if (hdr) hdr.textContent = sel.lvConfig === "incoming" ? "Incoming breaker" : "Outgoing breakers";
+  const rows = getActiveBreakers().map(b => `
+    <tr>
+      <td style="font-weight:600">${b.label}</td>
+      <td style="color:var(--color-text-secondary)">${b.widthMm} mm</td>
+      <td>
+        <div class="qty-ctrl">
+          <button class="qty-btn" onclick="changeQty('${b.id}',-1)">−</button>
+          <span class="qty-val" id="qty-${b.id}">${qtys[b.id]}</span>
+          <button class="qty-btn" onclick="changeQty('${b.id}',1)">+</button>
+        </div>
+      </td>
+      <td style="color:var(--color-text-secondary);font-size:11px; text-align:right;">${qtys[b.id]>0 ? qtys[b.id]+'× '+b.widthMm+' = '+(qtys[b.id]*b.widthMm)+' mm' : '—'}</td>
+    </tr>`).join("");
+  document.getElementById("cb-table").innerHTML = `
+    <thead><tr>
+      <th>Type</th><th>Dimension</th><th>Qty Selection</th><th style="text-align:right;">Total Line</th>
+    </tr></thead><tbody>${rows}</tbody>`;
+  renderCustomList();
+  updateSpaceBar();
+}
+
+function changeQty(id, delta) {
+  if (sel.lvConfig === "incoming") {
+    if (delta > 0) {
+      getActiveBreakers().forEach(b => { qtys[b.id] = 0; });
+      qtys[id] = 1;
+    } else {
+      qtys[id] = 0;
+    }
+    renderCbTable();
+    updateSpaceBar();
+    renderResults();
+    return;
+  }
+
+  qtys[id] = Math.max(0, (qtys[id]||0) + delta);
+  const el = document.getElementById("qty-"+id);
+  if (el) el.textContent = qtys[id];
+  const row = el ? el.closest("tr") : null;
+  if (row) {
+    const cells = row.querySelectorAll("td");
+    const b = ALL_BREAKERS.find(x=>x.id===id);
+    cells[3].textContent = qtys[id]>0 ? qtys[id]+'× '+b.widthMm+' = '+(qtys[id]*b.widthMm)+' mm' : '—';
+  }
+  updateSpaceBar();
+  renderResults();
+}
+
+function addCustom() {
+  const name = document.getElementById("cust-name").value.trim();
+  const w = parseInt(document.getElementById("cust-w").value);
+  if (!name || isNaN(w) || w < 1) return;
+  customs.push({ id:"c"+(++customIdCtr), label:name, widthMm:w, qty:1 });
+  document.getElementById("cust-name").value = "";
+  document.getElementById("cust-w").value = "";
+  renderCustomList();
+  updateSpaceBar();
+  renderResults();
+}
+
+function changeCustomQty(id, delta) {
+  const c = customs.find(x=>x.id===id);
+  if (!c) return;
+  c.qty = Math.max(0, c.qty + delta);
+  if (c.qty === 0) customs = customs.filter(x=>x.id!==id);
+  renderCustomList();
+  updateSpaceBar();
+  renderResults();
+}
+
+function renderCustomList() {
+  const el = document.getElementById("custom-list");
+  if (!customs.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<table class="cb-table"><thead><tr><th>Name</th><th>Width</th><th>Qty</th><th style="text-align:right;">Subtotal</th></tr></thead><tbody>`
+    + customs.map(c=>`<tr>
+      <td style="font-weight:600">${c.label}</td>
+      <td style="color:var(--color-text-secondary)">${c.widthMm} mm</td>
+      <td><div class="qty-ctrl">
+        <button class="qty-btn" onclick="changeCustomQty('${c.id}',-1)">−</button>
+        <span class="qty-val">${c.qty}</span>
+        <button class="qty-btn" onclick="changeCustomQty('${c.id}',1)">+</button>
+      </div></td>
+      <td style="color:var(--color-text-secondary);font-size:11px;text-align:right;">${c.qty+'× '+c.widthMm+' = '+(c.qty*c.widthMm)+' mm'}</td>
+    </tr>`).join("")
+    + `</tbody></table>`;
+}
+
+function populateMccbBrands() {
+  const brands = [...new Set(MCCB_CATALOG.map(r => r.brand))];
+  const sel = document.getElementById("mccb-brand");
+  sel.innerHTML = `<option value="">Select brand…</option>` +
+    brands.map(b => `<option value="${b}">${b}</option>`).join("");
+}
+
+function mccbSplitTrips(tripStr) {
+  const parts = tripStr.split(" / ").map(t => t.trim());
+  if (parts.length <= 1) return parts;
+  const firstWords = parts[0].split(" ");
+  const sharedPrefix = firstWords.slice(0, -1).join(" "); // e.g. "Ekip DIP" from "Ekip DIP LSI"
+  return parts.map((p, idx) => {
+    if (idx === 0) return p;
+    // A bare suffix like "LSIG" (no spaces) inherits the shared prefix from the first option
+    if (!p.includes(" ") && sharedPrefix) return sharedPrefix + " " + p;
+    return p;
+  });
+}
+
+function onMccbBrandChange(brand) {
+  const ampSel = document.getElementById("mccb-amp");
+  const scSel = document.getElementById("mccb-sc");
+  const tripSel = document.getElementById("mccb-trip");
+  const modelSel = document.getElementById("mccb-model");
+
+  scSel.innerHTML = `<option value="">Select ampere first…</option>`; scSel.disabled = true;
+  tripSel.innerHTML = `<option value="">Select SC level first…</option>`; tripSel.disabled = true;
+  modelSel.innerHTML = `<option value="">Auto from previous selections…</option>`; modelSel.disabled = true;
+
+  if (!brand) {
+    ampSel.innerHTML = `<option value="">Select brand first…</option>`;
+    ampSel.disabled = true;
+    return;
+  }
+  const amps = [...new Set(MCCB_CATALOG.filter(r => r.brand === brand).map(r => r.amp))].sort((a,b)=>a-b);
+  ampSel.innerHTML = `<option value="">Select ampere…</option>` +
+    amps.map(a => `<option value="${a}">${a} A</option>`).join("");
+  ampSel.disabled = false;
+}
+
+function onMccbAmpChange(amp) {
+  const brand = document.getElementById("mccb-brand").value;
+  const scSel = document.getElementById("mccb-sc");
+  const tripSel = document.getElementById("mccb-trip");
+  const modelSel = document.getElementById("mccb-model");
+
+  tripSel.innerHTML = `<option value="">Select SC level first…</option>`; tripSel.disabled = true;
+  modelSel.innerHTML = `<option value="">Auto from previous selections…</option>`; modelSel.disabled = true;
+
+  if (!amp) {
+    scSel.innerHTML = `<option value="">Select ampere first…</option>`;
+    scSel.disabled = true;
+    return;
+  }
+  const scs = [...new Set(MCCB_CATALOG.filter(r => r.brand === brand && String(r.amp) === String(amp)).map(r => r.sc))];
+  scSel.innerHTML = `<option value="">Select SC level…</option>` +
+    scs.map(s => `<option value="${s}">${s}</option>`).join("");
+  scSel.disabled = false;
+}
+
+function onMccbScChange(sc) {
+  const brand = document.getElementById("mccb-brand").value;
+  const amp = document.getElementById("mccb-amp").value;
+  const tripSel = document.getElementById("mccb-trip");
+  const modelSel = document.getElementById("mccb-model");
+
+  modelSel.innerHTML = `<option value="">Auto from previous selections…</option>`; modelSel.disabled = true;
+
+  if (!sc) {
+    tripSel.innerHTML = `<option value="">Select SC level first…</option>`;
+    tripSel.disabled = true;
+    return;
+  }
+  const rows = MCCB_CATALOG.filter(r => r.brand === brand && String(r.amp) === String(amp) && r.sc === sc);
+  const trips = [...new Set(rows.flatMap(r => mccbSplitTrips(r.trip)))];
+  tripSel.innerHTML = `<option value="">Select trip unit…</option>` +
+    trips.map(t => `<option value="${t}">${t}</option>`).join("");
+  tripSel.disabled = false;
+}
+
+function onMccbTripChange(trip) {
+  const brand = document.getElementById("mccb-brand").value;
+  const amp = document.getElementById("mccb-amp").value;
+  const sc = document.getElementById("mccb-sc").value;
+  const modelSel = document.getElementById("mccb-model");
+
+  if (!trip) {
+    modelSel.innerHTML = `<option value="">Auto from previous selections…</option>`;
+    modelSel.disabled = true;
+    return;
+  }
+  const rows = MCCB_CATALOG.filter(r => r.brand === brand && String(r.amp) === String(amp) && r.sc === sc && mccbSplitTrips(r.trip).includes(trip));
+  const models = [...new Set(rows.map(r => r.model))];
+
+  if (models.length === 1) {
+    modelSel.innerHTML = `<option value="${models[0]}" selected>${models[0]}</option>`;
+    modelSel.disabled = true;
+  } else if (models.length > 1) {
+    modelSel.innerHTML = `<option value="">Select circuit breaker…</option>` +
+      models.map(m => `<option value="${m}">${m}</option>`).join("");
+    modelSel.disabled = false;
+  } else {
+    modelSel.innerHTML = `<option value="">No match found</option>`;
+    modelSel.disabled = true;
+  }
+}
+
+function addMccbItem() {
+  const brand = document.getElementById("mccb-brand").value;
+  const model = document.getElementById("mccb-model").value;
+  const amp = document.getElementById("mccb-amp").value;
+  const sc = document.getElementById("mccb-sc").value;
+  const trip = document.getElementById("mccb-trip").value;
+  const qty = Math.max(1, parseInt(document.getElementById("mccb-qty").value) || 1);
+
+  if (!brand || !amp || !sc || !trip || !model) return;
+
+  const existing = mccbItems.find(i => i.brand===brand && i.model===model && i.amp===amp && i.sc===sc && i.trip===trip);
+  if (existing) {
+    existing.qty += qty;
+  } else {
+    mccbItems.push({ id: "mccb"+(mccbIdCtr++), brand, model, amp, sc, trip, qty });
+  }
+  renderMccbList();
+  updateSpaceBar();
+  renderResults();
+}
+
+function changeMccbQty(id, delta) {
+  const item = mccbItems.find(i => i.id === id);
+  if (!item) return;
+  item.qty = Math.max(0, item.qty + delta);
+  if (item.qty === 0) mccbItems = mccbItems.filter(i => i.id !== id);
+
+  if (item.model === "Switch Fuse") {
+    const fuse = mccbItems.find(i => i.brand === item.brand && i.model === "Fuse Link (Set of 3)" && i.amp === item.amp);
+    if (item.qty === 0) {
+      mccbItems = mccbItems.filter(i => !(i.brand === item.brand && i.model === "Fuse Link (Set of 3)" && i.amp === item.amp));
+    } else if (fuse) {
+      fuse.qty = item.qty * 3;
+    }
+  }
+
+  renderMccbList();
+  updateSpaceBar();
+  renderResults();
+}
+
+function addTechSwitchFuse(amp) {
+  const brand = "—";
+  const ampStr = String(amp);
+
+  let sf = mccbItems.find(i => i.brand === brand && i.model === "Switch Fuse" && i.amp === ampStr);
+  if (sf) { sf.qty += 1; } else {
+    sf = { id: "mccb"+(mccbIdCtr++), brand, model: "Switch Fuse", amp: ampStr, sc: "—", trip: "—", qty: 1 };
+    mccbItems.push(sf);
+  }
+
+  let fuse = mccbItems.find(i => i.brand === brand && i.model === "Fuse Link (Set of 3)" && i.amp === ampStr);
+  if (fuse) { fuse.qty = sf.qty * 3; } else {
+    mccbItems.push({ id: "mccb"+(mccbIdCtr++), brand, model: "Fuse Link (Set of 3)", amp: ampStr, sc: "—", trip: "—", qty: sf.qty * 3 });
+  }
+
+  renderMccbList();
+  updateSpaceBar();
+  renderResults();
+}
+
+function renderTechSwitchFuseAmpRow() {
+  const el = document.getElementById("techsf-amp-row");
+  if (!el) return;
+  el.innerHTML = SWITCHFUSE_AMPS.map(a => `<button class="sf-amp-btn" onclick="addTechSwitchFuse(${a})">${a} A</button>`).join("");
+}
+
+function removeMccbItem(id) {
+  const item = mccbItems.find(i => i.id === id);
+  mccbItems = mccbItems.filter(i => i.id !== id);
+  if (item && item.model === "Switch Fuse") {
+    mccbItems = mccbItems.filter(i => !(i.brand === item.brand && i.model === "Fuse Link (Set of 3)" && i.amp === item.amp));
+  }
+  renderMccbList();
+  updateSpaceBar();
+  renderResults();
+}
+
+function renderMccbList() {
+  const el = document.getElementById("mccb-list");
+  if (!el) return;
+  if (!mccbItems.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<table class="cb-table"><thead><tr><th>Brand</th><th>Ampere</th><th>SC Level</th><th>Trip Unit</th><th>Circuit Breaker</th><th>Qty</th><th></th></tr></thead><tbody>`
+    + mccbItems.map(i => {
+        const locked = i.isMetering || i.isMainIncoming || i.model === "Fuse Link (Set of 3)";
+        const badge = i.isMeteringAccessory
+          ? ' <span class="tag" style="margin-left:4px;">Metering accessory · excl. sizing</span>'
+          : (i.isMainIncoming ? ' <span class="tag" style="margin-left:4px;">Main incoming</span>' : '');
+        return `<tr>
+        <td style="font-weight:600">${i.brand}${badge}</td>
+        <td>${i.amp} A</td>
+        <td style="color:var(--color-text-secondary)">${i.sc}</td>
+        <td style="color:var(--color-text-secondary)">${i.trip}</td>
+        <td>${i.model}</td>
+        <td><div class="qty-ctrl">
+          <button class="qty-btn" onclick="changeMccbQty('${i.id}',-1)" ${locked ? 'disabled' : ''}>−</button>
+          <span class="qty-val">${i.qty}</span>
+          <button class="qty-btn" onclick="changeMccbQty('${i.id}',1)" ${locked ? 'disabled' : ''}>+</button>
+        </div></td>
+        <td>${locked ? '' : `<button class="qty-btn" onclick="removeMccbItem('${i.id}')" title="Remove"><i class="ti ti-x" aria-hidden="true"></i></button>`}</td>
+      </tr>`;
+      }).join("")
+    + `</tbody></table>`;
+}
+
+function updateBreadcrumb() {
+  const bc = document.getElementById("bc");
+  const parts = [];
+  if (sel.projectName) parts.push(sel.projectName);
+  if (sel.customer) parts.push(sel.customer);
+  if (sel.qtnNo) parts.push(sel.qtnNo);
+  if (sel.optyNo) parts.push(sel.optyNo);
+  if (sel.trPresence === "without") parts.push("No Transformer");
+  if (sel.trBrand) parts.push(sel.trBrand);
+  if (sel.trType) { const t=TR_TYPES.find(x=>x.id===sel.trType); parts.push(t.label); }
+  if (sel.trConn) { const c=TR_CONNECTIONS.find(x=>x.id===sel.trConn); parts.push(c.label); }
+  if (sel.trRating) parts.push(sel.trRating+" KVA");
+  if (sel.primaryV && sel.secondaryV) parts.push(sel.primaryV+"→"+sel.secondaryV+" kV");
+  if (sel.rmu)  { const r=RMUS.find(x=>x.id===sel.rmu); parts.push(r.label); }
+  if (sel.cfg)  parts.push(sel.cfg);
+  if (sel.smartType) { const s=SMART_TYPES.find(x=>x.id===sel.smartType); parts.push(s.label); }
+  if (sel.lv)   { const l=LV_PANELS.find(p=>p.id===sel.lv); parts.push(l.label); }
+  if (sel.iec)  parts.push(sel.iec==="eehc"?"EEHC Standard":"No EEHC Layout");
+  if (sel.lvConfig) { const c=LV_CONFIGS.find(x=>x.id===sel.lvConfig); parts.push(c.label); }
+  if (sel.includePf) parts.push("EEHC Fixed P.F.");
+  if (!parts.length) { bc.innerHTML = "Select specifications below to begin configuration..."; return; }
+  bc.innerHTML = parts.map(p=>`<span class="crumb">${p}</span>`).join(`<i class="ti ti-chevron-right" style="font-size:11px;color:var(--color-text-secondary)" aria-hidden="true"></i>`);
+}
+
+function selectRmu(id) {
+  sel.rmu=id; sel.cfg=null; sel.trPower=null; sel.lv=null; sel.iec=null; sel.lvConfig=null; sel.trPresence=null; sel.smartType=null;
+  renderGrid("rmu-grid", RMUS, id, r=>`<div class="oi"><i class="ti ${r.icon}" aria-hidden="true"></i></div><div class="ot">${r.label}</div><div class="os">${r.sub}</div>`, selectRmu);
+  updateBreadcrumb();
+  show("s2"); renderCfgGrid();
+  ["s-smart","s-trf","s4","s5"].forEach(hide);
+  renderResults();
+}
+
+function isSmartEligible() {
+  return SMART_ELIGIBLE_RMUS.includes(sel.rmu);
+}
+
+function renderSmartGrid() {
+  renderGrid("smart-grid", SMART_TYPES, sel.smartType, s=>`<div class="oi"><i class="ti ${s.icon}" aria-hidden="true"></i></div><div class="ot">${s.label}</div><div class="os">${s.sub}</div>`, selectSmartType);
+}
+
+function selectSmartType(id) {
+  sel.smartType = id;
+  renderSmartGrid();
+  updateBreadcrumb();
+  show("s-trf");
+  ["s4","s5"].forEach(hide);
+  renderResults();
+}
+
+function selectCfg(c) {
+  sel.cfg=c; sel.trPower=null; sel.lv=null; sel.iec=null; sel.lvConfig=null; sel.trPresence=null;
+  sel.trType=null; sel.trConn=null; sel.trRating=null; sel.primaryV=null; sel.secondaryV=null; sel.trBrand=null;
+  sel.smartType=null;
+  const cfgs = RMUS.find(r=>r.id===sel.rmu).configs.map(x=>({id:x,label:x}));
+  renderGrid("cfg-grid", cfgs, c, r=>`<div class="oi" style="font-size:16px"><i class="ti ti-topology-star-3" aria-hidden="true"></i></div><div class="ot">${r.label}</div>`, selectCfg);
+  updateBreadcrumb();
+
+  renderTrPresenceGrid();
+  document.getElementById("trf-rating-block").classList.add("hidden");
+  document.getElementById("trf-with-fields").classList.add("hidden");
+  renderTrTypeGrid(); renderTrConnGrid(); populateTrRatingSelect(); populateTrBrandSelect(); renderPrimarySecondary();
+
+  if (isSmartEligible()) {
+    renderSmartGrid();
+    show("s-smart");
+    ["s-trf","s4","s5"].forEach(hide);
+  } else {
+    show("s-trf");
+    ["s-smart","s4","s5"].forEach(hide);
+  }
+  renderResults();
+}
+
+function selectIec(id) {
+  sel.iec=id;
+  renderGrid("iec-grid", EEHC_ITEMS, id, r=>`<div class="oi"><i class="ti ${r.icon}" aria-hidden="true"></i></div><div class="ot">${r.label}</div><div class="os">${r.sub}</div>`, selectIec);
+  updateBreadcrumb();
+  if (!sel.lvConfig) sel.lvConfig = "inout";
+  renderGrid("lvcfg-grid", LV_CONFIGS, sel.lvConfig, c=>`<div class="oi"><i class="ti ${c.icon}" aria-hidden="true"></i></div><div class="ot">${c.label}</div><div class="os">${c.sub}</div>`, selectLvConfig);
+  document.getElementById("incoming-only-notice").classList.toggle("hidden", sel.lvConfig !== "incoming");
+  document.getElementById("lvmode-block").classList.toggle("hidden", sel.lvConfig === "incoming");
+  document.getElementById("pf-section").classList.toggle("hidden", sel.lvConfig === "incoming");
+  document.getElementById("metering-section").classList.remove("hidden");
+  document.getElementById("pf-toggle").checked = sel.includePf;
+  renderPfDetails();
+  renderMeteringDetails();
+  renderLvModeGrid();
+  renderPtypeGrid();
+  renderSwitchFuseAmpRow();
+  renderTechSwitchFuseAmpRow();
+  renderSwitchFuseList();
+  applyLvModeVisibility();
+  show("s5"); renderCbTable();
+  renderResults();
+}
+
+function renderLvModeGrid() {
+  renderGrid("lvmode-grid", LV_MODES, sel.lvMode, m=>`<div class="oi"><i class="ti ${m.icon}" aria-hidden="true"></i></div><div class="ot">${m.label}</div><div class="os">${m.sub}</div>`, selectLvMode);
+}
+
+function applyLvModeVisibility() {
+  const isTechnical = sel.lvConfig === "inout" && sel.lvMode === "technical";
+  document.getElementById("sizing-section").classList.toggle("hidden", isTechnical);
+
+  // Protection Type toggle retired — Circuit Breaker and Switch Fuse now coexist in both Sizing and Technical modes
+  document.getElementById("ptype-block").classList.add("hidden");
+  applyPtypeVisibility();
+}
+
+function applyPtypeVisibility() {
+  const inout = sel.lvConfig === "inout";
+  const isTechnical = inout && sel.lvMode === "technical";
+
+  // Sizing mode (dimension-only) — both shown together
+  document.getElementById("cb-table-wrap").classList.toggle("hidden", isTechnical);
+  document.getElementById("switchfuse-block").classList.toggle("hidden", isTechnical);
+
+  // Technical mode (catalog / BOM) — both shown together, freely combinable in the same offer
+  document.getElementById("mccb-section").classList.toggle("hidden", !isTechnical);
+  document.getElementById("tech-switchfuse-block").classList.toggle("hidden", !isTechnical);
+  document.getElementById("tech-offer-list-wrap").classList.toggle("hidden", !isTechnical);
+}
+
+function renderPtypeGrid() {
+  renderGrid("ptype-grid", PROTECTION_TYPES, sel.protectionType, p=>`<div class="oi"><i class="ti ${p.icon}" aria-hidden="true"></i></div><div class="ot">${p.label}</div><div class="os">${p.sub}</div>`, selectPtype);
+}
+
+function selectPtype(id) {
+  sel.protectionType = id;
+  renderPtypeGrid();
+  applyPtypeVisibility();
+  updateSpaceBar();
+  renderResults();
+}
+
+function renderSwitchFuseAmpRow() {
+  const el = document.getElementById("switchfuse-amp-row");
+  if (!el) return;
+  el.innerHTML = SWITCHFUSE_AMPS.map(a => `<button class="sf-amp-btn" onclick="addSwitchFuse(${a})">${a} A</button>`).join("");
+}
+
+function addSwitchFuse(amp) {
+  const existing = switchFuseItems.find(i => i.amp === amp);
+  if (existing) existing.qty += 1;
+  else switchFuseItems.push({ amp, qty: 1 });
+  renderSwitchFuseList();
+  updateSpaceBar();
+  renderResults();
+}
+
+function changeSwitchFuseQty(amp, delta) {
+  const item = switchFuseItems.find(i => i.amp === amp);
+  if (!item) return;
+  item.qty = Math.max(0, item.qty + delta);
+  if (item.qty === 0) switchFuseItems = switchFuseItems.filter(i => i.amp !== amp);
+  renderSwitchFuseList();
+  updateSpaceBar();
+  renderResults();
+}
+
+function renderSwitchFuseList() {
+  const el = document.getElementById("switchfuse-list");
+  if (!el) return;
+  if (!switchFuseItems.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<table class="cb-table"><thead><tr><th>Item</th><th>Ampere</th><th>Qty</th></tr></thead><tbody>`
+    + switchFuseItems.flatMap(i => [
+        `<tr>
+          <td style="font-weight:600">Switch Fuse</td>
+          <td>${i.amp} A</td>
+          <td><div class="qty-ctrl">
+            <button class="qty-btn" onclick="changeSwitchFuseQty(${i.amp},-1)">−</button>
+            <span class="qty-val">${i.qty}</span>
+            <button class="qty-btn" onclick="changeSwitchFuseQty(${i.amp},1)">+</button>
+          </div></td>
+        </tr>`,
+        `<tr>
+          <td style="color:var(--color-text-secondary)">Fuse Link (Set of 3)</td>
+          <td style="color:var(--color-text-secondary)">${i.amp} A</td>
+          <td style="color:var(--color-text-secondary)">${i.qty * 3}</td>
+        </tr>`
+      ]).join("")
+    + `</tbody></table>`;
+}
+
+function onPfToggle(checked) {
+  sel.includePf = checked;
+  renderPfDetails();
+  updateBreadcrumb();
+  updateSpaceBar();
+  renderResults();
+}
+
+function renderPfDetails() {
+  const el = document.getElementById("pf-details");
+  if (!el) return;
+  if (!sel.includePf) { el.innerHTML = ""; syncPfMccbItems(); syncPfSizing(); return; }
+
+  const pf = getPfForRating(sel.trRating);
+  if (!pf) {
+    el.innerHTML = `<div class="pf-details"><div class="pf-no-match">No EEHC fixed P.F. bracket found for ${sel.trRating || "the selected"} KVA — please select a transformer rating in Step 3.</div></div>`;
+    syncPfMccbItems(); syncPfSizing();
+    return;
+  }
+
+  const isTechnical = sel.lvConfig === "inout" && sel.lvMode === "technical";
+  const isSizing = sel.lvConfig === "inout" && sel.lvMode === "sizing";
+  let noteRow = "";
+  if (isTechnical) {
+    if (!sel.pfBrand) sel.pfBrand = "ABB";
+    noteRow = `
+    <div class="mccb-form" style="margin-top:12px;">
+      <div>
+        <label class="mccb-label">Protection MCCB Brand</label>
+        <select class="sel-field" id="pf-mccb-brand" onchange="onPfBrandChange(this.value)">
+          <option value="ABB"${sel.pfBrand==='ABB'?' selected':''}>ABB (${pf.abbModel})</option>
+          <option value="Himel"${sel.pfBrand==='Himel'?' selected':''}>Himel (${pf.himelModel})</option>
+        </select>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px;">P.F. capacitor and protection MCCB are added automatically to the Technical offer items list below.</div>`;
+  } else if (isSizing) {
+    noteRow = `<div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px;">Protection MCCB (${pf.abbModel} frame) added automatically to the Standard types list below.</div>`;
+  }
+
+  const effectiveTotal = pfEffectiveKvar(pf);
+  const stepConfig400 = pfStepConfigLabel(pf);
+
+  el.innerHTML = `<div class="pf-details">
+    <div class="pf-details-grid">
+      <div class="pf-item"><div class="cr-label">P.F. Rating (calculated @400V)</div><div class="cr-value">${effectiveTotal} kVAr</div></div>
+      <div class="pf-item"><div class="cr-label">Capacitor Step Rating</div><div class="cr-value">${CAP_STEP_RATED_525} kVAr@525V → ${CAP_STEP_EFFECTIVE_400} kVAr@400V</div></div>
+      <div class="pf-item"><div class="cr-label">Step Configuration</div><div class="cr-value">${stepConfig400}</div></div>
+      <div class="pf-item"><div class="cr-label">No. of Steps</div><div class="cr-value">${pf.steps}</div></div>
+      <div class="pf-item"><div class="cr-label">P.F. Relay</div><div class="cr-value">${pf.relay}</div></div>
+      <div class="pf-item"><div class="cr-label">Capacitor Current</div><div class="cr-value">${pf.capCurrent} A</div></div>
+      <div class="pf-item"><div class="cr-label">Recommended MCCB</div><div class="cr-value">${pf.mccbAmp} A</div></div>
+      <div class="pf-item"><div class="cr-label">Capacitor Duty Contactors</div><div class="cr-value">${pf.contactors}</div></div>
+    </div>
+    ${noteRow}
+  </div>`;
+
+  syncPfMccbItems();
+  syncPfSizing();
+}
+
+function onPfBrandChange(brand) {
+  sel.pfBrand = brand;
+  syncPfMccbItems();
+  updateSpaceBar();
+  renderResults();
+}
+
+function syncPfMccbItems() {
+  mccbItems = mccbItems.filter(i => !i.isPf);
+
+  const isTechnical = sel.lvConfig === "inout" && sel.lvMode === "technical";
+  if (!sel.includePf || !isTechnical) { renderMccbList(); return; }
+
+  const pf = getPfForRating(sel.trRating);
+  if (!pf) { renderMccbList(); return; }
+
+  const brand = sel.pfBrand || "ABB";
+  const model = brand === "ABB" ? pf.abbModel : pf.himelModel;
+  const row = MCCB_CATALOG.find(r => r.brand === brand && r.model === model && String(r.amp) === String(pf.mccbAmp));
+  const sc = row ? row.sc : "—";
+  const trip = row ? row.trip : pf.trip;
+
+  // Protection MCCB — counted toward sizing (real physical breaker)
+  mccbItems.push({ id: "mccb"+(mccbIdCtr++), brand, model, amp: String(pf.mccbAmp), sc, trip, qty: 1, isPf: true });
+
+  // P.F. capacitor bank itself — no width data available, excluded from sizing
+  mccbItems.push({ id: "mccb"+(mccbIdCtr++), brand: "—", model: `PF Capacitor ${pfEffectiveKvar(pf)} kVAr @400V (${pf.steps} × ${CAP_STEP_RATED_525} kVAr@525V)`, amp: "—", sc: "—", trip: "—", qty: 1, isPf: true, excludeFromSizing: true });
+
+  renderMccbList();
+}
+
+let pfSizingFrame = null; // tracks which XT frame currently carries the PF +1 in Sizing mode
+
+function syncPfSizing() {
+  const pf = (sel.includePf && sel.lvConfig === "inout" && sel.lvMode === "sizing") ? getPfForRating(sel.trRating) : null;
+  const targetFrame = pf ? (pf.abbModel.match(/^XT\d/) || [])[0]?.toLowerCase() : null;
+
+  if (pfSizingFrame && pfSizingFrame !== targetFrame) {
+    qtys[pfSizingFrame] = Math.max(0, (qtys[pfSizingFrame] || 0) - 1);
+    pfSizingFrame = null;
+  }
+  if (targetFrame && pfSizingFrame !== targetFrame) {
+    qtys[targetFrame] = (qtys[targetFrame] || 0) + 1;
+    pfSizingFrame = targetFrame;
+  }
+  renderCbTable();
+}
+
+function renderMeteringDetails() {
+  const el = document.getElementById("metering-details");
+  const hdr = document.getElementById("metering-section-hdr");
+  if (!el) return;
+
+  const m = getMeteringForRating(sel.trRating);
+  if (!m) {
+    el.innerHTML = `<div class="pf-details"><div class="pf-no-match">Select a transformer rating in Step 3 to determine the fixed EEHC incoming CB.</div></div>`;
+    if (hdr) hdr.textContent = "EEHC Incoming CB (Fixed)";
+    syncMeteringMccbItem(); // clears any stale entry
+    return;
+  }
+
+  const isIncomingOnly = sel.lvConfig === "incoming";
+
+  if (isIncomingOnly) {
+    // Incoming Only: show the fixed incoming CB recommendation only — no metering panel accessories
+    if (hdr) hdr.textContent = "EEHC Incoming CB (Fixed)";
+    el.innerHTML = `<div class="pf-details">
+      <div class="pf-details-grid">
+        <div class="pf-item"><div class="cr-label">Incoming CB</div><div class="cr-value">${m.incoming}</div></div>
+        <div class="pf-item"><div class="cr-label">Recommended Model</div><div class="cr-value">${m.brand} ${m.model}</div></div>
+        <div class="pf-item"><div class="cr-label">FLC @400V</div><div class="cr-value">${m.flc} A</div></div>
+        <div class="pf-item"><div class="cr-label">Trip Unit</div><div class="cr-value">${m.trip}</div></div>
+      </div>
+    </div>`;
+    syncMeteringMccbItem(); // no-op for this mode, just clears any stale technical-offer entries
+    return;
+  }
+
+  if (hdr) hdr.textContent = "EEHC Metering — Incoming CB (Fixed)";
+  const c = METERING_COMMON;
+
+  el.innerHTML = `<div class="pf-details">
+    <div class="pf-details-grid">
+      <div class="pf-item"><div class="cr-label">Incoming CB</div><div class="cr-value">${m.incoming}</div></div>
+      <div class="pf-item"><div class="cr-label">Recommended Model</div><div class="cr-value">${m.brand} ${m.model}</div></div>
+      <div class="pf-item"><div class="cr-label">FLC @400V</div><div class="cr-value">${m.flc} A</div></div>
+      <div class="pf-item"><div class="cr-label">Trip Unit</div><div class="cr-value">${m.trip}</div></div>
+      <div class="pf-item"><div class="cr-label">CT Qty 3</div><div class="cr-value">${m.ct.replace(/^3\s*×\s*/, '')}</div></div>
+      <div class="pf-item"><div class="cr-label">Digital Ammeters</div><div class="cr-value">${c.ammeters}</div></div>
+      <div class="pf-item"><div class="cr-label">Digital Voltmeter</div><div class="cr-value">${c.voltmeter}</div></div>
+      <div class="pf-item"><div class="cr-label">Voltmeter Selector</div><div class="cr-value">${c.voltSelector}</div></div>
+      <div class="pf-item"><div class="cr-label">Ammeter Selector</div><div class="cr-value">${c.ampSelector}</div></div>
+      <div class="pf-item"><div class="cr-label">kWh Meter Space</div><div class="cr-value">${c.kwhSpace}</div></div>
+      <div class="pf-item"><div class="cr-label">Indication Lamps</div><div class="cr-value">${c.lamps}</div></div>
+      <div class="pf-item"><div class="cr-label">Metering Type</div><div class="cr-value">${c.meteringType}</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--color-text-secondary);margin-top:8px;">Pick the actual breaker below in "Main incoming breaker" — the recommendation above is a reference only.</div>
+  </div>`;
+
+  syncMeteringMccbItem();
+}
+
+function syncMeteringMccbItem() {
+  // Remove any previously auto-added metering CB entry (legacy — now handled by Main Incoming Breaker)
+  mccbItems = mccbItems.filter(i => !i.isMetering || i.isMeteringAccessory);
+  syncMeteringAccessories();
+  renderMccbList();
+}
+
+function renderMainIncGrid() {
+  const grid = document.getElementById("mainInc-grid");
+  const brandRow = document.getElementById("mainInc-brand-row");
+  if (!grid) return;
+
+  const recommendedId = recommendedMainIncomingId();
+  if (!sel.mainIncoming && recommendedId) sel.mainIncoming = recommendedId; // default to recommendation, fully overridable
+
+  grid.innerHTML = INCOMING_ONLY_BREAKERS.map(b => `
+    <button class="opt${sel.mainIncoming===b.id?' active':''}" onclick="selectMainIncoming('${b.id}')">
+      ${b.id===recommendedId ? '<div class="recommended-badge">Recommended</div>' : ''}
+      <div class="ot">${b.label}</div>
+      <div class="os">${b.widthMm} mm</div>
+    </button>`).join("");
+
+  const isTechnical = sel.lvConfig === "inout" && sel.lvMode === "technical";
+  const isXt = sel.mainIncoming && sel.mainIncoming.startsWith("xt");
+  if (brandRow) {
+    if (isTechnical && isXt) {
+      if (!sel.mainIncomingBrand) sel.mainIncomingBrand = "ABB";
+      brandRow.innerHTML = `
+        <div class="mccb-form" style="margin-top:12px;">
+          <div>
+            <label class="mccb-label">Brand</label>
+            <select class="sel-field" id="mainInc-brand" onchange="onMainIncBrandChange(this.value)">
+              <option value="ABB"${sel.mainIncomingBrand==='ABB'?' selected':''}>ABB</option>
+              <option value="Himel"${sel.mainIncomingBrand==='Himel'?' selected':''}>Himel</option>
+            </select>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px;">Added automatically to the Technical offer items list below.</div>`;
+    } else {
+      brandRow.innerHTML = isTechnical ? `<div style="font-size:11px;color:var(--color-text-secondary);margin-top:8px;">Emax frame — added to the Technical offer as a size reference (no catalog part number available).</div>` : "";
+    }
+  }
+
+  syncMainIncomingItem();
+}
+
+function selectMainIncoming(id) {
+  sel.mainIncoming = id;
+  renderMainIncGrid();
+  updateSpaceBar();
+  renderResults();
+}
+
+function onMainIncBrandChange(brand) {
+  sel.mainIncomingBrand = brand;
+  syncMainIncomingItem();
+  updateSpaceBar();
+  renderResults();
+}
+
+function syncMainIncomingItem() {
+  mccbItems = mccbItems.filter(i => !i.isMainIncoming);
+
+  const isTechnical = sel.lvConfig === "inout" && sel.lvMode === "technical";
+  if (!isTechnical || !sel.mainIncoming) { renderMccbList(); return; }
+
+  const b = INCOMING_ONLY_BREAKERS.find(x => x.id === sel.mainIncoming);
+  if (!b) { renderMccbList(); return; }
+
+  if (sel.mainIncoming.startsWith("xt")) {
+    const brand = sel.mainIncomingBrand || "ABB";
+    const frameNum = sel.mainIncoming.replace("xt", "");
+    const row = MCCB_CATALOG.find(r => r.brand === brand && r.model.startsWith("XT"+frameNum));
+    if (row) {
+      mccbItems.push({ id: "mccb"+(mccbIdCtr++), brand, model: row.model, amp: String(row.amp), sc: row.sc, trip: row.trip, qty: 1, isMainIncoming: true });
+    } else {
+      mccbItems.push({ id: "mccb"+(mccbIdCtr++), brand, model: b.label, amp: "—", sc: "—", trip: "—", qty: 1, isMainIncoming: true });
+    }
+  } else {
+    // Emax frame — no catalog part-number data available, add as a labeled size reference
+    mccbItems.push({ id: "mccb"+(mccbIdCtr++), brand: "ABB", model: b.label, amp: "—", sc: "—", trip: "—", qty: 1, isMainIncoming: true });
+  }
+  renderMccbList();
+}
+
+function syncMeteringAccessories() {
+  // Remove any previously auto-added accessory entries before re-evaluating
+  mccbItems = mccbItems.filter(i => !i.isMeteringAccessory);
+
+  const isTechnical = sel.lvConfig === "inout" && sel.lvMode === "technical";
+  const m = isTechnical ? getMeteringForRating(sel.trRating) : null;
+  if (!m) return;
+
+  const c = METERING_COMMON;
+  const accessories = [
+    { name: `CT ${m.ct.replace(/^3\s*×\s*CT\s*/, '')}`,   qty: 3 },
+    { name: "Digital Ammeter",                        qty: c.ammeters },
+    { name: "Digital Voltmeter",                      qty: c.voltmeter },
+    { name: "Voltmeter Selector Switch (7 Position)", qty: 1 },
+    { name: "Ammeter Selector Switch (3 Position)",   qty: 1 },
+    { name: "Indication Lamps (Set of 3)",            qty: 1 },
+    { name: "Socket 220V",                            qty: 1 },
+    { name: "MCB S201-C16",                           qty: 1 },
+  ];
+
+  accessories.forEach(a => {
+    mccbItems.push({ id: "mccb"+(mccbIdCtr++), brand: "—", model: a.name, amp: "—", sc: "—", trip: "—", qty: a.qty, isMetering: true, isMeteringAccessory: true, excludeFromSizing: true });
+  });
+
+}
+
+function selectLvMode(id) {
+  sel.lvMode = id;
+  renderLvModeGrid();
+  applyLvModeVisibility();
+  renderPfDetails();
+  renderMeteringDetails();
+  updateSpaceBar();
+  renderResults();
+}
+
+function selectLvConfig(id) {
+  const changed = sel.lvConfig !== id;
+  sel.lvConfig = id;
+  if (changed) { ALL_BREAKERS.forEach(b => qtys[b.id] = 0); sel.lvMode = "sizing"; sel.protectionType = "cb"; switchFuseItems = []; pfSizingFrame = null; sel.mainIncoming = null; sel.mainIncomingBrand = null; } // reset quantities & mode when switching breaker set
+
+  if (id === "incoming") {
+    sel.lv = "1400";
+    document.getElementById("incoming-only-notice").classList.remove("hidden");
+    document.getElementById("lvmode-block").classList.add("hidden");
+    document.getElementById("pf-section").classList.add("hidden");
+    document.getElementById("metering-section").classList.remove("hidden");
+    document.getElementById("mainInc-section").classList.add("hidden");
+    sel.includePf = false;
+    document.getElementById("pf-toggle").checked = false;
+    renderPfDetails();
+    renderMeteringDetails();
+  } else {
+    document.getElementById("incoming-only-notice").classList.add("hidden");
+    document.getElementById("lvmode-block").classList.remove("hidden");
+    document.getElementById("pf-section").classList.remove("hidden");
+    document.getElementById("metering-section").classList.remove("hidden");
+    document.getElementById("mainInc-section").classList.remove("hidden");
+    renderMeteringDetails();
+    renderMainIncGrid();
+    autoSelectLv();
+  }
+  renderLvModeGrid();
+  renderPtypeGrid();
+  renderSwitchFuseAmpRow();
+  renderTechSwitchFuseAmpRow();
+  renderSwitchFuseList();
+  applyLvModeVisibility();
+
+  renderGrid("lvcfg-grid", LV_CONFIGS, id, c=>`<div class="oi"><i class="ti ${c.icon}" aria-hidden="true"></i></div><div class="ot">${c.label}</div><div class="os">${c.sub}</div>`, selectLvConfig);
+  updateBreadcrumb();
+  renderCbTable();
+  renderResults();
+}
+
+function renderGrid(elId, items, selId, tplFn, clickFn) {
+  document.getElementById(elId).innerHTML = items.map(item=>`
+    <button class="opt${selId===item.id?' active':''}" onclick="${clickFn.name}('${item.id}')">
+      ${tplFn(item)}
+    </button>`).join("");
+}
+
+function renderCfgGrid() {
+  const cfgs = RMUS.find(r=>r.id===sel.rmu).configs;
+  document.getElementById("cfg-grid").innerHTML = cfgs.map(c=>`
+    <button class="opt${sel.cfg===c?' active':''}" onclick="selectCfg('${c}')">
+      <div class="oi" style="font-size:16px"><i class="ti ti-topology-star-3" aria-hidden="true"></i></div>
+      <div class="ot">${c}</div>
+    </button>`).join("");
+}
+
+function renderIecGrid() {
+  document.getElementById("iec-grid").innerHTML = EEHC_ITEMS.map(it=>`
+    <button class="opt${sel.iec===it.id?' active':''}" onclick="selectIec('${it.id}')">
+      <div class="oi"><i class="ti ${it.icon}" aria-hidden="true"></i></div>
+      <div class="ot">${it.label}</div><div class="os">${it.sub}</div>
+    </button>`).join("");
+}
+
+function setFilter(f, e) {
+  activeFilter=f;
+  document.querySelectorAll(".filter-btn").forEach(b=>b.classList.remove("active"));
+  e.target.classList.add("active");
+  renderResults();
+}
+
+const SERIES_RANK = { "5ST":1, "10ST":2, "16ST":3 };
+
+function meetsMinSeriesBand(d) {
+  if (!sel.trPower) return true;
+  const req = TR_BAND_RANK[sel.trPower];
+  const cap = SERIES_RANK[d.series];
+  if (!req || !cap) return true;
+  return cap >= req; // the design's series must be at least the transformer's required minimum band
+}
+
+function checkDesignCompatibility(d) {
+  if (!meetsMinSeriesBand(d)) return false;
+
+  if (sel.rmu === "pral24") {
+    return d.name === "P-CSS 16ST-V";
+  }
+
+  if (sel.rmu === "murge" && sel.cfg === "2+1+M") {
+    return d.name === "P-CSS 16ST-V";
+  }
+
+  if (sel.rmu === "lucy" && sel.cfg === "2+1+M") {
+    return d.name === "P-CSS 16ST-V";
+  }
+
+  if (!d[sel.rmu] || d[sel.rmu][sel.cfg] !== 1) return false;
+
+  if (sel.rmu === "psec50") {
+    if (sel.cfg === "2+1+M") return d.name === "P-CSS 16ST-V";
+    if (d.name === "P-CSS 5ST-A") return false;
+    return true;
+  }
+
+  if (sel.rmu === "psec375") {
+    if (d.name === "P-CSS 5ST-A") return false;
+    if (sel.cfg !== "2+1+M") return d.name === "P-CSS 16ST-V";
+    return true;
+  }
+
+  if (sel.rmu === "murge" || sel.rmu === "lucy") {
+    if (d.name === "P-CSS 5ST-A" || d.name === "P-CSS 16ST-U") return false;
+    return true;
+  }
+
+  // pral12 (and anything else) falls through to the generic gate above;
+  // sizing is further resolved by sel.lv (computeEffectiveLvPanel) via the lvp pool filter upstream.
+  return true;
+}
+
+function isConfigComplete() {
+  const { count } = totalUsedMm();
+  const smartOk = !isSmartEligible() || !!sel.smartType;
+  const projectOk = isProjectDataComplete();
+  if (sel.trPresence === "without") {
+    return !!(projectOk && sel.rmu && sel.cfg && smartOk && sel.trRating && sel.iec && sel.lvConfig && count > 0);
+  }
+  return !!(projectOk && sel.rmu && sel.cfg && smartOk && sel.trPresence === "with" && sel.trBrand && sel.trType && sel.trConn && sel.trRating &&
+    sel.primaryV && sel.secondaryV && sel.iec && sel.lvConfig && count > 0);
+}
+
+function renderConfigSummary() {
+  const wrap = document.getElementById("config-summary");
+  if (!wrap) return;
+  if (!isConfigComplete()) { wrap.innerHTML = ""; return; }
+
+  const rmu = RMUS.find(r=>r.id===sel.rmu);
+  const eehc = EEHC_ITEMS.find(e=>e.id===sel.iec);
+  const lvCfg = LV_CONFIGS.find(c=>c.id===sel.lvConfig);
+
+  const isTechnical = sel.lvConfig === "inout" && sel.lvMode === "technical";
+  let breakerList = [];
+  if (isTechnical) {
+    breakerList = mccbItems.map(i => `${i.brand} ${i.model} ${i.amp}A (${i.trip}) ×${i.qty}`);
+  } else {
+    breakerList = getActiveBreakers()
+      .filter(b => qtys[b.id] > 0)
+      .map(b => `${b.label} ×${qtys[b.id]}`);
+    customs.forEach(c => breakerList.push(`${c.name} ×${c.qty}`));
+  }
+  const breakerSummary = breakerList.length ? breakerList.join(", ") : "None selected";
+
+  const { total, count } = totalUsedMm();
+  const em = emptyMm();
+  const fitNote = em ? `${total} / ${em} mm` : `${total} mm`;
+
+  const trBlock = sel.trPresence === "without"
+    ? `<div class="config-recap-item"><div class="cr-label">Transformer</div><div class="cr-value">Not installed · Sized for ${sel.trRating} KVA</div></div>`
+    : (() => {
+        const trType = TR_TYPES.find(t=>t.id===sel.trType);
+        const trConn = TR_CONNECTIONS.find(c=>c.id===sel.trConn);
+        return `<div class="config-recap-item"><div class="cr-label">Transformer</div><div class="cr-value">${sel.trBrand ? sel.trBrand + " · " : ""}${trType.label} · ${sel.trRating} KVA</div></div>
+        <div class="config-recap-item"><div class="cr-label">Connection</div><div class="cr-value">${trConn.label} (${sel.primaryV}→${sel.secondaryV} kV)</div></div>`;
+      })();
+
+  const lvPanelBlock = sel.lvConfig === "incoming"
+    ? `<div class="config-recap-item"><div class="cr-label">LV Panel</div><div class="cr-value" style="color:#b91c1c;">1400 mm (Fixed · Incoming Only)</div></div>`
+    : `<div class="config-recap-item"><div class="cr-label">LV Panel</div><div class="cr-value">${sel.lv && sel.lv !== "any" ? LV_PANELS.find(p=>p.id===sel.lv).label : "Not specified"}</div></div>`;
+
+  const smartBlock = sel.smartType
+    ? `<div class="config-recap-item"><div class="cr-label">Smart Type</div><div class="cr-value">${SMART_TYPES.find(s=>s.id===sel.smartType).label}</div></div>`
+    : "";
+
+  const pf = sel.includePf ? getPfForRating(sel.trRating) : null;
+  const pfBlock = sel.includePf
+    ? `<div class="config-recap-item"><div class="cr-label">EEHC Fixed P.F.</div><div class="cr-value">${pf ? `${pfEffectiveKvar(pf)} kVAr@400V (${pfStepConfigLabel(pf)})` : "No matching bracket"}</div></div>`
+    : "";
+
+  const meteringBlock = sel.lvConfig === "inout"
+    ? (() => { const m = getMeteringForRating(sel.trRating); return m ? `<div class="config-recap-item"><div class="cr-label">EEHC Incoming CB</div><div class="cr-value">${m.incoming}</div></div>` : ""; })()
+    : "";
+
+  const projectBlock = (sel.projectName || sel.customer || sel.qtnNo)
+    ? `<div class="config-recap-item"><div class="cr-label">Project</div><div class="cr-value">${[sel.projectName, sel.customer, sel.qtnNo, sel.optyNo].filter(Boolean).join(" · ") || "—"}</div></div>`
+    : "";
+  const salesBlock = (sel.salesManager || sel.salesPerson || sel.supportEngineer)
+    ? `<div class="config-recap-item"><div class="cr-label">Sales Team</div><div class="cr-value">${[sel.salesManager && `Mgr: ${sel.salesManager}`, sel.salesPerson && `Sales: ${sel.salesPerson}`, sel.supportEngineer && `Support: ${sel.supportEngineer}`].filter(Boolean).join(" · ")}</div></div>`
+    : "";
+
+  wrap.innerHTML = `
+    <div class="config-complete">
+      <div class="config-complete-hdr"><i class="ti ti-circle-check" aria-hidden="true"></i> Configuration Complete</div>
+      <div class="config-recap-grid">
+        ${projectBlock}
+        ${salesBlock}
+        <div class="config-recap-item"><div class="cr-label">MV Panel</div><div class="cr-value">${rmu.label} · ${sel.cfg}</div></div>
+        ${smartBlock}
+        ${trBlock}
+        <div class="config-recap-item"><div class="cr-label">LV Standard</div><div class="cr-value">${eehc.label}</div></div>
+        <div class="config-recap-item"><div class="cr-label">Breaker Config</div><div class="cr-value">${lvCfg.label}</div></div>
+        ${lvPanelBlock}
+        ${meteringBlock}
+        <div class="config-recap-item"><div class="cr-label">Breakers Selected</div><div class="cr-value">${breakerSummary}</div></div>
+        ${pfBlock}
+        <div class="config-recap-item"><div class="cr-label">LV Footprint Used</div><div class="cr-value">${fitNote} (${count} unit${count===1?'':'s'})</div></div>
+      </div>
+    </div>`;
+}
+
+function resetBreakers() {
+  ALL_BREAKERS.forEach(b => qtys[b.id] = 0);
+  customs = [];
+  mccbItems = [];
+  switchFuseItems = [];
+  pfSizingFrame = null;
+  renderCbTable();
+  renderCustomList();
+  renderSwitchFuseList();
+  document.getElementById("mccb-brand").value = "";
+  onMccbBrandChange("");
+  syncMeteringMccbItem();
+  renderPfDetails();
+  updateSpaceBar();
+  renderResults();
+}
+
+function resetConfig() {
+  const keepProject = { projectName: sel.projectName, customer: sel.customer, qtnNo: sel.qtnNo, revisionNo: sel.revisionNo, projectDate: sel.projectDate, optyNo: sel.optyNo, supportEngineer: sel.supportEngineer, salesManager: sel.salesManager, salesPerson: sel.salesPerson };
+  sel = { rmu:null, cfg:null, trPower:null, lv:null, iec:null, trType:null, trConn:null, trRating:null, primaryV:null, secondaryV:null, lvConfig:null, trPresence:null, smartType:null, lvMode:"sizing", includePf:false, meteringBrand:null, trBrand:null, protectionType:"cb", pfBrand:null, ...keepProject };
+  ALL_BREAKERS.forEach(b => qtys[b.id] = 0);
+  customs = [];
+  mccbItems = [];
+  switchFuseItems = [];
+  pfSizingFrame = null;
+  activeFilter = "all";
+
+  ["s2","s-smart","s-trf","s4","s5"].forEach(hide);
+
+  renderGrid("rmu-grid", RMUS, null, r=>`<div class="oi"><i class="ti ${r.icon}" aria-hidden="true"></i></div><div class="ot">${r.label}</div><div class="os">${r.sub}</div>`, selectRmu);
+  document.getElementById("cfg-grid").innerHTML = "";
+  document.getElementById("smart-grid").innerHTML = "";
+  document.getElementById("trrating-sel").value = "";
+  renderTrPresenceGrid();
+  document.getElementById("trf-rating-block").classList.add("hidden");
+  document.getElementById("trf-with-fields").classList.add("hidden");
+  renderTrTypeGrid();
+  renderTrConnGrid();
+  populateTrRatingSelect();
+  populateTrBrandSelect();
+  renderPrimarySecondary();
+  renderIecGrid();
+  document.getElementById("lvcfg-grid").innerHTML = "";
+  document.getElementById("lvmode-grid").innerHTML = "";
+  document.getElementById("lvmode-block").classList.add("hidden");
+  document.getElementById("ptype-block").classList.add("hidden");
+  renderPtypeGrid();
+  renderSwitchFuseAmpRow();
+  renderTechSwitchFuseAmpRow();
+  renderSwitchFuseList();
+  applyPtypeVisibility();
+  document.getElementById("sizing-section").classList.remove("hidden");
+  document.getElementById("mccb-section").classList.add("hidden");
+  document.getElementById("pf-section").classList.add("hidden");
+  document.getElementById("pf-toggle").checked = false;
+  renderPfDetails();
+  document.getElementById("metering-section").classList.add("hidden");
+  renderMeteringDetails();
+  document.getElementById("mccb-brand").value = "";
+  onMccbBrandChange("");
+  renderMccbList();
+
+  document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+  document.querySelector(".filter-btn").classList.add("active");
+
+  document.getElementById("bc").innerHTML = "Select specifications below to begin configuration...";
+  document.getElementById("bc").classList.add("breadcrumb");
+  updateBreadcrumb();
+  updateProjectStatus();
+  renderResults();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderResults() {
+  renderConfigSummary();
+
+  if (!sel.rmu || !sel.cfg) {
+    document.getElementById("results").innerHTML = `<div class="no-results"><i class="ti ti-adjustments" style="font-size:32px;display:block;margin-bottom:8px" aria-hidden="true"></i>Select structural components on the left to compute options.</div>`;
+    return;
+  }
+
+  const em = emptyMm();
+  const { total } = totalUsedMm();
+  const rmuLabel = RMUS.find(r=>r.id===sel.rmu).label;
+  const trLabel = sel.trRating ? sel.trRating + " KVA" : "Not Selected";
+
+  let pool = DESIGNS;
+  // Never show a series smaller than the transformer's required minimum band (enforced by
+  // meetsMinSeriesBand inside checkDesignCompatibility) — but do show every valid series at
+  // or above that minimum, not just a single auto-picked size, so the user can choose.
+  if (activeFilter !== "all") pool = pool.filter(d => d.series === activeFilter);
+
+  const recommendedLv = computeEffectiveLvPanel();
+  const rmuCompat = pool.filter(d => checkDesignCompatibility(d));
+  const rmuIncompat = pool.filter(d => !checkDesignCompatibility(d));
+  const recommendedDesign = rmuCompat.reduce((best, d) => {
+    const rank = SERIES_RANK[d.series] || 99;
+    return (!best || rank < (SERIES_RANK[best.series] || 99)) ? d : best;
+  }, null);
+
+  const spaceOk = em === null || total === 0 || total <= em;
+
+  document.getElementById("sum-bar").innerHTML = `
+    <i class="ti ti-filter" aria-hidden="true"></i> 
+    <strong>${rmuCompat.length}</strong> functional fits identified · 
+    <strong>${rmuLabel}</strong> (${sel.cfg}) · <strong>TR: ${trLabel}</strong>
+    ${total>0 ? `<br>Breaker Footprint Total: <strong>${total} mm</strong>${em?' / '+em+' mm limit':''}` : ""}`;
+
+  const allCards = [
+    ...rmuCompat.map(d => cardHTML(d, true, spaceOk, em, total, recommendedLv)),
+    ...rmuIncompat.map(d => cardHTML(d, false, spaceOk, em, total, recommendedLv))
+  ];
+  
+  document.getElementById("results").innerHTML = allCards.join("") ||
+    `<div class="no-results"><i class="ti ti-ban" style="font-size:32px;display:block;margin-bottom:8px" aria-hidden="true"></i>No standard blueprints match current constraint values.</div>`;
+}
+
+function cardHTML(d, rmuOk, spaceOk, em, totalMm, recommendedLv) {
+  const lvMatch = !sel.lv || sel.lv==="any" || d.lvp===sel.lv;
+  const ok = rmuOk && spaceOk;
+  const gapNote = sel.iec==="eehc" ? "EEHC Spaced" : "Dense Array (No EEHC)";
+  const remain = em ? em - totalMm : null;
+  const isRecommended = rmuOk && recommendedLv && d.lvp === recommendedLv;
+  
+  let chassisLabel = "LV Chassis: " + d.lvp + "cm";
+  
+  return `
+  <div class="result-card ${ok?'compatible':'incompatible'}">
+    <div class="result-header">
+      <span class="result-name">${d.name}</span>
+      <span class="badge ${ok?'badge-ok':'badge-no'}">${ok?'✔ Verified Fit':'— Incompatible'}</span>
+    </div>
+    <div class="spec-row">
+      <div class="spec">Outer Shell<span>${d.outer} cm</span></div>
+      <div class="spec">Inner Clearance<span>${d.inner} cm</span></div>
+      <div class="spec">Gross Mass<span>${d.kg} kg</span></div>
+      <div class="spec">LV Depth<span>${d.lv} cm</span></div>
+      <div class="spec">TR Enclosure<span>${d.tr} cm</span></div>
+    </div>
+    <div>
+      ${isRecommended ? `<span class="recommended-badge" style="margin-right:6px;">Recommended</span>` : ""}
+      <span class="tag ${lvMatch?'blue':''}">${chassisLabel}</span>
+      <span class="tag">${gapNote}</span>
+      ${em && totalMm>0 ? `<span class="tag ${spaceOk?'green':''}">${totalMm}mm Configured · ${remain>=0?remain+'mm clear':'⚠ '+Math.abs(remain)+'mm structural deficit'}</span>` : ""}
+    </div>
+  </div>`;
+}
+
+function toggleTheme() {
+  const body = document.body;
+  const isDark = body.classList.toggle("dark");
+  document.getElementById("theme-icon").className = isDark ? "ti ti-sun" : "ti ti-moon";
+  document.getElementById("theme-label").textContent = isDark ? "Light mode" : "Dark mode";
+}
+
+renderTrPresenceGrid();
+renderTrTypeGrid();
+renderTrConnGrid();
+populateTrRatingSelect();
+populateTrBrandSelect();
+renderPrimarySecondary();
+populateMccbBrands();
+renderPtypeGrid();
+renderSwitchFuseAmpRow();
+renderTechSwitchFuseAmpRow();
+populateProjectSelects();
+(function initProjectDate(){
+  const today = new Date().toISOString().slice(0,10);
+  const dateEl = document.getElementById("proj-date");
+  if (dateEl) { dateEl.value = today; sel.projectDate = today; }
+})();
+updateProjectStatus();
+renderGrid("rmu-grid", RMUS, null, r=>`<div class="oi"><i class="ti ${r.icon}" aria-hidden="true"></i></div><div class="ot">${r.label}</div><div class="os">${r.sub}</div>`, selectRmu);
+renderResults();
+</script>
+</body>
+</html>
