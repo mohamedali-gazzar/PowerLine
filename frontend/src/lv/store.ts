@@ -10,7 +10,6 @@ import {
   DEFAULT_SUPPORT_ENGINEERS,
   SALES_MANAGER,
   componentPriceEgp,
-  copperTypeFactor,
   cuPanelKg,
   cuCellKg,
   cellPriceEgp,
@@ -580,10 +579,9 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   }
   const cuConnCost = cuWeight * f.copper;
   // Main busbar: auto rule for sheet-metal panels, else the manual entry.
-  // Copper TYPE (Bare / Tin-plated / Silver-Plated Connections / Raychem) adds a
-  // plating premium on the busbar weight — the Cu-connection copper is unaffected.
+  // Priced the same way as the Cu connections — weight × copper rate (no plating premium).
   const busbarKg = mainBusbarAuto(p) ?? (p.mainBusbarKg || 0);
-  const busbarCost = busbarKg * f.copper * copperTypeFactor(p.copperType);
+  const busbarCost = busbarKg * f.copper;
   // Kit = a % of the enclosure cost, per system (see kitRate).
   const kits = enclCost * kitRate(p);
   const unitCost = compCost + enclCost + cuConnCost + busbarCost + kits;

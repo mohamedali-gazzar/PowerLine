@@ -6,7 +6,7 @@ import { useStaff, SALES_MANAGER } from "../staff";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
   PANEL_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
-  COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp, copperTypeFactor,
+  COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp,
   type DbComponent, type DbEnclosure,
 } from "../lv/catalog";
 import {
@@ -35,6 +35,7 @@ import {
 import {
   COPPER_RATINGS, csaFor, copperWeight, copperTotal, roundUpRating, ratingForCsa, pctOf,
 } from "../lv/copper";
+import { panelPoles, POLE_CM, GROUP_LABEL, KIND_LABEL, type PoleGroup, type PoleKind } from "../lv/poles";
 
 type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "summary";
 const TABS: Tab[] = ["project", "pricing", "panels", "technical", "commercial", "material", "spare", "selectivity"];
@@ -2136,8 +2137,6 @@ function CopperBreakdownWindow({ which, p, calc, f, onClose }: {
 }) {
   const [min, setMin] = useState(false);
   const rate = f.copper; // EGP / kg copper
-  const cuFactor = copperTypeFactor(p.copperType); // busbar plating premium (Bare 1 · Raychem 1.02 · Tin-plated 1.05 · Silver-Plated 1.15)
-  const facStr = cuFactor !== 1 ? ` × ${cuFactor}` : ""; // shown in the cost equation only when it changes the price
   // Main-busbar pieces — mirror mainBusbarAuto() for display.
   const isAuto = mainBusbarAuto(p) !== null;
   const area = busbarBarAreaMm2(p.ratingA);
@@ -2180,15 +2179,13 @@ function CopperBreakdownWindow({ which, p, calc, f, onClose }: {
               <div>Bar section <b className="text-ink">{area} mm²</b> — from incomer rating <b className="text-ink">{p.ratingA} A</b></div>
               <div>Panel height <b className="text-ink">{height} mm</b> — from Sizing (1) “{slot1?.name}”</div>
               <div>Poles <b className="text-ink">{poles}</b> · copper density <b className="text-ink">0.000009</b> kg/mm³{isDouble && <> · <b className="text-ink">Double ×2</b></>}</div>
-              <div>Copper type <b className="text-ink">{p.copperType || "Bare"}</b> — busbar factor <b className="text-ink">×{cuFactor}</b></div>
               <div className={eq}>{area} × {height} × {poles} × 0.000009{isDouble ? " × 2" : ""} = <b>{fmtNum(calc.busbarKg)} kg</b></div>
-              <div className={eq}>{fmtNum(calc.busbarKg)} kg{facStr} × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
+              <div className={eq}>{fmtNum(calc.busbarKg)} kg × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
             </div>
           ) : (
             <div className="space-y-0.5 text-muted">
               <div>Manual value <b className="text-ink">{fmtNum(calc.busbarKg)} kg</b> — the auto rule applies only to SR-Basic / Unikit / Local panels with a rating and a Sizing (1).</div>
-              <div>Copper type <b className="text-ink">{p.copperType || "Bare"}</b> — busbar factor <b className="text-ink">×{cuFactor}</b></div>
-              <div className={eq}>{fmtNum(calc.busbarKg)} kg{facStr} × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
+              <div className={eq}>{fmtNum(calc.busbarKg)} kg × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
             </div>
           )}
           </>)}
@@ -2339,10 +2336,12 @@ function PanelEditor({ s, p, up, upPanel }: {
 
   return (
     <div className="space-y-4">
-      {/* Panel details (left) + live cost (right) — one compact row. */}
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      {/* Panel details (left) + live cost (right) — one compact row.
+          Details is a touch wider, cost a touch narrower, and both stretch to
+          the same height so their bottoms line up. */}
+      <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)]">
       {/* Cost summary (live) */}
-      <div className="card px-4 py-3 order-2">
+      <div className="card px-4 py-3 order-2 flex flex-col">
         <button type="button" onClick={toggleCost} className="flex w-full items-center justify-between gap-3 text-left">
           <h2 className="sec-head mb-0 flex items-center gap-1.5">
             <span className={`text-[11px] text-muted transition-transform ${costOpen ? "rotate-90" : ""}`}>▶</span>
@@ -2351,7 +2350,7 @@ function PanelEditor({ s, p, up, upPanel }: {
           <span className="whitespace-nowrap text-sm font-bold text-brand-dark">{fmtEgp(calc.sellUnit)} EGP</span>
         </button>
         {costOpen && (
-        <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
+        <div className="mt-3 grid flex-1 auto-rows-fr grid-cols-2 gap-2 text-sm [&_b]:text-base sm:grid-cols-3">
           <div className="rounded-lg bg-surface p-2.5">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Enclosure<br /><b>{fmtEgp(calc.enclCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Kits<br /><b>{fmtEgp(calc.kits)} EGP</b></div>
@@ -2447,15 +2446,12 @@ function PanelEditor({ s, p, up, upPanel }: {
                     <>
                       <input className="input" type="number" min={0} step={0.5} value={p.mainBusbarKg || ""}
                         placeholder="0" onChange={(e) => u({ mainBusbarKg: parseFloat(e.target.value) || 0 })} />
-                      <div className="mt-1 flex items-start justify-between gap-2">
-                        <p className="text-[11px] text-muted">
-                          {isAutoFamily ? "manual override · auto disabled" : "auto for SR-Basic / Unikit / Local · manual otherwise"}
-                        </p>
-                        {isAutoFamily && overridden && (
+                      {isAutoFamily && overridden && (
+                        <div className="mt-1 flex justify-end">
                           <button type="button" onClick={() => u({ mainBusbarOverride: false })}
                             className="shrink-0 text-[11px] font-semibold text-brand hover:underline" title={`Back to auto (${(autoRaw ?? 0).toFixed(2)} KG)`}>↺ Auto</button>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -2483,6 +2479,9 @@ function PanelEditor({ s, p, up, upPanel }: {
 
       {/* Panel type — placed after Components (enclosure sizings as component-like items) */}
       <SizingCard p={p} u={u} factors={s.factors} />
+
+      {/* No. of poles — its own standalone section (sizing summary, not part of Panel type) */}
+      <div className="card p-5"><PolesSummary p={p} /></div>
 
       {/* RPT-1: per-panel Draft — notes & calculations, never included in outputs */}
       <div className="card p-5">
@@ -3348,7 +3347,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
         })()}
       </div>
       {pasteMsg && <p className="mt-1.5 text-[11px] font-semibold text-brand-dark">{pasteMsg}</p>}
-      {!addTarget && !pasteMsg && !pastePreview && <p className="mt-1 text-[10px] text-muted">Tip: paste a list (one component per line, optional qty via tab/comma) to add many at once.</p>}
       {addTarget && (
         <div className="mt-1.5 flex items-center gap-2 text-[11px]">
           <span className="inline-flex items-center gap-1 rounded-full bg-brand-light px-2 py-0.5 font-semibold text-brand-dark">
@@ -4599,49 +4597,58 @@ function SizingCard({ p, u, factors }: {
   const setFamily = (family: string) => u({ panelsSizing: { ...ps, family }, panelItems: [] });
   const keyOf = (it: PanelTypeItem | null) => (it ? `${it.name}|${it.ref}` : "");
 
+  // Panels/Cells chooser — rendered at the top in panels/none mode, or inside the
+  // left column (beside the Copper Tool) in cells mode.
+  const toggleEl = (
+    <div className="mb-4 max-w-md">
+      <L>Panels or Cells?</L>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          disabled={panelsLocked}
+          onClick={() => { if (p.sizingMode !== "panels") u({ sizingMode: "panels", cellConfig: defaultCellConfig() }); }}
+          title={panelsLocked ? `Incomer > ${PANELS_MAX_INCOMER_A} A — cells only (RPT-01)` : undefined}
+          className={`rounded-lg border-2 px-3 py-2 text-left transition ${
+            p.sizingMode === "panels"
+              ? "border-brand bg-brand-tint shadow-soft"
+              : panelsLocked
+              ? "cursor-not-allowed border-line bg-surface opacity-50"
+              : "border-line bg-white hover:border-brand/50 hover:bg-brand-tint/40"
+          }`}
+        >
+          <div className={`text-sm font-bold leading-tight ${p.sizingMode === "panels" ? "text-brand-dark" : "text-ink"}`}>
+            {panelsLocked && "🔒 "}Panels
+          </div>
+          <div className="text-[11px] text-muted">Standard enclosures</div>
+        </button>
+        <button
+          onClick={() => { if (p.sizingMode !== "cells") u({ sizingMode: "cells", panelItems: [] }); }}
+          className={`rounded-lg border-2 px-3 py-2 text-left transition ${
+            p.sizingMode === "cells"
+              ? "border-brand bg-brand-tint shadow-soft"
+              : "border-line bg-white hover:border-brand/50 hover:bg-brand-tint/40"
+          }`}
+        >
+          <div className={`text-sm font-bold leading-tight ${p.sizingMode === "cells" ? "text-brand-dark" : "text-ink"}`}>Cells</div>
+          <div className="text-[11px] text-muted">Pro-E / IS2 / PLP</div>
+        </button>
+      </div>
+      {panelsLocked && (
+        <p className="mt-1.5 text-[11px] font-semibold text-amber-700">
+          Incoming C.B &gt; {PANELS_MAX_INCOMER_A} A → Panels disabled (cells only)
+        </p>
+      )}
+    </div>
+  );
+
   return (
     <div className="card p-5">
+      <div>
+      {/* Panel type body — full width; the No. of poles summary is its own section below. */}
+      <div className="min-w-0">
       <h2 className="sec-head">Panel type</h2>
-      {/* Step 1 — choose what this panel is built from. Only the chosen section
-          renders below; switching modes clears the other one's selection. */}
-      <div className="mb-4">
-        <L>Panels or Cells?</L>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            disabled={panelsLocked}
-            onClick={() => { if (p.sizingMode !== "panels") u({ sizingMode: "panels", cellConfig: defaultCellConfig() }); }}
-            title={panelsLocked ? `Incomer > ${PANELS_MAX_INCOMER_A} A — cells only (RPT-01)` : undefined}
-            className={`rounded-xl border-2 px-4 py-3 text-left transition ${
-              p.sizingMode === "panels"
-                ? "border-brand bg-brand-tint shadow-soft"
-                : panelsLocked
-                ? "cursor-not-allowed border-line bg-surface opacity-50"
-                : "border-line bg-white hover:border-brand/50 hover:bg-brand-tint/40"
-            }`}
-          >
-            <div className={`text-sm font-bold ${p.sizingMode === "panels" ? "text-brand-dark" : "text-ink"}`}>
-              {panelsLocked && "🔒 "}Panels
-            </div>
-            <div className="mt-0.5 text-[11px] text-muted">Standard enclosures · Single / Double</div>
-          </button>
-          <button
-            onClick={() => { if (p.sizingMode !== "cells") u({ sizingMode: "cells", panelItems: [] }); }}
-            className={`rounded-xl border-2 px-4 py-3 text-left transition ${
-              p.sizingMode === "cells"
-                ? "border-brand bg-brand-tint shadow-soft"
-                : "border-line bg-white hover:border-brand/50 hover:bg-brand-tint/40"
-            }`}
-          >
-            <div className={`text-sm font-bold ${p.sizingMode === "cells" ? "text-brand-dark" : "text-ink"}`}>Cells</div>
-            <div className="mt-0.5 text-[11px] text-muted">Pro-E / IS2 / PLP cell systems</div>
-          </button>
-        </div>
-        {panelsLocked && (
-          <p className="mt-1.5 text-[11px] font-semibold text-amber-700">
-            Incoming C.B &gt; {PANELS_MAX_INCOMER_A} A → Panels disabled (cells only)
-          </p>
-        )}
-      </div>
+      {/* Step 1 — Panels or Cells? In cells mode this chooser moves into the left
+          column (beside the Copper Tool), so it renders here only otherwise. */}
+      {p.sizingMode !== "cells" && toggleEl}
 
       {p.sizingMode === "none" ? (
         <p className="rounded-lg border border-dashed border-line p-5 text-center text-sm text-muted">
@@ -4649,7 +4656,7 @@ function SizingCard({ p, u, factors }: {
         </p>
       ) : p.sizingMode === "panels" ? (
         <div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="max-w-md space-y-3">
             <div>
               <L>Layout</L>
               <div className="flex gap-1.5">
@@ -4666,7 +4673,7 @@ function SizingCard({ p, u, factors }: {
               <L>Enclosure family</L>
               <Sel value={ps.family as any} onChange={(v) => setFamily(v)} options={famOptions as any} />
             </div>
-            <div className={ps.layout === "Double" ? "" : "sm:col-span-2"}>
+            <div>
               <L>{ps.layout === "Double" ? "Sizing (1)" : "Sizing"}</L>
               <SearchSelect value={keyOf(slotItem(1))} placeholder="Search size — one selection…"
                 options={sizing1Pool.map((e) => ({
@@ -4691,11 +4698,7 @@ function SizingCard({ p, u, factors }: {
           </div>
 
           {/* the selected enclosure(s) — one per slot */}
-          {items.length === 0 ? (
-            <p className="mt-3 rounded-lg border border-dashed border-line p-3 text-center text-xs text-muted">
-              No panel selected — pick one sizing above.
-            </p>
-          ) : (
+          {items.length > 0 && (
             <table className="mt-3 w-full text-[13px]">
               <tbody>
                 {items.map((it) => (
@@ -4718,8 +4721,11 @@ function SizingCard({ p, u, factors }: {
           )}
         </div>
       ) : (
-        <div>
-          <div className="mb-3 grid gap-3 sm:grid-cols-4">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)] xl:items-stretch">
+          {/* Panels/Cells chooser + config + cells list (left) */}
+          <div className="min-w-0">
+          {toggleEl}
+          <div className="mb-3 max-w-md space-y-3">
             <div>
               <L>Cell type</L>
               <Sel value={cc.type as any} onChange={(v) => {
@@ -4774,7 +4780,7 @@ function SizingCard({ p, u, factors }: {
               </>
             )}
             {cc.type !== "Pro-E" && (
-              <div className="sm:col-span-2 self-end text-[11px] text-muted">IP54 · 1.5 mm (set automatically for {cc.type})</div>
+              <div className="text-[11px] text-muted">IP54 · 1.5 mm (set automatically for {cc.type})</div>
             )}
           </div>
 
@@ -4813,7 +4819,67 @@ function SizingCard({ p, u, factors }: {
               ))}
             </tbody>
           </table>
-          <CopperToolCard p={p} u={u} />
+          </div>{/* /left: config + cells */}
+          {/* Copper Tool — beside the panel type */}
+          <div className="min-w-0 mt-6 xl:mt-0">
+            <CopperToolCard p={p} u={u} />
+          </div>
+        </div>
+      )}
+      </div>{/* /LEFT */}
+
+      </div>{/* /grid */}
+    </div>
+  );
+}
+
+// Panel "No. of poles" summary — categorises the panel's DIN-rail components (MCB / RCBO /
+// RCCB, contactors + aux + terminal, control gear) and totals their rail width in poles,
+// so the enclosure can be sized. Widths come from the Control Design Guide (see lv/poles.ts).
+function PolesSummary({ p }: { p: LvPanel }) {
+  const { rows, groups, total } = panelPoles(p.components);
+  const pl = (n: number) => `${n} pole${n === 1 ? "" : "s"}`;
+  const groupKinds: Record<PoleGroup, PoleKind[]> = {
+    protection: ["mcb", "rcbo", "rccb"],
+    contactors: ["af", "esb", "aux", "terminal"],
+    control: ["timer", "psu", "relay", "surge"],
+  };
+  return (
+    <div>
+      <h2 className="sec-head">No. of poles <span className="text-[11px] font-normal text-muted">— DIN-rail width · 1 pole = {POLE_CM} cm</span></h2>
+      {total === 0 ? (
+        <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-muted">
+          Add MCB / RCBO / RCCB, contactors or control gear — their pole widths appear here to help size the panel.
+        </p>
+      ) : (
+        <div className="space-y-2.5">
+          {(Object.keys(groupKinds) as PoleGroup[]).map((g) => {
+            const kinds = groupKinds[g].filter((k) => rows[k]?.poles);
+            if (!kinds.length) return null;
+            return (
+              <div key={g} className="overflow-hidden rounded-lg border border-line">
+                <div className="flex items-center justify-between bg-surface px-3 py-1.5 text-[12px] font-bold text-brand-dark">
+                  <span>{GROUP_LABEL[g]}</span><span>{pl(groups[g])}</span>
+                </div>
+                <table className="w-full table-fixed text-[13px]">
+                  <colgroup><col /><col style={{ width: 44 }} /><col style={{ width: 76 }} /></colgroup>
+                  <tbody>
+                    {kinds.map((k) => (
+                      <tr key={k} className="border-t border-line/50">
+                        <td className="truncate py-1 pl-3 text-muted">{KIND_LABEL[k]}</td>
+                        <td className="py-1 pr-2 text-right text-[11px] text-muted">×{rows[k].count}</td>
+                        <td className="whitespace-nowrap py-1 pr-3 text-right font-semibold text-ink">{pl(rows[k].poles)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
+          <div className="flex items-center justify-between rounded-lg bg-brand-tint/60 px-3 py-2 text-sm font-extrabold text-brand-dark">
+            <span>Total width</span>
+            <span>{pl(total)}</span>
+          </div>
         </div>
       )}
     </div>
@@ -4842,32 +4908,21 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
   const cell = (rating: number, key: "p" | "n" | "e", hi: boolean, color: string) => {
     const v = tool[String(rating)]?.[key] ?? 0;
     return (
-      <input className="input h-7 w-16 px-1 text-center text-xs" inputMode="decimal" value={v || ""} placeholder="0"
+      <input className="input h-8 w-16 px-1 text-center text-sm" inputMode="decimal" value={v || ""} placeholder="0"
         style={hi ? { boxShadow: `inset 0 0 0 2px ${color}`, background: `${color}22`, color, fontWeight: 700 } : undefined}
         onChange={(e) => setLen(rating, key, parseFloat(e.target.value.replace(/[^\d.]/g, "")) || 0)} />
     );
   };
   return (
-    <div className="mt-4 rounded-lg border border-line p-3">
+    <div className="flex h-full flex-col rounded-lg border border-line p-3">
       <div className="-mx-3 -mt-3 mb-3 flex items-center justify-between rounded-t-lg border-b border-brand/20 bg-brand-light px-3 py-2">
-        <h3 className="text-sm font-bold text-brand-dark">Copper Tool <span className="text-[11px] font-normal text-muted">· {type} · lengths in mm</span></h3>
-        <span className="text-xs font-bold text-brand-dark">Busbar copper: {total.toFixed(1)} KG</span>
+        <h3 className="text-base font-bold text-brand-dark">Copper Tool</h3>
+        <span className="text-sm font-bold text-brand-dark">Busbar copper: {total.toFixed(1)} KG</span>
       </div>
-      <p className="mb-1 text-[11px] text-muted">Enter the required copper length per rating. Recommended cells are highlighted (all values stay editable):</p>
-      {inc > 0 ? (
-        <p className="mb-2 text-[11px] font-semibold">
-          <span style={{ color: "#dc2626" }}>Phase {hiP} A</span> ·{" "}
-          <span style={{ color: "#111827" }}>Neutral {hiN} A</span> ·{" "}
-          <span style={{ color: "#16a34a" }}>Earth {hiE} A</span>
-          <span className="font-normal text-muted"> — {inc} A incomer · N {Math.round(pctOf(p.neutral) * 100)}% · E {Math.round(pctOf(p.earth) * 100)}% of phase C.S.A ({phaseCsa} mm²)</span>
-        </p>
-      ) : (
-        <p className="mb-2 text-[11px] text-muted">Set the panel's Incoming C.B rating to get Phase / Neutral / Earth recommendations.</p>
-      )}
-      <div className="overflow-auto">
-        <table className="w-full min-w-[460px] text-xs">
+      <div className="flex-1 overflow-auto">
+        <table className="h-full w-full min-w-[460px] text-sm">
           <thead>
-            <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
+            <tr className="text-left text-[12px] uppercase tracking-wide text-muted">
               <th className="px-1 py-1">Rating</th>
               <th className="px-1 py-1">CSA <span className="normal-case">(mm²)</span></th>
               <th className="px-1 py-1 text-center">Phase L <span className="normal-case">(mm)</span></th>
