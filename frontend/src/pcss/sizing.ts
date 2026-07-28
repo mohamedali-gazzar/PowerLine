@@ -99,19 +99,32 @@ export function totalUsedMm(ws: Workspace): Footprint {
  * breakers picked so far physically overflow the panel.
  */
 export function computeEffectiveLvPanel(ws: Workspace): LvPanelId | null {
+  return lvPanelDecision(ws).panel;
+}
+
+/** The chosen panel plus why — whether the transformer band alone settled it. */
+export function lvPanelDecision(ws: Workspace): {
+  panel: LvPanelId | null;
+  /** The panel the transformer rating alone would have picked. */
+  basePanel: LvPanelId | null;
+  /** True when the breakers forced a bigger chassis than the rating needed. */
+  escalated: boolean;
+} {
   const { sel } = ws;
+  const fixed = (panel: LvPanelId) => ({ panel, basePanel: panel, escalated: false });
 
   // Forced to the widest chassis regardless of transformer size.
-  if (sel.rmu === "pral24") return "230";
-  if (sel.rmu === "psec50" && sel.cfg === "2+1+M") return "230";
-  if (sel.rmu === "murge" && sel.cfg === "2+1+M") return "230";
-  if (sel.rmu === "lucy" && sel.cfg === "2+1+M") return "230";
-  if (sel.rmu === "psec375" && sel.cfg === "3+1+M") return "230";
+  if (sel.rmu === "pral24") return fixed("230");
+  if (sel.rmu === "psec50" && sel.cfg === "2+1+M") return fixed("230");
+  if (sel.rmu === "murge" && sel.cfg === "2+1+M") return fixed("230");
+  if (sel.rmu === "lucy" && sel.cfg === "2+1+M") return fixed("230");
+  if (sel.rmu === "psec375" && sel.cfg === "3+1+M") return fixed("230");
 
   const band = trBand(sel.trRating);
-  if (!band) return null;
+  if (!band) return { panel: null, basePanel: null, escalated: false };
 
-  let rank = TR_BAND_RANK[band] || 1;
+  const baseRank = TR_BAND_RANK[band] || 1;
+  let rank = baseRank;
   const { total } = totalUsedMm(ws);
 
   while (rank < 3) {
@@ -122,7 +135,7 @@ export function computeEffectiveLvPanel(ws: Workspace): LvPanelId | null {
     if (hasCompatibleDesign && fits) break;
     rank++;
   }
-  return BAND_LV_PANEL[rank];
+  return { panel: BAND_LV_PANEL[rank], basePanel: BAND_LV_PANEL[baseRank], escalated: rank > baseRank };
 }
 
 /** Incoming Only is always the fixed 1400 mm chassis. */
@@ -139,25 +152,82 @@ export interface SpaceInfo {
   /** How full the panel is, 0-100. */
   pct: number;
   status: "ok" | "warn" | "over" | "unknown";
+  /** True when the breakers pushed the panel up a size on their own. */
+  escalated: boolean;
+  basePanel: LvPanelId | null;
 }
 
 export function spaceInfo(ws: Workspace): SpaceInfo {
   const footprint = totalUsedMm(ws);
-  const panel = effectiveLvPanel(ws);
-  const emptyMm = panelEmptyMm(panel);
+  const incomingOnly = ws.sel.lvConfig === "incoming";
+  const decision = incomingOnly
+    ? { panel: "1400" as LvPanelId, basePanel: "1400" as LvPanelId, escalated: false }
+    : lvPanelDecision(ws);
+  const emptyMm = panelEmptyMm(decision.panel);
+  const base = { escalated: decision.escalated, basePanel: decision.basePanel };
 
   if (emptyMm === null) {
-    return { panel, emptyMm, footprint, remainingMm: null, pct: 0, status: "unknown" };
+    return { panel: decision.panel, emptyMm, footprint, remainingMm: null, pct: 0, status: "unknown", ...base };
   }
   const remainingMm = emptyMm - footprint.total;
   const pct = Math.min((footprint.total / emptyMm) * 100, 100);
   const status = remainingMm < 0 ? "over" : remainingMm < emptyMm * 0.1 ? "warn" : "ok";
-  return { panel, emptyMm, footprint, remainingMm, pct, status };
+  return { panel: decision.panel, emptyMm, footprint, remainingMm, pct, status, ...base };
 }
 
 /** True once every required field is set and the panel has something in it. */
 export function isConfigComplete(ws: Workspace): boolean {
   return isSelectionComplete(ws.sel) && totalUsedMm(ws).count > 0;
+}
+
+export interface SpaceLine {
+  label: string;
+  qty: number;
+  eachMm: number;
+  totalMm: number;
+  /** Set on rows the tool added itself, so they can be called out. */
+  auto?: boolean;
+}
+
+/**
+ * Itemises what is eating the panel width, so the bar is explainable rather
+ * than just a number that moves.
+ */
+export function spaceBreakdown(ws: Workspace): SpaceLine[] {
+  const { sel, qtys, customs, switchFuseItems } = ws;
+  const lines: SpaceLine[] = [];
+  const push = (label: string, qty: number, eachMm: number, auto?: boolean) => {
+    if (qty > 0) lines.push({ label, qty, eachMm, totalMm: qty * eachMm, auto });
+  };
+
+  const useCatalog = sel.lvConfig === "inout" && sel.lvMode === "technical";
+  const inoutSizing = sel.lvConfig === "inout" && sel.lvMode === "sizing";
+
+  if (useCatalog) {
+    for (const i of allBomRows(ws)) {
+      if (i.excludeFromSizing) continue;
+      push(`${i.model} ${i.amp}A`, i.qty, mccbWidthMm(i.model, i.amp), i.id.startsWith("auto-"));
+    }
+  } else {
+    const pfFrame = pfSizingFrame(sel);
+    for (const b of getActiveBreakers(sel)) {
+      push(b.label, qtys[b.id] || 0, b.widthMm);
+      if (pfFrame === b.id) push(`${b.label} — power factor`, 1, b.widthMm, true);
+    }
+    if (inoutSizing) {
+      for (const i of switchFuseItems) push(`Switch fuse ${i.amp} A`, i.qty, SWITCHFUSE_WIDTH[i.amp] || 0);
+      if (sel.mainIncoming) {
+        const mb = INCOMING_ONLY_BREAKERS.find((x) => x.id === sel.mainIncoming);
+        if (mb) push(`${mb.label} — main incoming`, 1, mb.widthMm, true);
+      }
+    }
+    for (const c of customs) push(c.label, c.qty, c.widthMm);
+  }
+
+  const { stdGaps, swGaps } = totalUsedMm(ws);
+  push("EEHC gaps (60 mm)", stdGaps, 60, true);
+  push("EEHC gaps, switch fuse (20 mm)", swGaps, 20, true);
+  return lines;
 }
 
 /** Blueprints split into what fits and what does not. */

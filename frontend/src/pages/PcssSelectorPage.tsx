@@ -53,7 +53,7 @@ import {
   type Workspace,
 } from "../pcss/engine";
 import { allBomRows, isAutoRow, pfSizingFrame, brandOptions } from "../pcss/bom";
-import { evaluateDesigns, isConfigComplete, spaceInfo } from "../pcss/sizing";
+import { evaluateDesigns, isConfigComplete, spaceBreakdown, spaceInfo, type SpaceLine } from "../pcss/sizing";
 import { INCOMING_ONLY_BREAKERS } from "../pcss/data";
 import { SALES_MANAGER, findPerson, useStaff } from "../staff";
 import { Field, TextInput, Toggle } from "../components/fields";
@@ -199,6 +199,7 @@ export default function PcssSelectorPage() {
   const complete = useMemo(() => isConfigComplete(ws), [ws]);
   const results = useMemo(() => evaluateDesigns(ws, filter), [ws, filter]);
   const bom = useMemo(() => allBomRows(ws), [ws]);
+  const breakdown = useMemo(() => spaceBreakdown(ws), [ws]);
 
   const patch = (p: Partial<Selection>) => setSel((s) => ({ ...s, ...p }));
 
@@ -686,6 +687,12 @@ export default function PcssSelectorPage() {
                     </table>
                   </div>
 
+                  {/* The same live bar as the output pane, right under the
+                      buttons that move it. */}
+                  <div className="mt-3">
+                    <SpaceBar space={space} iec={sel.iec} breakdown={breakdown} />
+                  </div>
+
                   {!isIncomingOnly && (
                     <>
                       <SubHead>Switch fuse</SubHead>
@@ -822,6 +829,12 @@ export default function PcssSelectorPage() {
                     </div>
                   )}
                 </>
+              )}
+
+              {isTechnical && (
+                <div className="mt-3">
+                  <SpaceBar space={space} iec={sel.iec} breakdown={breakdown} />
+                </div>
               )}
 
               {/* Power factor correction */}
@@ -1013,8 +1026,17 @@ function VoltageSelect({
   );
 }
 
-function SpaceBar({ space, iec }: { space: ReturnType<typeof spaceInfo>; iec: EehcId | null }) {
-  const { footprint, emptyMm, remainingMm, pct, status } = space;
+function SpaceBar({
+  space,
+  iec,
+  breakdown,
+}: {
+  space: ReturnType<typeof spaceInfo>;
+  iec: EehcId | null;
+  /** Itemised list of what is filling the panel — shown next to the controls. */
+  breakdown?: SpaceLine[];
+}) {
+  const { footprint, emptyMm, remainingMm, pct, status, escalated, basePanel, panel } = space;
 
   if (emptyMm === null) {
     return (
@@ -1039,7 +1061,7 @@ function SpaceBar({ space, iec }: { space: ReturnType<typeof spaceInfo>; iec: Ee
           Space allocated: <b className="text-ink">{footprint.total} mm</b> / {emptyMm} mm
           <span className="text-muted/70">{gapNote}</span>
         </span>
-        <span className={`font-bold ${status === "over" ? "text-red-700" : "text-ink"}`}>
+        <span className={`whitespace-nowrap font-bold ${status === "over" ? "text-red-700" : "text-ink"}`}>
           {remainingMm} mm left
         </span>
       </div>
@@ -1057,6 +1079,41 @@ function SpaceBar({ space, iec }: { space: ReturnType<typeof spaceInfo>; iec: Ee
           ? "✔ Maximum utilisation reached."
           : `✔ ${remainingMm} mm structural buffer remaining.`}
       </p>
+
+      {/* Free space can go UP when something is added, because overflowing the
+          chassis moves the whole job to the next panel size. Say so, or it
+          reads as a bug. */}
+      {escalated && (
+        <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs font-semibold text-amber-800">
+          ⬆ Panel upgraded to {panel} cm — {basePanel} cm is what {""}
+          the transformer rating alone needs, but the components no longer fit it.
+        </p>
+      )}
+
+      {breakdown && breakdown.length > 0 && (
+        <table className="mt-3 w-full text-[11px]">
+          <tbody>
+            {breakdown.map((l) => (
+              <tr key={l.label} className="border-t border-line/60">
+                <td className={`py-1 ${l.auto ? "text-brand-dark" : "text-muted"}`}>
+                  {l.label}
+                  {l.auto && <span className="ml-1 text-[10px] uppercase tracking-wide">auto</span>}
+                </td>
+                <td className="py-1 text-right text-muted/80">
+                  {l.qty} × {l.eachMm} mm
+                </td>
+                <td className="py-1 text-right font-semibold text-ink">{l.totalMm} mm</td>
+              </tr>
+            ))}
+            <tr className="border-t-2 border-line">
+              <td className="py-1 font-bold text-ink" colSpan={2}>
+                Total
+              </td>
+              <td className="py-1 text-right font-bold text-ink">{footprint.total} mm</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

@@ -173,11 +173,10 @@ export const SWITCHFUSE_AMPS: number[] = [160, 250, 400, 630];
 
 /**
  * Width in mm per switch-fuse ampere rating.
- * NOTE 160 A = 500 mm sits well outside the other three (105 mm each). That is
- * what the original tool shipped and it drives real footprint maths, so it is
- * kept verbatim — worth confirming against the mechanical drawings.
+ * The 160 A entry read 500 mm in the original tool — a typo for 50 mm,
+ * corrected on the owner's instruction 2026-07-28.
  */
-export const SWITCHFUSE_WIDTH: Record<number, number> = { "160": 500, "250": 105, "400": 105, "630": 105 };
+export const SWITCHFUSE_WIDTH: Record<number, number> = { "160": 50, "250": 105, "400": 105, "630": 105 };
 
 export const FUSE_LINK_LABEL = "Fuse Link (Set of 3)";
 export const SWITCH_FUSE_LABEL = "Switch Fuse";
