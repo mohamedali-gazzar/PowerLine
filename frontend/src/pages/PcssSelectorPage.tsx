@@ -156,7 +156,12 @@ function OptGrid<T extends string>({
 
 /** A small label-over-value recap tile. */
 function Tile({ label, value, tone }: { label: string; value: ReactNode; tone?: "danger" | "warn" }) {
-  const toneCls = tone === "danger" ? "text-red-700" : tone === "warn" ? "text-amber-700" : "text-ink";
+  const toneCls =
+    tone === "danger"
+      ? "text-red-700 dark:text-red-300"
+      : tone === "warn"
+      ? "text-amber-700 dark:text-amber-300"
+      : "text-ink";
   return (
     <div className="rounded-lg border border-line bg-white p-2.5">
       <div className="text-[10px] font-bold uppercase tracking-wider text-muted">{label}</div>
@@ -165,14 +170,35 @@ function Tile({ label, value, tone }: { label: string; value: ReactNode; tone?: 
   );
 }
 
+/**
+ * Tinted banners. The dark variants matter: a bare `bg-amber-50` is very nearly
+ * white, so on the dark theme every tone rendered as the same glaring pale box
+ * and a warning was indistinguishable from an error. The leading glyph carries
+ * the same distinction without relying on colour at all.
+ */
 function Notice({ tone, children }: { tone: "danger" | "warn" | "info"; children: ReactNode }) {
-  const cls =
-    tone === "danger"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : tone === "warn"
-      ? "border-amber-300 bg-amber-50 text-amber-800"
-      : "border-line bg-surface text-muted";
-  return <p className={`rounded-lg border p-3 text-xs font-semibold ${cls}`}>{children}</p>;
+  const { cls, icon } = {
+    danger: {
+      cls: "border-red-200 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300",
+      icon: "⛔",
+    },
+    warn: {
+      cls: "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200",
+      icon: "⚠",
+    },
+    info: { cls: "border-line bg-surface text-muted", icon: "" },
+  }[tone];
+
+  return (
+    <p className={`flex items-start gap-2 rounded-lg border p-3 text-xs font-semibold ${cls}`}>
+      {icon && (
+        <span aria-hidden="true" className="leading-none">
+          {icon}
+        </span>
+      )}
+      <span>{children}</span>
+    </p>
+  );
 }
 
 function SubHead({ children }: { children: ReactNode }) {
@@ -1066,7 +1092,7 @@ function SpaceBar({
           Space allocated: <b className="text-ink">{footprint.total} mm</b> / {emptyMm} mm
           <span className="text-muted/70">{gapNote}</span>
         </span>
-        <span className={`whitespace-nowrap font-bold ${status === "over" ? "text-red-700" : "text-ink"}`}>
+        <span className={`whitespace-nowrap font-bold ${status === "over" ? "text-red-700 dark:text-red-300" : "text-ink"}`}>
           {remainingMm} mm left
         </span>
       </div>
@@ -1075,7 +1101,11 @@ function SpaceBar({
       </div>
       <p
         className={`mt-2 text-xs font-semibold ${
-          status === "over" ? "text-red-700" : status === "warn" ? "text-amber-700" : "text-muted"
+          status === "over"
+            ? "text-red-700 dark:text-red-300"
+            : status === "warn"
+            ? "text-amber-700 dark:text-amber-300"
+            : "text-muted"
         }`}
       >
         {remainingMm !== null && remainingMm < 0
@@ -1089,7 +1119,7 @@ function SpaceBar({
           chassis moves the whole job to the next panel size. Say so, or it
           reads as a bug. */}
       {escalated && (
-        <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs font-semibold text-amber-800">
+        <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs font-semibold text-amber-800 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">
           ⬆ Panel upgraded to {panel} cm — {basePanel} cm is what {""}
           the transformer rating alone needs, but the components no longer fit it.
         </p>
@@ -1216,7 +1246,9 @@ function DesignCard({
       <div className="flex items-start justify-between gap-2">
         <div className="text-sm font-bold text-ink">{d.name}</div>
         <span
-          className={`chip ${fits ? "bg-green-100 text-green-800" : "bg-surface text-muted"}`}
+          className={`chip ${
+            fits ? "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-300" : "bg-surface text-muted"
+          }`}
         >
           {fits ? "✔ Verified fit" : "— Incompatible"}
         </span>
@@ -1240,12 +1272,20 @@ function DesignCard({
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {recommended && <span className="chip bg-brand text-white">Recommended</span>}
-        <span className={`chip ${recommended ? "bg-blue-100 text-blue-800" : "bg-surface text-muted"}`}>
+        <span
+          className={`chip ${
+            recommended ? "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300" : "bg-surface text-muted"
+          }`}
+        >
           LV chassis: {d.lvp} cm
         </span>
         <span className="chip bg-surface text-muted">{iec === "eehc" ? "EEHC spaced" : "Dense array"}</span>
         {space.emptyMm && space.footprint.total > 0 && remain !== null && (
-          <span className={`chip ${remain < 0 ? "bg-red-100 text-red-800" : "bg-surface text-muted"}`}>
+          <span
+            className={`chip ${
+              remain < 0 ? "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300" : "bg-surface text-muted"
+            }`}
+          >
             {remain < 0
               ? `⚠ ${Math.abs(remain)} mm deficit`
               : `${space.footprint.total} mm configured · ${remain} mm clear`}
