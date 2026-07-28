@@ -5,9 +5,9 @@
 import {
   BAND_LV_PANEL,
   DESIGNS,
-  INCOMING_ONLY_BREAKERS,
   LV_PANELS,
   SWITCHFUSE_WIDTH,
+  SWITCH_FUSE_LABEL,
   TR_BAND_RANK,
   type LvPanelId,
 } from "./data";
@@ -16,7 +16,6 @@ import {
   checkDesignCompatibility,
   getActiveBreakers,
   isSelectionComplete,
-  mainIncomingId,
   mccbWidthMm,
   panelEmptyMm,
   trBand,
@@ -33,10 +32,17 @@ export interface Footprint {
 }
 
 /**
- * Adds up everything in the LV panel.
+ * Adds up what is in the LV panel.
  *
- * EEHC spacing: there is a gap either side of every unit (units + 1 gaps).
- * Switch-fuse gaps are 20 mm and get used up first; the rest are 60 mm.
+ * The two modes deliberately measure different things:
+ *
+ *   Sizing    — only the components the engineer puts in, plus the
+ *               power-factor breaker. No main incoming, no EEHC gaps.
+ *   Technical — the complete offer: every catalogue line including the
+ *               auto-added main incoming, plus EEHC spacing.
+ *
+ * EEHC spacing: a gap either side of every unit (units + 1 gaps). Switch-fuse
+ * gaps are 20 mm and get used up first; the rest are 60 mm.
  */
 export function totalUsedMm(ws: Workspace): Footprint {
   const { sel, qtys, customs, switchFuseItems } = ws;
@@ -65,14 +71,6 @@ export function totalUsedMm(ws: Workspace): Footprint {
         total += (SWITCHFUSE_WIDTH[i.amp] || 0) * i.qty;
         count += i.qty;
       }
-      const mainId = mainIncomingId(sel);
-      if (mainId) {
-        const mb = INCOMING_ONLY_BREAKERS.find((x) => x.id === mainId);
-        if (mb) {
-          total += mb.widthMm;
-          count += 1;
-        }
-      }
     }
     for (const c of customs) {
       total += c.qty * c.widthMm;
@@ -82,9 +80,12 @@ export function totalUsedMm(ws: Workspace): Footprint {
 
   let stdGaps = 0;
   let swGaps = 0;
-  if (sel.iec === "eehc" && count > 0) {
+  if (useCatalog && sel.iec === "eehc" && count > 0) {
     const numGaps = count + 1;
-    const switchFuseQty = inoutSizing ? switchFuseItems.reduce((s, i) => s + i.qty, 0) : 0;
+    // Switch fuses only need 20 mm between them; everything else takes 60 mm.
+    const switchFuseQty = allBomRows(ws)
+      .filter((i) => i.model === SWITCH_FUSE_LABEL)
+      .reduce((s, i) => s + i.qty, 0);
     swGaps = Math.min(switchFuseQty, numGaps);
     stdGaps = numGaps - swGaps;
     total += stdGaps * 60 + swGaps * 20;
@@ -218,15 +219,11 @@ export function spaceBreakdown(ws: Workspace): SpaceLine[] {
     }
     if (inoutSizing) {
       for (const i of switchFuseItems) push(`Switch fuse ${i.amp} A`, i.qty, SWITCHFUSE_WIDTH[i.amp] || 0);
-      const mainId = mainIncomingId(sel);
-      if (mainId) {
-        const mb = INCOMING_ONLY_BREAKERS.find((x) => x.id === mainId);
-        if (mb) push(`${mb.label} — main incoming`, 1, mb.widthMm, true);
-      }
     }
     for (const c of customs) push(c.label, c.qty, c.widthMm);
   }
 
+  // Gaps and the main incoming belong to the complete offer, not to Sizing.
   const { stdGaps, swGaps } = totalUsedMm(ws);
   push("EEHC gaps (60 mm)", stdGaps, 60, true);
   push("EEHC gaps, switch fuse (20 mm)", swGaps, 20, true);

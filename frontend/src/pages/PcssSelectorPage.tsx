@@ -1018,11 +1018,13 @@ function SpaceBar({
 
   const barColor = status === "over" ? "bg-red-500" : status === "warn" ? "bg-amber-500" : "bg-brand";
   const gapNote =
-    footprint.count > 0
-      ? iec === "eehc"
-        ? ` (incl. ${footprint.stdGaps}× 60 mm + ${footprint.swGaps}× 20 mm EEHC gaps)`
-        : " (no EEHC spacing)"
-      : "";
+    footprint.count === 0
+      ? ""
+      : footprint.stdGaps + footprint.swGaps > 0
+      ? ` (incl. ${footprint.stdGaps}× 60 mm + ${footprint.swGaps}× 20 mm EEHC gaps)`
+      : iec === "eehc"
+      ? " (selected breakers only — EEHC gaps and the incoming breaker are counted in Technical)"
+      : " (no EEHC spacing)";
 
   return (
     <div className="rounded-lg border border-line bg-white p-3">
