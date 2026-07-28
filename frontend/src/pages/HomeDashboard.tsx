@@ -38,7 +38,7 @@ export default function HomeDashboard() {
         </div>
         <div className="flex gap-2">
           <button className="btn-primary" onClick={() => setChooser(true)}>+ New QTN</button>
-          <button className="btn-ghost" onClick={() => navigate("/kiosks")}>🏗️ Kiosk tool</button>
+          <button className="btn-ghost" onClick={() => navigate("/kiosks")}>🏗️ P-CSS selector</button>
           <button className="btn-ghost" onClick={() => navigate("/pricing")}>💲 Price list</button>
         </div>
       </div>
@@ -67,6 +67,7 @@ export default function HomeDashboard() {
         <div className="grid gap-3 content-start">
           <ShortcutCard icon="⚡" title="RMU Offers History" desc="Ring Main Unit technical & commercial offers" onClick={() => navigate("/rmu")} />
           <ShortcutCard icon="📊" title="LV Offers History" desc="Low-voltage panel quotations" onClick={() => navigate("/lv")} />
+          <ShortcutCard icon="🏗️" title="P-CSS Selector" desc="Size a packaged substation, step by step" onClick={() => navigate("/kiosks")} />
           <ShortcutCard icon="💲" title="Price list" desc="Change prices online — live, no waiting" onClick={() => navigate("/pricing")} />
         </div>
       </div>

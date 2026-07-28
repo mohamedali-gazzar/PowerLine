@@ -10,13 +10,14 @@ import HomeDashboard from "./pages/HomeDashboard";
 import OffersListPage from "./pages/OffersListPage";
 import NewOfferPage from "./pages/NewOfferPage";
 import OfferDetailPage from "./pages/OfferDetailPage";
-import KioskSelectorPage from "./pages/KioskSelectorPage";
 import LvQtnListPage from "./pages/LvQtnListPage";
 import LvConfiguratorPage from "./pages/LvConfiguratorPage";
 // Loaded on demand: the price screen is used occasionally, so its code is only
 // downloaded when someone actually opens /pricing — it never weighs on the
 // everyday app or on first load.
 const PricingAdminPage = React.lazy(() => import("./pages/PricingAdminPage"));
+// Same for the P-CSS selector — it carries the full breaker catalogue.
+const PcssSelectorPage = React.lazy(() => import("./pages/PcssSelectorPage"));
 // Brand fonts — self-hosted via @fontsource so local dev stays offline-capable.
 import "@fontsource/poppins/300.css";
 import "@fontsource/poppins/400.css";
@@ -46,7 +47,14 @@ function Gate() {
       <Route path="/" element={<App />}>
         <Route index element={<HomeDashboard />} />
         <Route path="rmu" element={<OffersListPage />} />
-        <Route path="kiosks" element={<KioskSelectorPage />} />
+        <Route
+          path="kiosks"
+          element={
+            <React.Suspense fallback={<div className="skeleton h-64" />}>
+              <PcssSelectorPage />
+            </React.Suspense>
+          }
+        />
         <Route
           path="pricing"
           element={
