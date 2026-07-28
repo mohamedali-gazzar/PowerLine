@@ -32,16 +32,58 @@ export async function getVersion(_req: Request, res: Response) {
 }
 
 /** GET /api/pricing/status — what the price screen shows on load. */
+/**
+ * True when the price list customers are served is older than the prices in the
+ * database.
+ *
+ * Not the same question as "are there unpublished edits". Prices can reach the
+ * database without going through the editor — a catalogue import, or the
+ * first-run seed — and those write no PriceChange rows. Judging by edit rows
+ * alone reported "up to date" while quotations were still being priced from an
+ * older snapshot, with no way to publish. Comparing timestamps catches every
+ * route into the data, however it got there.
+ */
+async function livePriceListIsBehind(): Promise<boolean> {
+  const book = await prisma.priceBook.findUnique({ where: { id: "singleton" } });
+  if (!book || book.version === 0 || book.source === "json") return false;
+
+  const [rmu, comp, encl, setting] = await Promise.all([
+    prisma.rmuPrice.aggregate({ _max: { updatedAt: true } }),
+    prisma.lvComponent.aggregate({ _max: { updatedAt: true } }),
+    prisma.lvEnclosure.aggregate({ _max: { updatedAt: true } }),
+    prisma.priceSetting.aggregate({ _max: { updatedAt: true } }),
+  ]);
+  const latestData = [
+    rmu._max.updatedAt, comp._max.updatedAt, encl._max.updatedAt, setting._max.updatedAt,
+  ].reduce<Date | null>((a, d) => (d && (!a || d > a) ? d : a), null);
+  if (!latestData) return false;
+
+  const snaps = await prisma.priceSnapshot.findMany({
+    where: { version: book.version },
+    select: { domain: true, createdAt: true },
+  });
+  if (!snaps.length) return true;
+
+  // An LV catalogue that has never been published is behind by definition.
+  const lvRows = await prisma.lvComponent.count();
+  if (lvRows > 0 && !snaps.some((s) => s.domain === "LV")) return true;
+
+  const published = snaps.reduce((a, s) => (s.createdAt > a ? s.createdAt : a), snaps[0].createdAt);
+  // A second of slack: the snapshot is written moments after the rows it covers.
+  return latestData.getTime() > published.getTime() + 1000;
+}
+
 export async function getStatus(req: Request, res: Response) {
   try {
     await refreshPriceBook();
-    const [book, rmuCount, settingCount, lvComponents, lvEnclosures, role] = await Promise.all([
+    const [book, rmuCount, settingCount, lvComponents, lvEnclosures, role, behind] = await Promise.all([
       prisma.priceBook.findUnique({ where: { id: "singleton" } }),
       prisma.rmuPrice.count(),
       prisma.priceSetting.count(),
       prisma.lvComponent.count(),
       prisma.lvEnclosure.count(),
       roleOf(req.userId),
+      livePriceListIsBehind(),
     ]);
     const info = priceBookInfo();
     res.json({
@@ -51,6 +93,8 @@ export async function getStatus(req: Request, res: Response) {
       source: info.source,
       stale: info.stale,
       seedState: book?.seedState ?? "EMPTY",
+      /** Database prices are newer than the published list — publishing is needed. */
+      behindLive: behind,
       counts: { rmuPrices: rmuCount, settings: settingCount, lvComponents, lvEnclosures },
     });
   } catch (e) {

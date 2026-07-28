@@ -127,6 +127,9 @@ export interface PricingStatus {
   source: "bundled" | "db";
   stale: boolean;
   seedState: "EMPTY" | "SEEDING" | "READY";
+  /** Database prices are newer than the published list — publishing is needed.
+   *  Catches price changes that bypass the editor (imports, first-run seed). */
+  behindLive?: boolean;
   counts: { rmuPrices: number; settings: number; lvComponents: number; lvEnclosures: number };
 }
 export interface RmuPriceRow {

@@ -31,6 +31,29 @@ export interface CatalogPayload {
 const LS_KEY = "powerline-catalog"; // one key, overwritten — never version-suffixed
 let loadedVersion = 0;
 
+// A pristine copy of the catalogue shipped in this build, taken before anything
+// can overwrite it. installCatalog() mutates COMPONENTS/ENCLOSURES in place, so
+// without this the bundled prices are unrecoverable once a cached catalogue has
+// been installed — and a browser that cached a database catalogue would keep
+// serving it forever, even after a release with new prices. Captured at module
+// scope, which runs before installCachedCatalog() is called.
+const BUNDLED_COMPONENTS: DbComponent[] = [...COMPONENTS];
+const BUNDLED_ENCLOSURES: DbEnclosure[] = [...ENCLOSURES];
+const BUNDLED_FACTORS: Factors = JSON.parse(JSON.stringify(DEFAULT_FACTORS));
+
+/** Put the catalogue shipped in this build back in place. */
+function restoreBundled(): void {
+  COMPONENTS.length = 0;
+  COMPONENTS.push(...BUNDLED_COMPONENTS);
+  ENCLOSURES.length = 0;
+  ENCLOSURES.push(...BUNDLED_ENCLOSURES);
+  const { forms, ...flat } = BUNDLED_FACTORS;
+  Object.assign(DEFAULT_FACTORS, flat);
+  Object.assign(DEFAULT_FACTORS.forms, forms);
+  rebuildDerived();
+  loadedVersion = 0;
+}
+
 export function catalogVersion(): number {
   return loadedVersion;
 }
@@ -80,7 +103,21 @@ export async function refreshCatalog(token: string | null): Promise<number | nul
     });
     if (!res.ok) return null;
     const body = (await res.json()) as { source: string; version: number; data: CatalogPayload | null };
-    if (!body?.data || body.source !== "db" || !body.data.components?.length) return null;
+
+    // The server is serving the catalogue shipped with the build. Any catalogue
+    // this browser cached earlier is now wrong, so drop it and go back to the
+    // bundled prices — otherwise the cache would outlive every future release.
+    if (!body?.data || body.source !== "db" || !body.data.components?.length) {
+      if (loadedVersion !== 0 || readCache()) {
+        try {
+          localStorage.removeItem(LS_KEY);
+        } catch {
+          /* ignore */
+        }
+        restoreBundled();
+      }
+      return null;
+    }
     if (body.version === loadedVersion) return body.version;
 
     installCatalog(body.data, body.version);

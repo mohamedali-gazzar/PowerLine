@@ -225,39 +225,58 @@ export default function PricingAdminPage() {
         </div>
       )}
 
-      {/* ── Publish bar ──────────────────────────────────────────────────── */}
-      {status.seedState === "READY" && (
-        <div
-          className={`card mb-4 flex flex-wrap items-center justify-between gap-3 p-4 ${
-            pending.length ? "border-amber-300 bg-amber-50/60" : ""
-          }`}
-        >
-          <div>
-            <p className="text-sm font-bold text-ink">
-              {pending.length === 0
-                ? "No unpublished changes"
-                : `${pending.length} change${pending.length === 1 ? "" : "s"} waiting to go live`}
-            </p>
-            <p className="text-xs text-muted">
-              {pending.length === 0
-                ? "The live price list is up to date."
-                : "Customers still see the old prices until you publish."}
-            </p>
-          </div>
-          <button
-            className="btn-primary"
-            disabled={pending.length === 0 || busy === "publish"}
-            onClick={() => setConfirming(true)}
-          >
-            {busy === "publish" ? "Publishing…" : "Update price list & database"}
-          </button>
-        </div>
-      )}
+      {/* ── Publish bar ──────────────────────────────────────────────────────
+          Publishing is offered whenever the live list is behind the database —
+          not only when there are unpublished EDITS. Prices also arrive by
+          import or first-run seed, which write no edit rows; gating on those
+          alone left the price list stuck with the publish button greyed out. */}
+      {status.seedState === "READY" &&
+        (() => {
+          const behind = status.behindLive === true;
+          const needsPublish = pending.length > 0 || behind;
+          return (
+            <div
+              className={`card mb-4 flex flex-wrap items-center justify-between gap-3 p-4 ${
+                needsPublish ? "border-amber-300 bg-amber-50/60 dark:border-amber-400/40 dark:bg-amber-400/10" : ""
+              }`}
+            >
+              <div>
+                <p className="text-sm font-bold text-ink">
+                  {pending.length > 0
+                    ? `${pending.length} change${pending.length === 1 ? "" : "s"} waiting to go live`
+                    : behind
+                    ? "The live price list is behind"
+                    : "No unpublished changes"}
+                </p>
+                <p className="text-xs text-muted">
+                  {pending.length > 0
+                    ? "Customers still see the old prices until you publish."
+                    : behind
+                    ? "Prices in the database are newer than the ones quotations use. Publish to send them live."
+                    : "The live price list is up to date."}
+                </p>
+              </div>
+              <button
+                className="btn-primary"
+                disabled={!needsPublish || busy === "publish"}
+                onClick={() => setConfirming(true)}
+              >
+                {busy === "publish" ? "Publishing…" : "Update price list & database"}
+              </button>
+            </div>
+          );
+        })()}
 
       {/* ── Review sheet ─────────────────────────────────────────────────── */}
       {confirming && (
         <div className="card mb-4 border-brand/40 p-4">
           <h2 className="sec-head">Review before publishing</h2>
+          {pending.length === 0 && (
+            <p className="mb-3 rounded-lg border border-line bg-surface p-3 text-xs font-semibold text-muted">
+              No individual edits to list — the prices in the database are simply newer than the published list
+              (an import or the first-run copy). Publishing sends the current database prices to quotations.
+            </p>
+          )}
           <ul className="mb-3 max-h-64 space-y-1 overflow-y-auto text-sm">
             {pending.map((c) => (
               <li key={c.id} className="flex justify-between gap-3 border-b border-line/60 py-1">
