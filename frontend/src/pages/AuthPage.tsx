@@ -4,6 +4,10 @@ import { useAuth } from "../auth/AuthContext";
 
 type Mode = "login" | "signup" | "forgot";
 
+/** Sign-up is restricted to company mailboxes. The server enforces the same
+ *  rule — this only saves the user from typing a domain that would be rejected. */
+export const COMPANY_DOMAIN = "powerline.com.eg";
+
 /** The login wall — sign in, sign up (email → emailed code → password), or reset
  *  a forgotten password. Shown whenever no user is signed in. */
 export default function AuthPage() {
@@ -17,6 +21,15 @@ export default function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [devCode, setDevCode] = useState(""); // shown when email isn't configured
+
+  // On sign-up the box holds only the name part; the address is always rebuilt
+  // with the company domain. Pasting a full address keeps just the name part
+  // rather than producing "someone@powerline.com.eg@powerline.com.eg".
+  const localPart = email.split("@")[0];
+  const setLocalPart = (raw: string) => {
+    const local = raw.split("@")[0].trim();
+    setEmail(local ? `${local}@${COMPANY_DOMAIN}` : "");
+  };
 
   const reset = (m: Mode) => {
     setMode(m);
@@ -123,13 +136,42 @@ export default function AuthPage() {
               else (step === 0 ? doForgot : doReset)();
             }}
           >
-            {/* Email — shown except on the code step */}
+            {/* Email — shown except on the code step. Signing up is limited to
+                company mailboxes, so the domain is fixed and only the name part
+                is typed. Sign-in and reset stay open, so anyone who already has
+                an account can still get in. */}
             {step === 0 && (
               <div>
-                <label className="label" htmlFor="email">Email</label>
-                <input id="email" type="email" autoFocus required className="input"
-                  placeholder="you@company.com" value={email}
-                  onChange={(e) => setEmail(e.target.value)} />
+                <label className="label" htmlFor="email">
+                  {mode === "signup" ? "Company email" : "Email"}
+                </label>
+                {mode === "signup" ? (
+                  <>
+                    <div className="flex items-stretch">
+                      <input
+                        id="email"
+                        type="text"
+                        autoFocus
+                        required
+                        autoComplete="username"
+                        className="input rounded-r-none border-r-0"
+                        placeholder="firstname.lastname"
+                        value={localPart}
+                        onChange={(e) => setLocalPart(e.target.value)}
+                      />
+                      <span className="inline-flex select-none items-center whitespace-nowrap rounded-r-lg border border-line bg-surface px-3 text-sm font-semibold text-muted">
+                        @{COMPANY_DOMAIN}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted/80">
+                      Accounts are only for @{COMPANY_DOMAIN} addresses.
+                    </p>
+                  </>
+                ) : (
+                  <input id="email" type="email" autoFocus required className="input"
+                    placeholder={`you@${COMPANY_DOMAIN}`} value={email}
+                    onChange={(e) => setEmail(e.target.value)} />
+                )}
               </div>
             )}
 
