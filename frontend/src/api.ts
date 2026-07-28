@@ -160,6 +160,57 @@ export interface LvRow {
   name?: string;
   ip?: string;
 }
+/** One spreadsheet line, already parsed out of the workbook. */
+export interface LvImportRow {
+  type: string;
+  description: string;
+  code: string;
+  eur: number;
+  egp: number;
+  brand: string;
+  poles: number;
+}
+
+export interface LvImportDiff {
+  kind: "update" | "add";
+  entity: "LvComponent" | "LvEnclosure";
+  code: string;
+  label: string;
+  fromEur?: number;
+  fromEgp?: number;
+  eur: number;
+  egp: number;
+  pct?: number;
+}
+
+export interface LvImportSummary {
+  rowsRead: number;
+  updates: number;
+  additions: number;
+  unchanged: number;
+  /** Priced items whose cell was left blank — the existing price was kept. */
+  blankKept: number;
+  noCode: number;
+  /** New items with no price: not added, because they would quote as free. */
+  unpriced: number;
+  duplicates: number;
+  increases: number;
+  decreases: number;
+  medianPct: number | null;
+  minPct: number | null;
+  maxPct: number | null;
+}
+
+export interface LvImportPreview {
+  batchId: string;
+  summary: LvImportSummary;
+  updates: LvImportDiff[];
+  additions: LvImportDiff[];
+  warnings: string[];
+  truncated: boolean;
+  expiresAt: string;
+}
+
 export interface PriceChangeRow {
   id: string;
   label: string;
@@ -332,6 +383,18 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ factors }),
       }),
+    lvImportPreview: (rows: LvImportRow[]) =>
+      request<LvImportPreview>("/pricing/lv/import/preview", {
+        method: "POST",
+        body: JSON.stringify({ rows }),
+      }),
+    lvImportApply: (batchId: string) =>
+      request<{ ok: true; updated: number; added: number; skipped: number }>(
+        `/pricing/lv/import/${batchId}/apply`,
+        { method: "POST" },
+      ),
+    lvImportCancel: (batchId: string) =>
+      request<{ ok: true }>(`/pricing/lv/import/${batchId}/cancel`, { method: "POST" }),
     history: () => request<{ changes: PriceChangeRow[] }>("/pricing/history"),
     undo: (id: string) => request<{ ok: true }>(`/pricing/changes/${id}/undo`, { method: "POST" }),
     users: () => request<{ users: { id: string; email: string; name: string; role: string }[] }>("/pricing/users"),

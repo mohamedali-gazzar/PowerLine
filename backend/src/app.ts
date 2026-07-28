@@ -37,6 +37,11 @@ import {
   retireLvItem,
   getLvCatalog,
 } from "./controllers/pricing-lv.controller";
+import {
+  postLvImportPreview,
+  postLvImportApply,
+  postLvImportCancel,
+} from "./controllers/pricing-lv-import.controller";
 import { withPriceBook } from "./middleware/priceBook";
 import { requirePriceAdmin, requireOwner } from "./middleware/roles";
 import {
@@ -114,6 +119,10 @@ export function createApp() {
   app.post("/api/pricing/lv/:id/retire", requireAuth, requirePriceAdmin, retireLvItem);
   app.post("/api/pricing/lv/seed-chunk", requireAuth, requirePriceAdmin, postLvSeedChunk);
   app.post("/api/pricing/lv/settings", requireAuth, requirePriceAdmin, postLvSettings);
+  // Bulk update from a spreadsheet: preview first, apply only on confirmation.
+  app.post("/api/pricing/lv/import/preview", requireAuth, requirePriceAdmin, postLvImportPreview);
+  app.post("/api/pricing/lv/import/:id/apply", requireAuth, requirePriceAdmin, postLvImportApply);
+  app.post("/api/pricing/lv/import/:id/cancel", requireAuth, requirePriceAdmin, postLvImportCancel);
 
   app.get("/api/pricing/history", requireAuth, requirePriceAdmin, getHistory);
   app.post("/api/pricing/changes/:id/undo", requireAuth, requirePriceAdmin, postUndo);

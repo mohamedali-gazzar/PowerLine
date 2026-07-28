@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type PricingStatus, type RmuPriceRow, type PriceChangeRow, type LvRow } from "../api";
 import { COMPONENTS, ENCLOSURES, DEFAULT_FACTORS } from "../lv/catalog";
+import LvExcelImport from "../pricing/LvExcelImport";
 
 // Price list — the owner-facing screen.
 //
@@ -596,6 +597,26 @@ function LvPrices() {
             {k === "components" ? "Components" : "Enclosures & cells"}
           </button>
         ))}
+      </div>
+
+      {/* Bulk update from a spreadsheet — for a whole new supplier price list,
+          where editing rows one at a time is not realistic. */}
+      <div className="card mb-3 p-3">
+        <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-brand-dark">Update many prices at once</h3>
+        <p className="mb-2 text-xs text-muted">
+          Upload a supplier price list and see exactly what would change before anything is saved. Items are matched
+          on Item Code.
+        </p>
+        <LvExcelImport
+          onApplied={() => {
+            setPage(0);
+            api.pricing.lvList({ kind, q, type, brand, fam, noPrice, page: 0, take }).then((r) => {
+              setRows(r.rows);
+              setTotal(r.total);
+            });
+            api.pricing.lvFacets().then(setFacets).catch(() => {});
+          }}
+        />
       </div>
 
       {/* Add a component (components only — enclosures and cells are matched by
