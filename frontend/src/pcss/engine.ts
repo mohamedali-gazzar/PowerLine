@@ -72,6 +72,8 @@ export interface Selection {
   lvMode: LvModeId;
   includePf: boolean;
   pfBrand: Brand;
+  /** Switch fuses are opt-in; the picker stays hidden until they are wanted. */
+  includeSwitchFuse: boolean;
 }
 
 export interface CustomItem {
@@ -140,6 +142,7 @@ export function emptySelection(): Selection {
     lvMode: "sizing",
     includePf: false,
     pfBrand: "ABB",
+    includeSwitchFuse: false,
   };
 }
 

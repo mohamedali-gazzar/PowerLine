@@ -155,11 +155,12 @@ function OptGrid<T extends string>({
 }
 
 /** A small label-over-value recap tile. */
-function Tile({ label, value, tone }: { label: string; value: ReactNode; tone?: "danger" }) {
+function Tile({ label, value, tone }: { label: string; value: ReactNode; tone?: "danger" | "warn" }) {
+  const toneCls = tone === "danger" ? "text-red-700" : tone === "warn" ? "text-amber-700" : "text-ink";
   return (
     <div className="rounded-lg border border-line bg-white p-2.5">
       <div className="text-[10px] font-bold uppercase tracking-wider text-muted">{label}</div>
-      <div className={`mt-0.5 text-sm font-semibold ${tone === "danger" ? "text-red-700" : "text-ink"}`}>{value}</div>
+      <div className={`mt-0.5 text-sm font-semibold ${toneCls}`}>{value}</div>
     </div>
   );
 }
@@ -293,6 +294,15 @@ export default function PcssSelectorPage() {
     setQtys(emptyQtys());
     setCustoms([]);
     patch({ lvMode: id });
+  };
+
+  /** Turning switch fuses off clears them, so nothing hidden keeps taking width. */
+  const toggleSwitchFuse = (on: boolean) => {
+    patch({ includeSwitchFuse: on });
+    if (!on) {
+      setSwitchFuseItems([]);
+      setMccbItems((list) => list.filter((i) => i.model !== SWITCH_FUSE_LABEL && i.model !== FUSE_LINK_LABEL));
+    }
   };
 
   // ── Breaker quantities ─────────────────────────────────────────────────────
@@ -552,7 +562,7 @@ export default function PcssSelectorPage() {
 
               {isIncomingOnly && (
                 <div className="mt-3">
-                  <Notice tone="danger">
+                  <Notice tone="warn">
                     Incoming Only: LV panel fixed at 1400 mm · limited to a single breaker selection
                   </Notice>
                 </div>
@@ -619,11 +629,18 @@ export default function PcssSelectorPage() {
                   {!isIncomingOnly && (
                     <>
                       <SubHead>Switch fuse</SubHead>
-                      <div className="grid gap-2 sm:grid-cols-4">
+                      <div className="rounded-lg border border-line bg-white p-3">
+                        <Toggle
+                          checked={sel.includeSwitchFuse}
+                          onChange={toggleSwitchFuse}
+                          label="Include switch fuses"
+                        />
+                        {sel.includeSwitchFuse && (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-4">
                         {SWITCHFUSE_AMPS.map((a) => {
                           const item = switchFuseItems.find((i) => i.amp === a);
                           return (
-                            <div key={a} className="rounded-lg border border-line bg-white p-2.5">
+                            <div key={a} className="rounded-lg border border-line bg-surface p-2.5">
                               <div className="text-sm font-bold text-ink">{a} A</div>
                               <div className="mt-1 flex items-center justify-between gap-2">
                                 <button
@@ -655,6 +672,8 @@ export default function PcssSelectorPage() {
                             </div>
                           );
                         })}
+                      </div>
+                        )}
                       </div>
                     </>
                   )}
@@ -690,17 +709,31 @@ export default function PcssSelectorPage() {
                   <SubHead>Circuit breaker catalogue selection</SubHead>
                   <MccbPicker onAdd={(item) => setMccbItems((list) => mergeMccb(list, item))} />
 
-                  <SubHead>Switch fuse (technical offer)</SubHead>
-                  <div className="grid gap-2 sm:grid-cols-4">
-                    {SWITCHFUSE_AMPS.map((a) => (
-                      <button
-                        key={a}
-                        className="btn-ghost"
-                        onClick={() => setMccbItems((list) => addTechSwitchFuse(list, a))}
-                      >
-                        + {a} A
-                      </button>
-                    ))}
+                  <SubHead>Switch fuse</SubHead>
+                  <div className="rounded-lg border border-line bg-white p-3">
+                    <Toggle
+                      checked={sel.includeSwitchFuse}
+                      onChange={toggleSwitchFuse}
+                      label="Include switch fuses"
+                    />
+                    {sel.includeSwitchFuse && (
+                      <>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                          {SWITCHFUSE_AMPS.map((a) => (
+                            <button
+                              key={a}
+                              className="btn-ghost"
+                              onClick={() => setMccbItems((list) => addTechSwitchFuse(list, a))}
+                            >
+                              + {a} A
+                            </button>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-[11px] text-muted/70">
+                          Each switch fuse brings a set of three fuse links onto the offer automatically.
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   <SubHead>Technical offer items</SubHead>
@@ -1138,7 +1171,7 @@ function ConfigSummary({ ws, bom }: { ws: Workspace; bom: MccbItem[] }) {
         <Tile
           label="LV panel"
           value={sel.lvConfig === "incoming" ? "1400 mm (fixed · incoming only)" : panel?.label ?? "Not specified"}
-          tone={sel.lvConfig === "incoming" ? "danger" : undefined}
+          tone={sel.lvConfig === "incoming" ? "warn" : undefined}
         />
         {sel.includePf && (
           <Tile
