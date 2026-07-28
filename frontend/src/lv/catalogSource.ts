@@ -41,6 +41,19 @@ const BUNDLED_COMPONENTS: DbComponent[] = [...COMPONENTS];
 const BUNDLED_ENCLOSURES: DbEnclosure[] = [...ENCLOSURES];
 const BUNDLED_FACTORS: Factors = JSON.parse(JSON.stringify(DEFAULT_FACTORS));
 
+/**
+ * The catalogue shipped in this build, whatever is loaded right now.
+ *
+ * Anything comparing "what the release contains" against the database MUST read
+ * this and not COMPONENTS: once the database catalogue is installed, COMPONENTS
+ * holds the database's own prices, so comparing it to the database always
+ * reports a match and a genuinely stale price list looks up to date.
+ */
+export const bundledCatalog = () => ({
+  components: BUNDLED_COMPONENTS,
+  enclosures: BUNDLED_ENCLOSURES,
+});
+
 /** Put the catalogue shipped in this build back in place. */
 function restoreBundled(): void {
   COMPONENTS.length = 0;

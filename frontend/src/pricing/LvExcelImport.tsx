@@ -8,7 +8,7 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { api, type LvImportPreview, type LvImportRow } from "../api";
-import { COMPONENTS, ENCLOSURES } from "../lv/catalog";
+import { bundledCatalog } from "../lv/catalogSource";
 
 /** The columns the template ships with, in order. */
 export const TEMPLATE_COLUMNS = [
@@ -100,6 +100,9 @@ export function parseWorkbook(buf: ArrayBuffer): { rows: LvImportRow[]; missing:
  * as a spreadsheet rather than overwriting anything.
  */
 export function catalogueRows(): LvImportRow[] {
+  // The PRISTINE shipped catalogue — never the live arrays, which by now hold
+  // the database's own prices and would compare equal to themselves.
+  const { components: COMPONENTS, enclosures: ENCLOSURES } = bundledCatalog();
   const rows: LvImportRow[] = [];
   for (const c of COMPONENTS) {
     if (!c.ref) continue; // spacers carry no part number and no price
