@@ -72,8 +72,6 @@ export interface Selection {
   lvMode: LvModeId;
   includePf: boolean;
   pfBrand: Brand;
-  mainIncoming: string | null;
-  mainIncomingBrand: Brand;
 }
 
 export interface CustomItem {
@@ -142,8 +140,6 @@ export function emptySelection(): Selection {
     lvMode: "sizing",
     includePf: false,
     pfBrand: "ABB",
-    mainIncoming: null,
-    mainIncomingBrand: "ABB",
   };
 }
 
@@ -257,6 +253,18 @@ export function getMeteringForRating(rating: number | null): MeteringRow | null 
   const r = Number(rating);
   if (!r) return null;
   return METERING_DATABASE.find((m) => m.trRating >= r) ?? METERING_DATABASE[METERING_DATABASE.length - 1];
+}
+
+/**
+ * The main incoming breaker for this job.
+ *
+ * Not a choice — the EEHC metering table settles it from the transformer
+ * rating. Incoming Only panels have no separate main incoming (the one
+ * breaker you pick *is* the incoming), so this is null there.
+ */
+export function mainIncomingId(sel: Selection): string | null {
+  if (sel.lvConfig !== "inout") return null;
+  return recommendedMainIncomingId(sel.trRating);
 }
 
 /** The breaker frame the metering table implies for the main incoming. */

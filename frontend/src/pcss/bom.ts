@@ -15,6 +15,7 @@ import {
   getMeteringForRating,
   getPfForRating,
   mainIncomingCatalogRow,
+  mainIncomingId,
   pfEffectiveKvar,
   type MccbItem,
   type Selection,
@@ -67,10 +68,12 @@ export function pfSizingFrame(sel: Selection): string | null {
 }
 
 export function mainIncomingRow(sel: Selection): MccbItem[] {
-  if (!isTechnical(sel) || !sel.mainIncoming) return [];
+  const mainId = mainIncomingId(sel);
+  if (!isTechnical(sel) || !mainId) return [];
 
-  if (sel.mainIncoming.startsWith("xt")) {
-    const row = mainIncomingCatalogRow(sel.mainIncoming, sel.mainIncomingBrand, sel.trRating);
+  if (mainId.startsWith("xt")) {
+    // The EEHC metering table names ABB models, so it sets the brand too.
+    const row = mainIncomingCatalogRow(mainId, "ABB", sel.trRating);
     if (!row) return [];
     return [
       {
@@ -87,7 +90,7 @@ export function mainIncomingRow(sel: Selection): MccbItem[] {
   }
 
   // Emax frames have no catalogue part number here — carried as a size reference.
-  const label = sel.mainIncoming === "emax12" ? "Emax 1.2" : sel.mainIncoming === "emax22" ? "Emax 2.2" : "Emax 4.2";
+  const label = mainId === "emax12" ? "Emax 1.2" : mainId === "emax22" ? "Emax 2.2" : "Emax 4.2";
   const m = getMeteringForRating(sel.trRating);
   return [
     {

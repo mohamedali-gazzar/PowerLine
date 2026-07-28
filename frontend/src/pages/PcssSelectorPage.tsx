@@ -22,6 +22,7 @@ import {
   type EehcId,
   type LvConfigId,
   type LvModeId,
+  type MeteringRow,
   type Opt,
   type RmuId,
   type SmartTypeId,
@@ -44,7 +45,6 @@ import {
   missingProjectFields,
   pfEffectiveKvar,
   pfStepConfigLabel,
-  recommendedMainIncomingId,
   voltageSides,
   type CustomItem,
   type MccbItem,
@@ -54,7 +54,6 @@ import {
 } from "../pcss/engine";
 import { allBomRows, isAutoRow, pfSizingFrame, brandOptions } from "../pcss/bom";
 import { evaluateDesigns, isConfigComplete, spaceBreakdown, spaceInfo, type SpaceLine } from "../pcss/sizing";
-import { INCOMING_ONLY_BREAKERS } from "../pcss/data";
 import { SALES_MANAGER, findPerson, useStaff } from "../staff";
 import { Field, TextInput, Toggle } from "../components/fields";
 
@@ -285,7 +284,6 @@ export default function PcssSelectorPage() {
       lvConfig: id,
       lvMode: "sizing",
       includePf: id === "incoming" ? false : sel.includePf,
-      mainIncoming: id === "inout" ? recommendedMainIncomingId(sel.trRating) : null,
     });
   };
 
@@ -341,7 +339,6 @@ export default function PcssSelectorPage() {
   const pf = getPfForRating(sel.trRating);
   const isTechnical = sel.lvConfig === "inout" && sel.lvMode === "technical";
   const isIncomingOnly = sel.lvConfig === "incoming";
-  const recommendedMain = recommendedMainIncomingId(sel.trRating);
   const pfFrame = pfSizingFrame(sel);
   const missing = missingProjectFields(sel);
 
@@ -542,10 +539,7 @@ export default function PcssSelectorPage() {
               <OptGrid
                 items={EEHC_ITEMS}
                 value={sel.iec}
-                onSelect={(id: EehcId) => {
-                  patch({ iec: id, lvConfig: sel.lvConfig ?? "inout" });
-                  if (!sel.lvConfig) patch({ mainIncoming: recommendedMainIncomingId(sel.trRating) });
-                }}
+                onSelect={(id: EehcId) => patch({ iec: id, lvConfig: sel.lvConfig ?? "inout" })}
               />
             </Step>
           )}
@@ -564,80 +558,6 @@ export default function PcssSelectorPage() {
                 </div>
               )}
 
-              {/* EEHC metering — computed, read-only */}
-              {metering && (
-                <>
-                  <SubHead>{isIncomingOnly ? "EEHC incoming CB (fixed)" : "EEHC metering — incoming CB (fixed)"}</SubHead>
-                  <div className="grid gap-2 sm:grid-cols-4">
-                    <Tile label="Incoming CB" value={metering.incoming} />
-                    <Tile label="Recommended model" value={`${metering.brand} ${metering.model}`} />
-                    <Tile label="FLC @400V" value={`${metering.flc} A`} />
-                    <Tile label="Trip unit" value={metering.trip} />
-                    {!isIncomingOnly && (
-                      <>
-                        <Tile label="Type" value={metering.type} />
-                        <Tile label="Rated" value={`${metering.amp} A`} />
-                        <Tile label="Current transformers" value={metering.ct} />
-                        <Tile label="Metering type" value={METERING_COMMON.meteringType} />
-                        <Tile label="Ammeters" value={METERING_COMMON.ammeters} />
-                        <Tile label="Voltmeter" value={METERING_COMMON.voltmeter} />
-                        <Tile label="Volt selector" value={METERING_COMMON.voltSelector} />
-                        <Tile label="Amp selector" value={METERING_COMMON.ampSelector} />
-                        <Tile label="kWh meter space" value={METERING_COMMON.kwhSpace} />
-                        <Tile label="Indication lamps" value={METERING_COMMON.lamps} />
-                      </>
-                    )}
-                  </div>
-                  {!isIncomingOnly && (
-                    <p className="mt-2 text-xs text-muted/80">
-                      Pick the actual breaker below in “Main incoming breaker” — the recommendation above is a
-                      reference only.
-                    </p>
-                  )}
-                </>
-              )}
-
-              {/* Main incoming breaker */}
-              {!isIncomingOnly && (
-                <>
-                  <SubHead>Main incoming breaker</SubHead>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {INCOMING_ONLY_BREAKERS.map((b) => (
-                      <OptCard
-                        key={b.id}
-                        active={sel.mainIncoming === b.id}
-                        title={b.label}
-                        sub={`${b.widthMm} mm${b.id === recommendedMain ? " · Recommended" : ""}`}
-                        onClick={() => patch({ mainIncoming: b.id })}
-                      />
-                    ))}
-                  </div>
-                  {isTechnical && sel.mainIncoming?.startsWith("xt") && (
-                    <div className="mt-2">
-                      <Field label="Main incoming brand">
-                        <select
-                          className="input cursor-pointer"
-                          value={sel.mainIncomingBrand}
-                          onChange={(e) => patch({ mainIncomingBrand: e.target.value as Brand })}
-                        >
-                          {brandOptions.map((b) => (
-                            <option key={b} value={b}>
-                              {b}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-                    </div>
-                  )}
-                  {isTechnical && sel.mainIncoming && !sel.mainIncoming.startsWith("xt") && (
-                    <p className="mt-2 text-xs text-muted/80">
-                      Emax frame — added to the technical offer as a size reference (no catalogue part number
-                      available).
-                    </p>
-                  )}
-                </>
-              )}
-
               {/* Selection mode */}
               {!isIncomingOnly && (
                 <>
@@ -645,6 +565,9 @@ export default function PcssSelectorPage() {
                   <OptGrid items={LV_MODES} value={sel.lvMode} onSelect={selectLvMode} />
                 </>
               )}
+
+              {/* What EEHC prescribes for this transformer — computed, read-only. */}
+              {metering && <EehcRecommendation metering={metering} incomingOnly={isIncomingOnly} />}
 
               {/* Sizing mode */}
               {!isTechnical && (
@@ -1023,6 +946,53 @@ function VoltageSelect({
         )}
       </select>
     </Field>
+  );
+}
+
+/**
+ * What the EEHC standard prescribes for this transformer rating — the incoming
+ * breaker and the metering kit. Read-only: it is decided by the rating, not
+ * chosen, so it is kept compact rather than given a tile each.
+ */
+function EehcRecommendation({ metering, incomingOnly }: { metering: MeteringRow; incomingOnly: boolean }) {
+  const specs: [string, ReactNode][] = [
+    ["Incoming CB", metering.incoming],
+    ["Model", `${metering.brand} ${metering.model}`],
+    ["FLC @400V", `${metering.flc} A`],
+    ["Trip unit", metering.trip],
+  ];
+  const metering2: [string, ReactNode][] = incomingOnly
+    ? []
+    : [
+        ["Type", metering.type],
+        ["Rated", `${metering.amp} A`],
+        ["CTs", metering.ct],
+        ["Metering", METERING_COMMON.meteringType],
+        ["Ammeters", METERING_COMMON.ammeters],
+        ["Voltmeter", METERING_COMMON.voltmeter],
+        ["Volt selector", METERING_COMMON.voltSelector],
+        ["Amp selector", METERING_COMMON.ampSelector],
+        ["kWh space", METERING_COMMON.kwhSpace],
+        ["Lamps", METERING_COMMON.lamps],
+      ];
+
+  return (
+    <>
+      <SubHead>EEHC recommended configuration</SubHead>
+      <div className="rounded-lg border border-line bg-white px-3 py-2">
+        <dl className="flex flex-wrap gap-x-5 gap-y-1 text-[11px]">
+          {[...specs, ...metering2].map(([k, v]) => (
+            <div key={k} className="flex items-baseline gap-1.5">
+              <dt className="text-muted/80">{k}</dt>
+              <dd className="font-semibold text-ink">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <p className="mt-1 text-[11px] text-muted/70">
+        Set by the transformer rating — the incoming breaker is added to the panel and the offer automatically.
+      </p>
+    </>
   );
 }
 

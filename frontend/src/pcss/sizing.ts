@@ -16,6 +16,7 @@ import {
   checkDesignCompatibility,
   getActiveBreakers,
   isSelectionComplete,
+  mainIncomingId,
   mccbWidthMm,
   panelEmptyMm,
   trBand,
@@ -64,8 +65,9 @@ export function totalUsedMm(ws: Workspace): Footprint {
         total += (SWITCHFUSE_WIDTH[i.amp] || 0) * i.qty;
         count += i.qty;
       }
-      if (sel.mainIncoming) {
-        const mb = INCOMING_ONLY_BREAKERS.find((x) => x.id === sel.mainIncoming);
+      const mainId = mainIncomingId(sel);
+      if (mainId) {
+        const mb = INCOMING_ONLY_BREAKERS.find((x) => x.id === mainId);
         if (mb) {
           total += mb.widthMm;
           count += 1;
@@ -216,8 +218,9 @@ export function spaceBreakdown(ws: Workspace): SpaceLine[] {
     }
     if (inoutSizing) {
       for (const i of switchFuseItems) push(`Switch fuse ${i.amp} A`, i.qty, SWITCHFUSE_WIDTH[i.amp] || 0);
-      if (sel.mainIncoming) {
-        const mb = INCOMING_ONLY_BREAKERS.find((x) => x.id === sel.mainIncoming);
+      const mainId = mainIncomingId(sel);
+      if (mainId) {
+        const mb = INCOMING_ONLY_BREAKERS.find((x) => x.id === mainId);
         if (mb) push(`${mb.label} — main incoming`, 1, mb.widthMm, true);
       }
     }
