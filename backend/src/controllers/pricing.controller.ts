@@ -452,9 +452,84 @@ export async function postPublish(req: Request, res: Response) {
     await prisma.priceChange.updateMany({ where: { version: null }, data: { version } });
 
     await refreshPriceBook(true); // force: the publisher must never see stale numbers
+    await pruneSnapshots();
     res.json({ ok: true, version });
   } catch (e) {
     fail(res, e);
+  }
+}
+
+/** Keep the recent versions so a rollback is still possible, drop the rest —
+ *  an LV payload is ~500 KB and publishing now happens on every change. */
+const KEEP_VERSIONS = 15;
+async function pruneSnapshots(): Promise<void> {
+  const versions = await prisma.priceSnapshot.findMany({
+    distinct: ["version"],
+    select: { version: true },
+    orderBy: { version: "desc" },
+    take: KEEP_VERSIONS,
+  });
+  if (versions.length < KEEP_VERSIONS) return;
+  const cutoff = versions[versions.length - 1].version;
+  await prisma.priceSnapshot.deleteMany({ where: { version: { lt: cutoff } } });
+}
+
+/**
+ * Push the current database prices live.
+ *
+ * Called after every price write so that changing a price and it reaching a
+ * quotation are the same act. The draft-then-publish gap was a review step,
+ * but in practice it stranded the price list: prices arriving by import or by
+ * the first-run copy left nothing to "review", so the button sat disabled
+ * while quotations kept serving older numbers. History and Undo still cover
+ * the mistakes the gap was there to catch.
+ *
+ * Never throws: a price edit that saved must not report failure because the
+ * publish half had a problem — the list can always be published by hand.
+ */
+export async function publishCurrentPrices(actorEmail: string, note: string): Promise<number | null> {
+  try {
+    const built = await buildRmuPayload();
+    // The same guards as a manual publish — never send a broken list to quoting.
+    for (const v of Object.values(built.panels)) if (!(v > 0)) return null;
+    for (const v of Object.values(built.lucy)) if (!(v > 0)) return null;
+    if (!built.addOns.outdoorEnclosure) return null;
+
+    const book = await prisma.priceBook.findUnique({ where: { id: "singleton" } });
+    const version = (book?.version ?? 0) + 1;
+
+    await prisma.priceSnapshot.create({
+      data: {
+        domain: "RMU",
+        version,
+        payload: JSON.stringify(built),
+        rowCount: Object.keys(built.panels).length + Object.keys(built.lucy).length,
+      },
+    });
+
+    if ((await prisma.lvComponent.count()) > 0) {
+      const { buildLvPayload } = await import("./pricing-lv.controller");
+      const lv = await buildLvPayload();
+      await prisma.priceSnapshot.create({
+        data: {
+          domain: "LV",
+          version,
+          payload: JSON.stringify(lv),
+          rowCount: lv.components.length + lv.enclosures.length,
+        },
+      });
+    }
+
+    await prisma.priceBook.update({
+      where: { id: "singleton" },
+      data: { version, publishedAt: new Date(), publishedBy: actorEmail, note, source: "db" },
+    });
+    await prisma.priceChange.updateMany({ where: { version: null }, data: { version } });
+    await refreshPriceBook(true);
+    await pruneSnapshots();
+    return version;
+  } catch {
+    return null; // the edit itself succeeded; publishing can be retried by hand
   }
 }
 

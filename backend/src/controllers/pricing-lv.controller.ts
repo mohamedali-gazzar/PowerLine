@@ -9,6 +9,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { fail } from "../lib/http";
+import { publishCurrentPrices } from "./pricing.controller";
 
 const componentSchema = z.object({
   sortIndex: z.number().int().min(0),
@@ -228,6 +229,7 @@ export async function updateLvPrice(req: Request, res: Response) {
           actorId: req.userId ?? null, actorEmail: by,
         },
       });
+      await publishCurrentPrices(by, `Price change: ${row.d || row.ref}`);
       return res.json({ ok: true, row: updated });
     }
 
@@ -242,6 +244,7 @@ export async function updateLvPrice(req: Request, res: Response) {
         actorId: req.userId ?? null, actorEmail: by,
       },
     });
+    await publishCurrentPrices(by, `Price change: ${row.name || row.ref}`);
     res.json({ ok: true, row: updated });
   } catch (e) {
     fail(res, e);
@@ -302,6 +305,7 @@ export async function createLvComponent(req: Request, res: Response) {
         actorId: req.userId ?? null, actorEmail: by,
       },
     });
+    await publishCurrentPrices(by, `New item: ${row.d}`);
     res.status(201).json({ ok: true, row });
   } catch (e) {
     fail(res, e);

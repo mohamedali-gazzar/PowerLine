@@ -13,6 +13,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { fail } from "../lib/http";
+import { publishCurrentPrices } from "./pricing.controller";
 
 /** How long a previewed batch stays applicable. */
 const BATCH_TTL_MS = 60 * 60 * 1000;
@@ -309,7 +310,10 @@ export async function postLvImportApply(req: Request, res: Response) {
     }
 
     await prisma.priceImportBatch.update({ where: { id: batch.id }, data: { status: "APPLIED" } });
-    res.json({ ok: true, updated, added, skipped });
+
+    // Live immediately — changing a price and it reaching a quotation are one act.
+    const version = await publishCurrentPrices(by, `Spreadsheet import: ${updated} updated, ${added} added`);
+    res.json({ ok: true, updated, added, skipped, published: version !== null, version });
   } catch (e) {
     fail(res, e);
   }

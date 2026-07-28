@@ -210,7 +210,10 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
     try {
       const r = await api.pricing.lvImportApply(preview.batchId);
       setPreview(null);
-      setDone(`${r.updated.toLocaleString()} price(s) updated, ${r.added} item(s) added.`);
+      setDone(
+        `${r.updated.toLocaleString()} price(s) updated, ${r.added} item(s) added — ` +
+          (r.published ? "live in quotations now." : "saved, but publishing failed; press “Update price list & database”."),
+      );
       onApplied();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not apply the import.");
@@ -255,7 +258,7 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
       )}
       {done && (
         <p className="mt-2 rounded-lg bg-green-50 p-3 text-sm font-semibold text-green-700 dark:bg-green-500/10 dark:text-green-300">
-          ✓ {done} Publish the price list to send them to quotations.
+          ✓ {done}
         </p>
       )}
 

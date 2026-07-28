@@ -253,7 +253,7 @@ export default function PricingAdminPage() {
                     ? "Customers still see the old prices until you publish."
                     : behind
                     ? "Prices in the database are newer than the ones quotations use. Publish to send them live."
-                    : "The live price list is up to date."}
+                    : "Every price change goes live as you make it. This button is only needed if one didn’t."}
                 </p>
               </div>
               <button

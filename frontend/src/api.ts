@@ -392,7 +392,7 @@ export const api = {
         body: JSON.stringify({ rows }),
       }),
     lvImportApply: (batchId: string) =>
-      request<{ ok: true; updated: number; added: number; skipped: number }>(
+      request<{ ok: true; updated: number; added: number; skipped: number; published: boolean; version: number | null }>(
         `/pricing/lv/import/${batchId}/apply`,
         { method: "POST" },
       ),
