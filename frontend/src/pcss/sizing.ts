@@ -5,6 +5,7 @@
 import {
   BAND_LV_PANEL,
   DESIGNS,
+  INCOMING_ONLY_BREAKERS,
   LV_PANELS,
   SWITCHFUSE_WIDTH,
   SWITCH_FUSE_LABEL,
@@ -16,6 +17,7 @@ import {
   checkDesignCompatibility,
   getActiveBreakers,
   isSelectionComplete,
+  mainIncomingId,
   mccbWidthMm,
   panelEmptyMm,
   trBand,
@@ -70,6 +72,15 @@ export function totalUsedMm(ws: Workspace): Footprint {
       for (const i of switchFuseItems) {
         total += (SWITCHFUSE_WIDTH[i.amp] || 0) * i.qty;
         count += i.qty;
+      }
+    }
+    // On an Incoming Only panel the EEHC-recommended breaker is the whole
+    // configuration, so it is the one auto row that still counts here.
+    if (sel.lvConfig === "incoming") {
+      const mb = INCOMING_ONLY_BREAKERS.find((x) => x.id === mainIncomingId(sel));
+      if (mb) {
+        total += mb.widthMm;
+        count += 1;
       }
     }
     for (const c of customs) {
@@ -219,6 +230,10 @@ export function spaceBreakdown(ws: Workspace): SpaceLine[] {
     }
     if (inoutSizing) {
       for (const i of switchFuseItems) push(`Switch fuse ${i.amp} A`, i.qty, SWITCHFUSE_WIDTH[i.amp] || 0);
+    }
+    if (sel.lvConfig === "incoming") {
+      const mb = INCOMING_ONLY_BREAKERS.find((x) => x.id === mainIncomingId(sel));
+      if (mb) push(`${mb.label} — incoming breaker`, 1, mb.widthMm, true);
     }
     for (const c of customs) push(c.label, c.qty, c.widthMm);
   }

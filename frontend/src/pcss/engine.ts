@@ -259,14 +259,14 @@ export function getMeteringForRating(rating: number | null): MeteringRow | null 
 }
 
 /**
- * The main incoming breaker for this job.
+ * The incoming breaker for this job.
  *
  * Not a choice — the EEHC metering table settles it from the transformer
- * rating. Incoming Only panels have no separate main incoming (the one
- * breaker you pick *is* the incoming), so this is null there.
+ * rating, in both breaker configurations. On an Incoming Only panel it is the
+ * entire configuration.
  */
 export function mainIncomingId(sel: Selection): string | null {
-  if (sel.lvConfig !== "inout") return null;
+  if (!sel.lvConfig) return null;
   return recommendedMainIncomingId(sel.trRating);
 }
 

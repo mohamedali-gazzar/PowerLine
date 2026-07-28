@@ -377,6 +377,11 @@ export default function PcssSelectorPage() {
   const isIncomingOnly = sel.lvConfig === "incoming";
   const pfFrame = pfSizingFrame(sel);
   const missing = missingProjectFields(sel);
+  // Only inout Sizing leaves things out of the total; the other views are complete.
+  const spaceNote =
+    !isTechnical && !isIncomingOnly && sel.lvConfig
+      ? "selected breakers only — EEHC gaps and the incoming breaker are counted in Technical"
+      : undefined;
 
   const manager = findPerson(staff.salesPeople, sel.salesManager || SALES_MANAGER);
   const person = findPerson(staff.salesPeople, sel.salesPerson);
@@ -605,10 +610,11 @@ export default function PcssSelectorPage() {
               {/* What EEHC prescribes for this transformer — computed, read-only. */}
               {metering && <EehcRecommendation metering={metering} incomingOnly={isIncomingOnly} />}
 
-              {/* Sizing mode */}
-              {!isTechnical && (
+              {/* Sizing mode. Incoming Only has nothing to pick — the EEHC
+                  recommendation above is the whole configuration. */}
+              {!isTechnical && !isIncomingOnly && (
                 <>
-                  <SubHead>{isIncomingOnly ? "Incoming breaker" : "Outgoing breakers"}</SubHead>
+                  <SubHead>Outgoing breakers</SubHead>
                   <div className="overflow-x-auto rounded-lg border border-line">
                     <table className="w-full text-sm">
                       <thead className="bg-surface text-left text-xs uppercase tracking-wider text-muted">
@@ -649,7 +655,7 @@ export default function PcssSelectorPage() {
                   {/* The same live bar as the output pane, right under the
                       buttons that move it. */}
                   <div className="mt-3">
-                    <SpaceBar space={space} iec={sel.iec} breakdown={breakdown} />
+                    <SpaceBar space={space} iec={sel.iec} breakdown={breakdown} note={spaceNote} />
                   </div>
 
                   {!isIncomingOnly && (
@@ -727,6 +733,13 @@ export default function PcssSelectorPage() {
                     </ul>
                   )}
                 </>
+              )}
+
+              {/* Incoming Only still needs its space check, even with nothing to pick. */}
+              {isIncomingOnly && (
+                <div className="mt-3">
+                  <SpaceBar space={space} iec={sel.iec} breakdown={breakdown} note={spaceNote} />
+                </div>
               )}
 
               {/* Technical mode */}
@@ -815,7 +828,7 @@ export default function PcssSelectorPage() {
 
               {isTechnical && (
                 <div className="mt-3">
-                  <SpaceBar space={space} iec={sel.iec} breakdown={breakdown} />
+                  <SpaceBar space={space} iec={sel.iec} breakdown={breakdown} note={spaceNote} />
                 </div>
               )}
 
@@ -870,11 +883,14 @@ export default function PcssSelectorPage() {
                 </>
               )}
 
-              <div className="mt-4">
-                <button className="btn-ghost" onClick={resetBreakers}>
-                  Clear breakers
-                </button>
-              </div>
+              {/* Nothing to clear on an Incoming Only panel. */}
+              {!isIncomingOnly && (
+                <div className="mt-4">
+                  <button className="btn-ghost" onClick={resetBreakers}>
+                    Clear breakers
+                  </button>
+                </div>
+              )}
             </Step>
           )}
         </div>
@@ -883,7 +899,7 @@ export default function PcssSelectorPage() {
         <div className="card space-y-4 p-5 animate-fade-up xl:sticky xl:top-6">
           <div className="text-[10px] font-bold uppercase tracking-wider text-muted">Live execution &amp; output</div>
 
-          <SpaceBar space={space} iec={sel.iec} />
+          <SpaceBar space={space} iec={sel.iec} note={spaceNote} />
 
           {complete && <ConfigSummary ws={ws} bom={bom} />}
 
@@ -1035,6 +1051,28 @@ function EehcRecommendation({ metering, incomingOnly }: { metering: MeteringRow;
         ["Lamps", METERING_COMMON.lamps],
       ];
 
+  // On an Incoming Only panel this block is the entire configuration, so it is
+  // given room. Alongside the outgoing breakers it stays out of the way.
+  if (incomingOnly) {
+    return (
+      <>
+        <SubHead>EEHC recommended configuration</SubHead>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {specs.map(([k, v]) => (
+            <div key={k} className="rounded-lg border border-line bg-white p-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted">{k}</div>
+              <div className="mt-1 text-base font-bold text-ink">{v}</div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-muted/80">
+          Fixed by the {metering.trRating} KVA band — this breaker fills the panel and goes onto the offer
+          automatically, so there is nothing to choose here.
+        </p>
+      </>
+    );
+  }
+
   return (
     <>
       <SubHead>EEHC recommended configuration</SubHead>
@@ -1059,11 +1097,14 @@ function SpaceBar({
   space,
   iec,
   breakdown,
+  note,
 }: {
   space: ReturnType<typeof spaceInfo>;
   iec: EehcId | null;
   /** Itemised list of what is filling the panel — shown next to the controls. */
   breakdown?: SpaceLine[];
+  /** Explains what this total does and does not include, when it isn't obvious. */
+  note?: string;
 }) {
   const { footprint, emptyMm, remainingMm, pct, status, escalated, basePanel, panel } = space;
 
@@ -1081,8 +1122,10 @@ function SpaceBar({
       ? ""
       : footprint.stdGaps + footprint.swGaps > 0
       ? ` (incl. ${footprint.stdGaps}× 60 mm + ${footprint.swGaps}× 20 mm EEHC gaps)`
+      : note
+      ? ` (${note})`
       : iec === "eehc"
-      ? " (selected breakers only — EEHC gaps and the incoming breaker are counted in Technical)"
+      ? ""
       : " (no EEHC spacing)";
 
   return (
