@@ -8,6 +8,7 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { api, type LvImportPreview, type LvImportRow } from "../api";
+import { COMPONENTS, ENCLOSURES } from "../lv/catalog";
 
 /** The columns the template ships with, in order. */
 export const TEMPLATE_COLUMNS = [
@@ -90,6 +91,43 @@ export function parseWorkbook(buf: ArrayBuffer): { rows: LvImportRow[]; missing:
   return { rows, missing };
 }
 
+/**
+ * The catalogue that ships inside the app, expressed as import rows.
+ *
+ * This is what makes the two halves reconcilable. The bundled file is only the
+ * factory default — the database is the real price list — so when the file is
+ * updated in a release, this feeds it through the SAME merging, audited import
+ * as a spreadsheet rather than overwriting anything.
+ */
+export function catalogueRows(): LvImportRow[] {
+  const rows: LvImportRow[] = [];
+  for (const c of COMPONENTS) {
+    if (!c.ref) continue; // spacers carry no part number and no price
+    rows.push({
+      type: c.t ?? "",
+      description: c.d ?? "",
+      code: c.ref,
+      eur: c.eur ?? 0,
+      egp: c.egp ?? 0,
+      brand: c.brand ?? "",
+      poles: c.poles ?? 0,
+    });
+  }
+  for (const e of ENCLOSURES) {
+    if (!e.ref) continue;
+    rows.push({
+      type: "",
+      description: e.name ?? "",
+      code: e.ref,
+      eur: e.eur ?? 0,
+      egp: e.egp ?? 0,
+      brand: "",
+      poles: 0,
+    });
+  }
+  return rows;
+}
+
 /** Download an empty workbook with the expected columns. */
 export function downloadTemplate() {
   const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_COLUMNS as unknown as string[]]);
@@ -114,6 +152,28 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
     setError("");
     setDone("");
     fileRef.current?.click();
+  };
+
+  /** Compare the catalogue shipped in this release against the database. */
+  const checkAppCatalogue = async () => {
+    setError("");
+    setDone("");
+    setBusy("Comparing with the app catalogue…");
+    try {
+      const rows = catalogueRows();
+      const p = await api.pricing.lvImportPreview(rows);
+      if (p.summary.updates + p.summary.additions === 0) {
+        await api.pricing.lvImportCancel(p.batchId).catch(() => {});
+        setDone("The database already matches the app catalogue — nothing to sync.");
+        return;
+      }
+      setPreview(p);
+      setTab("updates");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not compare with the app catalogue.");
+    } finally {
+      setBusy("");
+    }
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -172,6 +232,9 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn-primary" onClick={pickFile} disabled={!!busy}>
           {busy || "⬆ Update prices from Excel"}
+        </button>
+        <button className="btn-ghost" onClick={checkAppCatalogue} disabled={!!busy}>
+          ⟳ Check app catalogue
         </button>
         <button className="btn-ghost" onClick={downloadTemplate} disabled={!!busy}>
           ⬇ Empty template

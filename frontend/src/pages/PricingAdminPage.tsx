@@ -604,8 +604,9 @@ function LvPrices() {
       <div className="card mb-3 p-3">
         <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-brand-dark">Update many prices at once</h3>
         <p className="mb-2 text-xs text-muted">
-          Upload a supplier price list and see exactly what would change before anything is saved. Items are matched
-          on Item Code.
+          These prices are the ones the configurator quotes from. Upload a supplier price list, or pull in a
+          catalogue that shipped with an app update — either way you see exactly what would change before anything
+          is saved. Items are matched on Item Code, and your own edits are never overwritten silently.
         </p>
         <LvExcelImport
           onApplied={() => {

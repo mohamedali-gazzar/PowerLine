@@ -53,6 +53,18 @@ const normRef = (v: string) => String(v ?? "").trim().toUpperCase().replace(/\s+
 const searchText = (...parts: string[]) => parts.join(" ").toLowerCase();
 
 /**
+ * Two prices are the same money if they differ by less than a millionth.
+ *
+ * Prices reach the two sides by different arithmetic — a discount applied in a
+ * spreadsheet, a float round-tripped through the database — so 2.56 arrives as
+ * 2.5599999999999996 on one side and 2.56 on the other. Compared with `!==`
+ * that is a "change", and a sync reported a hundred of them that were not real.
+ * The tolerance is far below a cent, so a genuine price move is never hidden —
+ * some items are priced to four decimals and must not be rounded.
+ */
+const sameMoney = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+
+/**
  * POST /api/pricing/lv/import/preview
  * Works out the change set and parks it. Writes nothing to the price list.
  */
@@ -106,7 +118,7 @@ export async function postLvImportPreview(req: Request, res: Response) {
           if (existing.eur > 0 || existing.egp > 0) blankKept++;
           continue;
         }
-        if (existing.eur === useEur && existing.egp === useEgp) {
+        if (sameMoney(existing.eur, useEur) && sameMoney(existing.egp, useEgp)) {
           unchanged++;
           continue;
         }
