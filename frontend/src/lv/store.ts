@@ -553,6 +553,9 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   // Enclosure cost: Panels mode → the chosen sizing items; Cells mode → the
   // priced cell rows (Pro-E/IS2/PLP). Either way it feeds the kit % below.
   let enclCost = 0;
+  // Cell "Sides" rows are part of the enclosure cost but excluded from the kit base
+  // (kit = % of the enclosure price *except* the sides).
+  let sideCost = 0;
   for (const it of p.panelItems ?? []) {
     // A per-item Material-List discount applies to any enclosure; without one, only ABB
     // enclosures follow the global discount (Pro-E / IS2 / PLP keep their list price).
@@ -574,7 +577,9 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
         (r.eur ?? 0) > 0 || (r.egp ?? 0) > 0
           ? enclosurePriceEgp({ eur: r.eur ?? 0, egp: r.egp ?? 0 }, f)
           : cellPriceEgp(p.cellConfig.type, r.desc, f);
-      enclCost += cellBase * (1 - (ov != null ? ov / 100 : 0)) * r.qty;
+      const rowCost = cellBase * (1 - (ov != null ? ov / 100 : 0)) * r.qty;
+      enclCost += rowCost;
+      if (r.locked) sideCost += rowCost; // the "Sides" row — kept out of the kit base
     }
   }
   const cuConnCost = cuWeight * f.copper;
@@ -582,8 +587,8 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   // Priced the same way as the Cu connections — weight × copper rate (no plating premium).
   const busbarKg = mainBusbarAuto(p) ?? (p.mainBusbarKg || 0);
   const busbarCost = busbarKg * f.copper;
-  // Kit = a % of the enclosure cost, per system (see kitRate).
-  const kits = enclCost * kitRate(p);
+  // Kit = a % of the enclosure cost minus the cell Sides, per system (see kitRate).
+  const kits = Math.max(0, enclCost - sideCost) * kitRate(p);
   const unitCost = compCost + enclCost + cuConnCost + busbarCost + kits;
   const unitCostOps = unitCost * (1 + f.operations);
   // Per-panel selling factor overrides the global (Pricing Settings) when set (> 0).
