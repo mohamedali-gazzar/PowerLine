@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import { useTheme } from "./theme";
 
@@ -23,6 +23,7 @@ const sunIcon = (
 export default function App() {
   const { user, signOut } = useAuth();
   const [theme, setTheme] = useTheme();
+  const { pathname } = useLocation();
   const initials = (user?.name || user?.email || "?").trim().slice(0, 1).toUpperCase();
 
   return (
@@ -90,7 +91,9 @@ export default function App() {
       {/* Main content — offset by the thin rail; the expanded sidebar overlays it. */}
       <div className="pl-14">
         <main className="mx-auto w-full max-w-[1800px] px-4 py-6 sm:px-6">
-          <Outlet />
+          <div key={pathname} className="animate-fade-up">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

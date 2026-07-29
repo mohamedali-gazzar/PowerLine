@@ -35,7 +35,7 @@ import {
 import {
   COPPER_RATINGS, csaFor, copperWeight, copperTotal, roundUpRating, ratingForCsa, pctOf,
 } from "../lv/copper";
-import { panelPoles, POLE_CM, GROUP_LABEL, KIND_LABEL, type PoleGroup, type PoleKind } from "../lv/poles";
+import { panelPoles, POLE_CM, POLE_KINDS, GROUP_LABEL, KIND_LABEL, type PoleGroup, type PoleKind } from "../lv/poles";
 
 type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "summary";
 const TABS: Tab[] = ["project", "pricing", "panels", "technical", "commercial", "material", "spare", "selectivity"];
@@ -131,8 +131,17 @@ function SearchSelect({ value, placeholder, options, onPick }: {
   const [activeIdx, setActiveIdx] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { setActiveIdx(0); }, [q, open]);
-  useEffect(() => { (listRef.current?.children[activeIdx] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" }); }, [activeIdx]);
+  // On open with no query, land on the currently-selected option (so the list shows
+  // what's already chosen); while typing, highlight the top match.
+  useEffect(() => {
+    if (open && !q && value) {
+      const idx = shown.findIndex((o) => o.key === value);
+      setActiveIdx(idx >= 0 ? idx : 0);
+    } else {
+      setActiveIdx(0);
+    }
+  }, [q, open]);
+  useEffect(() => { (listRef.current?.children[activeIdx] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" }); }, [activeIdx, open]);
   // Close when a click lands outside the dropdown (input + list).
   useEffect(() => {
     if (!open) return;
@@ -864,6 +873,9 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
   const addSeparator = (beforePanelId: string) => up({ offerSeparators: [...separators, { id: uid(), beforePanelId, text: "" }] });
   const editSeparator = (id: string, text: string) => up({ offerSeparators: separators.map((x) => (x.id === id ? { ...x, text } : x)) });
   const removeSeparator = (id: string) => up({ offerSeparators: separators.filter((x) => x.id !== id) });
+  // Eye toggle to hide the Brand column from the technical offer (and its PDF, since the
+  // PDF is captured from this DOM).
+  const [hideBrand, setHideBrand] = useState(false);
   if (!s.panels.length) {
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Technical Offer is generated from them.</div>;
   }
@@ -911,6 +923,18 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
     <div className="animate-fade-up">
       <PrintBar label={`${s.panels.length} panel${s.panels.length > 1 ? "s" : ""} → multi-page PDF (tables flow across pages).`}
         docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} exportFn={exportPdf} />
+      <div className="no-print mb-2 flex justify-end">
+        <button type="button" onClick={() => setHideBrand((v) => !v)}
+          title={hideBrand ? "Brand column is hidden — click to show it" : "Hide the Brand column from the offer"}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+            <circle cx="12" cy="12" r="3" />
+            {hideBrand && <line x1="3" y1="3" x2="21" y2="21" />}
+          </svg>
+          {hideBrand ? "Show brand" : "Hide brand"}
+        </button>
+      </div>
       <div className="offer-workspace">
       <div data-pdf-root className="print-area space-y-6">
         {/* Cover page (shared branded title page) — no footer on the cover */}
@@ -1028,9 +1052,9 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
               <table data-pdf-comptable className="w-full table-fixed border-separate border-spacing-0">
                 <colgroup>
                   <col className="w-[9%]" />
-                  <col className="w-[67%]" />
+                  <col className={hideBrand ? "w-[76%]" : "w-[67%]"} />
                   <col className="w-[7%]" />
-                  <col className="w-[9%]" />
+                  {!hideBrand && <col className="w-[9%]" />}
                   <col className="w-[8%]" />
                 </colgroup>
                 <thead>
@@ -1038,7 +1062,7 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                     <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">Qty</th>
                     <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">Description</th>
                     <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">ADJ</th>
-                    <th className="px-2 text-left py-1 text-[12px] font-bold leading-[17px]">Brand</th>
+                    {!hideBrand && <th className="px-2 text-left py-1 text-[12px] font-bold leading-[17px]">Brand</th>}
                     <th className="px-2 text-left py-1 text-[12px] font-bold leading-[17px]">NOTE</th>
                   </tr>
                 </thead>
@@ -1101,14 +1125,14 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                             // every sub-header uses one font size (13.5px) regardless of name length.
                             <tr key={`g-${sec}-${g}`} data-pdf-head style={{ breakInside: "avoid", breakAfter: "avoid" }}>
                               <td className="py-1" />
-                              <td colSpan={4} className="px-2 py-1 text-left font-display font-normal leading-[20px] text-[13.5px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>{gScalable ? <span className="font-bold">, QTY ({gcq}) each contain:</span> : ""}</td>
+                              <td colSpan={hideBrand ? 3 : 4} className="px-2 py-1 text-left font-display font-normal leading-[20px] text-[13.5px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>{gScalable ? <span className="font-bold">, QTY ({gcq}) each contain:</span> : ""}</td>
                             </tr>
                           );
                         }
                         for (const c of byG.get(g)!)
                           rows.push(isSpacer(c) ? (
                             <tr key={c.id}>
-                              <td colSpan={5} className="px-2 py-0.5 text-[12.5px] leading-[12.5px]">&nbsp;</td>
+                              <td colSpan={hideBrand ? 4 : 5} className="px-2 py-0.5 text-[12.5px] leading-[12.5px]">&nbsp;</td>
                             </tr>
                           ) : (
                             <tr key={c.id} style={{ breakInside: "avoid" }} className={`align-middle ${dataRow++ % 2 === 1 ? "bg-[#f4f4f6]" : ""}`}>
@@ -1118,7 +1142,7 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                                 {c.comment && <div className="mt-0.5 text-[11px] italic leading-tight text-muted">{c.comment}</div>}
                               </td>
                               <td className="px-2 py-1 text-center text-[12.5px] leading-[15px]">{c.adj}</td>
-                              <td className="px-2 py-1 text-[12.5px] leading-[15px]">{c.brand}</td>
+                              {!hideBrand && <td className="px-2 py-1 text-[12.5px] leading-[15px]">{c.brand}</td>}
                               <td className="px-2 py-1 text-[11.5px] text-muted leading-[15px]">{c.note}</td>
                             </tr>
                           ));
@@ -2494,6 +2518,27 @@ function PanelEditor({ s, p, up, upPanel }: {
   );
 }
 
+// Enter in a Qty cell jumps to the next row's Qty (down the column), not across to Adj.
+function qtyEnterNav(e: { key: string; preventDefault: () => void; currentTarget: HTMLInputElement }) {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const inputs = Array.from(document.querySelectorAll<HTMLInputElement>("input[data-qtyinput]"));
+  const next = inputs[inputs.indexOf(e.currentTarget) + 1];
+  if (next) { next.focus(); next.select(); }
+}
+
+// Enter in a Copper Tool cell moves down the same column (Phase / Neutral / Earth),
+// not across to the next column in the row.
+function copperEnterNav(e: { key: string; preventDefault: () => void; currentTarget: HTMLInputElement }) {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const col = e.currentTarget.getAttribute("data-coppercol");
+  if (!col) return;
+  const inputs = Array.from(document.querySelectorAll<HTMLInputElement>(`input[data-coppercol="${col}"]`));
+  const next = inputs[inputs.indexOf(e.currentTarget) + 1];
+  if (next) { next.focus(); next.select(); }
+}
+
 // ── Components card ──────────────────────────────────────────────────────────
 function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void; replaceComponent: (matchRef: string, matchName: string, nc: DbComponent, panelIds: Set<string>) => void; comboKind: ComboKind | null; setComboKind: (k: ComboKind | null) => void }) {
   const [q, setQ] = useState("");
@@ -3625,6 +3670,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                           // Combo item: the Qty column is the PER-UNIT qty (1 per unit); the group's
                           // combination qty (×N) multiplies the total, not this number.
                           <input className="input h-7 px-1.5 text-center text-xs" type="number" min={0} value={c.baseQty || ""}
+                            data-qtyinput onKeyDown={qtyEnterNav}
                             title="Per-unit qty — the combination qty (×N) multiplies the total"
                             onChange={(e) => {
                               const per = Math.max(0, parseFloat(e.target.value) || 0);
@@ -3633,6 +3679,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                             }} />
                         ) : (
                           <input className="input h-7 px-1.5 text-center text-xs" type="number" min={0} value={c.qty || ""}
+                            data-qtyinput onKeyDown={qtyEnterNav}
                             onChange={(e) => setComp(c.id, { qty: Math.max(0, parseFloat(e.target.value) || 0) })} />
                         )}
                       </td>
@@ -4837,13 +4884,21 @@ function SizingCard({ p, u, factors }: {
 // RCCB, contactors + aux + terminal, control gear) and totals their rail width in poles,
 // so the enclosure can be sized. Widths come from the Control Design Guide (see lv/poles.ts).
 function PolesSummary({ p }: { p: LvPanel }) {
-  const { rows, groups, total } = panelPoles(p.components);
+  const { rows, total } = panelPoles(p.components);
   const pl = (n: number) => `${n} pole${n === 1 ? "" : "s"}`;
   const groupKinds: Record<PoleGroup, PoleKind[]> = {
     protection: ["mcb", "rcbo", "rccb"],
     contactors: ["af", "esb", "aux", "terminal"],
     control: ["timer", "psu", "relay", "surge"],
   };
+  // Tick the types to include in the total (all on by default). Lets you sum any
+  // combination — e.g. MCB + RCBO only. Tracked as the *excluded* set so newly
+  // appearing types are counted by default.
+  const [excluded, setExcluded] = useState<Set<PoleKind>>(new Set());
+  const on = (k: PoleKind) => !excluded.has(k);
+  const toggle = (k: PoleKind) => setExcluded((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const sumOf = (kinds: PoleKind[]) => kinds.reduce((s, k) => s + (on(k) ? (rows[k]?.poles || 0) : 0), 0);
+  const grand = sumOf(POLE_KINDS);
   return (
     <div>
       <h2 className="sec-head">No. of poles <span className="text-[11px] font-normal text-muted">— DIN-rail width · 1 pole = {POLE_CM} cm</span></h2>
@@ -4859,15 +4914,18 @@ function PolesSummary({ p }: { p: LvPanel }) {
             return (
               <div key={g} className="overflow-hidden rounded-lg border border-line">
                 <div className="flex items-center justify-between bg-surface px-3 py-1.5 text-[12px] font-bold text-brand-dark">
-                  <span>{GROUP_LABEL[g]}</span><span>{pl(groups[g])}</span>
+                  <span>{GROUP_LABEL[g]}</span><span>{pl(sumOf(kinds))}</span>
                 </div>
                 <table className="w-full table-fixed text-[13px]">
-                  <colgroup><col /><col style={{ width: 44 }} /><col style={{ width: 76 }} /></colgroup>
+                  <colgroup><col style={{ width: 34 }} /><col /><col style={{ width: 76 }} /></colgroup>
                   <tbody>
                     {kinds.map((k) => (
-                      <tr key={k} className="border-t border-line/50">
-                        <td className="truncate py-1 pl-3 text-muted">{KIND_LABEL[k]}</td>
-                        <td className="py-1 pr-2 text-right text-[11px] text-muted">×{rows[k].count}</td>
+                      <tr key={k} className={`border-t border-line/50 ${on(k) ? "" : "opacity-45"}`}>
+                        <td className="py-1 pl-3">
+                          <input type="checkbox" className="h-3.5 w-3.5 cursor-pointer accent-brand align-middle" checked={on(k)}
+                            title="Include in the total" onChange={() => toggle(k)} />
+                        </td>
+                        <td className="truncate py-1 pl-1 text-muted">{KIND_LABEL[k]}</td>
                         <td className="whitespace-nowrap py-1 pr-3 text-right font-semibold text-ink">{pl(rows[k].poles)}</td>
                       </tr>
                     ))}
@@ -4877,8 +4935,8 @@ function PolesSummary({ p }: { p: LvPanel }) {
             );
           })}
           <div className="flex items-center justify-between rounded-lg bg-brand-tint/60 px-3 py-2 text-sm font-extrabold text-brand-dark">
-            <span>Total width</span>
-            <span>{pl(total)}</span>
+            <span>Total no. poles</span>
+            <span>{pl(grand)}</span>
           </div>
         </div>
       )}
@@ -4909,6 +4967,7 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
     const v = tool[String(rating)]?.[key] ?? 0;
     return (
       <input className="input h-8 w-16 px-1 text-center text-sm" inputMode="decimal" value={v || ""} placeholder="0"
+        data-coppercol={key} onKeyDown={copperEnterNav}
         style={hi ? { boxShadow: `inset 0 0 0 2px ${color}`, background: `${color}22`, color, fontWeight: 700 } : undefined}
         onChange={(e) => setLen(rating, key, parseFloat(e.target.value.replace(/[^\d.]/g, "")) || 0)} />
     );
