@@ -14,6 +14,7 @@ import {
   cuCellKg,
   cellPriceEgp,
   enclosurePriceEgp,
+  findByName,
   type DbComponent,
   type DbEnclosure,
   type Factors,
@@ -100,6 +101,11 @@ export interface LvPanel {
   draft: string;          // RPT-1: per-panel scratchpad — never included in outputs
   highlight?: boolean;    // yellow highlighter toggle in the panel list (UI marker only)
   spare?: boolean;        // this cell is the Spare-parts list (no sizing/specs; components + copper only)
+  spareKind?: string;     // which spare-list variant the cell is: "spare" | "lcp" | "kwhm"
+  noGroups?: number;      // LCP: number of control groups — drives the component auto-fill + auto-sizing
+  cablesEgp?: number;     // LCP: cables cost, EGP — manual
+  lcpBox?: { H: number; W: number; D: number }; // LCP: chosen SR-Basic box (auto-sized from noGroups, editable)
+  lcpBox2?: { H: number; W: number; D: number }; // LCP: 2nd enclosure box (Double layout only)
   sections: string[];
   activeSection: string;
   components: PanelComponent[];
@@ -316,8 +322,185 @@ export function newPanel(_n?: number): LvPanel {
 
 /** The single "Spare parts" cell of a spare-parts QTN — a stripped panel that holds
  *  only components/enclosures (as rows) + a manual copper weight (mainBusbarKg). */
-export function newSparePanel(): LvPanel {
-  return { ...newPanel(), name: "Spare parts", spare: true, sections: ["Spare parts"], activeSection: "Spare parts" };
+export const SPARE_KIND_LABELS: Record<string, string> = { spare: "Spare parts", lcp: "LCP", kwhm: "KWHM" };
+export function newSparePanel(kind = "spare"): LvPanel {
+  const label = SPARE_KIND_LABELS[kind] ?? "Spare parts";
+  return { ...newPanel(), name: label, spare: true, spareKind: kind, sections: [label], activeSection: label };
+}
+
+// ── LCP (Lighting Control Panel) ────────────────────────────────────────────────
+// Each control GROUP is a fixed set of pilot lights, pushbuttons and terminals.
+// Entering "No. Groups" (G) auto-fills the component list with this set × G.
+export const LCP_GROUP_PARTS: { qty: number; name: string }[] = [
+  { qty: 1, name: "Pilot Light Green LED 230V AC" },
+  { qty: 1, name: "Pilot Light Red LED 230V AC" },
+  { qty: 1, name: "CP1-10G-10 Pushbutton" },
+  { qty: 1, name: "CP1-10R-01 Pushbutton" },
+  { qty: 2, name: "Screw Terminal 4mm" },
+];
+/** The per-group control set × n groups, resolved to priced component rows. */
+export function lcpGroupComponents(n: number): PanelComponent[] {
+  const out: PanelComponent[] = [];
+  if (!(n > 0)) return out;
+  for (const part of LCP_GROUP_PARTS) {
+    const db = findByName(part.name);
+    if (db) out.push(toPanelComponent(db, "LCP", part.qty * n));
+  }
+  return out;
+}
+
+// LCP auto-sizing (SR-Basic). Groups G → rows N → standard height H → the four
+// candidate widths (40/60/80/100 cm ⇒ 2/3/4/5 groups per row), each snapped to a
+// valid SR-Basic box via the height↔width coupling, then the cheapest is picked.
+// Validated against the owner's table (G = 6/8/10/20/30/40/44/55/70).
+export interface LcpBox { H: number; W: number; D: number; }
+// N (rows) → standard box height (mm): H = (2N−1)×6+20 cm, rounded up to a stock height.
+const LCP_HEIGHT_BY_ROWS: Record<number, number> = {
+  1: 300, 2: 400, 3: 500, 4: 700, 5: 800, 6: 1000, 7: 1000, 8: 1200,
+  9: 1400, 10: 1400, 11: 1600, 12: 1600, 13: 1800, 14: 2000, 15: 2000,
+};
+const LCP_WIDTHS = [400, 600, 800, 1000]; // 40/60/80/100 cm → 2/3/4/5 groups per row
+const lcpMinWidth = (H: number) => (H <= 500 ? 400 : H <= 700 ? 500 : H <= 1200 ? 600 : 800);
+// Box minimum depth (mm) from the depth table (before any component override).
+const lcpDepth = (H: number, W: number) =>
+  W <= 500 ? 200 : W === 600 ? (H <= 800 ? 200 : 250) : W === 800 ? (H <= 1200 ? 250 : 300) : 300;
+export const LCP_MAX_ROWS = 15;   // single-panel ceiling (H 2000 mm)
+export interface LcpBuild extends LcpBox { N: number; base: number; }
+/** All geometrically-valid SR-Basic boxes for G groups, one per candidate width. */
+export function lcpBuilds(G: number): LcpBuild[] {
+  const out: LcpBuild[] = [];
+  if (!(G > 0)) return out;
+  for (let i = 0; i < LCP_WIDTHS.length; i++) {
+    const N = Math.ceil(G / (LCP_WIDTHS[i] / 200));
+    if (N > LCP_MAX_ROWS) continue;                 // needs a multi-panel split
+    const H = LCP_HEIGHT_BY_ROWS[N];
+    if (!H || H > 2000) continue;
+    const W = Math.max(LCP_WIDTHS[i], lcpMinWidth(H)); // snap: too narrow for its height → widen
+    out.push({ base: i, N, H, W, D: lcpDepth(H, W) });
+  }
+  return out;
+}
+/** The recommended SR-Basic box for G groups — the LOWEST-PRICED candidate (one real box
+ *  per width, each already holding all G groups). SR-Basic price = list EUR × the euro rate
+ *  (same rate for every box), so the cheapest is found by comparing list EUR — no factors
+ *  needed. Returns null if G needs a multi-panel split. */
+export function lcpAutoSize(G: number): LcpBox | null {
+  const builds = lcpBuilds(G);
+  if (!builds.length) return null;
+  let best: LcpBox | null = null;
+  let bestEur = Infinity;
+  for (const b of builds) {
+    const real = lcpRealBox({ H: b.H, W: b.W, D: b.D });   // snap to a stocked size
+    const eur = lcpBoxEur(real);
+    if (eur < bestEur) { bestEur = eur; best = real; }
+  }
+  return best;
+}
+/** List EUR of the standard SR-Basic SKU for a size — the basis for cheapest-price sizing
+ *  (catalogue price = eur × the euro rate, so ranking by eur == ranking by price). */
+function lcpBoxEur(box: LcpBox): number {
+  let std = 0;
+  let any = 0;
+  for (const e of ENCLOSURES) {
+    if (!/SR.?Basic/i.test(e.fam)) continue;
+    const nm = (e.name || "").trim();
+    const m = nm.replace(/^new/i, "").match(/(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)/);
+    if (!m || +m[1] !== box.H || +m[2] !== box.W || +m[3] !== box.D) continue;
+    const price = e.eur > 0 ? e.eur : e.egp;
+    if (price <= 0) continue;
+    if (/^\d/.test(nm) && std === 0) std = price;
+    if (any === 0 || price < any) any = price;
+  }
+  return std > 0 ? std : any > 0 ? any : Infinity;
+}
+/** The SR-Basic box for a panel — stored, else recomputed from No. Groups. */
+export function lcpBoxOf(p: LvPanel): LcpBox | null {
+  return p.lcpBox ?? (p.noGroups ? lcpAutoSize(p.noGroups) : null);
+}
+// The SR-Basic box has no catalogue price, so it is costed by weight: outer sheet
+// area × gauge × steel density × the sheet-metal rate (EGP/kg, Pricing Settings).
+const STEEL_KG_PER_M2_PER_MM = 7.85;
+export const LCP_SHEET_THICKNESS_MM = 2;
+export function lcpEnclosureKg(box: LcpBox): number {
+  const areaM2 = (2 * (box.H * box.W + box.H * box.D + box.W * box.D)) / 1e6;
+  return areaM2 * LCP_SHEET_THICKNESS_MM * STEEL_KG_PER_M2_PER_MM;
+}
+/** Auto enclosure cost (EGP) for the box, from the sheet-metal rate. */
+export function lcpEnclosureAuto(box: LcpBox | null | undefined, f: Factors): number {
+  return box ? lcpEnclosureKg(box) * (f.sheetMetal || 0) : 0;
+}
+/** LCP enclosure cost from the catalogue price list — the SAME price the box carries in
+ *  Panels mode. SR-Basic ships two SKUs per size: the standard one (name "HxWxD") and a
+ *  "new HxWxD" variant; Panels prices the standard SKU, so LCP uses it too. Dims are parsed
+ *  from the name (SR-Basic prices live in EUR). Falls back to any priced match, then to the
+ *  sheet-metal price only if the size isn't priced at all. */
+export function lcpEnclosureDbPrice(box: LcpBox | null | undefined, f: Factors): number {
+  if (!box) return 0;
+  let std = 0;   // standard SKU (name starts with the dimensions, no "new" prefix)
+  let any = 0;   // any priced SR-Basic box of that size — fallback
+  for (const e of ENCLOSURES) {
+    if (!/SR.?Basic/i.test(e.fam)) continue;
+    const nm = (e.name || "").trim();
+    const m = nm.replace(/^new/i, "").match(/(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)/);
+    if (!m || +m[1] !== box.H || +m[2] !== box.W || +m[3] !== box.D) continue;
+    const price = enclosurePriceEgp(e, f);
+    if (price <= 0) continue;
+    if (/^\d/.test(nm) && std === 0) std = price;
+    if (any === 0 || price < any) any = price;
+  }
+  return std > 0 ? std : any > 0 ? any : lcpEnclosureAuto(box, f);
+}
+/** LCP: the 2nd enclosure box (Double layout only). No default — the double-panel split
+ *  rule is undefined, so the second size is never auto-recommended (stays manual). */
+export function lcpBox2Of(p: LvPanel): LcpBox | null {
+  return p.panelsSizing?.layout === "Double" ? (p.lcpBox2 ?? null) : null;
+}
+/** LCP enclosure cost — the catalogue (price-list) cost of the chosen box(es); Double sums both. */
+export function lcpEnclosureEgp(p: LvPanel, f: Factors): number {
+  return lcpEnclosureDbPrice(lcpBoxOf(p), f) + lcpEnclosureDbPrice(lcpBox2Of(p), f);
+}
+/** Distinct SR-Basic box sizes (H×W×D, mm) in the catalogue, parsed from the enclosure
+ *  names (dims aren't in the DB H/W/D fields). Sorted small → large. */
+export function lcpSizes(): LcpBox[] {
+  const seen = new Set<string>();
+  const out: LcpBox[] = [];
+  for (const e of ENCLOSURES) {
+    if (!/SR.?Basic/i.test(e.fam)) continue;
+    const m = (e.name || "").replace(/^new/i, "").match(/(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)/);
+    if (!m) continue;
+    const key = `${m[1]}x${m[2]}x${m[3]}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ H: +m[1], W: +m[2], D: +m[3] });
+  }
+  return out.sort((a, b) => a.H - b.H || a.W - b.W || a.D - b.D);
+}
+/** The nearest real SR-Basic box to a recommended size: same H & W, smallest depth ≥ the
+ *  recommended depth; else the closest box overall (by |ΔH|+|ΔW|+|ΔD|). */
+export function lcpClosestSize(rec: LcpBox): LcpBox {
+  const sizes = lcpSizes();
+  if (!sizes.length) return rec;
+  const hw = sizes.filter((s) => s.H === rec.H && s.W === rec.W);
+  if (hw.length) {
+    const ge = hw.filter((s) => s.D >= rec.D).sort((a, b) => a.D - b.D);
+    return ge[0] ?? hw.sort((a, b) => Math.abs(a.D - rec.D) - Math.abs(b.D - rec.D))[0];
+  }
+  const dist = (s: LcpBox) => Math.abs(s.H - rec.H) + Math.abs(s.W - rec.W) + Math.abs(s.D - rec.D);
+  return sizes.slice().sort((a, b) => dist(a) - dist(b))[0];
+}
+/** Snap a raw geometric size to a REAL stocked SR-Basic box, keeping the width and bumping
+ *  the height up to the smallest stocked one (and the depth to the smallest that fits). This
+ *  guarantees a size that actually exists in the catalogue. */
+export function lcpRealBox(box: LcpBox): LcpBox {
+  const sizes = lcpSizes();
+  const sameW = sizes.filter((s) => s.W === box.W && s.H >= box.H);
+  if (sameW.length) {
+    const minH = Math.min(...sameW.map((s) => s.H));
+    const atH = sameW.filter((s) => s.H === minH);
+    const geD = atH.filter((s) => s.D >= box.D).sort((a, b) => a.D - b.D);
+    return geD[0] ?? atH.sort((a, b) => a.D - b.D)[0];
+  }
+  return lcpClosestSize(box);
 }
 
 export function initialState(): LvState {
@@ -482,6 +665,7 @@ export interface PanelCalc {
   busbarCost: number;
   busbarKg: number;
   kits: number;
+  cablesCost?: number; // LCP only — cables line (else undefined)
   cuWeight: number;
   unitCost: number;
   unitCostOps: number;
@@ -525,6 +709,27 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   // Spare-parts cell: components/enclosures (as rows) + manual copper weight only —
   // no enclosure sizing, kits, connection copper or operations markup.
   if (p.spare) {
+    // LCP (Lighting Control Panel): Components (group parts) + Enclosure (manual SR-Basic
+    // box) + Kits (10 % of the enclosure, SR-Basic rate) + Cables (manual). No copper.
+    if (p.spareKind === "lcp") {
+      let compCost = 0;
+      let enclComp = 0;
+      for (const c of p.components) {
+        if (isSpacer(c)) continue;
+        const ov = abbDiscounts?.[abbKey(c)];
+        const line = componentPriceEgp(c, f, ov != null ? ov / 100 : undefined) * c.qty;
+        if (c.type === "Enclosure") enclComp += line; else compCost += line;
+      }
+      // Enclosure = auto sheet-metal price of the SR-Basic box (or manual override).
+      const enclCost = enclComp + lcpEnclosureEgp(p, f);
+      const kits = enclCost * 0.10;                // SR-Basic assembly kit = 10 % of enclosure
+      const cablesCost = p.cablesEgp || 0;
+      const unitCost = compCost + enclCost + kits + cablesCost;
+      const unitCostOps = unitCost * (1 + f.operations);   // operations overhead, like a panel
+      const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
+      const sellUnit = (factor > 0 ? unitCostOps / factor : unitCostOps) * (1 + (f.safetyFactor || 0));
+      return { compCost, enclCost, cuConnCost: 0, busbarCost: 0, busbarKg: 0, kits, cablesCost, cuWeight: 0, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
+    }
     let compCost = 0;
     for (const c of p.components) {
       if (isSpacer(c)) continue;
@@ -708,6 +913,7 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   const zeroPrice: string[] = [];
   const noCells: string[] = [];
   const missingCopper: string[] = [];
+  const lcpCables: string[] = []; // LCP cells with no cables cost (mandatory)
   const highlighted: string[] = []; // panels flagged with the sidebar highlighter
   s.panels.forEach((p, i) => {
     const label = `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}`;
@@ -718,6 +924,10 @@ export function exportBlockers(s: LvState): ExportCheck[] {
     for (const c of p.components) {
       if (isSpacer(c) || c.type === "Space") continue;
       if (itemPriceEgp(c, s) <= 0) zeroPrice.push(`${tag}: ${c.name || c.ref || "item"} — 0 EGP`);
+    }
+    // LCP: the cables cost is mandatory — it has no auto value.
+    if (p.spareKind === "lcp" && !(p.cablesEgp && p.cablesEgp > 0)) {
+      lcpCables.push(`${tag}: cables cost not entered`);
     }
     // Spare-parts cell: no sizing / cells / busbar rules to check.
     if (p.spare) return;
@@ -745,6 +955,7 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   if (zeroPrice.length) out.push({ title: "Zero price", items: zeroPrice });
   if (noCells.length) out.push({ title: "No cells selected", items: noCells });
   if (missingCopper.length) out.push({ title: "Missing copper", items: missingCopper });
+  if (lcpCables.length) out.push({ title: "LCP cables missing", items: lcpCables });
   return out;
 }
 

@@ -11,6 +11,7 @@ import {
 } from "../lv/catalog";
 import {
   newPanel, newSparePanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
+  lcpGroupComponents, LCP_GROUP_PARTS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarBarAreaMm2, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
@@ -353,9 +354,9 @@ export default function LvConfiguratorPage() {
   // Add a "Spare parts" cell — both from a spare QTN's list and from a panels QTN
   // ("+ Add spare parts"). It selects the new cell so its Spare editor shows at once,
   // staying on whichever list tab is active.
-  const addSpareCell = () => {
+  const addSpareCell = (kind = "spare") => {
     if (readOnly) return;
-    const c = newSparePanel();
+    const c = newSparePanel(kind);
     apply((old) => ({ ...old, panels: [...old.panels, c], selectedId: c.id }));
     setTab(isSpareQtn ? "spare" : "panels");
   };
@@ -535,7 +536,7 @@ export default function LvConfiguratorPage() {
         )}
         {tab === "spare" && isSpareQtn && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
-            onAdd={addSpareCell} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
+            onAdd={() => addSpareCell("spare")} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
             addLabel="+ Add cell" emptyLabel="No spare cells yet." emptyAddLabel="+ Add your first cell" />
         )}
         {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} />)}
@@ -923,20 +924,18 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
     <div className="animate-fade-up">
       <PrintBar label={`${s.panels.length} panel${s.panels.length > 1 ? "s" : ""} → multi-page PDF (tables flow across pages).`}
         docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} exportFn={exportPdf} />
-      {hideBrand && (
-        <div className="no-print mb-2 flex justify-end">
-          <button type="button" onClick={() => setHideBrand(false)}
-            title="Brand column is hidden — click to show it in the offer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-              <circle cx="12" cy="12" r="3" />
-              <line x1="3" y1="3" x2="21" y2="21" />
-            </svg>
-            Show brand
-          </button>
-        </div>
-      )}
+      <div className="no-print mb-2 flex justify-end">
+        <button type="button" onClick={() => setHideBrand((v) => !v)}
+          title={hideBrand ? "Brand column is hidden in the offer — click to show it" : "Brand column is shown in the offer — click to hide it"}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+            <circle cx="12" cy="12" r="3" />
+            {hideBrand && <line x1="3" y1="3" x2="21" y2="21" />}
+          </svg>
+          {hideBrand ? "Show brand" : "Hide brand"}
+        </button>
+      </div>
       <div className="offer-workspace">
       <div data-pdf-root className="print-area space-y-6">
         {/* Cover page (shared branded title page) — no footer on the cover */}
@@ -1712,26 +1711,13 @@ function SpareEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: 
   const rows = p.components;
   return (
     <div className="space-y-4 animate-fade-up">
-      {/* Header + name + live total */}
+      {/* Header + name */}
       <div className="card p-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-[240px] flex-1">
-            <h2 className="sec-head mb-1 flex items-center gap-2">🧰 Spare Parts</h2>
-            <p className="text-xs text-muted">
-              Loose components &amp; enclosures plus copper by weight. No sizing or panel details — its price
-              feeds the Technical, Commercial and Material offers.
-            </p>
-            <div className="mt-3 max-w-sm">
-              <L>Name</L>
-              <input className="input" value={p.name} placeholder="Spare parts"
-                onChange={(e) => u({ name: e.target.value })} />
-            </div>
-          </div>
-          <div className="rounded-xl bg-brand-light p-3 text-right text-brand-dark">
-            <div className="text-[11px] font-semibold uppercase tracking-wide">Spare parts total (selling)</div>
-            <div className="text-xl font-extrabold">{fmtEgp(calc.sellUnit)} EGP</div>
-            <div className="text-[11px] text-muted">{f.usd > 0 ? `${fmtEgp(calc.sellUnit / f.usd)} USD` : ""}</div>
-          </div>
+        <h2 className="sec-head flex items-center gap-2">🧰 Spare Parts</h2>
+        <div className="mt-3 max-w-sm">
+          <L>Name</L>
+          <input className="input" value={p.name} placeholder="Spare parts"
+            onChange={(e) => u({ name: e.target.value })} />
         </div>
       </div>
 
@@ -1825,6 +1811,358 @@ function SpareEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: 
           Generate the itemised list, prices and procurement from the Technical, Commercial and Material tabs above.
         </p>
       </div>
+    </div>
+  );
+}
+
+// ── LCP (Lighting Control Panel) editor ─────────────────────────────────────────
+// A local control panel: SR-Basic enclosure auto-sized from the number of control
+// groups. "No. Groups" auto-fills the component list (pilot lights / pushbuttons /
+// terminals × G) and recommends the box (H × W × D). Cost = Components + Enclosure +
+// Kits (10 % of the enclosure) + Cables → Unit cost → Factor → Unit selling.
+function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: string, patch: Partial<LvPanel>) => void }) {
+  const f = s.factors;
+  const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
+  const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
+  const priceOf = (c: PanelComponent) => componentPriceEgp(c, f);
+  const G = p.noGroups || 0;
+
+  const isDouble = p.panelsSizing?.layout === "Double";
+  // Entering No. Groups re-seeds the group components (group set × G), preserving any
+  // components the user added by hand. Single panels auto-size the box to the nearest
+  // SR-Basic size; a Double split rule is undefined, so Double sizes stay manual.
+  const setGroups = (n: number) => {
+    const g = Math.max(0, Math.round(n) || 0);
+    const groupNames = new Set(LCP_GROUP_PARTS.map((gp) => gp.name));
+    const extras = p.components.filter((c) => !groupNames.has(c.name));
+    const patch: Partial<LvPanel> = { noGroups: g, components: [...lcpGroupComponents(g), ...extras] };
+    if (!isDouble) { patch.lcpBox = lcpAutoSize(g) ?? undefined; }   // cheapest stocked box for G
+    u(patch);
+  };
+  const setQty = (id: string, n: number) =>
+    u({ components: p.components.map((c) => (c.id === id ? { ...c, qty: Math.max(1, Math.round(n) || 1) } : c)) });
+
+  // Component rows are editable like a panel: add (search), change (✎) and remove (✕).
+  const [pending, setPending] = useState<PanelComponent | null>(null);
+  const [pendQty, setPendQty] = useState("");
+  const [editId, setEditId] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const qtyRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (pending) { qtyRef.current?.focus({ preventScroll: true }); qtyRef.current?.select(); } }, [pending]);
+  const pickComp = (c: DbComponent) => { setPending(toPanelComponent(c, "LCP", 1)); setPendQty(""); };
+  const confirmAdd = () => {
+    if (!pending) return;
+    u({ components: [...p.components, { ...pending, qty: Math.max(1, parseInt(pendQty, 10) || 1) }] });
+    setPending(null); setPendQty("");
+    requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true }));
+  };
+  const cancelAdd = () => { setPending(null); setPendQty(""); };
+  const changeComp = (id: string, c: DbComponent) => {
+    const nc = toPanelComponent(c, "LCP", 1);
+    u({ components: p.components.map((r) => (r.id === id ? { ...nc, id: r.id, qty: r.qty } : r)) });
+    setEditId(null);
+  };
+  const delRow = (id: string) => u({ components: p.components.filter((c) => c.id !== id) });
+  // Drag-to-reorder component rows (grip handle).
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const dropRow = (targetId: string) => {
+    const dId = dragId;
+    setDragId(null); setOverId(null);
+    if (!dId || dId === targetId) return;
+    const arr = [...p.components];
+    const from = arr.findIndex((c) => c.id === dId);
+    const to = arr.findIndex((c) => c.id === targetId);
+    if (from < 0 || to < 0) return;
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    u({ components: arr });
+  };
+
+  const box = lcpBoxOf(p);
+  const box2 = lcpBox2Of(p);
+  const overCeiling = !isDouble && G > 0 && !box;   // beyond a single panel (> ~75 groups)
+  const rows = p.components;
+  const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
+  const enclEgp = lcpEnclosureDbPrice(box, f) + lcpEnclosureDbPrice(box2, f);   // one box, or two (Double)
+  const cablesMissing = !((p.cablesEgp ?? 0) > 0);
+  // Sizing dropdown — every SR-Basic box size, priced from the catalogue price list.
+  const sizeOptions = lcpSizes().map((sz) => ({
+    key: `${sz.H}x${sz.W}x${sz.D}`,
+    label: `${sz.H} × ${sz.W} × ${sz.D} mm`,
+    hint: `${fmtEgp(lcpEnclosureDbPrice(sz, f))} EGP`,
+  }));
+  // Auto-sizing candidates (one per width) + which one is chosen — for the summary panel.
+  const WIDTH_CM = [40, 60, 80, 100];
+  const GROUPS_PER_ROW = [2, 3, 4, 5];
+  // Candidates — one real stocked box per width, with its catalogue price. The cheapest wins.
+  const sizeBuilds = lcpBuilds(G).map((b) => {
+    const s = lcpRealBox({ H: b.H, W: b.W, D: b.D });
+    return { base: b.base, N: b.N, H: s.H, W: s.W, D: s.D, price: lcpEnclosureDbPrice(s, f) };
+  });
+  const chosenBase = sizeBuilds.length ? sizeBuilds.reduce((m, b) => (b.price < m.price ? b : m)).base : undefined;
+  const keyOfBox = (b: { H: number; W: number; D: number } | null) => (b ? `${b.H}x${b.W}x${b.D}` : "");
+  const parseBox = (key: string) => { const m = key.match(/(\d+)x(\d+)x(\d+)/); return m ? { H: +m[1], W: +m[2], D: +m[3] } : null; };
+  const pickSize = (key: string) => { const b = parseBox(key); if (b) u({ lcpBox: b }); };
+  const pickSize2 = (key: string) => { const b = parseBox(key); if (b) u({ lcpBox2: b }); };
+  return (
+    <div className="space-y-4 animate-fade-up">
+      {/* Header */}
+      <div className="card p-5">
+        <h2 className="sec-head flex items-center gap-2">🎛️ LCP — Lighting Control Panel</h2>
+      </div>
+
+      {/* Panel Cost (Live) — first table; updates live as the panel below is configured */}
+      <div className="card p-5">
+        <h2 className="sec-head mb-3">Panel Cost (Live)</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg bg-surface p-2.5 text-sm">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
+          <div className="rounded-lg bg-surface p-2.5 text-sm">
+            Enclosure{isDouble ? " (2)" : ""}<br /><b>{fmtEgp(enclEgp)} EGP</b>
+            <span className="block text-[10px] font-normal text-muted">
+              {isDouble
+                ? `${box ? `${box.H}×${box.W}×${box.D}` : "—"} + ${box2 ? `${box2.H}×${box2.W}×${box2.D}` : "pick size 2"}`
+                : box ? `${box.H}×${box.W}×${box.D} mm` : "—"}
+            </span>
+          </div>
+          <div className="rounded-lg bg-surface p-2.5 text-sm">Kits <span className="text-[10px] text-muted">(10%)</span><br /><b>{fmtEgp(calc.kits)} EGP</b></div>
+          <div>
+            <L>Cables (EGP) <span className="text-red-500">*</span></L>
+            <input className={`input ${cablesMissing ? "border-red-400 ring-1 ring-red-300" : ""}`} type="number" min={0}
+              value={p.cablesEgp || ""} placeholder="required"
+              onChange={(e) => u({ cablesEgp: parseFloat(e.target.value) || 0 })} />
+            {cablesMissing && <p className="mt-1 text-[11px] font-semibold text-red-500">Cables cost is required</p>}
+          </div>
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg bg-surface p-2.5 text-sm">Unit cost<br /><b>{fmtEgp(calc.unitCost)} EGP</b></div>
+          <div>
+            <L>Factor</L>
+            <input className="input" type="number" min={0} step={0.1} value={p.sellFactor || f.factor}
+              onChange={(e) => u({ sellFactor: parseFloat(e.target.value) || 0 })} />
+            <p className="mt-1 text-[11px] text-muted">÷ {factor}{p.sellFactor > 0 ? "" : " (global)"}</p>
+          </div>
+          <div className="rounded-lg bg-brand-light p-2.5 text-sm text-brand-dark">Unit selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
+          <div className="rounded-lg bg-brand p-2.5 text-sm text-white">Unit selling (USD)<br /><b>{fmtEgp(f.usd > 0 ? calc.sellUnit / f.usd : 0)} USD</b></div>
+        </div>
+        <p className="mt-3 text-[11px] text-muted">
+          Enclosure is priced from the SR-Basic catalogue price list (the chosen box). Kits = 10 % of the enclosure. Cables are mandatory.
+        </p>
+      </div>
+
+      {/* Panel details */}
+      <div className="card p-5">
+        <h2 className="sec-head mb-3">Panel details</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="sm:col-span-2 lg:col-span-2">
+            <L>Panel name</L>
+            <input className="input" value={p.name} placeholder="LCP" onChange={(e) => u({ name: e.target.value })} />
+          </div>
+          <div>
+            <L>Quantity</L>
+            <input className="input" type="number" min={1} value={p.qty}
+              onChange={(e) => u({ qty: Math.max(1, parseInt(e.target.value, 10) || 1) })} />
+          </div>
+          <div>
+            <L>Incoming cables</L>
+            <Sel value={p.incomingCables as any} onChange={(v) => u({ incomingCables: v })} options={INCOMING_CABLES as any} />
+          </div>
+          <div>
+            <L>Outgoing cables</L>
+            <Sel value={p.outgoingCables as any} onChange={(v) => u({ outgoingCables: v })} options={OUTGOING_CABLES as any} />
+          </div>
+          <div>
+            <L>No. Groups</L>
+            <input className="input" type="number" min={0} value={p.noGroups ?? ""} placeholder="0"
+              onChange={(e) => setGroups(parseInt(e.target.value, 10) || 0)} />
+          </div>
+        </div>
+        {/* Enclosure sizing — auto-sized from No. Groups; the size stays editable. */}
+        <div className="mt-4 grid gap-5 border-t border-line pt-4 lg:grid-cols-2">
+          <div className="space-y-3">
+          <div>
+            <L>Layout</L>
+            <div className="flex gap-1.5">
+              {(["Single", "Double"] as const).map((l) => (
+                <button key={l} onClick={() => u({ panelsSizing: { ...p.panelsSizing, layout: l } })}
+                  className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-bold ${
+                    p.panelsSizing?.layout === l ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted"
+                  }`}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <L>Enclosure family</L>
+            <Sel value={"SR-Basic" as any} onChange={() => {}} options={["SR-Basic"] as any} />
+          </div>
+          <div>
+            <L>{isDouble ? "Sizing (1)" : "Sizing"}</L>
+            <SearchSelect value={keyOfBox(box)} placeholder="Search size — one selection…" options={sizeOptions} onPick={pickSize} />
+            {!isDouble && (overCeiling ? (
+              <p className="mt-1 text-[11px] font-semibold text-red-600">
+                {G} groups exceed a single panel (max ≈ {5 * LCP_MAX_ROWS}). Split into multiple LCP panels.
+              </p>
+            ) : G > 0 && box ? (
+              <p className="mt-1 text-[11px] text-muted">Auto-sized from {G} group{G === 1 ? "" : "s"} · recommended {box.H} × {box.W} × {box.D} mm</p>
+            ) : (
+              <p className="mt-1 text-[11px] text-muted">Enter No. Groups above to auto-size, or pick a size.</p>
+            ))}
+          </div>
+          {isDouble && (
+            <div>
+              <L>Sizing (2)</L>
+              <SearchSelect value={keyOfBox(box2)} placeholder="Search size — one selection…" options={sizeOptions} onPick={pickSize2} />
+              <p className="mt-1 text-[11px] text-muted">Second enclosure — pick its size (not auto-recommended).</p>
+            </div>
+          )}
+          </div>
+
+          {/* Summary — how the auto-size chose this box */}
+          <div className="rounded-lg border border-line bg-surface/50 p-4 text-sm">
+            <h3 className="mb-1.5 font-bold text-ink">How the size is chosen</h3>
+            {G <= 0 ? (
+              <p className="text-xs leading-relaxed text-muted">
+                Enter <b className="text-ink">No. Groups</b> to auto-size the SR-Basic box. Each candidate width holds a fixed number
+                of groups per row; the box grows in rows, then the cheapest box that fits is chosen and priced from the catalogue.
+              </p>
+            ) : (
+              <>
+                <p className="mb-2 text-xs leading-relaxed text-muted">
+                  <b className="text-ink">G = {G}</b> · N = ⌈G ÷ groups-per-row⌉ · H = [N + (N−1)] × 6 + 20 cm (rounded up to a standard height):
+                </p>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
+                      <th className="py-1 font-semibold">Width</th>
+                      <th className="py-1 text-center font-semibold">Grp/row</th>
+                      <th className="py-1 text-center font-semibold">Rows</th>
+                      <th className="py-1 text-right font-semibold">Box (H×W×D)</th>
+                      <th className="py-1 text-right font-semibold">Price</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sizeBuilds.length === 0 && (
+                      <tr><td colSpan={5} className="py-2 text-center font-semibold text-red-600">Over one panel (max ≈ {5 * LCP_MAX_ROWS} groups) — split needed.</td></tr>
+                    )}
+                    {sizeBuilds.map((b) => {
+                      const on = b.base === chosenBase;
+                      return (
+                        <tr key={b.base} className={`border-t border-line/50 ${on ? "font-bold text-brand-dark" : "text-muted"}`}>
+                          <td className="py-1">{WIDTH_CM[b.base]} cm</td>
+                          <td className="py-1 text-center">{GROUPS_PER_ROW[b.base]}</td>
+                          <td className="py-1 text-center">{b.N}</td>
+                          <td className="py-1 text-right">{b.H}×{b.W}×{b.D}</td>
+                          <td className="py-1 text-right">{fmtEgp(b.price)}{on ? "  ✓" : ""}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <p className="mt-2 text-[11px] leading-relaxed text-muted">
+                  Rule: each width gives one stocked box that holds all {G} groups; the one with the <b className="text-ink">lowest catalogue price</b> is chosen{box ? <> → <b className="text-ink">{box.H} × {box.W} × {box.D} mm</b></> : ""}.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Components — auto-filled from No. Groups; add / change / remove like a panel */}
+      <div className="card p-0 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface px-4 py-2.5">
+          <h2 className="text-sm font-bold text-ink">Components — {G} group{G === 1 ? "" : "s"}</h2>
+          <span className="text-[11px] text-muted">auto-filled from No. Groups · add or edit below</span>
+        </div>
+        {/* Add / change component search */}
+        <div className="border-b border-line px-4 py-3">
+          <L>{editId ? "Change component" : "Add component"}</L>
+          <ComponentSearch inputRef={searchRef} factors={f}
+            onPick={(c) => (editId ? changeComp(editId, c) : pickComp(c))}
+            placeholder="Search components (name / reference / type / rating)…" />
+          {editId && (
+            <button type="button" onClick={() => setEditId(null)}
+              className="mt-1 text-[11px] font-semibold text-muted hover:text-ink">Cancel change</button>
+          )}
+          {/* Qty popup for a newly-picked component */}
+          {pending && (
+            <div className="mt-2 rounded-lg border border-brand/50 bg-white p-3 shadow-sm">
+              <p className="mb-2 text-xs">
+                <span className="mr-1.5 rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold text-muted">{pending.type || "Item"}</span>
+                <span className="font-bold text-ink">{pending.name}</span>
+                <span className="ml-1 text-[11px] text-muted">{pending.ref}{pending.brand ? ` · ${pending.brand}` : ""} · {fmtEgp(priceOf(pending))} EGP</span>
+              </p>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-muted">Qty</label>
+                <input ref={qtyRef} inputMode="numeric" className="input h-9 w-24" placeholder="1" value={pendQty}
+                  onChange={(e) => setPendQty(e.target.value.replace(/[^\d]/g, ""))}
+                  onKeyDown={(e) => { if (e.key === "Enter") confirmAdd(); if (e.key === "Escape") cancelAdd(); }} />
+                <button type="button" className="btn-primary h-9 px-4 text-sm" onClick={confirmAdd}>Add</button>
+                <button type="button" className="btn-ghost h-9 px-3 text-sm" onClick={cancelAdd}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+        <table className="w-full text-sm">
+          <colgroup><col className="w-[4%]" /><col className="w-[34%]" /><col className="w-[15%]" /><col className="w-[11%]" /><col className="w-[8%]" /><col className="w-[11%]" /><col className="w-[11%]" /><col className="w-[6%]" /></colgroup>
+          <thead>
+            <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-muted">
+              <th className="px-1 py-2" />
+              <th className="px-3 py-2 font-semibold">Description</th>
+              <th className="px-3 py-2 font-semibold">Reference</th>
+              <th className="px-3 py-2 font-semibold">Type / Brand</th>
+              <th className="px-2 py-2 text-center font-semibold">Qty</th>
+              <th className="px-3 py-2 text-right font-semibold">Unit cost</th>
+              <th className="px-3 py-2 text-right font-semibold">Total cost</th>
+              <th className="px-2 py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr><td colSpan={8} className="px-3 py-6 text-center text-muted">No components yet — set No. Groups above or search to add.</td></tr>
+            )}
+            {rows.map((c) => (
+              <tr key={c.id}
+                onDragOver={(e) => { if (dragId && dragId !== c.id) { e.preventDefault(); if (overId !== c.id) setOverId(c.id); } }}
+                onDragLeave={() => { if (overId === c.id) setOverId(null); }}
+                onDrop={(e) => { e.preventDefault(); dropRow(c.id); }}
+                className={`border-b border-line/50 last:border-0 ${editId === c.id ? "bg-brand-tint/40" : ""} ${dragId === c.id ? "opacity-40" : ""} ${overId === c.id ? "border-t-2 border-t-brand" : ""}`}>
+                <td className="px-1 py-1.5 text-center">
+                  <span draggable
+                    onDragStart={(e) => { setDragId(c.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", c.id); } catch {} }}
+                    onDragEnd={() => { setDragId(null); setOverId(null); }}
+                    title="Drag to reorder"
+                    className="inline-flex cursor-grab select-none text-muted/50 transition-colors hover:text-brand active:cursor-grabbing">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                      <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
+                      <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
+                      <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
+                    </svg>
+                  </span>
+                </td>
+                <td className="px-3 py-1.5 font-medium text-ink">{c.name}</td>
+                <td className="px-3 py-1.5 text-muted">{c.ref || "—"}</td>
+                <td className="px-3 py-1.5 text-muted">{c.brand || c.type || "—"}</td>
+                <td className="px-2 py-1.5 text-center">
+                  <input className="input h-7 w-14 px-1.5 text-center text-xs" inputMode="numeric" value={c.qty}
+                    onChange={(e) => setQty(c.id, parseInt(e.target.value.replace(/[^\d]/g, ""), 10) || 1)} />
+                </td>
+                <td className="px-3 py-1.5 text-right text-muted">{fmtEgp(priceOf(c))}</td>
+                <td className="px-3 py-1.5 text-right font-semibold text-ink">{fmtEgp(priceOf(c) * c.qty)}</td>
+                <td className="px-2 py-1.5">
+                  <div className="flex items-center justify-end gap-1">
+                    <button title="Change component"
+                      onClick={() => { setPending(null); setPendQty(""); setEditId(c.id); requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true })); }}
+                      className="grid h-5 w-5 place-items-center rounded text-xs leading-none text-ink/70 hover:bg-brand-light hover:text-brand-dark">✎</button>
+                    <button title="Remove" onClick={() => delRow(c.id)}
+                      className="grid h-5 w-5 place-items-center rounded text-xs leading-none text-red-500 hover:bg-red-100 hover:text-red-600">✕</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
     </div>
   );
 }
@@ -2004,13 +2342,64 @@ function SelectivityTab({ s, upPanel }: { s: LvState; upPanel: (id: string, patc
   );
 }
 
+// "Add spare parts" dropdown — the variants of spare cell. Their editor pages are
+// designed separately; here we only add a cell tagged with the chosen kind.
+const SPARE_KINDS: { kind: string; label: string }[] = [
+  { kind: "spare", label: "Spare Parts" },
+  { kind: "lcp", label: "LCP" },
+  { kind: "kwhm", label: "KWHM" },
+];
+function AddSpareMenu({ onAddSpare, trigger, wrap = "" }: { onAddSpare: (kind: string) => void; trigger: string; wrap?: string }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // The trigger lives inside a card with overflow-hidden, so an absolutely-positioned
+  // menu gets clipped. Render it in a portal at fixed coordinates instead.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (btnRef.current?.contains(e.target as Node) || menuRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    const onLeave = () => setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("resize", onLeave);
+    window.addEventListener("scroll", onLeave, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("resize", onLeave);
+      window.removeEventListener("scroll", onLeave, true);
+    };
+  }, [open]);
+  const toggle = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setPos({ left: r.left, top: r.bottom + 4, width: Math.max(r.width, 160) });
+    setOpen((v) => !v);
+  };
+  return (
+    <div className={wrap}>
+      <button ref={btnRef} type="button" onClick={toggle} className={trigger}>🧰 Auxiliary Panels ▾</button>
+      {open && pos && createPortal(
+        <div ref={menuRef} style={{ position: "fixed", left: pos.left, top: pos.top, width: pos.width, zIndex: 60 }}
+          className="overflow-hidden rounded-lg border border-line bg-white shadow-lift">
+          {SPARE_KINDS.map((o) => (
+            <button key={o.kind} type="button"
+              className="block w-full px-3 py-2 text-left text-sm font-semibold text-ink transition-colors hover:bg-brand-tint"
+              onClick={() => { setOpen(false); onAddSpare(o.kind); }}>{o.label}</button>
+          ))}
+        </div>, document.body)}
+    </div>
+  );
+}
+
 function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
   s: LvState; sel: LvPanel | null;
   up: (p: Partial<LvState>) => void;
   upPanel: (id: string, p: Partial<LvPanel>) => void;
   onAdd: () => void; onDel: (id: string) => void; onClone: (id: string) => void;
   onOpenInOffer: (id: string) => void;
-  onAddSpare?: () => void;
+  onAddSpare?: (kind: string) => void;
   addLabel?: string; emptyLabel?: string; emptyAddLabel?: string;
 }) {
   // Drag-and-drop reorder state (hooks must precede the early return).
@@ -2024,10 +2413,8 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
           <button className="btn-primary" onClick={onAdd}>{emptyAddLabel}</button>
           {onAddSpare && (
-            <button onClick={onAddSpare}
-              className="rounded-lg border border-dashed border-brand/40 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-tint">
-              🧰 Add spare parts
-            </button>
+            <AddSpareMenu onAddSpare={onAddSpare}
+              trigger="rounded-lg border border-dashed border-brand/40 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-tint" />
           )}
         </div>
       </div>
@@ -2110,17 +2497,18 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
         })}
         <button className="btn-ghost mt-1 w-full" onClick={onAdd}>{addLabel}</button>
         {onAddSpare && (
-          <button onClick={onAddSpare} title="Add a Spare parts cell to this quotation"
-            className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-brand/40 px-3 py-1.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-tint">
-            🧰 Add spare parts
-          </button>
+          <AddSpareMenu onAddSpare={onAddSpare} wrap="mt-1 w-full"
+            trigger="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-brand/40 px-3 py-1.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-tint" />
         )}
       </div>
 
       {/* editor — its own scroll area so the panel list and editor scroll independently.
-          A spare cell uses the stripped SpareEditor; every other cell the full PanelEditor. */}
+          An LCP cell uses the LcpEditor; any other spare cell the stripped SpareEditor;
+          every other cell the full PanelEditor. */}
       <div className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
-        {sel && (sel.spare
+        {sel && (sel.spareKind === "lcp"
+          ? <LcpEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />
+          : sel.spare
           ? <SpareEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />
           : <PanelEditor key={sel.id} s={s} p={sel} up={up} upPanel={upPanel} />)}
       </div>
