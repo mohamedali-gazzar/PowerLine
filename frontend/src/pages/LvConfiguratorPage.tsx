@@ -11,7 +11,7 @@ import {
 } from "../lv/catalog";
 import {
   newPanel, newSparePanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
-  lcpGroupComponents, LCP_GROUP_PARTS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
+  lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarBarAreaMm2, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
@@ -1826,17 +1826,34 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
   const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
   const priceOf = (c: PanelComponent) => componentPriceEgp(c, f);
   const G = p.noGroups || 0;
+  // The same editor drives the LCP and KWHM auxiliary panels — same formula, different labels.
+  const isKwhm = p.spareKind === "kwhm";
+  const title = `${SPARE_KIND_ICONS[p.spareKind ?? "lcp"]} ${isKwhm ? "KWHM — kWh Meter Panel" : "LCP — Lighting Control Panel"}`;
+  const countLabel = isKwhm ? "No. KWHM" : "No. Groups";
+  const unitWord = isKwhm ? "KWHM" : "group";
+  const unitPlural = isKwhm ? "KWHM" : "groups";
+  const perRow = isKwhm ? "KWHM/row" : "groups-per-row";
 
   const isDouble = p.panelsSizing?.layout === "Double";
-  // Entering No. Groups re-seeds the group components (group set × G), preserving any
-  // components the user added by hand. Single panels auto-size the box to the nearest
-  // SR-Basic size; a Double split rule is undefined, so Double sizes stay manual.
+  const fam = p.panelsSizing?.family ?? "SR-Basic";   // enclosure family (SR-Basic by default)
+  // Entering the count auto-sizes the box (Single only). LCP also re-seeds its group
+  // components (preserving hand-added rows); KWHM components stay manual.
   const setGroups = (n: number) => {
     const g = Math.max(0, Math.round(n) || 0);
-    const groupNames = new Set(LCP_GROUP_PARTS.map((gp) => gp.name));
-    const extras = p.components.filter((c) => !groupNames.has(c.name));
-    const patch: Partial<LvPanel> = { noGroups: g, components: [...lcpGroupComponents(g), ...extras] };
-    if (!isDouble) { patch.lcpBox = lcpAutoSize(g) ?? undefined; }   // cheapest stocked box for G
+    const patch: Partial<LvPanel> = { noGroups: g };
+    if (!isKwhm) {
+      const groupNames = new Set(LCP_GROUP_PARTS.map((gp) => gp.name));
+      const extras = p.components.filter((c) => !groupNames.has(c.name));
+      patch.components = [...lcpGroupComponents(g), ...extras];
+    }
+    if (!isDouble) { patch.lcpBox = lcpAutoSize(g, fam) ?? undefined; }   // cheapest stocked box for G in this family
+    u(patch);
+  };
+  // Changing the enclosure family re-sizes to the cheapest box of that family.
+  const setFamily = (family: string) => {
+    const patch: Partial<LvPanel> = { panelsSizing: { ...p.panelsSizing, family } };
+    if (!isDouble && G > 0) patch.lcpBox = lcpAutoSize(G, family) ?? undefined;
+    else patch.lcpBox = undefined;
     u(patch);
   };
   const setQty = (id: string, n: number) =>
@@ -1884,21 +1901,21 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
   const overCeiling = !isDouble && G > 0 && !box;   // beyond a single panel (> ~75 groups)
   const rows = p.components;
   const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
-  const enclEgp = lcpEnclosureDbPrice(box, f) + lcpEnclosureDbPrice(box2, f);   // one box, or two (Double)
+  const enclEgp = lcpEnclosureDbPrice(box, f, fam) + lcpEnclosureDbPrice(box2, f, fam);   // one box, or two (Double)
   const cablesMissing = !((p.cablesEgp ?? 0) > 0);
-  // Sizing dropdown — every SR-Basic box size, priced from the catalogue price list.
-  const sizeOptions = lcpSizes().map((sz) => ({
+  // Sizing dropdown — every box size in the selected family, priced from the catalogue.
+  const sizeOptions = lcpSizes(fam).map((sz) => ({
     key: `${sz.H}x${sz.W}x${sz.D}`,
     label: `${sz.H} × ${sz.W} × ${sz.D} mm`,
-    hint: `${fmtEgp(lcpEnclosureDbPrice(sz, f))} EGP`,
+    hint: `${fmtEgp(lcpEnclosureDbPrice(sz, f, fam))} EGP`,
   }));
   // Auto-sizing candidates (one per width) + which one is chosen — for the summary panel.
   const WIDTH_CM = [40, 60, 80, 100];
   const GROUPS_PER_ROW = [2, 3, 4, 5];
   // Candidates — one real stocked box per width, with its catalogue price. The cheapest wins.
   const sizeBuilds = lcpBuilds(G).map((b) => {
-    const s = lcpRealBox({ H: b.H, W: b.W, D: b.D });
-    return { base: b.base, N: b.N, H: s.H, W: s.W, D: s.D, price: lcpEnclosureDbPrice(s, f) };
+    const s = lcpRealBox({ H: b.H, W: b.W, D: b.D }, fam);
+    return { base: b.base, N: b.N, H: s.H, W: s.W, D: s.D, price: lcpEnclosureDbPrice(s, f, fam) };
   });
   const chosenBase = sizeBuilds.length ? sizeBuilds.reduce((m, b) => (b.price < m.price ? b : m)).base : undefined;
   const keyOfBox = (b: { H: number; W: number; D: number } | null) => (b ? `${b.H}x${b.W}x${b.D}` : "");
@@ -1909,42 +1926,83 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
     <div className="space-y-4 animate-fade-up">
       {/* Header */}
       <div className="card p-5">
-        <h2 className="sec-head flex items-center gap-2">🎛️ LCP — Lighting Control Panel</h2>
+        <h2 className="sec-head flex items-center gap-2">{title}</h2>
       </div>
 
       {/* Panel Cost (Live) — first table; updates live as the panel below is configured */}
       <div className="card p-5">
         <h2 className="sec-head mb-3">Panel Cost (Live)</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-lg bg-surface p-2.5 text-sm">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5 text-sm">
-            Enclosure{isDouble ? " (2)" : ""}<br /><b>{fmtEgp(enclEgp)} EGP</b>
-            <span className="block text-[10px] font-normal text-muted">
-              {isDouble
-                ? `${box ? `${box.H}×${box.W}×${box.D}` : "—"} + ${box2 ? `${box2.H}×${box2.W}×${box2.D}` : "pick size 2"}`
-                : box ? `${box.H}×${box.W}×${box.D} mm` : "—"}
-            </span>
+        {isKwhm ? (
+          /* KWHM — one aligned 5-col grid with the Cu connections tile. */
+          <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Row 1 */}
+            <div className="flex flex-col justify-center rounded-lg bg-surface p-2.5 text-sm">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
+            <div className="flex flex-col justify-center rounded-lg bg-surface p-2.5 text-sm">
+              Enclosure{isDouble ? " (2)" : ""}<br /><b>{fmtEgp(enclEgp)} EGP</b>
+              <span className="block text-[10px] font-normal text-muted">
+                {isDouble
+                  ? `${box ? `${box.H}×${box.W}×${box.D}` : "—"} + ${box2 ? `${box2.H}×${box2.W}×${box2.D}` : "pick size 2"}`
+                  : box ? `${box.H}×${box.W}×${box.D} mm` : "—"}
+              </span>
+            </div>
+            <div className="flex flex-col justify-center rounded-lg bg-surface p-2.5 text-sm">Kits <span className="text-[10px] text-muted">(10%)</span><br /><b>{fmtEgp(calc.kits)} EGP</b></div>
+            {/* Row 2 */}
+            <div className="flex flex-col justify-center rounded-lg bg-surface p-2.5 text-sm">Cu connections<br /><b>{fmtEgp(calc.cuConnCost)} EGP</b>
+              <span className="block text-[10px] font-normal text-muted">{calc.cuWeight.toFixed(1)} KG · × {fmtEgp(f.copper)}/KG</span>
+            </div>
+            <div className="flex flex-col justify-center">
+              <L>Cables (EGP) <span className="text-red-500">*</span></L>
+              <input className={`input ${cablesMissing ? "border-red-400 ring-1 ring-red-300" : ""}`} type="number" min={0}
+                value={p.cablesEgp || ""} placeholder="required"
+                onChange={(e) => u({ cablesEgp: parseFloat(e.target.value) || 0 })} />
+              {cablesMissing && <p className="mt-1 text-[11px] font-semibold text-red-500">Cables cost is required</p>}
+            </div>
+            <div className="flex flex-col justify-center">
+              <L>Factor</L>
+              <input className="input" type="number" min={0} step={0.1} value={p.sellFactor || f.factor}
+                onChange={(e) => u({ sellFactor: parseFloat(e.target.value) || 0 })} />
+              <p className="mt-1 text-[11px] text-muted">÷ {factor}{p.sellFactor > 0 ? "" : " (global)"}</p>
+            </div>
+            {/* Row 3 */}
+            <div className="flex flex-col justify-center rounded-lg bg-surface p-2.5 text-sm">Unit cost<br /><b>{fmtEgp(calc.unitCost)} EGP</b></div>
+            <div className="flex flex-col justify-center rounded-lg bg-brand-light p-2.5 text-sm text-brand-dark">Unit selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
+            <div className="flex flex-col justify-center rounded-lg bg-brand p-2.5 text-sm text-white">Unit selling (USD)<br /><b>{fmtEgp(f.usd > 0 ? calc.sellUnit / f.usd : 0)} USD</b></div>
           </div>
-          <div className="rounded-lg bg-surface p-2.5 text-sm">Kits <span className="text-[10px] text-muted">(10%)</span><br /><b>{fmtEgp(calc.kits)} EGP</b></div>
-          <div>
-            <L>Cables (EGP) <span className="text-red-500">*</span></L>
-            <input className={`input ${cablesMissing ? "border-red-400 ring-1 ring-red-300" : ""}`} type="number" min={0}
-              value={p.cablesEgp || ""} placeholder="required"
-              onChange={(e) => u({ cablesEgp: parseFloat(e.target.value) || 0 })} />
-            {cablesMissing && <p className="mt-1 text-[11px] font-semibold text-red-500">Cables cost is required</p>}
+        ) : (
+          /* LCP — original layout (no Cu connections). */
+          <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg bg-surface p-2.5 text-sm">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
+            <div className="rounded-lg bg-surface p-2.5 text-sm">
+              Enclosure{isDouble ? " (2)" : ""}<br /><b>{fmtEgp(enclEgp)} EGP</b>
+              <span className="block text-[10px] font-normal text-muted">
+                {isDouble
+                  ? `${box ? `${box.H}×${box.W}×${box.D}` : "—"} + ${box2 ? `${box2.H}×${box2.W}×${box2.D}` : "pick size 2"}`
+                  : box ? `${box.H}×${box.W}×${box.D} mm` : "—"}
+              </span>
+            </div>
+            <div className="rounded-lg bg-surface p-2.5 text-sm">Kits <span className="text-[10px] text-muted">(10%)</span><br /><b>{fmtEgp(calc.kits)} EGP</b></div>
+            <div>
+              <L>Cables (EGP) <span className="text-red-500">*</span></L>
+              <input className={`input ${cablesMissing ? "border-red-400 ring-1 ring-red-300" : ""}`} type="number" min={0}
+                value={p.cablesEgp || ""} placeholder="required"
+                onChange={(e) => u({ cablesEgp: parseFloat(e.target.value) || 0 })} />
+              {cablesMissing && <p className="mt-1 text-[11px] font-semibold text-red-500">Cables cost is required</p>}
+            </div>
           </div>
-        </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-lg bg-surface p-2.5 text-sm">Unit cost<br /><b>{fmtEgp(calc.unitCost)} EGP</b></div>
-          <div>
-            <L>Factor</L>
-            <input className="input" type="number" min={0} step={0.1} value={p.sellFactor || f.factor}
-              onChange={(e) => u({ sellFactor: parseFloat(e.target.value) || 0 })} />
-            <p className="mt-1 text-[11px] text-muted">÷ {factor}{p.sellFactor > 0 ? "" : " (global)"}</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg bg-surface p-2.5 text-sm">Unit cost<br /><b>{fmtEgp(calc.unitCost)} EGP</b></div>
+            <div>
+              <L>Factor</L>
+              <input className="input" type="number" min={0} step={0.1} value={p.sellFactor || f.factor}
+                onChange={(e) => u({ sellFactor: parseFloat(e.target.value) || 0 })} />
+              <p className="mt-1 text-[11px] text-muted">÷ {factor}{p.sellFactor > 0 ? "" : " (global)"}</p>
+            </div>
+            <div className="rounded-lg bg-brand-light p-2.5 text-sm text-brand-dark">Unit selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
+            <div className="rounded-lg bg-brand p-2.5 text-sm text-white">Unit selling (USD)<br /><b>{fmtEgp(f.usd > 0 ? calc.sellUnit / f.usd : 0)} USD</b></div>
           </div>
-          <div className="rounded-lg bg-brand-light p-2.5 text-sm text-brand-dark">Unit selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
-          <div className="rounded-lg bg-brand p-2.5 text-sm text-white">Unit selling (USD)<br /><b>{fmtEgp(f.usd > 0 ? calc.sellUnit / f.usd : 0)} USD</b></div>
-        </div>
+          </>
+        )}
         <p className="mt-3 text-[11px] text-muted">
           Enclosure is priced from the SR-Basic catalogue price list (the chosen box). Kits = 10 % of the enclosure. Cables are mandatory.
         </p>
@@ -1953,30 +2011,62 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
       {/* Panel details */}
       <div className="card p-5">
         <h2 className="sec-head mb-3">Panel details</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="sm:col-span-2 lg:col-span-2">
-            <L>Panel name</L>
-            <input className="input" value={p.name} placeholder="LCP" onChange={(e) => u({ name: e.target.value })} />
+        {isKwhm ? (
+          /* KWHM — two columns: Name/Qty · Incoming/Outgoing · Content/No. KWHM */
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <L>Panel name</L>
+              <input className="input" value={p.name} placeholder="KWHM" onChange={(e) => u({ name: e.target.value })} />
+            </div>
+            <div>
+              <L>Quantity</L>
+              <input className="input" type="number" min={1} value={p.qty}
+                onChange={(e) => u({ qty: Math.max(1, parseInt(e.target.value, 10) || 1) })} />
+            </div>
+            <div>
+              <L>Incoming cables</L>
+              <Sel value={p.incomingCables as any} onChange={(v) => u({ incomingCables: v })} options={INCOMING_CABLES as any} />
+            </div>
+            <div>
+              <L>Outgoing cables</L>
+              <Sel value={p.outgoingCables as any} onChange={(v) => u({ outgoingCables: v })} options={OUTGOING_CABLES as any} />
+            </div>
+            <div>
+              <L>Content</L>
+              <Sel value={(p.content ?? KWHM_CONTENTS[0]) as any} onChange={(v) => u({ content: v })} options={KWHM_CONTENTS as any} />
+            </div>
+            <div>
+              <L>{countLabel}</L>
+              <input className="input" type="number" min={0} value={p.noGroups ?? ""} placeholder="0"
+                onChange={(e) => setGroups(parseInt(e.target.value, 10) || 0)} />
+            </div>
           </div>
-          <div>
-            <L>Quantity</L>
-            <input className="input" type="number" min={1} value={p.qty}
-              onChange={(e) => u({ qty: Math.max(1, parseInt(e.target.value, 10) || 1) })} />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="sm:col-span-2 lg:col-span-2">
+              <L>Panel name</L>
+              <input className="input" value={p.name} placeholder="LCP" onChange={(e) => u({ name: e.target.value })} />
+            </div>
+            <div>
+              <L>Quantity</L>
+              <input className="input" type="number" min={1} value={p.qty}
+                onChange={(e) => u({ qty: Math.max(1, parseInt(e.target.value, 10) || 1) })} />
+            </div>
+            <div>
+              <L>Incoming cables</L>
+              <Sel value={p.incomingCables as any} onChange={(v) => u({ incomingCables: v })} options={INCOMING_CABLES as any} />
+            </div>
+            <div>
+              <L>Outgoing cables</L>
+              <Sel value={p.outgoingCables as any} onChange={(v) => u({ outgoingCables: v })} options={OUTGOING_CABLES as any} />
+            </div>
+            <div>
+              <L>{countLabel}</L>
+              <input className="input" type="number" min={0} value={p.noGroups ?? ""} placeholder="0"
+                onChange={(e) => setGroups(parseInt(e.target.value, 10) || 0)} />
+            </div>
           </div>
-          <div>
-            <L>Incoming cables</L>
-            <Sel value={p.incomingCables as any} onChange={(v) => u({ incomingCables: v })} options={INCOMING_CABLES as any} />
-          </div>
-          <div>
-            <L>Outgoing cables</L>
-            <Sel value={p.outgoingCables as any} onChange={(v) => u({ outgoingCables: v })} options={OUTGOING_CABLES as any} />
-          </div>
-          <div>
-            <L>No. Groups</L>
-            <input className="input" type="number" min={0} value={p.noGroups ?? ""} placeholder="0"
-              onChange={(e) => setGroups(parseInt(e.target.value, 10) || 0)} />
-          </div>
-        </div>
+        )}
         {/* Enclosure sizing — auto-sized from No. Groups; the size stays editable. */}
         <div className="mt-4 grid gap-5 border-t border-line pt-4 lg:grid-cols-2">
           <div className="space-y-3">
@@ -1993,7 +2083,8 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
           </div>
           <div>
             <L>Enclosure family</L>
-            <Sel value={"SR-Basic" as any} onChange={() => {}} options={["SR-Basic"] as any} />
+            <Sel value={fam as any} onChange={(v) => setFamily(v)}
+              options={PANEL_SYSTEMS.filter((s) => s !== "Pillars" && s !== "Coffree") as any} />
           </div>
           <div>
             <L>{isDouble ? "Sizing (1)" : "Sizing"}</L>
@@ -2005,7 +2096,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
             ) : G > 0 && box ? (
               <p className="mt-1 text-[11px] text-muted">Auto-sized from {G} group{G === 1 ? "" : "s"} · recommended {box.H} × {box.W} × {box.D} mm</p>
             ) : (
-              <p className="mt-1 text-[11px] text-muted">Enter No. Groups above to auto-size, or pick a size.</p>
+              <p className="mt-1 text-[11px] text-muted">Enter {countLabel} above to auto-size, or pick a size.</p>
             ))}
           </div>
           {isDouble && (
@@ -2022,19 +2113,19 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
             <h3 className="mb-1.5 font-bold text-ink">How the size is chosen</h3>
             {G <= 0 ? (
               <p className="text-xs leading-relaxed text-muted">
-                Enter <b className="text-ink">No. Groups</b> to auto-size the SR-Basic box. Each candidate width holds a fixed number
-                of groups per row; the box grows in rows, then the cheapest box that fits is chosen and priced from the catalogue.
+                Enter <b className="text-ink">{countLabel}</b> to auto-size the SR-Basic box. Each candidate width holds a fixed number
+                of {perRow}; the box grows in rows, then the cheapest box that fits is chosen and priced from the catalogue.
               </p>
             ) : (
               <>
                 <p className="mb-2 text-xs leading-relaxed text-muted">
-                  <b className="text-ink">G = {G}</b> · N = ⌈G ÷ groups-per-row⌉ · H = [N + (N−1)] × 6 + 20 cm (rounded up to a standard height):
+                  <b className="text-ink">G = {G}</b> · N = ⌈G ÷ {perRow}⌉ · H = [N + (N−1)] × 6 + 20 cm (rounded up to a standard height):
                 </p>
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
                       <th className="py-1 font-semibold">Width</th>
-                      <th className="py-1 text-center font-semibold">Grp/row</th>
+                      <th className="py-1 text-center font-semibold">{isKwhm ? "Per row" : "Grp/row"}</th>
                       <th className="py-1 text-center font-semibold">Rows</th>
                       <th className="py-1 text-right font-semibold">Box (H×W×D)</th>
                       <th className="py-1 text-right font-semibold">Price</th>
@@ -2059,7 +2150,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
                   </tbody>
                 </table>
                 <p className="mt-2 text-[11px] leading-relaxed text-muted">
-                  Rule: each width gives one stocked box that holds all {G} groups; the one with the <b className="text-ink">lowest catalogue price</b> is chosen{box ? <> → <b className="text-ink">{box.H} × {box.W} × {box.D} mm</b></> : ""}.
+                  Rule: each width gives one stocked box that holds all {G} {unitPlural}; the one with the <b className="text-ink">lowest catalogue price</b> is chosen{box ? <> → <b className="text-ink">{box.H} × {box.W} × {box.D} mm</b></> : ""}.
                 </p>
               </>
             )}
@@ -2070,8 +2161,8 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
       {/* Components — auto-filled from No. Groups; add / change / remove like a panel */}
       <div className="card p-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface px-4 py-2.5">
-          <h2 className="text-sm font-bold text-ink">Components — {G} group{G === 1 ? "" : "s"}</h2>
-          <span className="text-[11px] text-muted">auto-filled from No. Groups · add or edit below</span>
+          <h2 className="text-sm font-bold text-ink">Components — {G} {unitWord}{!isKwhm && G !== 1 ? "s" : ""}</h2>
+          <span className="text-[11px] text-muted">{isKwhm ? "search to add components" : "auto-filled from No. Groups · add or edit below"}</span>
         </div>
         {/* Add / change component search */}
         <div className="border-b border-line px-4 py-3">
@@ -2118,7 +2209,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={8} className="px-3 py-6 text-center text-muted">No components yet — set No. Groups above or search to add.</td></tr>
+              <tr><td colSpan={8} className="px-3 py-6 text-center text-muted">No components yet — set {countLabel} above or search to add.</td></tr>
             )}
             {rows.map((c) => (
               <tr key={c.id}
@@ -2469,7 +2560,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
                   </span>
                   <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{i + 1}</span>
                   <button onClick={() => up({ selectedId: p.id })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
-                    <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare ? "🧰 " : ""}{p.name.trim() || "(unnamed panel)"}</div>
+                    <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare ? `${SPARE_KIND_ICONS[p.spareKind ?? "spare"] ?? "🧰"} ` : ""}{p.name.trim() || "(unnamed panel)"}</div>
                   </button>
                 </div>
                 {/* action icons (smaller) — inline when the name is short, else wrapped below-right */}
@@ -2503,10 +2594,10 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
       </div>
 
       {/* editor — its own scroll area so the panel list and editor scroll independently.
-          An LCP cell uses the LcpEditor; any other spare cell the stripped SpareEditor;
+          LCP / KWHM cells use the LcpEditor; any other spare cell the stripped SpareEditor;
           every other cell the full PanelEditor. */}
       <div className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
-        {sel && (sel.spareKind === "lcp"
+        {sel && (sel.spareKind === "lcp" || sel.spareKind === "kwhm"
           ? <LcpEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />
           : sel.spare
           ? <SpareEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />

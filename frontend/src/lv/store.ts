@@ -102,10 +102,11 @@ export interface LvPanel {
   highlight?: boolean;    // yellow highlighter toggle in the panel list (UI marker only)
   spare?: boolean;        // this cell is the Spare-parts list (no sizing/specs; components + copper only)
   spareKind?: string;     // which spare-list variant the cell is: "spare" | "lcp" | "kwhm"
-  noGroups?: number;      // LCP: number of control groups — drives the component auto-fill + auto-sizing
-  cablesEgp?: number;     // LCP: cables cost, EGP — manual
-  lcpBox?: { H: number; W: number; D: number }; // LCP: chosen SR-Basic box (auto-sized from noGroups, editable)
-  lcpBox2?: { H: number; W: number; D: number }; // LCP: 2nd enclosure box (Double layout only)
+  noGroups?: number;      // LCP: control groups / KWHM: number of meters — drives auto-fill + auto-sizing
+  content?: string;       // KWHM: what each meter unit contains (KWHM / KWHM+MDRC / KWHM+MOULDED_CASE)
+  cablesEgp?: number;     // LCP/KWHM: cables cost, EGP — manual
+  lcpBox?: { H: number; W: number; D: number }; // LCP/KWHM: chosen SR-Basic box (auto-sized, editable)
+  lcpBox2?: { H: number; W: number; D: number }; // LCP/KWHM: 2nd enclosure box (Double layout only)
   sections: string[];
   activeSection: string;
   components: PanelComponent[];
@@ -323,6 +324,7 @@ export function newPanel(_n?: number): LvPanel {
 /** The single "Spare parts" cell of a spare-parts QTN — a stripped panel that holds
  *  only components/enclosures (as rows) + a manual copper weight (mainBusbarKg). */
 export const SPARE_KIND_LABELS: Record<string, string> = { spare: "Spare parts", lcp: "LCP", kwhm: "KWHM" };
+export const SPARE_KIND_ICONS: Record<string, string> = { spare: "🧰", lcp: "🎛️", kwhm: "🔢" };
 export function newSparePanel(kind = "spare"): LvPanel {
   const label = SPARE_KIND_LABELS[kind] ?? "Spare parts";
   return { ...newPanel(), name: label, spare: true, spareKind: kind, sections: [label], activeSection: label };
@@ -348,6 +350,11 @@ export function lcpGroupComponents(n: number): PanelComponent[] {
   }
   return out;
 }
+
+// ── KWHM (kWh-meter panel) ───────────────────────────────────────────────────
+// A KWHM panel is sized/priced like an LCP but counts meters ("No. KWHM") and each
+// meter's "Content" says what it carries.
+export const KWHM_CONTENTS: string[] = ["KWHM", "KWHM+MDRC", "KWHM+MOULDED_CASE"];
 
 // LCP auto-sizing (SR-Basic). Groups G → rows N → standard height H → the four
 // candidate widths (40/60/80/100 cm ⇒ 2/3/4/5 groups per row), each snapped to a
@@ -384,28 +391,28 @@ export function lcpBuilds(G: number): LcpBuild[] {
  *  per width, each already holding all G groups). SR-Basic price = list EUR × the euro rate
  *  (same rate for every box), so the cheapest is found by comparing list EUR — no factors
  *  needed. Returns null if G needs a multi-panel split. */
-export function lcpAutoSize(G: number): LcpBox | null {
+export function lcpAutoSize(G: number, fam = "SR-Basic"): LcpBox | null {
   const builds = lcpBuilds(G);
   if (!builds.length) return null;
   let best: LcpBox | null = null;
   let bestEur = Infinity;
   for (const b of builds) {
-    const real = lcpRealBox({ H: b.H, W: b.W, D: b.D });   // snap to a stocked size
-    const eur = lcpBoxEur(real);
+    const real = lcpRealBox({ H: b.H, W: b.W, D: b.D }, fam);   // snap to a stocked size in this family
+    const eur = lcpBoxEur(real, fam);
     if (eur < bestEur) { bestEur = eur; best = real; }
   }
   return best;
 }
-/** List EUR of the standard SR-Basic SKU for a size — the basis for cheapest-price sizing
+/** List EUR of the standard SKU for a size in a family — the basis for cheapest-price sizing
  *  (catalogue price = eur × the euro rate, so ranking by eur == ranking by price). */
-function lcpBoxEur(box: LcpBox): number {
+function lcpBoxEur(box: LcpBox, fam = "SR-Basic"): number {
   let std = 0;
   let any = 0;
   for (const e of ENCLOSURES) {
-    if (!/SR.?Basic/i.test(e.fam)) continue;
+    if (e.fam !== fam) continue;
     const nm = (e.name || "").trim();
-    const m = nm.replace(/^new/i, "").match(/(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)/);
-    if (!m || +m[1] !== box.H || +m[2] !== box.W || +m[3] !== box.D) continue;
+    const d = parseEnclDims(nm);
+    if (!d || d.H !== box.H || d.W !== box.W || d.D !== box.D) continue;
     const price = e.eur > 0 ? e.eur : e.egp;
     if (price <= 0) continue;
     if (/^\d/.test(nm) && std === 0) std = price;
@@ -415,7 +422,7 @@ function lcpBoxEur(box: LcpBox): number {
 }
 /** The SR-Basic box for a panel — stored, else recomputed from No. Groups. */
 export function lcpBoxOf(p: LvPanel): LcpBox | null {
-  return p.lcpBox ?? (p.noGroups ? lcpAutoSize(p.noGroups) : null);
+  return p.lcpBox ?? (p.noGroups ? lcpAutoSize(p.noGroups, p.panelsSizing?.family ?? "SR-Basic") : null);
 }
 // The SR-Basic box has no catalogue price, so it is costed by weight: outer sheet
 // area × gauge × steel density × the sheet-metal rate (EGP/kg, Pricing Settings).
@@ -434,15 +441,15 @@ export function lcpEnclosureAuto(box: LcpBox | null | undefined, f: Factors): nu
  *  "new HxWxD" variant; Panels prices the standard SKU, so LCP uses it too. Dims are parsed
  *  from the name (SR-Basic prices live in EUR). Falls back to any priced match, then to the
  *  sheet-metal price only if the size isn't priced at all. */
-export function lcpEnclosureDbPrice(box: LcpBox | null | undefined, f: Factors): number {
+export function lcpEnclosureDbPrice(box: LcpBox | null | undefined, f: Factors, fam = "SR-Basic"): number {
   if (!box) return 0;
   let std = 0;   // standard SKU (name starts with the dimensions, no "new" prefix)
-  let any = 0;   // any priced SR-Basic box of that size — fallback
+  let any = 0;   // any priced box of that size — fallback
   for (const e of ENCLOSURES) {
-    if (!/SR.?Basic/i.test(e.fam)) continue;
+    if (e.fam !== fam) continue;
     const nm = (e.name || "").trim();
-    const m = nm.replace(/^new/i, "").match(/(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)/);
-    if (!m || +m[1] !== box.H || +m[2] !== box.W || +m[3] !== box.D) continue;
+    const d = parseEnclDims(nm);
+    if (!d || d.H !== box.H || d.W !== box.W || d.D !== box.D) continue;
     const price = enclosurePriceEgp(e, f);
     if (price <= 0) continue;
     if (/^\d/.test(nm) && std === 0) std = price;
@@ -455,30 +462,39 @@ export function lcpEnclosureDbPrice(box: LcpBox | null | undefined, f: Factors):
 export function lcpBox2Of(p: LvPanel): LcpBox | null {
   return p.panelsSizing?.layout === "Double" ? (p.lcpBox2 ?? null) : null;
 }
-/** LCP enclosure cost — the catalogue (price-list) cost of the chosen box(es); Double sums both. */
+/** LCP enclosure cost — the catalogue (price-list) cost of the chosen box(es) in the panel's
+ *  enclosure family; Double sums both. */
 export function lcpEnclosureEgp(p: LvPanel, f: Factors): number {
-  return lcpEnclosureDbPrice(lcpBoxOf(p), f) + lcpEnclosureDbPrice(lcpBox2Of(p), f);
+  const fam = p.panelsSizing?.family ?? "SR-Basic";
+  return lcpEnclosureDbPrice(lcpBoxOf(p), f, fam) + lcpEnclosureDbPrice(lcpBox2Of(p), f, fam);
 }
-/** Distinct SR-Basic box sizes (H×W×D, mm) in the catalogue, parsed from the enclosure
- *  names (dims aren't in the DB H/W/D fields). Sorted small → large. */
-export function lcpSizes(): LcpBox[] {
+/** Parse H×W×D (mm) from an enclosure name — dims aren't in the DB H/W/D fields. Handles
+ *  the SR-Basic "new" prefix, the Local "L" prefix, PLP "… 2000 x 400 x 700mm", etc. Returns
+ *  null for families whose names carry no dimensions (Minicenter / Primo / Pro-E / IS2). */
+export function parseEnclDims(name: string): LcpBox | null {
+  const m = (name || "").replace(/^new/i, "").match(/(\d+)\s*[xX×]\s*(\d+)\s*[xX×]\s*(\d+)/);
+  return m ? { H: +m[1], W: +m[2], D: +m[3] } : null;
+}
+/** Distinct box sizes (H×W×D, mm) for an enclosure family, parsed from the names. Sorted
+ *  small → large. Default family is SR-Basic (the LCP/KWHM auto-sizing baseline). */
+export function lcpSizes(fam = "SR-Basic"): LcpBox[] {
   const seen = new Set<string>();
   const out: LcpBox[] = [];
   for (const e of ENCLOSURES) {
-    if (!/SR.?Basic/i.test(e.fam)) continue;
-    const m = (e.name || "").replace(/^new/i, "").match(/(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)/);
-    if (!m) continue;
-    const key = `${m[1]}x${m[2]}x${m[3]}`;
+    if (e.fam !== fam) continue;
+    const d = parseEnclDims(e.name);
+    if (!d) continue;
+    const key = `${d.H}x${d.W}x${d.D}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ H: +m[1], W: +m[2], D: +m[3] });
+    out.push(d);
   }
   return out.sort((a, b) => a.H - b.H || a.W - b.W || a.D - b.D);
 }
 /** The nearest real SR-Basic box to a recommended size: same H & W, smallest depth ≥ the
  *  recommended depth; else the closest box overall (by |ΔH|+|ΔW|+|ΔD|). */
-export function lcpClosestSize(rec: LcpBox): LcpBox {
-  const sizes = lcpSizes();
+export function lcpClosestSize(rec: LcpBox, fam = "SR-Basic"): LcpBox {
+  const sizes = lcpSizes(fam);
   if (!sizes.length) return rec;
   const hw = sizes.filter((s) => s.H === rec.H && s.W === rec.W);
   if (hw.length) {
@@ -491,8 +507,8 @@ export function lcpClosestSize(rec: LcpBox): LcpBox {
 /** Snap a raw geometric size to a REAL stocked SR-Basic box, keeping the width and bumping
  *  the height up to the smallest stocked one (and the depth to the smallest that fits). This
  *  guarantees a size that actually exists in the catalogue. */
-export function lcpRealBox(box: LcpBox): LcpBox {
-  const sizes = lcpSizes();
+export function lcpRealBox(box: LcpBox, fam = "SR-Basic"): LcpBox {
+  const sizes = lcpSizes(fam);
   const sameW = sizes.filter((s) => s.W === box.W && s.H >= box.H);
   if (sameW.length) {
     const minH = Math.min(...sameW.map((s) => s.H));
@@ -500,7 +516,7 @@ export function lcpRealBox(box: LcpBox): LcpBox {
     const geD = atH.filter((s) => s.D >= box.D).sort((a, b) => a.D - b.D);
     return geD[0] ?? atH.sort((a, b) => a.D - b.D)[0];
   }
-  return lcpClosestSize(box);
+  return lcpClosestSize(box, fam);
 }
 
 export function initialState(): LvState {
@@ -709,26 +725,28 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   // Spare-parts cell: components/enclosures (as rows) + manual copper weight only —
   // no enclosure sizing, kits, connection copper or operations markup.
   if (p.spare) {
-    // LCP (Lighting Control Panel): Components (group parts) + Enclosure (manual SR-Basic
-    // box) + Kits (10 % of the enclosure, SR-Basic rate) + Cables (manual). No copper.
-    if (p.spareKind === "lcp") {
+    // LCP / KWHM: Components + Enclosure (auto-sized SR-Basic box) + Kits (10 % of the
+    // enclosure) + Cu connections (manual weight × copper) + Cables (manual).
+    if (p.spareKind === "lcp" || p.spareKind === "kwhm") {
       let compCost = 0;
       let enclComp = 0;
+      let cuWeight = 0;
       for (const c of p.components) {
         if (isSpacer(c)) continue;
         const ov = abbDiscounts?.[abbKey(c)];
         const line = componentPriceEgp(c, f, ov != null ? ov / 100 : undefined) * c.qty;
         if (c.type === "Enclosure") enclComp += line; else compCost += line;
+        cuWeight += cuPanelKg(c) * c.qty * buswayCopperMult(c.note);   // Cu connections, like a panel
       }
-      // Enclosure = auto sheet-metal price of the SR-Basic box (or manual override).
       const enclCost = enclComp + lcpEnclosureEgp(p, f);
       const kits = enclCost * 0.10;                // SR-Basic assembly kit = 10 % of enclosure
+      const cuConnCost = cuWeight * f.copper;
       const cablesCost = p.cablesEgp || 0;
-      const unitCost = compCost + enclCost + kits + cablesCost;
+      const unitCost = compCost + enclCost + kits + cuConnCost + cablesCost;
       const unitCostOps = unitCost * (1 + f.operations);   // operations overhead, like a panel
       const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
       const sellUnit = (factor > 0 ? unitCostOps / factor : unitCostOps) * (1 + (f.safetyFactor || 0));
-      return { compCost, enclCost, cuConnCost: 0, busbarCost: 0, busbarKg: 0, kits, cablesCost, cuWeight: 0, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
+      return { compCost, enclCost, cuConnCost, busbarCost: 0, busbarKg: 0, kits, cablesCost, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
     }
     let compCost = 0;
     for (const c of p.components) {
