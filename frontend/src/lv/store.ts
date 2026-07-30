@@ -327,7 +327,11 @@ export const SPARE_KIND_LABELS: Record<string, string> = { spare: "Spare parts",
 export const SPARE_KIND_ICONS: Record<string, string> = { spare: "🧰", lcp: "🎛️", kwhm: "🔢" };
 export function newSparePanel(kind = "spare"): LvPanel {
   const label = SPARE_KIND_LABELS[kind] ?? "Spare parts";
-  return { ...newPanel(), name: label, spare: true, spareKind: kind, sections: [label], activeSection: label };
+  const base = newPanel();
+  const panel: LvPanel = { ...base, name: label, spare: true, spareKind: kind, sections: [label], activeSection: label };
+  // KWHM defaults to the Local (Sheet Metal) enclosure family.
+  if (kind === "kwhm") panel.panelsSizing = { ...base.panelsSizing, family: "Local (Sheet Metal)" };
+  return panel;
 }
 
 // ── LCP (Lighting Control Panel) ────────────────────────────────────────────────
@@ -355,6 +359,53 @@ export function lcpGroupComponents(n: number): PanelComponent[] {
 // A KWHM panel is sized/priced like an LCP but counts meters ("No. KWHM") and each
 // meter's "Content" says what it carries.
 export const KWHM_CONTENTS: string[] = ["KWHM", "KWHM+MDRC", "KWHM+MOULDED_CASE"];
+
+// KWHM (Content = "KWHM") auto-sizing: meters per row depends on the box width; the box
+// height grows by 40 cm per row (+ 30 cm clearance), snapped to the nearest stocked height.
+export interface KwhmBuild { W: number; perRow: number; N: number; H: number; D: number; }
+const KWHM_WIDTHS = [400, 600, 800, 1000];   // 40 / 60 / 80 / 100 cm
+const KWHM_PER_ROW = [1, 2, 3, 4];           // KWHM-3P meters per row at each width
+/** One candidate box per width for `meters` KWHM-3P: rows N = ⌈meters ÷ per-row⌉, zone height
+ *  = N × 40 cm, and the box height is the stocked height nearest to (zone + 30 cm) that still
+ *  covers the zone. Widths with no tall-enough box are dropped. */
+export function kwhmBuilds(meters: number, fam: string): KwhmBuild[] {
+  const sizes = lcpSizes(fam);
+  const out: KwhmBuild[] = [];
+  if (!(meters > 0)) return out;
+  for (let i = 0; i < KWHM_WIDTHS.length; i++) {
+    const W = KWHM_WIDTHS[i];
+    const perRow = KWHM_PER_ROW[i];
+    const N = Math.ceil(meters / perRow);
+    const zone = N * 400;             // module rows × 40 cm
+    const target = zone + 300;        // + 30 cm clearance
+    // round UP to the smallest stocked height that covers the target
+    const atW = sizes.filter((s) => s.W === W && s.H >= target).sort((a, b) => a.H - b.H);
+    if (!atW.length) continue;
+    const H = atW[0].H;
+    const D = Math.min(...sizes.filter((s) => s.H === H && s.W === W).map((s) => s.D));
+    out.push({ W, perRow, N, H, D });
+  }
+  return out;
+}
+/** KWHM auto-sizing (Content = "KWHM"): 1 meter → 400×300×150; otherwise the lowest-priced
+ *  candidate box across the four widths. Other Content types aren't auto-sized yet. */
+export function kwhmAutoSize(meters: number, content: string, fam: string): LcpBox | null {
+  if (content !== "KWHM") return null;
+  const sizes = lcpSizes(fam);
+  if (!sizes.length) return null;
+  if (meters <= 1) {
+    const one = sizes.filter((s) => s.H === 400 && s.W === 300).sort((a, b) => a.D - b.D)[0];
+    return one ?? { H: 400, W: 300, D: 150 };
+  }
+  let best: LcpBox | null = null;
+  let bestEur = Infinity;
+  for (const b of kwhmBuilds(meters, fam)) {
+    const box = { H: b.H, W: b.W, D: b.D };
+    const eur = lcpBoxEur(box, fam);
+    if (eur < bestEur) { bestEur = eur; best = box; }
+  }
+  return best;
+}
 
 // LCP auto-sizing (SR-Basic). Groups G → rows N → standard height H → the four
 // candidate widths (40/60/80/100 cm ⇒ 2/3/4/5 groups per row), each snapped to a
@@ -422,7 +473,12 @@ function lcpBoxEur(box: LcpBox, fam = "SR-Basic"): number {
 }
 /** The SR-Basic box for a panel — stored, else recomputed from No. Groups. */
 export function lcpBoxOf(p: LvPanel): LcpBox | null {
-  return p.lcpBox ?? (p.noGroups ? lcpAutoSize(p.noGroups, p.panelsSizing?.family ?? "SR-Basic") : null);
+  if (p.lcpBox) return p.lcpBox;
+  if (!p.noGroups) return null;
+  const fam = p.panelsSizing?.family ?? "SR-Basic";
+  return p.spareKind === "kwhm"
+    ? kwhmAutoSize(p.noGroups, p.content ?? KWHM_CONTENTS[0], fam)
+    : lcpAutoSize(p.noGroups, fam);
 }
 // The SR-Basic box has no catalogue price, so it is costed by weight: outer sheet
 // area × gauge × steel density × the sheet-metal rate (EGP/kg, Pricing Settings).

@@ -11,7 +11,7 @@ import {
 } from "../lv/catalog";
 import {
   newPanel, newSparePanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
-  lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
+  lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarBarAreaMm2, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
@@ -1836,6 +1836,10 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
 
   const isDouble = p.panelsSizing?.layout === "Double";
   const fam = p.panelsSizing?.family ?? "SR-Basic";   // enclosure family (SR-Basic by default)
+  const content = p.content ?? KWHM_CONTENTS[0];
+  // Auto-size: KWHM uses its meter-per-row rule; LCP uses the cheapest-box rule.
+  const autoBox = (g: number, family: string, cont = content) =>
+    isKwhm ? kwhmAutoSize(g, cont, family) : lcpAutoSize(g, family);
   // Entering the count auto-sizes the box (Single only). LCP also re-seeds its group
   // components (preserving hand-added rows); KWHM components stay manual.
   const setGroups = (n: number) => {
@@ -1846,14 +1850,17 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
       const extras = p.components.filter((c) => !groupNames.has(c.name));
       patch.components = [...lcpGroupComponents(g), ...extras];
     }
-    if (!isDouble) { patch.lcpBox = lcpAutoSize(g, fam) ?? undefined; }   // cheapest stocked box for G in this family
+    if (!isDouble) { patch.lcpBox = autoBox(g, fam) ?? undefined; }
     u(patch);
   };
-  // Changing the enclosure family re-sizes to the cheapest box of that family.
   const setFamily = (family: string) => {
     const patch: Partial<LvPanel> = { panelsSizing: { ...p.panelsSizing, family } };
-    if (!isDouble && G > 0) patch.lcpBox = lcpAutoSize(G, family) ?? undefined;
-    else patch.lcpBox = undefined;
+    patch.lcpBox = !isDouble && G > 0 ? (autoBox(G, family) ?? undefined) : undefined;
+    u(patch);
+  };
+  const setContent = (cont: string) => {
+    const patch: Partial<LvPanel> = { content: cont };
+    if (!isDouble && G > 0) patch.lcpBox = autoBox(G, fam, cont) ?? undefined;
     u(patch);
   };
   const setQty = (id: string, n: number) =>
@@ -1909,15 +1916,18 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
     label: `${sz.H} × ${sz.W} × ${sz.D} mm`,
     hint: `${fmtEgp(lcpEnclosureDbPrice(sz, f, fam))} EGP`,
   }));
-  // Auto-sizing candidates (one per width) + which one is chosen — for the summary panel.
+  // Auto-sizing candidates + which one is chosen. KWHM uses its meter-per-row rule; LCP the
+  // groups-per-row rule. Both pick the lowest-priced candidate box.
+  const kwhmMode = isKwhm && content === "KWHM";
   const WIDTH_CM = [40, 60, 80, 100];
   const GROUPS_PER_ROW = [2, 3, 4, 5];
-  // Candidates — one real stocked box per width, with its catalogue price. The cheapest wins.
-  const sizeBuilds = lcpBuilds(G).map((b) => {
-    const s = lcpRealBox({ H: b.H, W: b.W, D: b.D }, fam);
-    return { base: b.base, N: b.N, H: s.H, W: s.W, D: s.D, price: lcpEnclosureDbPrice(s, f, fam) };
-  });
-  const chosenBase = sizeBuilds.length ? sizeBuilds.reduce((m, b) => (b.price < m.price ? b : m)).base : undefined;
+  const sizeBuilds = kwhmMode
+    ? kwhmBuilds(G, fam).map((b) => ({ key: b.W, widthCm: b.W / 10, perRow: b.perRow, N: b.N, H: b.H, W: b.W, D: b.D, price: lcpEnclosureDbPrice({ H: b.H, W: b.W, D: b.D }, f, fam) }))
+    : lcpBuilds(G).map((b) => {
+        const s = lcpRealBox({ H: b.H, W: b.W, D: b.D }, fam);
+        return { key: b.base, widthCm: WIDTH_CM[b.base], perRow: GROUPS_PER_ROW[b.base], N: b.N, H: s.H, W: s.W, D: s.D, price: lcpEnclosureDbPrice(s, f, fam) };
+      });
+  const chosenKey = sizeBuilds.length ? sizeBuilds.reduce((m, b) => (b.price < m.price ? b : m)).key : undefined;
   const keyOfBox = (b: { H: number; W: number; D: number } | null) => (b ? `${b.H}x${b.W}x${b.D}` : "");
   const parseBox = (key: string) => { const m = key.match(/(\d+)x(\d+)x(\d+)/); return m ? { H: +m[1], W: +m[2], D: +m[3] } : null; };
   const pickSize = (key: string) => { const b = parseBox(key); if (b) u({ lcpBox: b }); };
@@ -2033,7 +2043,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
             </div>
             <div>
               <L>Content</L>
-              <Sel value={(p.content ?? KWHM_CONTENTS[0]) as any} onChange={(v) => u({ content: v })} options={KWHM_CONTENTS as any} />
+              <Sel value={content as any} onChange={(v) => setContent(v)} options={KWHM_CONTENTS as any} />
             </div>
             <div>
               <L>{countLabel}</L>
@@ -2116,10 +2126,14 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
                 Enter <b className="text-ink">{countLabel}</b> to auto-size the SR-Basic box. Each candidate width holds a fixed number
                 of {perRow}; the box grows in rows, then the cheapest box that fits is chosen and priced from the catalogue.
               </p>
+            ) : kwhmMode && G === 1 ? (
+              <p className="text-xs leading-relaxed text-muted">1 KWHM meter → fixed box <b className="text-ink">400 × 300 × 150 mm</b>, priced from the catalogue.</p>
             ) : (
               <>
                 <p className="mb-2 text-xs leading-relaxed text-muted">
-                  <b className="text-ink">G = {G}</b> · N = ⌈G ÷ {perRow}⌉ · H = [N + (N−1)] × 6 + 20 cm (rounded up to a standard height):
+                  {kwhmMode
+                    ? <><b className="text-ink">meters = {G}</b> · N = ⌈meters ÷ per-row⌉ · zone = N × 40 cm · height = zone + 30 cm, rounded up to a stocked box:</>
+                    : <><b className="text-ink">G = {G}</b> · N = ⌈G ÷ {perRow}⌉ · H = [N + (N−1)] × 6 + 20 cm (rounded up to a standard height):</>}
                 </p>
                 <table className="w-full text-xs">
                   <thead>
@@ -2133,14 +2147,14 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
                   </thead>
                   <tbody>
                     {sizeBuilds.length === 0 && (
-                      <tr><td colSpan={5} className="py-2 text-center font-semibold text-red-600">Over one panel (max ≈ {5 * LCP_MAX_ROWS} groups) — split needed.</td></tr>
+                      <tr><td colSpan={5} className="py-2 text-center font-semibold text-red-600">{kwhmMode ? "No stocked box fits — try a wider family or size manually." : `Over one panel (max ≈ ${5 * LCP_MAX_ROWS} groups) — split needed.`}</td></tr>
                     )}
                     {sizeBuilds.map((b) => {
-                      const on = b.base === chosenBase;
+                      const on = b.key === chosenKey;
                       return (
-                        <tr key={b.base} className={`border-t border-line/50 ${on ? "font-bold text-brand-dark" : "text-muted"}`}>
-                          <td className="py-1">{WIDTH_CM[b.base]} cm</td>
-                          <td className="py-1 text-center">{GROUPS_PER_ROW[b.base]}</td>
+                        <tr key={b.key} className={`border-t border-line/50 ${on ? "font-bold text-brand-dark" : "text-muted"}`}>
+                          <td className="py-1">{b.widthCm} cm</td>
+                          <td className="py-1 text-center">{b.perRow}</td>
                           <td className="py-1 text-center">{b.N}</td>
                           <td className="py-1 text-right">{b.H}×{b.W}×{b.D}</td>
                           <td className="py-1 text-right">{fmtEgp(b.price)}{on ? "  ✓" : ""}</td>
@@ -2150,7 +2164,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
                   </tbody>
                 </table>
                 <p className="mt-2 text-[11px] leading-relaxed text-muted">
-                  Rule: each width gives one stocked box that holds all {G} {unitPlural}; the one with the <b className="text-ink">lowest catalogue price</b> is chosen{box ? <> → <b className="text-ink">{box.H} × {box.W} × {box.D} mm</b></> : ""}.
+                  Rule: {kwhmMode ? "each width fits more meters per 40 cm row" : `each width gives one stocked box that holds all ${G} ${unitPlural}`}; the box with the <b className="text-ink">lowest catalogue price</b> is chosen{box ? <> → <b className="text-ink">{box.H} × {box.W} × {box.D} mm</b></> : ""}.
                 </p>
               </>
             )}
