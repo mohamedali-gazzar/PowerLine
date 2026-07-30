@@ -11,7 +11,7 @@ import {
 } from "../lv/catalog";
 import {
   newPanel, newSparePanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
-  lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
+  lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarBarAreaMm2, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
@@ -1837,9 +1837,21 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
   const isDouble = p.panelsSizing?.layout === "Double";
   const fam = p.panelsSizing?.family ?? "SR-Basic";   // enclosure family (SR-Basic by default)
   const content = p.content ?? KWHM_CONTENTS[0];
-  // Auto-size: KWHM uses its meter-per-row rule; LCP uses the cheapest-box rule.
-  const autoBox = (g: number, family: string, cont = content) =>
-    isKwhm ? kwhmAutoSize(g, cont, family) : lcpAutoSize(g, family);
+  // Auto-size + the family actually used. KWHM tries its family (Local by default) and falls
+  // back to SR-Basic when that family has no box tall enough; LCP just uses the cheapest box.
+  const autoBoxFam = (g: number, family: string, cont = content): { box?: { H: number; W: number; D: number }; family: string } => {
+    if (!isKwhm) return { box: lcpAutoSize(g, family) ?? undefined, family };
+    const box = kwhmAutoSize(g, cont, family);
+    if (!box && family !== "SR-Basic") return { box: kwhmAutoSize(g, cont, "SR-Basic") ?? undefined, family: "SR-Basic" };
+    return { box: box ?? undefined, family };
+  };
+  const applyBox = (patch: Partial<LvPanel>, g: number, family: string, cont = content) => {
+    if (isDouble) return;                                   // Double: sizes are manual
+    if (!(g > 0)) { patch.lcpBox = undefined; return; }
+    const r = autoBoxFam(g, family, cont);
+    patch.lcpBox = r.box;
+    if (r.family !== family) patch.panelsSizing = { ...(patch.panelsSizing ?? p.panelsSizing), family: r.family };
+  };
   // Entering the count auto-sizes the box (Single only). LCP also re-seeds its group
   // components (preserving hand-added rows); KWHM components stay manual.
   const setGroups = (n: number) => {
@@ -1850,17 +1862,17 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
       const extras = p.components.filter((c) => !groupNames.has(c.name));
       patch.components = [...lcpGroupComponents(g), ...extras];
     }
-    if (!isDouble) { patch.lcpBox = autoBox(g, fam) ?? undefined; }
+    applyBox(patch, g, fam);
     u(patch);
   };
   const setFamily = (family: string) => {
     const patch: Partial<LvPanel> = { panelsSizing: { ...p.panelsSizing, family } };
-    patch.lcpBox = !isDouble && G > 0 ? (autoBox(G, family) ?? undefined) : undefined;
+    applyBox(patch, G, family);
     u(patch);
   };
   const setContent = (cont: string) => {
     const patch: Partial<LvPanel> = { content: cont };
-    if (!isDouble && G > 0) patch.lcpBox = autoBox(G, fam, cont) ?? undefined;
+    applyBox(patch, G, fam, cont);
     u(patch);
   };
   const setQty = (id: string, n: number) =>
@@ -1918,16 +1930,20 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
   }));
   // Auto-sizing candidates + which one is chosen. KWHM uses its meter-per-row rule; LCP the
   // groups-per-row rule. Both pick the lowest-priced candidate box.
-  const kwhmMode = isKwhm && content === "KWHM";
+  const kwhmMode = isKwhm && !!kwhmContentCfg(content);
   const WIDTH_CM = [40, 60, 80, 100];
   const GROUPS_PER_ROW = [2, 3, 4, 5];
   const sizeBuilds = kwhmMode
-    ? kwhmBuilds(G, fam).map((b) => ({ key: b.W, widthCm: b.W / 10, perRow: b.perRow, N: b.N, H: b.H, W: b.W, D: b.D, price: lcpEnclosureDbPrice({ H: b.H, W: b.W, D: b.D }, f, fam) }))
+    ? kwhmBuilds(G, content, fam).map((b) => ({ key: b.W, widthCm: b.W / 10, perRow: b.perRow, N: b.N, H: b.H, W: b.W, D: b.D, price: lcpEnclosureDbPrice({ H: b.H, W: b.W, D: b.D }, f, fam) }))
     : lcpBuilds(G).map((b) => {
         const s = lcpRealBox({ H: b.H, W: b.W, D: b.D }, fam);
         return { key: b.base, widthCm: WIDTH_CM[b.base], perRow: GROUPS_PER_ROW[b.base], N: b.N, H: s.H, W: s.W, D: s.D, price: lcpEnclosureDbPrice(s, f, fam) };
       });
   const chosenKey = sizeBuilds.length ? sizeBuilds.reduce((m, b) => (b.price < m.price ? b : m)).key : undefined;
+  const cbCfg = kwhmMode ? kwhmContentCfg(content) : null;   // breaker section (fixed + per-row)
+  const cbDesc = cbCfg
+    ? [cbCfg.cbFixed > 0 ? `${cbCfg.cbFixed / 10} cm (CB)` : "", cbCfg.cbPerRow > 0 ? `${cbCfg.cbPerRow / 10} cm/row (CB)` : ""].filter(Boolean).join(" + ")
+    : "";
   const keyOfBox = (b: { H: number; W: number; D: number } | null) => (b ? `${b.H}x${b.W}x${b.D}` : "");
   const parseBox = (key: string) => { const m = key.match(/(\d+)x(\d+)x(\d+)/); return m ? { H: +m[1], W: +m[2], D: +m[3] } : null; };
   const pickSize = (key: string) => { const b = parseBox(key); if (b) u({ lcpBox: b }); };
@@ -2126,13 +2142,13 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
                 Enter <b className="text-ink">{countLabel}</b> to auto-size the SR-Basic box. Each candidate width holds a fixed number
                 of {perRow}; the box grows in rows, then the cheapest box that fits is chosen and priced from the catalogue.
               </p>
-            ) : kwhmMode && G === 1 ? (
+            ) : isKwhm && content === "KWHM" && G === 1 ? (
               <p className="text-xs leading-relaxed text-muted">1 KWHM meter → fixed box <b className="text-ink">400 × 300 × 150 mm</b>, priced from the catalogue.</p>
             ) : (
               <>
                 <p className="mb-2 text-xs leading-relaxed text-muted">
                   {kwhmMode
-                    ? <><b className="text-ink">meters = {G}</b> · N = ⌈meters ÷ per-row⌉ · zone = N × 40 cm · height = zone + 30 cm, rounded up to a stocked box:</>
+                    ? <><b className="text-ink">meters = {G}</b> · N = ⌈meters ÷ per-row⌉ · zone = N × 40 cm · height = {`zone + ${cbDesc ? `${cbDesc} + ` : ""}30 cm`}, rounded up to a stocked box:</>
                     : <><b className="text-ink">G = {G}</b> · N = ⌈G ÷ {perRow}⌉ · H = [N + (N−1)] × 6 + 20 cm (rounded up to a standard height):</>}
                 </p>
                 <table className="w-full text-xs">
