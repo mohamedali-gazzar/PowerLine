@@ -5,6 +5,7 @@
 //      name (3p -> 3, 4p -> 4). Copper-per-pole is left as-is, so 630/800 A count
 //      in panels + cells and 1000-1600 A in cells only.
 //   2. Rebrand the P.F.C capacitors + capacitor-contactors from ABB to Hitachi.
+//   3. Rebrand the timers (Control type, name contains "timer") from ABB to Theben.
 //
 // Every other field (prices, `active`, etc.) is left untouched — this is a
 // surgical update, NOT a re-seed.
@@ -40,7 +41,19 @@ async function main() {
     }
   }
 
-  console.log(`ATS pole counts set: ${poleUpdates}. Capacitor brands set to Hitachi: ${brandUpdates}.`);
+  let timerUpdates = 0;
+  for (const c of await prisma.lvComponent.findMany({ where: { t: "Control" } })) {
+    const nm = c.n || c.d || "";
+    if (/timer/i.test(nm) && c.brand !== "Theben") {
+      await prisma.lvComponent.update({
+        where: { id: c.id },
+        data: { brand: "Theben", search: searchText(c.t, c.f, c.r, c.d, c.n, c.ref, "Theben") },
+      });
+      timerUpdates++;
+    }
+  }
+
+  console.log(`ATS pole counts: ${poleUpdates}. Capacitor brands -> Hitachi: ${brandUpdates}. Timer brands -> Theben: ${timerUpdates}.`);
   console.log('Now click "Update price list & database" in Pricing Admin to publish.');
 }
 
