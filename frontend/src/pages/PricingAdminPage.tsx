@@ -736,6 +736,7 @@ function LvPrices() {
               <tr>
                 <th className="px-4 py-2">Item</th>
                 <th className="px-4 py-2 w-28">{kind === "components" ? "Type" : "Family"}</th>
+                <th className="px-4 py-2 w-28">Brand</th>
                 <th className="px-4 py-2 w-28 text-right">Price EUR</th>
                 <th className="px-4 py-2 w-28 text-right">Price EGP</th>
                 <th className="px-4 py-2 w-20"></th>
@@ -754,10 +755,11 @@ function LvPrices() {
                       )}
                     </div>
                     <div className="text-[11px] text-muted">
-                      {[r.ref, r.brand, r.f, r.r, r.ip].filter(Boolean).join(" · ")}
+                      {[r.ref, r.f, r.r, r.ip].filter(Boolean).join(" · ")}
                     </div>
                   </td>
                   <td className="px-4 py-2 text-xs text-muted">{r.t || r.fam}</td>
+                  <td className="px-4 py-2 text-xs font-medium text-ink">{r.brand || "—"}</td>
                   <td className="px-4 py-2 text-right">
                     <input
                       type="number" min={0} step="0.01" defaultValue={r.eur} disabled={busy === r.id}
