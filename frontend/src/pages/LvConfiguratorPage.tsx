@@ -1912,9 +1912,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
         <h2 className="sec-head flex items-center gap-2">🎛️ LCP — Lighting Control Panel</h2>
       </div>
 
-      {/* Panel Cost (Live) + Panel details, side by side like the Panels editor. */}
-      <div className="grid items-start gap-4 xl:grid-cols-2">
-      {/* Panel Cost (Live) */}
+      {/* Panel Cost (Live) — first table; updates live as the panel below is configured */}
       <div className="card p-5">
         <h2 className="sec-head mb-3">Panel Cost (Live)</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1980,8 +1978,8 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
           </div>
         </div>
         {/* Enclosure sizing — auto-sized from No. Groups; the size stays editable. */}
-        <div className="mt-4 space-y-4 border-t border-line pt-4">
-          <div className="max-w-md space-y-3">
+        <div className="mt-4 grid gap-5 border-t border-line pt-4 lg:grid-cols-2">
+          <div className="space-y-3">
           <div>
             <L>Layout</L>
             <div className="flex gap-1.5">
@@ -2067,7 +2065,6 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
             )}
           </div>
         </div>
-      </div>
       </div>
 
       {/* Components — auto-filled from No. Groups; add / change / remove like a panel */}
