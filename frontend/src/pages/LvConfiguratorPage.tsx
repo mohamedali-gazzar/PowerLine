@@ -923,18 +923,20 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
     <div className="animate-fade-up">
       <PrintBar label={`${s.panels.length} panel${s.panels.length > 1 ? "s" : ""} → multi-page PDF (tables flow across pages).`}
         docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} exportFn={exportPdf} />
-      <div className="no-print mb-2 flex justify-end">
-        <button type="button" onClick={() => setHideBrand((v) => !v)}
-          title={hideBrand ? "Brand column is hidden — click to show it" : "Hide the Brand column from the offer"}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-            <circle cx="12" cy="12" r="3" />
-            {hideBrand && <line x1="3" y1="3" x2="21" y2="21" />}
-          </svg>
-          {hideBrand ? "Show brand" : "Hide brand"}
-        </button>
-      </div>
+      {hideBrand && (
+        <div className="no-print mb-2 flex justify-end">
+          <button type="button" onClick={() => setHideBrand(false)}
+            title="Brand column is hidden — click to show it in the offer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+              <circle cx="12" cy="12" r="3" />
+              <line x1="3" y1="3" x2="21" y2="21" />
+            </svg>
+            Show brand
+          </button>
+        </div>
+      )}
       <div className="offer-workspace">
       <div data-pdf-root className="print-area space-y-6">
         {/* Cover page (shared branded title page) — no footer on the cover */}
@@ -1062,7 +1064,19 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                     <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">Qty</th>
                     <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">Description</th>
                     <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">ADJ</th>
-                    {!hideBrand && <th className="px-2 text-left py-1 text-[12px] font-bold leading-[17px]">Brand</th>}
+                    {!hideBrand && (
+                      <th className="px-2 text-left py-1 text-[12px] font-bold leading-[17px]">
+                        <span className="inline-flex items-center gap-1">Brand
+                          <button type="button" onClick={() => setHideBrand(true)} title="Hide the Brand column from the offer"
+                            className="no-print inline-flex opacity-80 transition hover:opacity-100">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                          </button>
+                        </span>
+                      </th>
+                    )}
                     <th className="px-2 text-left py-1 text-[12px] font-bold leading-[17px]">NOTE</th>
                   </tr>
                 </thead>
