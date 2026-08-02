@@ -90,6 +90,9 @@ function normalize(state: LvState): LvState {
     p.code ??= "";
     p.shortCircuit ??= "";
     p.busbarPoles ??= 3;
+    // Pillars busbar = 3P + N (100%) + E (25%) = 4.25 bar-equivalents. 3 is only the
+    // legacy default and is never a valid pillar value, so lift old pillar panels to 4.25.
+    if (p.panelsSizing?.family === "Pillars" && p.busbarPoles === 3) p.busbarPoles = 4.25;
     p.sellFactor ??= 0;
     if (Array.isArray(p.sections)) p.sections = meteringBeforeOutgoings(p.sections);
     // "Other" is no longer a default section — drop it from existing panels when empty.

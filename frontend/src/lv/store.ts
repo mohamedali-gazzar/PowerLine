@@ -711,7 +711,13 @@ export function duplicatePanel(p: LvPanel, name: string): LvPanel {
 // Ref "Main busbar Cu (kg).xlsx": bar cross-section sized by the incomer rating,
 // run the full panel height, one bar per pole. Copper density ≈ 9e-6 kg/mm³.
 //   KG = Area(mm²) × PanelHeight(mm) × Poles × 0.000009   (× 2 for a Double panel)
-const BUSBAR_AUTO_FAMILIES = new Set(["SR-Basic", "Unikit", "Local (Sheet Metal)"]);
+const BUSBAR_AUTO_FAMILIES = new Set(["SR-Basic", "Unikit", "Local (Sheet Metal)", "Pillars"]);
+// Pillar-type enclosures ("7 Lines" …) carry no H×W×D in the name, so the busbar
+// rule uses this fixed pillar height instead of parsing one out of the name.
+const PILLAR_HEIGHT_MM = 1000;
+// Pillars use a fixed 500 mm² main-busbar bar section (a standard), not one sized
+// from the incomer rating the way the sheet-metal families are.
+const PILLAR_BUSBAR_CSA_MM2 = 500;
 /** Bar cross-section area (mm²) for an incomer rating, per the reference table. */
 export function busbarBarAreaMm2(ratingA: number): number {
   if (ratingA <= 0) return 0;
@@ -723,8 +729,16 @@ export function busbarBarAreaMm2(ratingA: number): number {
   if (ratingA <= 800) return 50 * 10;  // 500 — 800 A
   return 0; // > 800 A → panels not allowed (cells only)
 }
+/** Effective main-busbar bar section (mm²) for a panel: pillars use their fixed
+ *  standard 500 mm²; every other family sizes it from the incomer rating. */
+export function busbarAreaMm2(p: LvPanel): number {
+  if (p.panelsSizing?.family === "Pillars") return PILLAR_BUSBAR_CSA_MM2;
+  return busbarBarAreaMm2(p.ratingA);
+}
 /** Panel height (mm) = first dimension of the slot-1 enclosure name (H×W×D, opt. "L" prefix). */
-function panelHeightMm(p: LvPanel): number {
+export function panelHeightMm(p: LvPanel): number {
+  // Pillars have no dimensions in the enclosure name ("7 Lines") — use the fixed pillar height.
+  if (p.panelsSizing?.family === "Pillars") return PILLAR_HEIGHT_MM;
   const slot1 = (p.panelItems ?? []).find((it) => (it.slot ?? 1) === 1);
   const m = slot1?.name.match(/(\d+)/);
   return m ? parseInt(m[1], 10) : 0;
@@ -735,7 +749,7 @@ function panelHeightMm(p: LvPanel): number {
 export function mainBusbarAutoRaw(p: LvPanel): number | null {
   if (p.sizingMode !== "panels") return null;
   if (!BUSBAR_AUTO_FAMILIES.has(p.panelsSizing?.family ?? "")) return null;
-  const area = busbarBarAreaMm2(p.ratingA);
+  const area = busbarAreaMm2(p);
   const height = panelHeightMm(p);
   if (!area || !height) return null;
   const poles = p.busbarPoles || 3;

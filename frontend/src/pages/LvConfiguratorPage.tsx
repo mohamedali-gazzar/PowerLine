@@ -13,7 +13,7 @@ import {
   newPanel, newSparePanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarBarAreaMm2, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
+  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
 } from "../lv/store";
 import {
@@ -2713,9 +2713,10 @@ function CopperBreakdownWindow({ which, p, calc, f, onClose }: {
   const rate = f.copper; // EGP / kg copper
   // Main-busbar pieces — mirror mainBusbarAuto() for display.
   const isAuto = mainBusbarAuto(p) !== null;
-  const area = busbarBarAreaMm2(p.ratingA);
+  const area = busbarAreaMm2(p);
   const slot1 = (p.panelItems ?? []).find((it) => (it.slot ?? 1) === 1) ?? null;
-  const height = slot1 ? parseInt(slot1.name.match(/(\d+)/)?.[1] ?? "0", 10) : 0;
+  const isPillar = p.panelsSizing?.family === "Pillars";
+  const height = panelHeightMm(p); // Pillars → fixed 1000 mm; else parsed from Sizing (1)
   const poles = p.busbarPoles || 3;
   const isDouble = p.panelsSizing?.layout === "Double";
   // Cu-connection contribution per component: (kg/pole) × poles × qty.
@@ -2750,15 +2751,15 @@ function CopperBreakdownWindow({ which, p, calc, f, onClose }: {
           <h4 className="mb-1 font-bold text-ink">Main Busbar · {fmtNum(calc.busbarKg)} KG · {fmtEgp(calc.busbarCost)} EGP</h4>
           {isAuto ? (
             <div className="space-y-0.5 text-muted">
-              <div>Bar section <b className="text-ink">{area} mm²</b> — from incomer rating <b className="text-ink">{p.ratingA} A</b></div>
-              <div>Panel height <b className="text-ink">{height} mm</b> — from Sizing (1) “{slot1?.name}”</div>
+              <div>Bar section <b className="text-ink">{area} mm²</b> — {isPillar ? "fixed pillar standard" : <>from incomer rating <b className="text-ink">{p.ratingA} A</b></>}</div>
+              <div>Panel height <b className="text-ink">{height} mm</b> — {isPillar ? "fixed pillar height" : <>from Sizing (1) “{slot1?.name}”</>}</div>
               <div>Poles <b className="text-ink">{poles}</b> · copper density <b className="text-ink">0.000009</b> kg/mm³{isDouble && <> · <b className="text-ink">Double ×2</b></>}</div>
               <div className={eq}>{area} × {height} × {poles} × 0.000009{isDouble ? " × 2" : ""} = <b>{fmtNum(calc.busbarKg)} kg</b></div>
               <div className={eq}>{fmtNum(calc.busbarKg)} kg × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
             </div>
           ) : (
             <div className="space-y-0.5 text-muted">
-              <div>Manual value <b className="text-ink">{fmtNum(calc.busbarKg)} kg</b> — the auto rule applies only to SR-Basic / Unikit / Local panels with a rating and a Sizing (1).</div>
+              <div>Manual value <b className="text-ink">{fmtNum(calc.busbarKg)} kg</b> — the auto rule applies only to SR-Basic / Unikit / Local / Pillars panels with a rating (Pillars use a fixed 1000 mm height; the others read it from Sizing (1)).</div>
               <div className={eq}>{fmtNum(calc.busbarKg)} kg × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
             </div>
           )}
@@ -2995,7 +2996,7 @@ function PanelEditor({ s, p, up, upPanel }: {
             const autoRaw = mainBusbarAutoRaw(p);   // family auto value, ignoring any override
             const isAutoFamily = autoRaw !== null;
             const overridden = !!p.mainBusbarOverride;
-            const area = busbarBarAreaMm2(p.ratingA);
+            const area = busbarAreaMm2(p);
             const startOverride = () => {
               if (!confirm("Override the auto-calculated Main Busbar weight?\nIt will stop updating from the rating / height — you'll enter the KG manually. You can revert to auto anytime.")) return;
               u({ mainBusbarOverride: true, mainBusbarKg: parseFloat((autoRaw ?? 0).toFixed(2)) });
@@ -3031,8 +3032,9 @@ function PanelEditor({ s, p, up, upPanel }: {
                 </div>
                 <div>
                   <L>Busbar poles</L>
-                  <Sel value={String(p.busbarPoles || 3) as any}
-                    onChange={(v) => u({ busbarPoles: parseInt(v, 10) || 3 })} options={["3", "4"]} />
+                  <input type="number" min={1} step={0.25} value={p.busbarPoles || 3}
+                    onChange={(e) => u({ busbarPoles: parseFloat(e.target.value) || 3 })}
+                    className="input" title="Bar-equivalents = phases + neutral% + earth% (e.g. 3P + N 100% + E 25% = 4.25)" />
                 </div>
               </>
             );
@@ -5239,7 +5241,10 @@ function SizingCard({ p, u, factors }: {
     const trimmed = layout === "Single" ? items.filter((it) => (it.slot ?? 1) === 1) : items;
     u({ panelsSizing: { ...ps, layout, family }, panelItems: trimmed });
   };
-  const setFamily = (family: string) => u({ panelsSizing: { ...ps, family }, panelItems: [] });
+  // Pillars busbar is 3P + Neutral (100%) + Earth (25%) = 4.25 bar-equivalents; every
+  // other family is 3P. Picking a family resets the busbar poles to its standard.
+  const setFamily = (family: string) =>
+    u({ panelsSizing: { ...ps, family }, panelItems: [], busbarPoles: family === "Pillars" ? 4.25 : 3 });
   const keyOf = (it: PanelTypeItem | null) => (it ? `${it.name}|${it.ref}` : "");
 
   // Panels/Cells chooser — rendered at the top in panels/none mode, or inside the
@@ -5305,12 +5310,17 @@ function SizingCard({ p, u, factors }: {
             <div>
               <L>Layout</L>
               <div className="flex gap-1.5">
-                {(["Single", "Double"] as const).map((l) => (
-                  <button key={l} onClick={() => setLayout(l)}
-                    className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-bold ${
-                      ps.layout === l ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted"
-                    }`}>{l}</button>
-                ))}
+                {(["Single", "Double"] as const).map((l) => {
+                  const noDouble = l === "Double" && !DOUBLE_FAMILIES.includes(ps.family as any);
+                  return (
+                    <button key={l} disabled={noDouble} onClick={() => { if (!noDouble) setLayout(l); }}
+                      title={noDouble ? `${ps.family} panels can't be Double` : undefined}
+                      className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-bold ${
+                        noDouble ? "cursor-not-allowed border-line bg-surface text-muted/40"
+                          : ps.layout === l ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted"
+                      }`}>{l}</button>
+                  );
+                })}
               </div>
               {ps.layout === "Double" && <p className="mt-1 text-[11px] text-muted">Double: SR-Basic / Unikit / Local only · 2nd width 60/80 (RPT-02)</p>}
             </div>

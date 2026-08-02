@@ -30,9 +30,14 @@ import "./index.css";
 /** Login wall: shows the auth page until the user is signed in, then the app. */
 function Gate() {
   const { user, loading } = useAuth();
+  const [, bumpCatalog] = React.useState(0);
   // Pull the published prices once the user is known (the endpoint needs a login).
+  // refreshCatalog mutates the catalogue arrays IN PLACE, so React sees no change on
+  // its own — force one re-render of the whole authed subtree when a new version
+  // lands, or a screen already open (e.g. the Sizing picker) keeps showing the
+  // catalogue it first rendered with (a newly-published enclosure wouldn't appear).
   React.useEffect(() => {
-    if (user) void refreshCatalog(getToken());
+    if (user) void refreshCatalog(getToken()).then((v) => { if (v) bumpCatalog(v); });
   }, [user]);
   if (loading) {
     return (
