@@ -117,6 +117,29 @@ function Sel<T extends string>({ value, onChange, options, className }: {
     </select>
   );
 }
+// Watt-hour-meter icon for KWHM cells — a compact SVG (scales with font-size).
+function KwhmIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="1.15em" height="1.15em" className="inline-block shrink-0 align-[-0.22em]" aria-hidden="true">
+      <rect x="3" y="2.5" width="18" height="19" rx="2.6" fill="#3f434d" />
+      <rect x="5" y="4.5" width="14" height="10.5" rx="1.4" fill="#f5f5f7" />
+      <rect x="6.4" y="6.4" width="8.7" height="4.4" rx="0.7" fill="#20262f" />
+      <rect x="15.4" y="6.4" width="2.4" height="4.4" rx="0.7" fill="#e5484d" />
+      <rect x="6.4" y="12" width="11.4" height="1.3" rx="0.6" fill="#b6bac2" />
+      <g fill="#9297a1">
+        <rect x="6.2" y="16.6" width="2.2" height="2.7" rx="0.4" />
+        <rect x="9.2" y="16.6" width="2.2" height="2.7" rx="0.4" />
+        <rect x="12.2" y="16.6" width="2.2" height="2.7" rx="0.4" />
+        <rect x="15.2" y="16.6" width="2.2" height="2.7" rx="0.4" />
+      </g>
+    </svg>
+  );
+}
+/** Icon for a spare/aux cell — the KWHM meter SVG, else the kind's emoji. */
+function SpareKindIcon({ kind }: { kind?: string }) {
+  if (kind === "kwhm") return <KwhmIcon />;
+  return <>{SPARE_KIND_ICONS[kind ?? "spare"] ?? "🧰"}</>;
+}
 /** Searchable dropdown (RPT-01: enclosure family + sizing must be searchable). */
 function SearchSelect({ value, placeholder, options, onPick }: {
   value: string; placeholder: string;
@@ -1828,7 +1851,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
   const G = p.noGroups || 0;
   // The same editor drives the LCP and KWHM auxiliary panels — same formula, different labels.
   const isKwhm = p.spareKind === "kwhm";
-  const title = `${SPARE_KIND_ICONS[p.spareKind ?? "lcp"]} ${isKwhm ? "KWHM — kWh Meter Panel" : "LCP — Lighting Control Panel"}`;
+  const titleLabel = isKwhm ? "KWHM — kWh Meter Panel" : "LCP — Lighting Control Panel";
   const countLabel = isKwhm ? "No. KWHM" : "No. Groups";
   const unitWord = isKwhm ? "KWHM" : "group";
   const unitPlural = isKwhm ? "KWHM" : "groups";
@@ -1952,7 +1975,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
     <div className="space-y-4 animate-fade-up">
       {/* Header */}
       <div className="card p-5">
-        <h2 className="sec-head flex items-center gap-2">{title}</h2>
+        <h2 className="sec-head flex items-center gap-2"><SpareKindIcon kind={p.spareKind} /> {titleLabel}</h2>
       </div>
 
       {/* Panel Cost (Live) — first table; updates live as the panel below is configured */}
@@ -2590,7 +2613,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
                   </span>
                   <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{i + 1}</span>
                   <button onClick={() => up({ selectedId: p.id })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
-                    <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare ? `${SPARE_KIND_ICONS[p.spareKind ?? "spare"] ?? "🧰"} ` : ""}{p.name.trim() || "(unnamed panel)"}</div>
+                    <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{p.name.trim() || "(unnamed panel)"}</div>
                   </button>
                 </div>
                 {/* action icons (smaller) — inline when the name is short, else wrapped below-right */}
@@ -5407,59 +5430,79 @@ function SizingCard({ p, u, factors }: {
 // RCCB, contactors + aux + terminal, control gear) and totals their rail width in poles,
 // so the enclosure can be sized. Widths come from the Control Design Guide (see lv/poles.ts).
 function PolesSummary({ p }: { p: LvPanel }) {
-  const { rows, total } = panelPoles(p.components);
+  // Split the DIN-rail poles by feed: Main Incoming vs everything else (Outgoings).
+  const pIn = panelPoles(p.components.filter((c) => c.section === "Main Incoming"));
+  const pOut = panelPoles(p.components.filter((c) => c.section !== "Main Incoming"));
   const pl = (n: number) => `${n} pole${n === 1 ? "" : "s"}`;
   const groupKinds: Record<PoleGroup, PoleKind[]> = {
     protection: ["mcb", "rcbo", "rccb"],
     contactors: ["af", "esb", "aux", "terminal"],
     control: ["timer", "psu", "relay", "surge"],
   };
-  // Tick the types to include in the total (all on by default). Lets you sum any
-  // combination — e.g. MCB + RCBO only. Tracked as the *excluded* set so newly
-  // appearing types are counted by default.
-  const [excluded, setExcluded] = useState<Set<PoleKind>>(new Set());
-  const on = (k: PoleKind) => !excluded.has(k);
-  const toggle = (k: PoleKind) => setExcluded((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
-  const sumOf = (kinds: PoleKind[]) => kinds.reduce((s, k) => s + (on(k) ? (rows[k]?.poles || 0) : 0), 0);
-  const grand = sumOf(POLE_KINDS);
-  return (
-    <div>
-      <h2 className="sec-head">No. of poles <span className="text-[11px] font-normal text-muted">— DIN-rail width · 1 pole = {POLE_CM} cm</span></h2>
-      {total === 0 ? (
-        <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-muted">
-          Add MCB / RCBO / RCCB, contactors or control gear — their pole widths appear here to help size the panel.
-        </p>
-      ) : (
-        <div className="space-y-2.5">
-          {(Object.keys(groupKinds) as PoleGroup[]).map((g) => {
-            const kinds = groupKinds[g].filter((k) => rows[k]?.poles);
+  // Per-section: tick the types to include in the total (all on by default). Tracked as the
+  // *excluded* set so newly appearing types are counted by default.
+  const [exIn, setExIn] = useState<Set<PoleKind>>(new Set());
+  const [exOut, setExOut] = useState<Set<PoleKind>>(new Set());
+  type Poles = ReturnType<typeof panelPoles>;
+  const sumOf = (d: Poles, ex: Set<PoleKind>, kinds: PoleKind[]) =>
+    kinds.reduce((s, k) => s + (!ex.has(k) ? (d.rows[k]?.poles || 0) : 0), 0);
+  // One Incoming / Outgoings block: section header + total, then the group tables.
+  const block = (title: string, d: Poles, ex: Set<PoleKind>, setEx: React.Dispatch<React.SetStateAction<Set<PoleKind>>>) => {
+    const toggle = (k: PoleKind) => setEx((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+    return (
+      <div className="overflow-hidden rounded-lg border border-line">
+        <div className="flex items-center justify-between bg-brand-tint/50 px-3 py-1.5 text-[12px] font-extrabold uppercase tracking-wide text-brand-dark">
+          <span>{title}</span><span>{pl(sumOf(d, ex, POLE_KINDS))}</span>
+        </div>
+        {d.total === 0 ? (
+          <p className="px-3 py-2 text-[11px] text-muted">No {title.toLowerCase()} DIN-rail items yet.</p>
+        ) : (
+          (Object.keys(groupKinds) as PoleGroup[]).map((g) => {
+            const kinds = groupKinds[g].filter((k) => d.rows[k]?.poles);
             if (!kinds.length) return null;
             return (
-              <div key={g} className="overflow-hidden rounded-lg border border-line">
-                <div className="flex items-center justify-between bg-surface px-3 py-1.5 text-[12px] font-bold text-brand-dark">
-                  <span>{GROUP_LABEL[g]}</span><span>{pl(sumOf(kinds))}</span>
+              <div key={g}>
+                <div className="flex items-center justify-between border-t border-line bg-surface px-3 py-1 text-[11px] font-bold text-muted">
+                  <span>{GROUP_LABEL[g]}</span><span>{pl(sumOf(d, ex, kinds))}</span>
                 </div>
                 <table className="w-full table-fixed text-[13px]">
                   <colgroup><col style={{ width: 34 }} /><col /><col style={{ width: 76 }} /></colgroup>
                   <tbody>
                     {kinds.map((k) => (
-                      <tr key={k} className={`border-t border-line/50 ${on(k) ? "" : "opacity-45"}`}>
+                      <tr key={k} className={`border-t border-line/50 ${!ex.has(k) ? "" : "opacity-45"}`}>
                         <td className="py-1 pl-3">
-                          <input type="checkbox" className="h-3.5 w-3.5 cursor-pointer accent-brand align-middle" checked={on(k)}
+                          <input type="checkbox" className="h-3.5 w-3.5 cursor-pointer accent-brand align-middle" checked={!ex.has(k)}
                             title="Include in the total" onChange={() => toggle(k)} />
                         </td>
                         <td className="truncate py-1 pl-1 text-muted">{KIND_LABEL[k]}</td>
-                        <td className="whitespace-nowrap py-1 pr-3 text-right font-semibold text-ink">{pl(rows[k].poles)}</td>
+                        <td className="whitespace-nowrap py-1 pr-3 text-right font-semibold text-ink">{pl(d.rows[k].poles)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             );
-          })}
+          })
+        )}
+      </div>
+    );
+  };
+  return (
+    <div>
+      <h2 className="sec-head">No. of poles <span className="text-[11px] font-normal text-muted">— DIN-rail width · 1 pole = {POLE_CM} cm</span></h2>
+      {pIn.total === 0 && pOut.total === 0 ? (
+        <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-muted">
+          Add MCB / RCBO / RCCB, contactors or control gear — their pole widths appear here to help size the panel.
+        </p>
+      ) : (
+        <div className="space-y-2.5">
+          <div className="grid items-start gap-2.5 sm:grid-cols-2">
+            {block("Incoming", pIn, exIn, setExIn)}
+            {block("Outgoings", pOut, exOut, setExOut)}
+          </div>
           <div className="flex items-center justify-between rounded-lg bg-brand-tint/60 px-3 py-2 text-sm font-extrabold text-brand-dark">
             <span>Total no. poles</span>
-            <span>{pl(grand)}</span>
+            <span>{pl(sumOf(pIn, exIn, POLE_KINDS) + sumOf(pOut, exOut, POLE_KINDS))}</span>
           </div>
         </div>
       )}
