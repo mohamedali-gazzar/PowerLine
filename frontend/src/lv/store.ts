@@ -14,6 +14,7 @@ import {
   cuCellKg,
   cellPriceEgp,
   enclosurePriceEgp,
+  copperTypeFactor,
   findByName,
   type DbComponent,
   type DbEnclosure,
@@ -880,10 +881,10 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
     }
   }
   const cuConnCost = cuWeight * f.copper;
-  // Main busbar: auto rule for sheet-metal panels, else the manual entry.
-  // Priced the same way as the Cu connections — weight × copper rate (no plating premium).
+  // Main busbar: auto rule for sheet-metal panels, else the manual entry. Priced by weight ×
+  // copper rate × the plating factor (Bare 1 · Raychem 1.02 · Tin-plated 1.05 · Silver 1.15).
   const busbarKg = mainBusbarAuto(p) ?? (p.mainBusbarKg || 0);
-  const busbarCost = busbarKg * f.copper;
+  const busbarCost = busbarKg * f.copper * copperTypeFactor(p.copperType);
   // Kit = a % of the enclosure cost minus the cell Sides, per system (see kitRate).
   const kits = Math.max(0, enclCost - sideCost) * kitRate(p);
   const unitCost = compCost + enclCost + cuConnCost + busbarCost + kits;
