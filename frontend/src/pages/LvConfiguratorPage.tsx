@@ -3608,11 +3608,22 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     const from = arr.findIndex((c) => c.id === dId);
     const tgt = arr.find((c) => c.id === targetId);
     if (from < 0 || !tgt) return;
-    const moved = { ...arr[from], section: tgt.section };
+    const crossSection = arr[from].section !== tgt.section;
+    // A cross-section move drops combination membership and lands loose at the END of the
+    // target section — so it can't be absorbed into a combination it was dropped onto.
+    const moved = crossSection
+      ? { ...arr[from], section: tgt.section, group: "", comboScalable: false, comboId: undefined }
+      : { ...arr[from], section: tgt.section };
     arr.splice(from, 1);
-    const tIdx = arr.findIndex((c) => c.id === targetId);
-    arr.splice(tIdx, 0, moved);
-    applyGroupScaling(arr, tIdx); // scale it to the combination's ×N if it landed inside one
+    if (crossSection) {
+      let lastIdx = -1;
+      for (let i = 0; i < arr.length; i++) if (arr[i].section === tgt.section) lastIdx = i;
+      arr.splice(lastIdx + 1, 0, moved);
+    } else {
+      const tIdx = arr.findIndex((c) => c.id === targetId);
+      arr.splice(tIdx, 0, moved);
+      applyGroupScaling(arr, tIdx); // only a within-section drop can join a combination
+    }
     u({ components: arr });
   };
 
@@ -3625,7 +3636,10 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     const arr = [...p.components];
     const from = arr.findIndex((c) => c.id === dId);
     if (from < 0) return;
-    const moved = { ...arr[from], section };
+    // A cross-section move drops any combination membership — it becomes a loose row.
+    const moved = arr[from].section !== section
+      ? { ...arr[from], section, group: "", comboScalable: false, comboId: undefined }
+      : { ...arr[from], section };
     arr.splice(from, 1);
     let lastIdx = -1;
     for (let i = 0; i < arr.length; i++) if (arr[i].section === section) lastIdx = i;
