@@ -60,6 +60,10 @@ function effectiveGroups(comps: PanelComponent[]): Map<string, string> {
   return out;
 }
 
+// Cross-panel clipboard for Copy/Paste of a whole combination (module-level so it survives
+// switching between panels; not persisted to the quotation).
+let comboClipboard: { label: string; comps: PanelComponent[] } | null = null;
+
 // ── Keyboard field navigation (arrow keys move between fields by layout) ───────
 type ArrowKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
 /** Visible, enabled input/select fields within a container. */
@@ -3165,6 +3169,31 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     arr.splice(lastIdx + 1, 0, ...clones);
     u({ components: arr });
   };
+  // Copy a combination to the cross-panel clipboard; Paste clones it (fresh ids + unique name)
+  // into the active section of whatever panel is open — so a combo can move between panels.
+  const [, bumpClip] = useState(0);
+  const copyGroup = (group: string, sec: string) => {
+    const members = p.components.filter((c) => c.section === sec && (effGroup.get(c.id) || "") === group);
+    if (!members.length) return;
+    comboClipboard = { label: group, comps: members.map((c) => ({ ...c })) };
+    bumpClip((v) => v + 1);
+  };
+  const pasteCombo = () => {
+    if (!comboClipboard) return;
+    const sec = p.activeSection;
+    const used = new Set(p.components.filter((c) => c.section === sec && !isSpacer(c)).map((c) => effGroup.get(c.id) || "").filter(Boolean));
+    let name = comboClipboard.label;
+    for (let k = 2; used.has(name); k++) name = `${comboClipboard.label} (${k})`;
+    const cid = uid();
+    const clones = comboClipboard.comps.map((c) => (isSpacer(c)
+      ? { ...c, id: uid(), section: sec }
+      : { ...c, id: uid(), section: sec, group: name, comboId: cid }));
+    const arr = [...p.components];
+    let lastIdx = -1;
+    for (let i = 0; i < arr.length; i++) if (arr[i].section === sec) lastIdx = i;
+    arr.splice(lastIdx + 1, 0, ...clones);
+    u({ components: arr });
+  };
 
   const [newSection, setNewSection] = useState("");
   const [preview, setPreview] = useState<ComboLine[]>([]); // active circuit-combination preview
@@ -3840,6 +3869,13 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
             + {label}
           </button>
         ))}
+        {comboClipboard && (
+          <button type="button" onClick={pasteCombo}
+            title={`Paste the copied “${comboClipboard.label}” into “${p.activeSection}”`}
+            className="ml-1 rounded-full border border-brand/60 bg-brand-light px-2.5 py-1 text-[11px] font-bold text-brand-dark transition hover:bg-brand-tint">
+            📋 Paste combination
+          </button>
+        )}
       </div>
 
       {/* search */}
@@ -4331,6 +4367,8 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                                     className="rounded px-1 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">↓</button>
                                   <button type="button" title="Duplicate this combination" onClick={() => duplicateGroup(g, sec)}
                                     className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">⧉</button>
+                                  <button type="button" title="Copy this combination — paste into any panel" onClick={() => copyGroup(g, sec)}
+                                    className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">📋</button>
                                   {p.sections.length > 1 && (
                                     <select value="" onChange={(e) => { if (e.target.value) moveGroupToSection(g, sec, e.target.value); }}
                                       title="Move this group to another section"
