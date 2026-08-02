@@ -28,6 +28,7 @@ import {
 } from "../lv/combos";
 import { rankSearchOptions } from "../lv/search";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
+import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
 import * as XLSX from "xlsx";
 import {
   PRO_E_DEPTHS, PRO_E_THICKNESS, PRO_E_IPS, IS2_DEPTHS, PLP_DEPTHS,
@@ -326,6 +327,24 @@ export default function LvConfiguratorPage() {
     setHist((h) => (!readOnly && h.future.length ? { past: [...h.past, h.present].slice(-60), present: h.future[0], future: h.future.slice(1) } : h));
   const canUndo = !readOnly && hist.past.length > 0;
   const canRedo = !readOnly && hist.future.length > 0;
+  // ERP upload: download the QTN's panels as an ERPNext "Bulk Edit Items" CSV
+  // (one row per panel — see lv/erpCsv.ts).
+  const erpCount = erpItemCount(s);
+  const exportErpCsv = () => {
+    const def = `Items-${(qtnNum || "export").replace(/\s+/g, "")}`;
+    const name = window.prompt("ERP items CSV file name:", def);
+    if (name === null) return; // cancelled
+    const trimmed = name.trim() || def;
+    const blob = new Blob([buildErpItemsCsv(s)], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = /\.csv$/i.test(trimmed) ? trimmed : `${trimmed}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
 
   // Debounced live-save to the backend (replaces the previous localStorage save).
   // saveRef holds the latest pending state so the final edit isn't lost if the
@@ -513,18 +532,27 @@ export default function LvConfiguratorPage() {
             {totals.sell > 0 && <> · <strong className="text-ink">{fmtEgp(totals.incl)}</strong> incl. {Math.round(s.factors.vat * 100)}% VAT</>}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button className="btn-ghost" disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)">↶ Undo</button>
-          <button className="btn-ghost" disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
-          {submitted ? (
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-100 px-3 py-2 text-sm font-bold text-green-700"
-              title="This QTN is submitted and counts in the team's weekly chart">
-              ✓ Submitted
-            </span>
-          ) : (
-            <button className="btn-primary" disabled={submitting || cancelled} onClick={doSubmit}
-              title={cancelled ? "Cancelled revision — read-only" : "Mark this QTN as submitted (counts in the dashboard chart)"}>
-              {submitting ? "Submitting…" : "✓ Submit"}
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2">
+            <button className="btn-ghost" disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)">↶ Undo</button>
+            <button className="btn-ghost" disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+            {submitted ? (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-100 px-3 py-2 text-sm font-bold text-green-700"
+                title="This QTN is submitted and counts in the team's weekly chart">
+                ✓ Submitted
+              </span>
+            ) : (
+              <button className="btn-primary" disabled={submitting || cancelled} onClick={doSubmit}
+                title={cancelled ? "Cancelled revision — read-only" : "Mark this QTN as submitted (counts in the dashboard chart)"}>
+                {submitting ? "Submitting…" : "✓ Submit"}
+              </button>
+            )}
+          </div>
+          {erpCount > 0 && (
+            <button onClick={exportErpCsv}
+              title={`Download ${erpCount} panel${erpCount > 1 ? "s" : ""} as an ERPNext "Bulk Edit Items" CSV for your ERP`}
+              className="rounded-full border border-brand bg-white px-4 py-1.5 text-xs font-bold text-brand-dark hover:bg-brand-light no-print">
+              ⬇ ERP CSV
             </button>
           )}
         </div>
