@@ -4808,8 +4808,8 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
         )}
         <div><L>Qty</L><input className="input w-20" inputMode="numeric" value={qty}
           onChange={(e) => setQty(Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1))} /></div>
-        <label className="flex items-center gap-1.5 pb-2 text-xs font-semibold text-ink">
-          <input type="checkbox" checked={withCtl} onChange={(e) => setWithCtl(e.target.checked)} /> + control acc.
+        <label className="flex cursor-pointer select-none items-center gap-1.5 pb-2 text-xs font-semibold text-ink">
+          <input type="checkbox" className="cursor-pointer accent-brand" checked={withCtl} onChange={(e) => setWithCtl(e.target.checked)} /> + control acc.
         </label>
         <button className="btn-ghost"
           onClick={() => onPreview(
