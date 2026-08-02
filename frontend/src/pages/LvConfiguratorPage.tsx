@@ -145,15 +145,26 @@ function SpareKindIcon({ kind }: { kind?: string }) {
   return <>{SPARE_KIND_ICONS[kind ?? "spare"] ?? "🧰"}</>;
 }
 /** Searchable dropdown (RPT-01: enclosure family + sizing must be searchable). */
-function SearchSelect({ value, placeholder, options, onPick }: {
+function SearchSelect({ value, placeholder, options, onPick, heightMatch }: {
   value: string; placeholder: string;
   options: { key: string; label: string; hint?: string }[];
   onPick: (key: string) => void;
+  heightMatch?: boolean; // enclosure Sizing: a pure-number query matches the HEIGHT only
 }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
-  // Live, flexible filter+rank — see rankSearchOptions (lv/search.ts).
-  const shown = useMemo(() => rankSearchOptions(options, q), [q, options]);
+  // Live, flexible filter+rank — see rankSearchOptions (lv/search.ts). For enclosure
+  // Sizing (heightMatch), a pure-number query filters by the enclosure HEIGHT (the
+  // first dimension in the name) so "1000" shows only 1000-high boxes, not every row
+  // that happens to contain 1000 (a width/depth/price). Non-dimensioned families and
+  // any non-numeric query fall back to the normal full-text search.
+  const shown = useMemo(() => {
+    const digits = q.trim();
+    if (heightMatch && /^\d+$/.test(digits) && options.some((o) => encDims(o.label) != null)) {
+      return options.filter((o) => { const h = encDims(o.label)?.H; return h != null && String(h).startsWith(digits); });
+    }
+    return rankSearchOptions(options, q);
+  }, [q, options, heightMatch]);
   const sel = options.find((o) => o.key === value);
   // Keyboard nav: first option auto-highlighted; ↑/↓ move, Enter picks the highlight.
   const [activeIdx, setActiveIdx] = useState(0);
@@ -1362,9 +1373,13 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
   const upPr = (patch: Partial<LvState["project"]>) => up({ project: { ...pr, ...patch } });
   const [staff, setStaff] = useStaff();
   const pickSales = (name: string) => {
+    // Known registry name → auto-fill their contact. A custom (typed) name keeps
+    // whatever phone/email is there so the user can enter it in the now-editable fields.
     const sp = staff.salesPeople.find((x) => x.name === name);
-    upPr({ salesPerson: name, salesMobile: sp?.mobile ?? "", salesEmail: sp?.email ?? "" });
+    upPr(sp ? { salesPerson: name, salesMobile: sp.mobile, salesEmail: sp.email } : { salesPerson: name });
   };
+  // A registry name auto-fills (and locks) the contact; a custom name makes it editable.
+  const knownSales = staff.salesPeople.some((x) => x.name === pr.salesPerson);
   // Sales manager is fixed (Ali Kamal); his contact comes from the shared registry.
   const mgr = staff.salesManagers.find((m) => m.name === SALES_MANAGER);
   const [newSales, setNewSales] = useState({ name: "", mobile: "", email: "" });
@@ -1418,19 +1433,29 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
             </div>
             <div><L>Manager email</L><input className="input bg-surface" value={mgr?.email ?? ""} readOnly /></div>
           </div>
-          {/* Sales person — name + phone side by side, email full width below */}
+          {/* Sales person — pick from the registry OR type a custom name; a custom name
+              opens the phone/email fields so their contact can be entered. */}
           <div className="grid content-start gap-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <L>Sales person</L>
-                <select className="input cursor-pointer" value={pr.salesPerson} onChange={(e) => pickSales(e.target.value)}>
-                  <option value="">— select —</option>
-                  {staff.salesPeople.filter((p) => p.name !== SALES_MANAGER).map((p) => <option key={p.name}>{p.name}</option>)}
-                </select>
+                <input className="input" list="lv-sales-people" value={pr.salesPerson}
+                  placeholder="Select or type a name…" onChange={(e) => pickSales(e.target.value)} />
+                <datalist id="lv-sales-people">
+                  {staff.salesPeople.filter((p) => p.name !== SALES_MANAGER).map((p) => <option key={p.name} value={p.name} />)}
+                </datalist>
               </div>
-              <div><L>Phone no.</L><input className="input bg-surface" value={pr.salesMobile} readOnly /></div>
+              <div>
+                <L>Phone no.</L>
+                <input className={`input ${knownSales ? "bg-surface" : ""}`} value={pr.salesMobile} readOnly={knownSales}
+                  placeholder={knownSales ? "" : "Type phone no.…"} onChange={(e) => upPr({ salesMobile: e.target.value })} />
+              </div>
             </div>
-            <div><L>Sales person email</L><input className="input bg-surface" value={pr.salesEmail} readOnly /></div>
+            <div>
+              <L>Sales person email</L>
+              <input className={`input ${knownSales ? "bg-surface" : ""}`} value={pr.salesEmail} readOnly={knownSales}
+                placeholder={knownSales ? "" : "Type email…"} onChange={(e) => upPr({ salesEmail: e.target.value })} />
+            </div>
           </div>
         </div>
       </div>
@@ -2141,7 +2166,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
           </div>
           <div>
             <L>{isDouble ? "Sizing (1)" : "Sizing"}</L>
-            <SearchSelect value={keyOfBox(box)} placeholder="Search size — one selection…" options={sizeOptions} onPick={pickSize} />
+            <SearchSelect value={keyOfBox(box)} placeholder="Search size — one selection…" options={sizeOptions} onPick={pickSize} heightMatch />
             {!isDouble && (overCeiling ? (
               <p className="mt-1 text-[11px] font-semibold text-red-600">
                 {G} groups exceed a single panel (max ≈ {5 * LCP_MAX_ROWS}). Split into multiple LCP panels.
@@ -2155,7 +2180,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
           {isDouble && (
             <div>
               <L>Sizing (2)</L>
-              <SearchSelect value={keyOfBox(box2)} placeholder="Search size — one selection…" options={sizeOptions} onPick={pickSize2} />
+              <SearchSelect value={keyOfBox(box2)} placeholder="Search size — one selection…" options={sizeOptions} onPick={pickSize2} heightMatch />
               <p className="mt-1 text-[11px] text-muted">Second enclosure — pick its size (not auto-recommended).</p>
             </div>
           )}
@@ -5189,7 +5214,9 @@ function CustomBuilder({ factors, onPreview }: { factors: LvState["factors"]; on
 // fields are all 0), e.g. "1400x800x300" → { H:1400, W:800, D:300 }. Used for
 // RPT-02's Double rule: panel 2 matches panel 1's H & D, width 600/800 mm only.
 function encDims(name: string): { H: number; W: number; D: number } | null {
-  const m = String(name).match(/(\d+)\s*x\s*(\d+)\s*x\s*(\d+)/i);
+  // Accept both separators: raw catalogue names use "300x200x150"; formatted Sizing
+  // labels use "300 × 200 × 250 mm". Both must parse so the height filter works everywhere.
+  const m = String(name).match(/(\d+)\s*[x×]\s*(\d+)\s*[x×]\s*(\d+)/i);
   return m ? { H: +m[1], W: +m[2], D: +m[3] } : null;
 }
 
@@ -5336,7 +5363,7 @@ function SizingCard({ p, u, factors }: {
                   label: e.name,
                   hint: `${e.ref} · ${fmtEgp(enclosurePriceEgp(e, factors))} EGP`,
                 }))}
-                onPick={(k) => setSlot(1, sizing1Pool.find((x) => `${x.name}|${x.ref}` === k) ?? null)} />
+                onPick={(k) => setSlot(1, sizing1Pool.find((x) => `${x.name}|${x.ref}` === k) ?? null)} heightMatch />
             </div>
             {ps.layout === "Double" && (
               <div>
@@ -5347,7 +5374,7 @@ function SizingCard({ p, u, factors }: {
                     label: e.name,
                     hint: `${e.ref} · ${fmtEgp(enclosurePriceEgp(e, factors))} EGP`,
                   }))}
-                  onPick={(k) => setSlot(2, sizing2Pool.find((x) => `${x.name}|${x.ref}` === k) ?? null)} />
+                  onPick={(k) => setSlot(2, sizing2Pool.find((x) => `${x.name}|${x.ref}` === k) ?? null)} heightMatch />
               </div>
             )}
           </div>
