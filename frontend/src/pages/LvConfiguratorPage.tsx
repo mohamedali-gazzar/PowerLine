@@ -24,7 +24,7 @@ import {
   MCC_KINDS, mccKws, mccTypes, buildMcc, buildTwoSpeed, prevSpeedKw, TWO_SPEED,
   PFC_DEFAULT, pfcTotalKvar, pfcHeader, buildPfc,
   WD_OPTIONS, buildWd,
-  MOTORIZED_FRAMES, buildMotorized,
+  MOTORIZED_FRAMES, buildMotorized, motorizedFrameKey,
   buildIndicationLamps, buildPushButtons, buildFire,
   type ComboLine, type AtsTypeId,
 } from "../lv/combos";
@@ -5154,21 +5154,29 @@ function WdBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => 
 }
 
 function MotorizedBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
-  const [frame, setFrame] = useState(MOTORIZED_FRAMES[0] ?? "");
+  // Only MCCB / ACB breakers (no MCBs / junk); on the XT7 frame only the motorizable
+  // XT7M variant qualifies, so plain XT7 (XT7S / XT7H without "M") is filtered out.
+  const pool = useMemo(() => atsBreakerPool().filter((c) => frameOf(c) !== "XT7" || /\bXT7[SH]?\s*M\b/i.test(c.n)), []);
+  const [cb, setCb] = useState<DbComponent | null>(null);
+  const [manualFrame, setManualFrame] = useState(""); // manual frame override
+  const frame = manualFrame || (cb ? motorizedFrameKey(frameOf(cb)) : "") || MOTORIZED_FRAMES[0];
   return (
     <div className="rounded-lg border border-line p-3">
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <BreakerSelect label="Circuit breaker" value={cb} onPick={(c) => { setCb(c); setManualFrame(""); }} pool={pool} placeholder="Search all components…" />
         <div>
-          <L>Breaker frame</L>
-          <select className="input w-48 cursor-pointer" value={frame} onChange={(e) => setFrame(e.target.value)}>
+          <L>Breaker frame <span className="text-[11px] font-normal text-muted">— auto from C.B, or pick</span></L>
+          <select className="input cursor-pointer" value={frame} onChange={(e) => setManualFrame(e.target.value)}>
             {MOTORIZED_FRAMES.map((f) => <option key={f} value={f}>{f}</option>)}
           </select>
         </div>
-        <button className="btn-ghost" onClick={() => onPreview(buildMotorized(frame), `Motorized C.B — ${frame}`)}>Generate</button>
       </div>
-      {frame === "XT7"
-        ? <p className="mt-2 text-[11px] font-semibold text-amber-700">On XT7 the breaker must be the XT7M (motorizable) variant.</p>
-        : <p className="mt-2 text-[11px] text-muted">Motor operator + control gear (push buttons, pilots, selector) for the selected frame.</p>}
+      {cb && <p className="mt-1.5 text-[11px] text-muted">Detected frame: <b>{motorizedFrameKey(frameOf(cb)) || "?"}</b>{manualFrame ? ` · using ${manualFrame} (manual)` : ""}</p>}
+      {frame === "XT7M"
+        ? <p className="mt-1 text-[11px] font-semibold text-amber-700">XT7 must be the motorizable XT7M variant.</p>
+        : <p className="mt-1 text-[11px] text-muted">Motor operator + control gear (push buttons, pilots, selector) — sized to the breaker frame; the picked breaker is included.</p>}
+      <button className="btn-ghost mt-2" disabled={!frame}
+        onClick={() => frame && onPreview(buildMotorized(frame, cb ?? undefined), `Motorized C.B — ${frame}`)}>Generate combination</button>
     </div>
   );
 }

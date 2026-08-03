@@ -432,11 +432,23 @@ export function buildWd(key: string): ComboLine[] {
 // breaker, keyed by frame family. NOTE: on XT7 the breaker must be the XT7M
 // (motorizable) variant — the XT7 recipe uses the "M XT7M …" motor accordingly.
 export const MOTORIZED_FRAMES = Object.keys((COMBOS as any).motorized as Record<string, string[]>);
-export function buildMotorized(frame: string): ComboLine[] {
+/** Map a single ABB frame (from frameOf) to the Motorized recipe's frame-family key. */
+export function motorizedFrameKey(frame: string | null): string {
+  if (!frame) return "";
+  if (frame === "XT1" || frame === "XT3") return "XT1/XT3";
+  if (frame === "XT2" || frame === "XT4") return "XT2/XT4";
+  if (frame === "XT7") return "XT7M"; // XT7 must be the motorizable XT7M
+  if (frame === "E2.2" || frame === "E4.2" || frame === "E6.2") return "E2.2 - E6.2";
+  return frame; // XT5 / XT6 / E1.2 match a key directly
+}
+export function buildMotorized(frame: string, cb?: DbComponent): ComboLine[] {
   const parts = ((COMBOS as any).motorized as Record<string, string[]>)[frame];
   if (!parts) return [];
   const label = `Motorized C.B — ${frame}`;
-  return parts.map((desc) => ({ qty: 1, desc, comp: findByName(desc), groupLabel: label }));
+  const out: ComboLine[] = [];
+  if (cb) out.push({ qty: 1, desc: cb.n, comp: cb, groupLabel: label }); // the motorized breaker itself
+  parts.forEach((desc) => out.push({ qty: 1, desc, comp: findByName(desc), groupLabel: label }));
+  return out;
 }
 
 // ── Indication Lamps ─────────────────────────────────────────────────────────
