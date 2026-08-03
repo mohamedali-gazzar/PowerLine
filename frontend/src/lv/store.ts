@@ -1111,8 +1111,13 @@ export function searchComponents(q: string, limit = 50): DbComponent[] {
     const pos = phrase >= 0 ? phrase : desc.indexOf(first) >= 0 ? desc.indexOf(first) : 1e9;
     scored.push({ c, score, pos });
   }
+  // ATS transfer switches (TruOne) are niche next to lamps / buttons / etc., so on an
+  // otherwise-equal match (e.g. "compact" hits both) they sink last — Compact Pilot
+  // lights show before Compact ATS. Specific "ats"/"truone" searches are unaffected
+  // (only ATS rows match those terms).
+  const atsLast = (c: DbComponent) => (/truone/i.test(c.t || "") ? 1 : 0);
   scored.sort((a, b) =>
-    a.score - b.score || a.pos - b.pos || a.c.n.length - b.c.n.length || a.c.n.localeCompare(b.c.n)
+    a.score - b.score || a.pos - b.pos || atsLast(a.c) - atsLast(b.c) || a.c.n.length - b.c.n.length || a.c.n.localeCompare(b.c.n)
   );
   return scored.slice(0, limit).map((x) => x.c);
 }
