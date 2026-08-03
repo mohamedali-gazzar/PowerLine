@@ -21,7 +21,7 @@ import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
   buildSync, type SyncUnit,
   breakerPool, breakerAmps, buildPhotocell,
-  MCC_KINDS, mccKws, mccTypes, buildMcc, buildTwoSpeed, prevSpeedKw, TWO_SPEED,
+  MCC_KINDS, mccKws, mccTypes, buildMcc,
   PFC_DEFAULT, pfcTotalKvar, pfcHeader, buildPfc,
   WD_OPTIONS, buildWd, wdKeyFor, WD_ACCESSORIES, wdAccessoryName,
   MOTORIZED_FRAMES, buildMotorized, motorizedFrameKey,
@@ -5027,15 +5027,9 @@ function PhotocellBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: stri
 
 function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
   const [kind, setKind] = useState(MCC_KINDS[0] ?? "DOL-3Ph");
-  const twoSpeed = kind === TWO_SPEED;
   const kws = useMemo(() => mccKws(kind), [kind]);
-  const [kw, setKw] = useState(kws[0] ?? ""); // Two Speed: the HIGH-speed kW (primary)
-  // Two Speed defaults to High 11 kW (→ Low 5.5 kW); other starters use the first kW.
-  useEffect(() => { const list = mccKws(kind); setKw(kind === TWO_SPEED ? (list.find((k) => k === "11 kW") ?? list[0] ?? "") : (list[0] ?? "")); }, [kind]);
-  // Two Speed low-speed kW — defaults to ~half the high speed (rounded to a standard),
-  // still editable.
-  const [lowKw, setLowKw] = useState("");
-  useEffect(() => { if (twoSpeed) setLowKw(prevSpeedKw(kw)); }, [kw, twoSpeed]);
+  const [kw, setKw] = useState(kws[0] ?? "");
+  useEffect(() => { const list = mccKws(kind); setKw(list[0] ?? ""); }, [kind]);
   const types = useMemo(() => mccTypes(kind, kw), [kind, kw]);
   const [type, setType] = useState(2);
   useEffect(() => setType(types.includes(2) ? 2 : (types[0] ?? 1)), [types]); // default Type 2 when available
@@ -5062,26 +5056,15 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
     <div className="rounded-lg border border-line p-3">
       <div className="flex flex-wrap items-end gap-3">
         <div><L>Starter</L><Sel value={kind as any} onChange={(v) => setKind(v)} options={MCC_KINDS as any} className="w-36" /></div>
-        {twoSpeed ? (
-          <>
-            <div><L>High Speed (kW)</L><Sel value={kw as any} onChange={(v) => setKw(v)} options={kws as any} className="w-32" /></div>
-            <div><L>Low Speed (kW)</L><Sel value={lowKw as any} onChange={(v) => setLowKw(v)} options={kws as any} className="w-32" /></div>
-          </>
-        ) : (
-          <>
-            <div><L>Motor (kW)</L><Sel value={kw as any} onChange={(v) => setKw(v)} options={kws as any} className="w-32" /></div>
-            <div><L>Type</L><Sel value={String(type) as any} onChange={(v) => setType(+v)} options={types.map(String) as any} className="w-24" /></div>
-          </>
-        )}
+        <div><L>Motor (kW)</L><Sel value={kw as any} onChange={(v) => setKw(v)} options={kws as any} className="w-32" /></div>
+        <div><L>Type</L><Sel value={String(type) as any} onChange={(v) => setType(+v)} options={types.map(String) as any} className="w-24" /></div>
         <div><L>Qty</L><input className="input w-20" inputMode="numeric" value={qty}
           onChange={(e) => setQty(Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1))} /></div>
         <label className="flex cursor-pointer select-none items-center gap-1.5 pb-2 text-xs font-semibold text-ink">
           <input type="checkbox" className="cursor-pointer accent-brand" checked={withCtl} onChange={(e) => setWithCtl(e.target.checked)} /> + control acc.
         </label>
         <button className="btn-ghost"
-          onClick={() => onPreview(
-            twoSpeed ? buildTwoSpeed(kw, lowKw, withCtl, qty) : buildMcc(kind, kw, type, withCtl, qty),
-            twoSpeed ? `MCC Two Speed ${kw}/${lowKw}` : `MCC ${kind} ${kw}`)}>
+          onClick={() => onPreview(buildMcc(kind, kw, type, withCtl, qty), `MCC ${kind} ${kw}`)}>
           Generate combination
         </button>
         {/* KVA → kW converter — fills the Motor (kW) above from KVA × P.F (rounded up). */}
