@@ -2034,9 +2034,11 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
   // back to SR-Basic when that family has no box tall enough; LCP just uses the cheapest box.
   const autoBoxFam = (g: number, family: string, cont = content): { box?: { H: number; W: number; D: number }; family: string } => {
     if (!isKwhm) return { box: lcpAutoSize(g, family) ?? undefined, family };
-    const box = kwhmAutoSize(g, cont, family);
-    if (!box && family !== "SR-Basic") return { box: kwhmAutoSize(g, cont, "SR-Basic") ?? undefined, family: "SR-Basic" };
-    return { box: box ?? undefined, family };
+    // kwhmAutoSize returns the cheapest box across the family AND SR-Basic (which stocks
+    // every width), plus the family that box belongs to — so a width the panel family
+    // lacks (e.g. 60 cm for 4 KWHM in Local) is filled from SR-Basic and switches to it.
+    const r = kwhmAutoSize(g, cont, family);
+    return { box: r.box ?? undefined, family: r.family };
   };
   const applyBox = (patch: Partial<LvPanel>, g: number, family: string, cont = content) => {
     if (isDouble) return;                                   // Double: sizes are manual
@@ -2127,7 +2129,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
   const WIDTH_CM = [40, 60, 80, 100];
   const GROUPS_PER_ROW = [2, 3, 4, 5];
   const sizeBuilds = kwhmMode
-    ? kwhmBuilds(G, content, fam).map((b) => ({ key: b.W, widthCm: b.W / 10, perRow: b.perRow, N: b.N, H: b.H, W: b.W, D: b.D, price: lcpEnclosureDbPrice({ H: b.H, W: b.W, D: b.D }, f, fam) }))
+    ? kwhmBuilds(G, content, fam).map((b) => ({ key: b.W, widthCm: b.W / 10, perRow: b.perRow, N: b.N, H: b.H, W: b.W, D: b.D, price: lcpEnclosureDbPrice({ H: b.H, W: b.W, D: b.D }, f, b.fam) }))
     : lcpBuilds(G).map((b) => {
         const s = lcpRealBox({ H: b.H, W: b.W, D: b.D }, fam);
         return { key: b.base, widthCm: WIDTH_CM[b.base], perRow: GROUPS_PER_ROW[b.base], N: b.N, H: s.H, W: s.W, D: s.D, price: lcpEnclosureDbPrice(s, f, fam) };
@@ -2593,6 +2595,9 @@ function SelectivityTab({ s, upPanel }: { s: LvState; upPanel: (id: string, patc
   const panels = s.panels.filter((p) => !p.spare);
   // Distinct "Fed From" values seen across the panels → the header filter's options.
   const fedOptions = Array.from(new Set(panels.map((p) => p.fedFrom.trim()).filter(Boolean)));
+  // Panel-by-name → look up the "Fed From" (feeding) panel to read its incomer for the
+  // "Incoming of Feeder" column.
+  const byName = new Map(panels.map((x) => [x.name.trim(), x]));
   // Filtering by a source shows every panel fed from it AND the source panel itself
   // (the panel whose name matches) — so the whole feeder group is visible together.
   const rows = panels.map((p, i) => ({ p, no: i + 1 }))
@@ -2615,6 +2620,7 @@ function SelectivityTab({ s, upPanel }: { s: LvState; upPanel: (id: string, patc
                 <tr className="text-left font-bold text-white" style={{ background: "#1f4e79" }}>
                   <th className={`${cell} w-16 text-center`}>Item No.</th>
                   <th className={`${cell} w-56`}>Panel Name</th>
+                  <th className={cell}>Main Incoming</th>
                   <th className={`${cell} w-56`}>
                     <div className="flex items-center gap-2">
                       <span>Fed From</span>
@@ -2627,22 +2633,26 @@ function SelectivityTab({ s, upPanel }: { s: LvState; upPanel: (id: string, patc
                       </select>
                     </div>
                   </th>
-                  <th className={cell}>Main Incoming</th>
+                  <th className={cell}>Incoming of Feeder</th>
                   <th className={`${cell} w-48`}>Adj</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={5} className={`${cell} py-4 text-center text-muted`}>No panels fed from “{fedFilter}”.</td></tr>
+                  <tr><td colSpan={6} className={`${cell} py-4 text-center text-muted`}>No panels fed from “{fedFilter}”.</td></tr>
                 ) : rows.map(({ p, no }) => {
-                  // Main Incoming + Adj are read from the panel's main incoming breaker.
+                  // Main Incoming + Adj are read from THIS panel's main incoming breaker;
+                  // Incoming of Feeder = the main incomer of the panel it is Fed From.
                   const inc = selMainIncomer(p);
+                  const feeder = byName.get(p.fedFrom.trim());
+                  const feederInc = feeder ? selMainIncomer(feeder) : null;
                   return (
                   <tr key={p.id}>
                     <td className={`${cell} text-center font-semibold text-muted`}>{no}</td>
                     <td className={cell}><input className={inp} value={p.name} placeholder="Panel name" onChange={(e) => upPanel(p.id, { name: e.target.value })} /></td>
+                    <td className={`${cell} px-3 text-sm`} title="Read from this panel's Main Incoming breaker">{inc ? inc.name : <span className="text-muted/50">—</span>}</td>
                     <td className={cell}><input className={inp} value={p.fedFrom} placeholder="—" onChange={(e) => upPanel(p.id, { fedFrom: e.target.value })} /></td>
-                    <td className={`${cell} px-3 text-sm`} title="Read from the panel's Main Incoming breaker">{inc ? inc.name : <span className="text-muted/50">—</span>}</td>
+                    <td className={`${cell} px-3 text-sm`} title="The Main Incoming breaker of the panel in ‘Fed From’ (the upstream feeder)">{feederInc ? feederInc.name : <span className="text-muted/50">—</span>}</td>
                     <td className={`${cell} px-3 text-sm`} title="Read from the Main Incoming breaker's ADJ.">{inc?.adj?.trim() ? inc.adj : <span className="text-muted/50">—</span>}</td>
                   </tr>
                   );

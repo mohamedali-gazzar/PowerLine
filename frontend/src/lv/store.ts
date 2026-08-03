@@ -364,7 +364,7 @@ export const KWHM_CONTENTS: string[] = ["KWHM", "KWHM+MDRC", "KWHM+MOULDED_CASE"
 // KWHM auto-sizing: meters per row depends on the box width; the box height grows 40 cm per
 // row, then per-Content extras (a breaker allowance + 30 cm clearance) round it UP to a
 // stocked height, and the depth is the smallest stocked depth ≥ the Content minimum.
-export interface KwhmBuild { W: number; perRow: number; N: number; H: number; D: number; }
+export interface KwhmBuild { W: number; perRow: number; N: number; H: number; D: number; fam: string; }
 const KWHM_WIDTHS = [400, 600, 800, 1000];   // 40 / 60 / 80 / 100 cm
 const KWHM_PER_ROW = [1, 2, 3, 4];           // KWHM-3P meters per row at each width
 // Per-Content sizing extras: cbHeight = extra mm of height for the breaker, minDepth = the
@@ -387,40 +387,50 @@ export function kwhmBuilds(meters: number, content: string, fam: string): KwhmBu
   const cfg = KWHM_CONTENT_CFG[content];
   const out: KwhmBuild[] = [];
   if (!cfg || !(meters > 0)) return out;
-  const sizes = lcpSizes(fam);
+  const own = lcpSizes(fam);
+  const srb = fam === "SR-Basic" ? own : lcpSizes("SR-Basic"); // SR-Basic stocks every width — fill gaps
+  // Smallest stocked box in a pool with the given width and enough height + depth.
+  const pick = (sizes: LcpBox[], W: number, target: number): { H: number; D: number } | null => {
+    const atW = sizes.filter((s) => s.W === W && s.H >= target).sort((a, b) => a.H - b.H);
+    if (!atW.length) return null;
+    const H = atW[0].H;
+    const depths = sizes.filter((s) => s.H === H && s.W === W && s.D >= cfg.minDepth).map((s) => s.D).sort((a, b) => a - b);
+    return depths.length ? { H, D: depths[0] } : null;
+  };
   for (let i = 0; i < KWHM_WIDTHS.length; i++) {
     const W = KWHM_WIDTHS[i];
     const perRow = KWHM_PER_ROW[i];
     const N = Math.ceil(meters / perRow);
     const zone = N * 400;                                         // module rows × 40 cm
     const target = zone + cfg.cbFixed + cfg.cbPerRow * N + 300;   // + breaker section + 30 cm clearance
-    const atW = sizes.filter((s) => s.W === W && s.H >= target).sort((a, b) => a.H - b.H);
-    if (!atW.length) continue;
-    const H = atW[0].H;
-    const depths = sizes.filter((s) => s.H === H && s.W === W && s.D >= cfg.minDepth).map((s) => s.D).sort((a, b) => a - b);
-    if (!depths.length) continue;                  // no stocked depth meets the minimum
-    out.push({ W, perRow, N, H, D: depths[0] });
+    // Prefer the panel's family; if it doesn't stock this width tall enough (e.g. Local has
+    // no 600-wide box ≥ ~1100 mm → 4 KWHM at 2/row), fall back to SR-Basic for that width.
+    let hit = pick(own, W, target);
+    let usedFam = fam;
+    if (!hit && fam !== "SR-Basic") { hit = pick(srb, W, target); usedFam = "SR-Basic"; }
+    if (!hit) continue;
+    out.push({ W, perRow, N, H: hit.H, D: hit.D, fam: usedFam });
   }
   return out;
 }
 /** KWHM auto-sizing: Content = KWHM & 1 meter → 400×300×150; otherwise the lowest-priced
  *  candidate box for the Content. Returns null for Content types without a rule yet. */
-export function kwhmAutoSize(meters: number, content: string, fam: string): LcpBox | null {
-  if (!KWHM_CONTENT_CFG[content]) return null;
+export function kwhmAutoSize(meters: number, content: string, fam: string): { box: LcpBox | null; family: string } {
+  if (!KWHM_CONTENT_CFG[content]) return { box: null, family: fam };
   const sizes = lcpSizes(fam);
-  if (!sizes.length) return null;
   if (content === "KWHM" && meters <= 1) {
     const one = sizes.filter((s) => s.H === 400 && s.W === 300).sort((a, b) => a.D - b.D)[0];
-    return one ?? { H: 400, W: 300, D: 150 };
+    return { box: one ?? { H: 400, W: 300, D: 150 }, family: fam };
   }
-  let best: LcpBox | null = null;
-  let bestEur = Infinity;
+  // Cheapest candidate across widths — each priced in the family its box came from
+  // (a width the panel family lacks is filled from SR-Basic, and wins the family too).
+  let best: LcpBox | null = null, bestFam = fam, bestEur = Infinity;
   for (const b of kwhmBuilds(meters, content, fam)) {
     const box = { H: b.H, W: b.W, D: b.D };
-    const eur = lcpBoxEur(box, fam);
-    if (eur < bestEur) { bestEur = eur; best = box; }
+    const eur = lcpBoxEur(box, b.fam);
+    if (eur < bestEur) { bestEur = eur; best = box; bestFam = b.fam; }
   }
-  return best;
+  return { box: best, family: bestFam };
 }
 
 // LCP auto-sizing (SR-Basic). Groups G → rows N → standard height H → the four
@@ -494,8 +504,8 @@ export function lcpBoxOf(p: LvPanel): LcpBox | null {
   const fam = p.panelsSizing?.family ?? "SR-Basic";
   if (p.spareKind === "kwhm") {
     const content = p.content ?? KWHM_CONTENTS[0];
-    // If the chosen family has no box tall enough, fall back to SR-Basic.
-    return kwhmAutoSize(p.noGroups, content, fam) ?? kwhmAutoSize(p.noGroups, content, "SR-Basic");
+    // kwhmAutoSize already falls back to SR-Basic per width for boxes the family lacks.
+    return kwhmAutoSize(p.noGroups, content, fam).box;
   }
   return lcpAutoSize(p.noGroups, fam);
 }
