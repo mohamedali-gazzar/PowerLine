@@ -213,3 +213,26 @@ export function findByName(desc: string): DbComponent | undefined {
     COMPONENTS.find((c) => norm(c.n).startsWith(want.slice(0, 40)))
   );
 }
+
+/** A 3-pole breaker with an LSIG trip unit (ground-fault "G") measures the neutral
+ *  OUTSIDE the breaker, so it needs an external neutral current sensor. Given a
+ *  breaker's name, return the matching sensor's catalogue name (to add alongside it),
+ *  or null when it doesn't apply (4-pole or no LSIG). Sensor selection follows ABB's
+ *  ranges: XT2/XT4 use the per-rating "TA NEUTRO EXT" CTs, XT5/XT6 use frame+rating
+ *  CTs, and XT7/XT7M + the Emax E-frames share the EXT CS N sensors — every name
+ *  matches the catalogue exactly, so the added sensor line carries its price. */
+export function externalNeutralCT(name: string): string | null {
+  const n = name || "";
+  if (!/lsig/i.test(n) || !/\b3P\b/i.test(n)) return null; // 3-pole LSIG only (4-pole has the neutral inside)
+  const amp = parseInt((n.match(/(\d{2,4})\s*A\b/) || [])[1] || "0", 10); // first rating, e.g. "400A"
+  if (/\bXT2[NSH]?\b/i.test(n)) return amp <= 25 ? "TA NEUTRO EXT 25A XT2" : amp <= 63 ? "TA NEUTRO EXT 63A XT2" : amp <= 100 ? "TA NEUTRO EXT 100A XT2" : "TA NEUTRO EXT 160A XT2";
+  if (/\bXT4[NSH]?\b/i.test(n)) return "TA NEUTRO EXT 250A XT4"; // one sensor covers the XT4 frame
+  if (/\bXT5[NSH]?\b/i.test(n)) return amp <= 500 ? "EXT CT N XT5 400 A EKIP DIP IEC/UL" : "EXT CT N XT5 630 A EKIP DIP IEC";
+  if (/\bXT6[NSH]?\b/i.test(n)) return amp <= 630 ? "EXT CT N XT6 630 A EKIP DIP IEC" : "EXT CT N XT6 800 A EKIP DIP IEC/UL";
+  if (/\bXT7/i.test(n)) return "EXT CS N E1.2-E2.2-XT7-XT7M 2000A"; // XT7 / XT7M
+  if (/\bE1\.2/i.test(n)) return "EXT CS N E1.2-E2.2-XT7-XT7M 2000A";
+  if (/\bE2\.2/i.test(n)) return amp <= 2000 ? "EXT CS N E1.2-E2.2-XT7-XT7M 2000A" : "EXT CS N E2.2 2500A";
+  if (/\bE4\.2/i.test(n)) return amp <= 3200 ? "EXT CS N E4.2 3200A" : "EXT CS E4.2 4000A - E6.2 N 50%";
+  if (/\bE6\.2/i.test(n)) return "EXT CS N E6.2";
+  return null;
+}

@@ -7,6 +7,7 @@ import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
   PANEL_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
   COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp,
+  findByName, externalNeutralCT,
   type DbComponent, type DbEnclosure,
 } from "../lv/catalog";
 import {
@@ -728,6 +729,36 @@ function ExportWarnModal({ checks, onClose, onProceed }: { checks: ExportCheck[]
         <div className="mt-5 flex justify-end gap-2">
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn-primary" onClick={onProceed}>Export anyway</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/** LSIG breaker → offer its matching external-neutral current sensor. Shown right
+ *  after a 3-pole LSIG breaker is added; "Add sensor" drops the sensor beside it. */
+function NeutralPromptModal({ breaker, sensor, onAdd, onClose }: { breaker: string; sensor: string; onAdd: () => void; onClose: () => void }) {
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print"
+      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
+      <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-label="Add external neutral sensor"
+        className="relative w-full max-w-lg rounded-xl2 border border-line bg-white p-6 shadow-lift animate-pop">
+        <div className="mb-3 flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-tint text-xl">⚡</div>
+          <div>
+            <h2 className="text-lg font-extrabold tracking-tight text-ink">External neutral sensor</h2>
+            <p className="text-sm text-muted">A 3-pole LSIG breaker senses the neutral outside the breaker.</p>
+          </div>
+        </div>
+        <div className="rounded-lg border border-line bg-surface p-3 text-[13px] leading-relaxed text-ink">
+          <p><b>{breaker}</b> is a 3-pole LSIG breaker — its ground-fault (G) protection needs an external neutral current sensor.</p>
+          <p className="mt-2">Add <b className="text-brand-dark">{sensor}</b> to this section?</p>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button className="btn-ghost" onClick={onClose}>Skip</button>
+          <button className="btn-primary" onClick={onAdd} autoFocus>Add sensor</button>
         </div>
       </div>
     </div>,
@@ -3336,6 +3367,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   // Picking a search result opens a small qty popup before the component is added.
   const [pending, setPending] = useState<DbComponent | null>(null);
   const [pendQty, setPendQty] = useState(""); // empty box — typed number becomes the qty (blank = 1)
+  // Styled "add the external neutral sensor?" prompt shown after a 3-pole LSIG breaker
+  // is added (the breaker is added immediately; this offers its matching sensor).
+  const [neutralPrompt, setNeutralPrompt] = useState<null | { breaker: string; sensor: string; sec: string; qty: number; extra?: Partial<PanelComponent> }>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const searchWrapRef = useRef<HTMLDivElement>(null);
@@ -3739,6 +3773,33 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     requestAnimationFrame(() => requestAnimationFrame(() => {
       cardRef.current?.querySelector(`tr[data-cid="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
     }));
+  // A 3-pole LSIG breaker senses the neutral OUTSIDE the breaker, so it needs an
+  // external neutral current sensor — after adding one, offer to add the matching
+  // sensor (frame + rating) to the same section. Returns the sensor to add, or null.
+  // Sensor row: priced from the catalogue when the part exists, else a named 0-price
+  // line (auto-prices once that part is catalogued under this name).
+  const sensorRow = (name: string, sec: string, qty: number, extra?: Partial<PanelComponent>): PanelComponent => {
+    const c = findByName(name);
+    const row = c ? toPanelComponent(c, sec, qty) : freeComponent(name, sec, qty);
+    return extra ? { ...row, ...extra } : row;
+  };
+  // Confirmed from the modal: add the neutral sensor next to its breaker (into the
+  // combination group when the breaker joined one, else at the end of the section).
+  const confirmNeutral = () => {
+    if (!neutralPrompt) return;
+    const { sensor, sec, qty, extra } = neutralPrompt;
+    const row = sensorRow(sensor, sec, qty, extra);
+    if (extra?.group) {
+      const arr = [...p.components];
+      let lastIdx = -1;
+      arr.forEach((x, i) => { if (x.section === sec && !isSpacer(x) && (effGroup.get(x.id) || "") === extra.group) lastIdx = i; });
+      if (lastIdx >= 0) arr.splice(lastIdx + 1, 0, row); else arr.push(row);
+      u({ components: arr });
+    } else {
+      u({ components: [...p.components, row] });
+    }
+    setNeutralPrompt(null);
+  };
   const add = (c: DbComponent, qty = 1) => {
     const base = Math.max(1, qty);
     const t = addTarget;
@@ -3755,6 +3816,8 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       if (lastIdx < 0) { setAddTarget(null); return; }
       arr.splice(lastIdx + 1, 0, nc);
       u({ components: arr });
+      const sensor = externalNeutralCT(c.n);
+      if (sensor) setNeutralPrompt({ breaker: c.n, sensor, sec: t.sec, qty: base * cq, extra: { baseQty: base, group: t.group, ...(scalable ? { comboScalable: true } : {}), ...(cid ? { comboId: cid } : {}) } });
       setQ("");
       refocusSearch();
       revealRow(nc.id);
@@ -3762,6 +3825,8 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     }
     const nc = toPanelComponent(c, p.activeSection, base);
     u({ components: [...p.components, nc] });
+    const sensor = externalNeutralCT(c.n);
+    if (sensor) setNeutralPrompt({ breaker: c.n, sensor, sec: p.activeSection, qty: base });
     setQ("");
     // Return focus to the search box so the next component can be typed without the mouse.
     refocusSearch();
@@ -3838,6 +3903,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
         </button>
       </div>
       {replaceOpen && <ReplaceComponentModal s={s} replaceComponent={replaceComponent} factors={s.factors} onClose={() => setReplaceOpen(false)} />}
+      {neutralPrompt && <NeutralPromptModal breaker={neutralPrompt.breaker} sensor={neutralPrompt.sensor} onAdd={confirmNeutral} onClose={() => setNeutralPrompt(null)} />}
 
       {/* Sticky header: section tabs + search bar stay pinned below the tab bar while
           the component list scrolls; unpins automatically when this card ends. */}
