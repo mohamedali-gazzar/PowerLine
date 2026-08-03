@@ -37,6 +37,7 @@ import {
   retireLvItem,
   getLvCatalog,
 } from "./controllers/pricing-lv.controller";
+import { getAbbDatasheet } from "./controllers/abb.controller";
 import {
   postLvImportPreview,
   postLvImportApply,
@@ -112,6 +113,8 @@ export function createApp() {
   app.post("/api/pricing/rmu", requireAuth, requirePriceAdmin, createRmuPrice);
   // LV catalogue (2,121 components + 253 enclosures)
   app.get("/api/catalog/lv", requireAuth, getLvCatalog);
+  // ABB data-sheet proxy — resolve + stream a component's PDF by order code
+  app.get("/api/abb/datasheet", requireAuth, getAbbDatasheet);
   app.get("/api/pricing/lv", requireAuth, requirePriceAdmin, listLvPrices);
   app.get("/api/pricing/lv/facets", requireAuth, requirePriceAdmin, getLvFacets);
   app.patch("/api/pricing/lv/:id", requireAuth, requirePriceAdmin, updateLvPrice);
