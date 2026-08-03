@@ -24,6 +24,7 @@ import {
   MCC_KINDS, mccKws, mccTypes, buildMcc, buildTwoSpeed, prevSpeedKw, TWO_SPEED,
   PFC_DEFAULT, pfcTotalKvar, pfcHeader, buildPfc,
   WD_OPTIONS, buildWd,
+  MOTORIZED_FRAMES, buildMotorized,
   buildIndicationLamps, buildPushButtons, buildFire,
   type ComboLine, type AtsTypeId,
 } from "../lv/combos";
@@ -3324,7 +3325,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   };
   // Row-2 circuit combinations (smaller sub-row under the section pills). P.F.C is NOT here —
   // it's triggered from the sections row (beside Outgoings) since it builds its own section.
-  const COMBOS = [["lamps", "Indication Lamps"], ["pushbtn", "Push Buttons"], ["fire", "Fire"], ["ats", "ATS"], ["sync", "Synchronization"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["wd", "WD kit"], ["custom", "New Combination"]] as const;
+  const COMBOS = [["lamps", "Indication Lamps"], ["pushbtn", "Push Buttons"], ["fire", "Fire"], ["ats", "ATS"], ["sync", "Synchronization"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["motorized", "Motorized C.B"], ["wd", "WD kit"], ["custom", "New Combination"]] as const;
   // Word-style row inserter: drop an empty row (spacer) after a given component, or at
   // the top of the section when afterId is null.
   const insertSpacerAfter = (sec: string, afterId: string | null) => {
@@ -4136,6 +4137,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
           {comboKind === "photocell" && <PhotocellBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "mcc" && <MccBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "wd" && <WdBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
+          {comboKind === "motorized" && <MotorizedBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "lamps" && <LampsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "pushbtn" && <PushButtonsBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
           {comboKind === "fire" && <FireBuilder onPreview={(l, t) => { setPreview(l); setTag(t); }} />}
@@ -4776,7 +4778,7 @@ function ReplaceComponentModal({ s, replaceComponent, factors, onClose }: {
 }
 
 // ── Combination builders (RPT-03) ────────────────────────────────────────────
-type ComboKind = "ats" | "sync" | "photocell" | "mcc" | "pfc" | "wd" | "lamps" | "pushbtn" | "fire" | "custom";
+type ComboKind = "ats" | "sync" | "photocell" | "mcc" | "pfc" | "wd" | "motorized" | "lamps" | "pushbtn" | "fire" | "custom";
 function BreakerSelect({ label, value, onPick, pool, placeholder = "Search breaker…" }: {
   label: string; value: DbComponent | null; onPick: (c: DbComponent) => void; pool: DbComponent[]; placeholder?: string;
 }) {
@@ -5147,6 +5149,26 @@ function WdBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => 
         <button className="btn-ghost" onClick={() => onPreview(buildWd(key), "WD kit")}>Generate kit</button>
       </div>
       <p className="mt-2 text-[11px] text-muted">Adds the fixed part + moving part kit for the selected withdrawable breaker.</p>
+    </div>
+  );
+}
+
+function MotorizedBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
+  const [frame, setFrame] = useState(MOTORIZED_FRAMES[0] ?? "");
+  return (
+    <div className="rounded-lg border border-line p-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <L>Breaker frame</L>
+          <select className="input w-48 cursor-pointer" value={frame} onChange={(e) => setFrame(e.target.value)}>
+            {MOTORIZED_FRAMES.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
+        </div>
+        <button className="btn-ghost" onClick={() => onPreview(buildMotorized(frame), `Motorized C.B — ${frame}`)}>Generate</button>
+      </div>
+      {frame === "XT7"
+        ? <p className="mt-2 text-[11px] font-semibold text-amber-700">On XT7 the breaker must be the XT7M (motorizable) variant.</p>
+        : <p className="mt-2 text-[11px] text-muted">Motor operator + control gear (push buttons, pilots, selector) for the selected frame.</p>}
     </div>
   );
 }

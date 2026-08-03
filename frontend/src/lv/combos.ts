@@ -427,6 +427,18 @@ export function buildWd(key: string): ComboLine[] {
   return out;
 }
 
+// ── Motorized C.B ────────────────────────────────────────────────────────────
+// Motor operator + control gear (push buttons, pilots, selector) to motorize a
+// breaker, keyed by frame family. NOTE: on XT7 the breaker must be the XT7M
+// (motorizable) variant — the XT7 recipe uses the "M XT7M …" motor accordingly.
+export const MOTORIZED_FRAMES = Object.keys((COMBOS as any).motorized as Record<string, string[]>);
+export function buildMotorized(frame: string): ComboLine[] {
+  const parts = ((COMBOS as any).motorized as Record<string, string[]>)[frame];
+  if (!parts) return [];
+  const label = `Motorized C.B — ${frame}`;
+  return parts.map((desc) => ({ qty: 1, desc, comp: findByName(desc), groupLabel: label }));
+}
+
 // ── Indication Lamps ─────────────────────────────────────────────────────────
 // Fixed three-lamp signalling set: Red / Green / Yellow pilot lights (LED 230 V AC).
 export const INDICATION_LAMPS: { qty: number; desc: string }[] = [
