@@ -7,7 +7,7 @@ import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
   PANEL_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
   COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp,
-  findByName, externalNeutralCT,
+  findByName, externalNeutralCT, copperTypeFactor,
   type DbComponent, type DbEnclosure,
 } from "../lv/catalog";
 import {
@@ -2894,6 +2894,7 @@ function CopperBreakdownWindow({ which, p, calc, f, onClose }: {
   const isPillar = p.panelsSizing?.family === "Pillars";
   const height = panelHeightMm(p); // Pillars → fixed 1000 mm; else parsed from Sizing (1)
   const poles = p.busbarPoles || 3;
+  const plating = copperTypeFactor(p.copperType); // Bare 1 · Raychem 1.02 · Tin 1.05 · Silver 1.15
   const isDouble = p.panelsSizing?.layout === "Double";
   // Cu-connection contribution per component: (kg/pole) × poles × qty.
   const col: "cuP" | "cuC" = p.sizingMode === "cells" ? "cuC" : "cuP";
@@ -2929,8 +2930,8 @@ function CopperBreakdownWindow({ which, p, calc, f, onClose }: {
             <div className="space-y-0.5 text-muted">
               <div>Bar section <b className="text-ink">{area} mm²</b> — {isPillar ? "fixed pillar standard" : <>from incomer rating <b className="text-ink">{p.ratingA} A</b></>}</div>
               <div>Panel height <b className="text-ink">{height} mm</b> — {isPillar ? "fixed pillar height" : <>from Sizing (1) “{slot1?.name}”</>}</div>
-              <div>Poles <b className="text-ink">{poles}</b> · copper density <b className="text-ink">0.000009</b> kg/mm³{isDouble && <> · <b className="text-ink">Double ×2</b></>}</div>
-              <div className={eq}>{area} × {height} × {poles} × 0.000009{isDouble ? " × 2" : ""} = <b>{fmtNum(calc.busbarKg)} kg</b></div>
+              <div>Poles <b className="text-ink">{poles}</b> · copper density <b className="text-ink">0.000009</b> kg/mm³{isDouble && <> · <b className="text-ink">Double ×2</b></>}{plating !== 1 && <> · plating <b className="text-ink">{p.copperType} ×{plating}</b></>}</div>
+              <div className={eq}>{area} × {height} × {poles} × 0.000009{isDouble ? " × 2" : ""}{plating !== 1 ? ` × ${plating}` : ""} = <b>{fmtNum(calc.busbarKg)} kg</b></div>
               <div className={eq}>{fmtNum(calc.busbarKg)} kg × {fmtEgp(rate)} EGP/kg = <b>{fmtEgp(calc.busbarCost)} EGP</b></div>
             </div>
           ) : (

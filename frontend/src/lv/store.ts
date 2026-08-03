@@ -907,8 +907,10 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   const cuConnCost = cuWeight * f.copper;
   // Main busbar: auto rule for sheet-metal panels, else the manual entry. Priced by weight ×
   // copper rate × the plating factor (Bare 1 · Raychem 1.02 · Tin-plated 1.05 · Silver 1.15).
-  const busbarKg = mainBusbarAuto(p) ?? (p.mainBusbarKg || 0);
-  const busbarCost = busbarKg * f.copper * copperTypeFactor(p.copperType);
+  // Plating premium (Bare 1 · Raychem 1.02 · Tin-plated 1.05 · Silver-plated 1.15)
+  // multiplies the busbar copper WEIGHT — so both the KG shown and the cost carry it.
+  const busbarKg = (mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) * copperTypeFactor(p.copperType);
+  const busbarCost = busbarKg * f.copper;
   // Kit = a % of the enclosure cost minus the cell Sides, per system (see kitRate).
   const kits = Math.max(0, enclCost - sideCost) * kitRate(p);
   const unitCost = compCost + enclCost + cuConnCost + busbarCost + kits;
@@ -983,7 +985,7 @@ export function buildMaterialList(s: LvState): MaterialList {
         eur: it.eur,
       });
     }
-    copperKg += (mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) * mult;
+    copperKg += (mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) * copperTypeFactor(p.copperType) * mult;
     // Sizing & Copper cell tables → their own supplier buckets
     if (p.sizingMode === "cells") {
       for (const r of p.cellConfig.rows) {
