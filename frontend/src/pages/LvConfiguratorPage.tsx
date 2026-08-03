@@ -23,7 +23,7 @@ import {
   breakerPool, breakerAmps, buildPhotocell,
   MCC_KINDS, mccKws, mccTypes, buildMcc, buildTwoSpeed, prevSpeedKw, TWO_SPEED,
   PFC_DEFAULT, pfcTotalKvar, pfcHeader, buildPfc,
-  WD_OPTIONS, buildWd,
+  WD_OPTIONS, buildWd, wdKeyFor, WD_ACCESSORIES, wdAccessoryName,
   MOTORIZED_FRAMES, buildMotorized, motorizedFrameKey,
   buildIndicationLamps, buildPushButtons, buildFire,
   type ComboLine, type AtsTypeId,
@@ -31,6 +31,11 @@ import {
 import { rankSearchOptions } from "../lv/search";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
+import wdFldImg from "../assets/wd-fld.png";
+import wdRhdImg from "../assets/wd-rhd.png";
+import wdRheImg from "../assets/wd-rhe.png";
+// Guide photos for the W.D operating-mechanism accessories (shown when picked).
+const WD_ACC_IMG: Record<string, string> = { fld: wdFldImg, rhd: wdRhdImg, rhe: wdRheImg };
 import * as XLSX from "xlsx";
 import {
   PRO_E_DEPTHS, PRO_E_THICKNESS, PRO_E_IPS, IS2_DEPTHS, PLP_DEPTHS,
@@ -5136,19 +5141,53 @@ function PfcBuilder({ onPreview, syncKvar }: { onPreview: (l: ComboLine[], tag: 
 }
 
 function WdBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
-  const [key, setKey] = useState(WD_OPTIONS[0]?.key ?? "");
+  const pool = useMemo(() => atsBreakerPool().filter((c) => wdKeyFor(c)), []); // only breakers with a WD kit (no MCBs / junk)
+  const [cb, setCb] = useState<DbComponent | null>(null);
+  const [manualKey, setManualKey] = useState(""); // manual Frame·poles override
+  const [acc, setAcc] = useState("none"); // W.D operating-mechanism accessory
+  const [zoom, setZoom] = useState<string | null>(null); // full-res guide-image lightbox
+  const key = manualKey || (cb ? wdKeyFor(cb) : "") || WD_OPTIONS[0]?.key || "";
+  const labelOf = (k: string) => WD_OPTIONS.find((o) => o.key === k)?.label ?? "?";
+  // A FLD/RHD/RHE choice that has no part for the picked breaker's frame (e.g. FLD on XT7).
+  const accUnavailable = !!cb && acc !== "none" && acc !== "motorized" && !wdAccessoryName(acc, cb);
   return (
     <div className="rounded-lg border border-line p-3">
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <BreakerSelect label="Circuit breaker" value={cb} onPick={(c) => { setCb(c); setManualKey(""); }} pool={pool} placeholder="Search all components…" />
         <div>
-          <L>Frame · poles</L>
-          <select className="input w-48 cursor-pointer" value={key} onChange={(e) => setKey(e.target.value)}>
+          <L>Frame · poles <span className="text-[11px] font-normal text-muted">— auto from C.B, or pick</span></L>
+          <select className="input cursor-pointer" value={key} onChange={(e) => setManualKey(e.target.value)}>
             {WD_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
           </select>
         </div>
-        <button className="btn-ghost" onClick={() => onPreview(buildWd(key), "WD kit")}>Generate kit</button>
+        <div>
+          <L>W.D MCCB accessories</L>
+          <div className="flex items-center gap-2">
+            <select className="input cursor-pointer flex-1" value={acc} onChange={(e) => setAcc(e.target.value)}>
+              {WD_ACCESSORIES.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+            </select>
+            {WD_ACC_IMG[acc] && (
+              <button type="button" onClick={() => setZoom(WD_ACC_IMG[acc])} title="Click to enlarge"
+                className="shrink-0 rounded-md border border-line bg-white p-0.5 hover:border-brand" aria-label="Enlarge guide photo">
+                <img src={WD_ACC_IMG[acc]} alt={`${acc.toUpperCase()} guide`} className="h-9 w-auto cursor-zoom-in" />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
-      <p className="mt-2 text-[11px] text-muted">Adds the fixed part + moving part kit for the selected withdrawable breaker.</p>
+      {cb && <p className="mt-1.5 text-[11px] text-muted">Detected: <b>{labelOf(wdKeyFor(cb))}</b>{manualKey ? ` · using ${labelOf(manualKey)} (manual)` : ""}</p>}
+      {accUnavailable
+        ? <p className="mt-1 text-[11px] font-semibold text-amber-700">{WD_ACCESSORIES.find((a) => a.id === acc)?.label} isn’t offered for this breaker’s frame — it will be skipped.</p>
+        : <p className="mt-1 text-[11px] text-muted">Fixed + moving part kit for the withdrawable breaker (the picked breaker is included){acc !== "none" ? ", plus the chosen operating mechanism" : ""}.</p>}
+      <button className="btn-ghost mt-2" disabled={!key} onClick={() => key && onPreview(buildWd(key, cb ?? undefined, acc), "WD kit")}>Generate kit</button>
+      {zoom && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 no-print" onClick={() => setZoom(null)}
+          onKeyDown={(e) => { if (e.key === "Escape") setZoom(null); }}>
+          <div className="fixed inset-0 bg-ink/70 animate-fade-in" />
+          <img src={zoom} alt="Accessory guide — click to close" className="relative max-h-[85vh] max-w-[92vw] rounded-lg bg-white p-3 shadow-lift animate-pop" />
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

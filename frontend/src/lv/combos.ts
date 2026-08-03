@@ -418,12 +418,59 @@ export const WD_OPTIONS = COMBOS.wd.map((w) => ({
   ...w,
 }));
 
-export function buildWd(key: string): ComboLine[] {
+/** Map a breaker to its WD option key: frame (+ rating band for XT5) + poles from
+ *  the name. E1.2 has a single air option; frames without a WD kit return "". */
+export function wdKeyFor(cb: DbComponent): string {
+  const f = frameOf(cb);
+  if (!f) return "";
+  if (f === "E1.2") return "E1.2-3P-Air"; // single air kit
+  let frame: string | null = null;
+  if (f === "XT2") frame = "XT2";
+  else if (f === "XT4") frame = "XT4";
+  else if (f === "XT5") frame = breakerAmps(cb) <= 400 ? "XT5-400" : "XT5-630";
+  else if (f === "XT6") frame = "XT6";
+  else if (f === "XT7") frame = "XT7";
+  if (!frame) return "";
+  return `${frame}-${/\b4P\b/i.test(cb.n || "") ? "4P" : "3P"}`;
+}
+// Operating mechanism options for a withdrawable MCCB: FLD (direct fault-link
+// handle), rotary handles RHD (direct) / RHE (returned), or full motorization.
+export const WD_ACCESSORIES: { id: string; label: string }[] = [
+  { id: "none", label: "None" },
+  { id: "fld", label: "FLD" },
+  { id: "rhd", label: "Rotary Handle RHD (direct)" },
+  { id: "rhe", label: "Rotary Handle RHE (returned)" },
+  { id: "motorized", label: "Motorized" },
+];
+/** The FLD / RHD / RHE accessory component for a breaker's frame (W variant), or null
+ *  when that accessory isn't offered for the frame (e.g. FLD/RHD have no XT7). */
+export function wdAccessoryName(kind: string, cb: DbComponent): string | null {
+  const f = frameOf(cb);
+  if (!f) return null;
+  const g = f === "XT2" || f === "XT4" ? "XT2-XT4" : f; // XT5 / XT6 / XT7 map directly
+  const M: Record<string, Record<string, string>> = {
+    fld: { "XT2-XT4": "FLD XT2-XT4 W", XT5: "FLD - XT5 W", XT6: "FLD - XT6 W" },
+    rhd: { "XT2-XT4": "RHD XT2-XT4 W STAND. DIRECT", XT5: "RHD XT5 W STAND. DIRECT", XT6: "RHD XT6 W STAND. DIRECT" },
+    rhe: { "XT2-XT4": "RHE XT2-XT4 W STAND. RETURNED", XT5: "RHE XT5 W STAND. RETURNED", XT6: "RHE XT6 W STAND. RETURNED", XT7: "RHE XT7 F/W STAND. RETURNED" },
+  };
+  return M[kind]?.[g] ?? null;
+}
+export function buildWd(key: string, cb?: DbComponent, accessory?: string): ComboLine[] {
   const w = WD_OPTIONS.find((o) => o.key === key);
   if (!w) return [];
   const out: ComboLine[] = [];
+  if (cb) out.push({ qty: 1, desc: cb.n, comp: cb, groupLabel: `WD ${w.frame} breaker` });
   if (w.fp) out.push({ qty: 1, desc: w.fp, comp: findByName(w.fp), groupLabel: `WD ${w.frame} fixed part` });
   if (w.mp) out.push({ qty: 1, desc: w.mp, comp: findByName(w.mp), groupLabel: `WD ${w.frame} moving part` });
+  if (cb && accessory && accessory !== "none") {
+    if (accessory === "motorized") {
+      const fr = motorizedFrameKey(frameOf(cb));
+      if (fr) buildMotorized(fr).forEach((l) => out.push({ ...l, groupLabel: `WD ${w.frame} operator` }));
+    } else {
+      const name = wdAccessoryName(accessory, cb);
+      if (name) out.push({ qty: 1, desc: name, comp: findByName(name), groupLabel: `WD ${w.frame} operator` });
+    }
+  }
   return out;
 }
 
