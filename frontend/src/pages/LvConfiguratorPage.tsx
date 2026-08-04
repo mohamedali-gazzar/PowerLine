@@ -5987,14 +5987,12 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   // Per-item ABB discount (%) — defaults to the Pricing-Settings global, editable
   // per item. Stored by reference||name; drives each ABB item's price in the quote.
   const globalPct = Math.round(s.factors.abbDiscount * 100);
-  // Default for a row: ABB enclosures follow the Pricing-Settings global; ABB products
-  // follow it only when supplied from ABB (priced off the EUR import list, eur > 0) —
-  // locally-priced EGP items default to 0. Every other supplier (incl. cells) defaults
-  // to 0. A per-item value still applies to any of them.
+  // Default for a row: ABB products follow the Pricing-Settings global only when supplied
+  // from ABB (priced off the EUR import list, eur > 0) — locally-priced EGP items default
+  // to 0. Enclosures are quoted at list price and never take the global discount, and every
+  // other supplier (incl. cells) defaults to 0. A per-item value still applies to any of them.
   const defFor = (r: MatRow) =>
-    r.supplier === "ABB Enclosure" ? globalPct
-    : r.supplier === "ABB" && (r.eur ?? 0) > 0 ? globalPct
-    : 0;
+    r.supplier === "ABB" && (r.eur ?? 0) > 0 ? globalPct : 0;
   const abbDisc: AbbDiscCtl = {
     globalPct,
     defaultFor: defFor,
@@ -6022,11 +6020,12 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
     | { kind: "table"; title: string; rows: MatRow[]; withSupplier?: boolean; note?: string }
     | { kind: "copper"; title: string; kg: number };
   const abbNote = "ABB discount (%) is editable per item · defaults from Pricing Settings";
+  const encNote = "Quoted at list price — the ABB discount does not apply · a per-item discount (%) can still be entered";
   const candidates: (Block | false)[] = [
     { kind: "table", title: "ABB Products", rows: ml.abb, note: abbNote },
     !abbOnly && { kind: "table", title: "Other Suppliers", rows: ml.other },
     !abbOnly && { kind: "table", title: "PLP Cells", rows: ml.plpCells },
-    { kind: "table", title: "ABB Enclosures", rows: ml.abbEnclosures, note: abbNote },
+    { kind: "table", title: "ABB Enclosures", rows: ml.abbEnclosures, note: encNote },
     !abbOnly && { kind: "table", title: "IS2", rows: ml.is2 },
     !abbOnly && { kind: "copper", title: "Copper — total project weight", kg: ml.copperKg },
     !abbOnly && { kind: "table", title: "Pro-E", rows: ml.proE },

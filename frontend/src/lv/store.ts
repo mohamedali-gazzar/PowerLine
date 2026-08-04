@@ -879,12 +879,12 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   // (kit = % of the enclosure price *except* the sides).
   let sideCost = 0;
   for (const it of p.panelItems ?? []) {
-    // A per-item Material-List discount applies to any enclosure; without one, only ABB
-    // enclosures follow the global discount (Pro-E / IS2 / PLP keep their list price).
+    // Enclosures are quoted at list price — the global ABB discount covers ABB *products*
+    // only and never an enclosure, whatever the family. A per-item Material-List discount
+    // is still honoured, since that is an explicit, deliberate entry.
     const base = it.eur > 0 ? it.eur * f.euro : it.egp;
-    const isAbbEnc = !["Pro-E", "IS2", "PLP"].includes(it.fam);
     const ov = abbDiscounts?.[abbKey(it)];
-    const frac = ov != null ? ov / 100 : isAbbEnc ? f.abbDiscount : 0;
+    const frac = ov != null ? ov / 100 : 0;
     enclCost += base * (1 - frac) * it.qty;
   }
   if (p.sizingMode === "cells") {
