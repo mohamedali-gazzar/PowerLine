@@ -343,7 +343,7 @@ export const LCP_GROUP_PARTS: { qty: number; name: string }[] = [
   { qty: 1, name: "Pilot Light Red LED 230V AC" },
   { qty: 1, name: "CP1-10G-10 Pushbutton" },
   { qty: 1, name: "CP1-10R-01 Pushbutton" },
-  { qty: 2, name: "Screw Terminal 4mm" },
+  { qty: 2, name: "Terminal Block" }, // ELECON00087 — renamed from "Screw Terminal 4mm"
 ];
 /** The per-group control set × n groups, resolved to priced component rows. */
 export function lcpGroupComponents(n: number): PanelComponent[] {
