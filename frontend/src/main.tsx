@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import App from "./App";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
-import { installCachedCatalog, refreshCatalog } from "./lv/catalogSource";
+import { installCachedCatalog, refreshCatalog, onCatalogChange } from "./lv/catalogSource";
 import { getToken } from "./api";
 import AuthPage from "./pages/AuthPage";
 import HomeDashboard from "./pages/HomeDashboard";
@@ -39,6 +39,12 @@ function Gate() {
   React.useEffect(() => {
     if (user) void refreshCatalog(getToken()).then((v) => { if (v) bumpCatalog(v); });
   }, [user]);
+  // …and again whenever a catalogue lands later in the session. Publishing from
+  // the price list (an edit, an import, the publish button) swaps the catalogue
+  // without the user changing, so without this the configurator would keep the
+  // version it signed in with — showing an old description next to a price list
+  // already displaying the new one.
+  React.useEffect(() => onCatalogChange((v) => bumpCatalog(v)), []);
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-surface">

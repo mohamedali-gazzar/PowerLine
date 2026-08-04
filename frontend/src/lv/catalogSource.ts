@@ -31,6 +31,32 @@ export interface CatalogPayload {
 const LS_KEY = "powerline-catalog"; // one key, overwritten — never version-suffixed
 let loadedVersion = 0;
 
+// The catalogue arrays are mutated in place, so React cannot see a new version
+// land. Anything that publishes (a price edit, an import, the publish button)
+// calls refreshCatalog, and every screen already on screen has to hear about it
+// — otherwise the configurator keeps showing the catalogue it was signed in
+// with while the price list shows the new one.
+type CatalogListener = (version: number) => void;
+const listeners = new Set<CatalogListener>();
+
+/** Subscribe to catalogue swaps. Returns the unsubscribe function. */
+export function onCatalogChange(fn: CatalogListener): () => void {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
+function notify(): void {
+  for (const fn of listeners) {
+    try {
+      fn(loadedVersion);
+    } catch {
+      /* a bad listener must never break a catalogue swap */
+    }
+  }
+}
+
 // A pristine copy of the catalogue shipped in this build, taken before anything
 // can overwrite it. installCatalog() mutates COMPONENTS/ENCLOSURES in place, so
 // without this the bundled prices are unrecoverable once a cached catalogue has
@@ -65,6 +91,7 @@ function restoreBundled(): void {
   Object.assign(DEFAULT_FACTORS.forms, forms);
   rebuildDerived();
   loadedVersion = 0;
+  notify();
 }
 
 export function catalogVersion(): number {
@@ -105,6 +132,7 @@ export function installCatalog(p: CatalogPayload, version: number): void {
   // they must be rebuilt, or a new component is priced correctly but invisible.
   rebuildDerived();
   loadedVersion = version;
+  notify();
 }
 
 /** Fetch the published catalogue and install it. Silent on failure: the app

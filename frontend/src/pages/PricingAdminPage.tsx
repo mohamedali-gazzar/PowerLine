@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type PricingStatus, type RmuPriceRow, type PriceChangeRow, type LvRow } from "../api";
+import { api, getToken, type PricingStatus, type RmuPriceRow, type PriceChangeRow, type LvRow } from "../api";
 import { COMPONENTS, ENCLOSURES, DEFAULT_FACTORS } from "../lv/catalog";
+import { refreshCatalog } from "../lv/catalogSource";
 import LvExcelImport from "../pricing/LvExcelImport";
 
 // Price list — the owner-facing screen.
@@ -149,6 +150,9 @@ export default function PricingAdminPage() {
       const r = await api.pricing.publish();
       setToast(`Published. Everyone sees the new prices from their next click (version ${r.version}).`);
       setConfirming(false);
+      // Pull what was just published into THIS session too, or the configurator
+      // would keep quoting the catalogue this tab signed in with.
+      await refreshCatalog(getToken());
       await loadAll();
     } catch (e) {
       setError((e as Error).message);
@@ -444,6 +448,7 @@ function AddLvComponent({
       });
       setV(empty);
       setOpen(false);
+      void refreshCatalog(getToken()); // adding an item publishes too
       onAdded();
     } catch (e) {
       setErr((e as Error).message);
@@ -562,6 +567,7 @@ function LvPrices() {
     try {
       const r = await api.pricing.lvSetPrice(row.id, kind, eur, egp);
       setRows((rs) => (rs ? rs.map((x) => (x.id === row.id ? r.row : x)) : rs));
+      void refreshCatalog(getToken()); // the server published this edit — keep this session in step
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -585,6 +591,7 @@ function LvPrices() {
     try {
       const r = await api.pricing.lvRetire(row.id, kind, !removing);
       setRows((rs) => (rs ? rs.map((x) => (x.id === row.id ? r.row : x)) : rs));
+      void refreshCatalog(getToken()); // retiring publishes too
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -636,6 +643,9 @@ function LvPrices() {
               setTotal(r.total);
             });
             api.pricing.lvFacets().then(setFacets).catch(() => {});
+            // An import publishes on apply, so this session's catalogue is now a
+            // version behind — reload it or the configurator keeps the old text.
+            void refreshCatalog(getToken());
           }}
         />
       </div>
