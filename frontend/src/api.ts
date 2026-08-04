@@ -174,6 +174,14 @@ export interface LvImportRow {
   poles: number;
 }
 
+/** A non-price column the sheet would rewrite on an already-catalogued item. */
+export interface LvImportFieldChange {
+  field: "d" | "brand" | "t" | "poles";
+  label: string;
+  from: string;
+  to: string;
+}
+
 export interface LvImportDiff {
   kind: "update" | "add";
   entity: "LvComponent" | "LvEnclosure";
@@ -184,6 +192,10 @@ export interface LvImportDiff {
   eur: number;
   egp: number;
   pct?: number;
+  /** False when only data columns moved — the price is left exactly as it is. */
+  priceMoved?: boolean;
+  /** Description / Brand / Type / Poles rewrites carried by this row. */
+  fields?: LvImportFieldChange[];
 }
 
 export interface LvImportSummary {
@@ -197,6 +209,12 @@ export interface LvImportSummary {
   /** New items with no price: not added, because they would quote as free. */
   unpriced: number;
   duplicates: number;
+  /** Update rows that move the price. */
+  priceUpdates: number;
+  /** Update rows that rewrite a data column (description / brand / type / poles). */
+  dataUpdates: number;
+  /** Update rows that rename a description — these can orphan a combination template. */
+  renames: number;
   increases: number;
   decreases: number;
   medianPct: number | null;

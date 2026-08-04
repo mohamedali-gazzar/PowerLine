@@ -214,7 +214,7 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
       const r = await api.pricing.lvImportApply(preview.batchId);
       setPreview(null);
       setDone(
-        `${r.updated.toLocaleString()} price(s) updated, ${r.added} item(s) added — ` +
+        `${r.updated.toLocaleString()} item(s) updated, ${r.added} item(s) added — ` +
           (r.published ? "live in quotations now." : "saved, but publishing failed; press “Update price list & database”."),
       );
       onApplied();
@@ -237,7 +237,7 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
     <>
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn-primary" onClick={pickFile} disabled={!!busy}>
-          {busy || "⬆ Update prices from Excel"}
+          {busy || "⬆ Update from Excel"}
         </button>
         <button className="btn-ghost" onClick={checkAppCatalogue} disabled={!!busy}>
           ⟳ Check app catalogue
@@ -282,7 +282,7 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
 
               {/* Headline counts */}
               <div className="grid gap-2 sm:grid-cols-4">
-                <Stat label="Prices to update" value={s.updates.toLocaleString()} tone="brand" />
+                <Stat label="Items to update" value={s.updates.toLocaleString()} tone="brand" />
                 <Stat label="New items to add" value={String(s.additions)} tone="brand" />
                 <Stat label="Already correct" value={s.unchanged.toLocaleString()} />
                 <Stat label="Left untouched" value={String(s.blankKept)} hint="blank price cell" />
@@ -290,9 +290,22 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
 
               {s.updates > 0 && (
                 <p className="mt-3 rounded-lg border border-line bg-surface p-2.5 text-xs font-semibold text-ink">
-                  {s.increases.toLocaleString()} increase{s.increases === 1 ? "" : "s"} ·{" "}
-                  {s.decreases.toLocaleString()} decrease{s.decreases === 1 ? "" : "s"} · median {pct(s.medianPct)}{" "}
-                  (range {pct(s.minPct)} to {pct(s.maxPct)})
+                  {s.priceUpdates.toLocaleString()} price{s.priceUpdates === 1 ? "" : "s"} ·{" "}
+                  {s.dataUpdates.toLocaleString()} data change{s.dataUpdates === 1 ? "" : "s"}
+                  {s.priceUpdates > 0 && (
+                    <>
+                      {" "}
+                      · {s.increases.toLocaleString()} up · {s.decreases.toLocaleString()} down · median{" "}
+                      {pct(s.medianPct)} (range {pct(s.minPct)} to {pct(s.maxPct)})
+                    </>
+                  )}
+                </p>
+              )}
+
+              {s.renames > 0 && (
+                <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs font-semibold text-amber-800 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">
+                  ⚠ {s.renames.toLocaleString()} description{s.renames === 1 ? "" : "s"} renamed. Combination templates
+                  (ATS / MCC / WD) find parts by description — check the Warnings tab before applying.
                 </p>
               )}
 
@@ -350,17 +363,39 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
                       </tr>
                     </thead>
                     <tbody>
-                      {(tab === "updates" ? preview.updates : preview.additions).map((d, i) => (
-                        <tr key={d.code + i} className="border-t border-line">
+                      {(tab === "updates" ? preview.updates : preview.additions).map((d, i) => {
+                        // A data-only row keeps its price — show it as untouched, not as a move.
+                        const priceHeld = tab === "updates" && d.priceMoved === false;
+                        return (
+                        <tr key={d.code + i} className="border-t border-line align-top">
                           <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-muted">{d.code}</td>
-                          <td className="px-3 py-1.5 text-ink">{d.label}</td>
+                          <td className="px-3 py-1.5 text-ink">
+                            {d.label}
+                            {!!d.fields?.length && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {d.fields.map((fc) => (
+                                  <span
+                                    key={fc.field}
+                                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                      fc.field === "d"
+                                        ? "bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-200"
+                                        : "bg-brand-tint text-brand-dark"
+                                    }`}
+                                    title={`${fc.label}: ${fc.from || "—"} → ${fc.to}`}
+                                  >
+                                    {fc.label}: {fc.from || "—"} → {fc.to}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
                           {tab === "updates" && (
                             <td className="whitespace-nowrap px-3 py-1.5 text-right text-muted">
                               {money(d.fromEur ?? 0, d.fromEgp ?? 0)}
                             </td>
                           )}
                           <td className="whitespace-nowrap px-3 py-1.5 text-right font-semibold text-ink">
-                            {money(d.eur, d.egp)}
+                            {priceHeld ? <span className="font-normal text-muted">kept</span> : money(d.eur, d.egp)}
                           </td>
                           {tab === "updates" && (
                             <td
@@ -368,11 +403,12 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
                                 (d.pct ?? 0) > 0 ? "text-amber-700 dark:text-amber-300" : "text-muted"
                               }`}
                             >
-                              {pct(d.pct)}
+                              {priceHeld ? "—" : pct(d.pct)}
                             </td>
                           )}
                         </tr>
-                      ))}
+                        );
+                      })}
                       {(tab === "updates" ? preview.updates : preview.additions).length === 0 && (
                         <tr>
                           <td colSpan={5} className="p-4 text-center text-muted">

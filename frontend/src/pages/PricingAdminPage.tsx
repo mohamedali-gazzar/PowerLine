@@ -621,11 +621,12 @@ function LvPrices() {
       {/* Bulk update from a spreadsheet — for a whole new supplier price list,
           where editing rows one at a time is not realistic. */}
       <div className="card mb-3 p-3">
-        <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-brand-dark">Update many prices at once</h3>
+        <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-brand-dark">Update many items at once</h3>
         <p className="mb-2 text-xs text-muted">
-          These prices are the ones the configurator quotes from. Upload a supplier price list, or pull in a
+          This is the catalogue the configurator quotes from. Upload a supplier price list, or pull in a
           catalogue that shipped with an app update — either way you see exactly what would change before anything
-          is saved. Items are matched on Item Code, and your own edits are never overwritten silently.
+          is saved. Items are matched on Item Code, then their price, description, brand, type and poles are all
+          brought up to date. A blank cell changes nothing, so your own edits are never overwritten silently.
         </p>
         <LvExcelImport
           onApplied={() => {

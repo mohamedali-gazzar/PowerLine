@@ -5,9 +5,19 @@
 // until the person who uploaded the file has seen the numbers and said yes.
 //
 // Items are matched on the manufacturer part number (Item Code -> ref), which
-// is the only stable identifier the two sides share. Descriptions are NEVER
-// written back: the combination builders look components up by description, so
-// editing one would silently break a build.
+// is the only stable identifier the two sides share. Once matched, the sheet is
+// the source of truth for the component's DATA too — description, brand, type
+// and poles — not just its price. A blank cell always means "no new
+// information" and never overwrites what is already there.
+//
+// Renaming a description is deliberate but not free: the combination builders
+// resolve parts by description (catalog.findByName), so a rename that no
+// template expects orphans that build. The preview flags every rename for that
+// reason — it is never applied silently.
+//
+// An ENCLOSURE's `name` is the one thing still never rewritten: cell matching
+// parses it for dimensions and [fam, name] is unique, so a rename there is a
+// structural change, not a relabel. Enclosure rows update their price only.
 
 import type { Request, Response } from "express";
 import { z } from "zod";
@@ -35,6 +45,26 @@ const previewSchema = z.object({ rows: z.array(rawRowSchema).min(1).max(6000) })
 
 type RawRow = z.infer<typeof rawRowSchema>;
 
+/** One non-price column the sheet would rewrite on an already-catalogued item. */
+export interface FieldChange {
+  /** LvComponent column. Only the keys in APPLIABLE_FIELDS are ever written. */
+  field: "d" | "brand" | "t" | "poles";
+  /** Human label for the preview ("Description", "Brand", …). */
+  label: string;
+  from: string;
+  to: string;
+}
+
+/** The only columns an import may rewrite, and how each reaches the row.
+ *  A whitelist on purpose: the diff is replayed from stored JSON, so nothing
+ *  outside this map can ever be written, whatever a batch claims. */
+const APPLIABLE_FIELDS: Record<FieldChange["field"], string> = {
+  d: "Description",
+  brand: "Brand",
+  t: "Type",
+  poles: "Poles",
+};
+
 export interface DiffEntry {
   kind: "update" | "add";
   entity: "LvComponent" | "LvEnclosure";
@@ -47,6 +77,11 @@ export interface DiffEntry {
   egp: number;
   /** Percent move on the euro price, for the summary. */
   pct?: number;
+  /** False when the sheet left the price blank and only data columns moved —
+   *  apply then leaves the price exactly as it is. */
+  priceMoved?: boolean;
+  /** Non-price columns this row would rewrite (components only). */
+  fields?: FieldChange[];
   row?: RawRow;
 }
 
@@ -74,7 +109,13 @@ export async function postLvImportPreview(req: Request, res: Response) {
     const { rows } = previewSchema.parse(req.body);
 
     const [components, enclosures] = await Promise.all([
-      prisma.lvComponent.findMany({ select: { id: true, ref: true, d: true, n: true, eur: true, egp: true } }),
+      prisma.lvComponent.findMany({
+        select: {
+          id: true, ref: true, d: true, n: true, eur: true, egp: true,
+          // the data columns an import may rewrite, plus the ones that feed `search`
+          t: true, f: true, r: true, brand: true, poles: true,
+        },
+      }),
       prisma.lvEnclosure.findMany({ select: { id: true, ref: true, name: true, eur: true, egp: true } }),
     ]);
     const compByRef = new Map(components.filter((c) => c.ref).map((c) => [normRef(c.ref), c]));
@@ -114,12 +155,40 @@ export async function postLvImportPreview(req: Request, res: Response) {
       const existing = comp ?? encl;
 
       if (existing) {
-        // A blank price cell means "no new information", never "make it free".
-        if (useEur === 0 && useEgp === 0) {
-          if (existing.eur > 0 || existing.egp > 0) blankKept++;
-          continue;
+        // A blank price cell means "no new information", never "make it free" —
+        // but the row can still carry a data change, so it is not skipped here.
+        const priceGiven = useEur > 0 || useEgp > 0;
+        if (!priceGiven && (existing.eur > 0 || existing.egp > 0)) blankKept++;
+        const priceMoved =
+          priceGiven && !(sameMoney(existing.eur, useEur) && sameMoney(existing.egp, useEgp));
+
+        // Data columns. Same rule as the price: a blank cell says nothing.
+        const fields: FieldChange[] = [];
+        if (comp) {
+          const text = (field: FieldChange["field"], was: string, now: string) => {
+            const to = now.trim();
+            if (to && to !== (was ?? "").trim()) {
+              fields.push({ field, label: APPLIABLE_FIELDS[field], from: was ?? "", to });
+            }
+          };
+          text("t", comp.t, row.type);
+          text("d", comp.d, row.description);
+          text("brand", comp.brand, row.brand);
+          if (row.poles > 0 && row.poles !== comp.poles) {
+            fields.push({ field: "poles", label: APPLIABLE_FIELDS.poles, from: String(comp.poles), to: String(row.poles) });
+          }
+          // A rename moves the key the combination builders resolve parts by.
+          if (fields.some((f) => f.field === "d")) {
+            warnings.push(
+              `${row.code}: description renamed — any combination template that names the old text will stop finding this part.`,
+            );
+          }
+        } else if (encl && row.description.trim() && row.description.trim() !== encl.name.trim()) {
+          // An enclosure's name is parsed for dimensions and is half its unique key.
+          warnings.push(`${row.code}: enclosure description differs — left as is (cell matching parses that name). Price still updated.`);
         }
-        if (sameMoney(existing.eur, useEur) && sameMoney(existing.egp, useEgp)) {
+
+        if (!priceMoved && !fields.length) {
           unchanged++;
           continue;
         }
@@ -131,9 +200,12 @@ export async function postLvImportPreview(req: Request, res: Response) {
           label: (comp ? comp.d || comp.n : (encl as { name: string }).name) || row.code,
           fromEur: existing.eur,
           fromEgp: existing.egp,
-          eur: useEur,
-          egp: useEgp,
-          pct: existing.eur > 0 && useEur > 0 ? ((useEur - existing.eur) / existing.eur) * 100 : undefined,
+          // A data-only row replays its own price, so apply never rewrites it.
+          eur: priceMoved ? useEur : existing.eur,
+          egp: priceMoved ? useEgp : existing.egp,
+          pct: priceMoved && existing.eur > 0 && useEur > 0 ? ((useEur - existing.eur) / existing.eur) * 100 : undefined,
+          priceMoved,
+          fields,
         });
         continue;
       }
@@ -172,6 +244,10 @@ export async function postLvImportPreview(req: Request, res: Response) {
       noCode,
       unpriced,
       duplicates,
+      // An update row can move the price, the data columns, or both.
+      priceUpdates: updates.filter((u) => u.priceMoved).length,
+      dataUpdates: updates.filter((u) => (u.fields?.length ?? 0) > 0).length,
+      renames: updates.filter((u) => u.fields?.some((f) => f.field === "d")).length,
       increases: updates.filter((u) => typeof u.pct === "number" && u.pct > 0).length,
       decreases: updates.filter((u) => typeof u.pct === "number" && u.pct < 0).length,
       medianPct: pcts.length ? pcts[Math.floor(pcts.length / 2)] : null,
@@ -243,18 +319,55 @@ export async function postLvImportApply(req: Request, res: Response) {
           // moved between preview and apply.
           const cur = await prisma.lvComponent.findUnique({ where: { id: d.entityId } });
           if (!cur) { skipped++; continue; }
-          await prisma.lvComponent.update({
-            where: { id: cur.id },
-            data: { eur: d.eur, egp: d.egp, updatedBy: by },
-          });
-          await prisma.priceChange.create({
-            data: {
-              domain: "LV", entity: "LvComponent", entityId: cur.id,
-              label: cur.d || cur.n || cur.ref, field: "price",
-              oldValue: `${cur.eur} EUR / ${cur.egp} EGP`, newValue: `${d.eur} EUR / ${d.egp} EGP`,
-              actorId, actorEmail: by,
-            },
-          });
+
+          const data: Record<string, unknown> = { updatedBy: by };
+          // priceMoved is absent on batches previewed before data columns existed —
+          // those were price-only by definition, so undefined must mean "write it".
+          const writePrice = d.priceMoved !== false;
+          if (writePrice) { data.eur = d.eur; data.egp = d.egp; }
+
+          // Post-update values, needed for the `search` column below.
+          let nt = cur.t, nd = cur.d, nBrand = cur.brand;
+          for (const fc of d.fields ?? []) {
+            if (!(fc.field in APPLIABLE_FIELDS)) continue; // whitelist — replayed JSON is not trusted
+            if (fc.field === "d") {
+              // d and n are both combination lookup keys and must not drift apart.
+              data.d = fc.to; data.n = fc.to; nd = fc.to;
+            } else if (fc.field === "brand") {
+              data.brand = fc.to; nBrand = fc.to;
+            } else if (fc.field === "t") {
+              data.t = fc.to; nt = fc.to;
+            } else if (fc.field === "poles") {
+              data.poles = Number(fc.to) || 0;
+            }
+          }
+          // Keep the one lowercase column the price-list search reads (schema: "t f r d ref brand").
+          if ((d.fields?.length ?? 0) > 0) data.search = searchText(nt, cur.f, cur.r, nd, cur.ref, nBrand);
+
+          await prisma.lvComponent.update({ where: { id: cur.id }, data });
+
+          if (writePrice) {
+            await prisma.priceChange.create({
+              data: {
+                domain: "LV", entity: "LvComponent", entityId: cur.id,
+                label: cur.d || cur.n || cur.ref, field: "price",
+                oldValue: `${cur.eur} EUR / ${cur.egp} EGP`, newValue: `${d.eur} EUR / ${d.egp} EGP`,
+                actorId, actorEmail: by,
+              },
+            });
+          }
+          // One audit row per data column, so the history reads field by field.
+          for (const fc of d.fields ?? []) {
+            if (!(fc.field in APPLIABLE_FIELDS)) continue;
+            await prisma.priceChange.create({
+              data: {
+                domain: "LV", entity: "LvComponent", entityId: cur.id,
+                label: cur.d || cur.n || cur.ref, field: fc.label.toLowerCase(),
+                oldValue: fc.from, newValue: fc.to,
+                actorId, actorEmail: by,
+              },
+            });
+          }
         } else {
           const cur = await prisma.lvEnclosure.findUnique({ where: { id: d.entityId } });
           if (!cur) { skipped++; continue; }
