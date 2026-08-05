@@ -446,7 +446,7 @@ export async function getLvCatalogChanges(req: Request, res: Response) {
         where,
         orderBy: [{ version: "desc" }, { createdAt: "desc" }],
         take: CHANGE_DETAIL_CAP,
-        select: { version: true, label: true, field: true, oldValue: true, newValue: true, actorEmail: true, createdAt: true },
+        select: { version: true, label: true, field: true, oldValue: true, newValue: true, actorEmail: true, createdAt: true, entity: true, entityId: true },
       }),
       prisma.priceChange.count({ where }),
     ]);
@@ -456,13 +456,37 @@ export async function getLvCatalogChanges(req: Request, res: Response) {
       counts[g.field] = g._count.field;
     }
 
+    // Attach the item itself. An audit row records one field, which is not enough to
+    // describe an item that was ADDED or REMOVED ("every data about it"), and not
+    // enough to say whether a brand change turned the ABB discount on or off — that
+    // needs the price too, since the discount only applies to EUR-priced ABB lines.
+    const compIds = [...new Set(rows.filter((r) => r.entity === "LvComponent").map((r) => r.entityId))];
+    const enclIds = [...new Set(rows.filter((r) => r.entity === "LvEnclosure").map((r) => r.entityId))];
+    const [comps, encls] = await Promise.all([
+      compIds.length
+        ? prisma.lvComponent.findMany({
+            where: { id: { in: compIds } },
+            select: { id: true, ref: true, t: true, f: true, r: true, d: true, brand: true, poles: true, cuP: true, cuC: true, stock: true, eur: true, egp: true, active: true },
+          })
+        : [],
+      enclIds.length
+        ? prisma.lvEnclosure.findMany({
+            where: { id: { in: enclIds } },
+            select: { id: true, ref: true, fam: true, name: true, ip: true, mount: true, ral: true, eur: true, egp: true, active: true },
+          })
+        : [],
+    ]);
+    const detail = new Map<string, unknown>();
+    for (const c of comps) detail.set(c.id, c);
+    for (const e of encls) detail.set(e.id, e);
+
     res.setHeader("Cache-Control", "no-cache");
     res.json({
       version: latest,
       from,
       counts,
       total,
-      items: rows,
+      items: rows.map((r) => ({ ...r, detail: detail.get(r.entityId) ?? null })),
       publishedAt: book?.publishedAt ?? null,
       publishedBy: book?.publishedBy ?? "",
       note: book?.note ?? "",

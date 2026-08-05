@@ -237,6 +237,15 @@ export interface LvImportPreview {
   expiresAt: string;
 }
 
+/** The catalogue row an audit line refers to — needed to describe an added or
+ *  removed item in full, and to work out ABB-discount eligibility. */
+export interface CatalogChangeDetail {
+  ref?: string; t?: string; f?: string; r?: string; d?: string;
+  brand?: string; poles?: number; cuP?: number; cuC?: number; stock?: string;
+  fam?: string; name?: string; ip?: string; mount?: string; ral?: string;
+  eur?: number; egp?: number; active?: boolean;
+}
+
 /** One line of the price-list changelog. */
 export interface CatalogChangeItem {
   version: number;
@@ -246,6 +255,9 @@ export interface CatalogChangeItem {
   newValue: string | null;
   actorEmail: string;
   createdAt: string;
+  entity?: string;
+  entityId?: string;
+  detail?: CatalogChangeDetail | null;
 }
 export interface CatalogChanges {
   version: number;
