@@ -1143,16 +1143,11 @@ function ChangeRow({ it }: { it: CatalogChangeItem }) {
   );
 }
 
-/** Cover icons — drawn, not raster, so they stay sharp through the PDF export.
- *  Charcoal linework with ONE orange accent each: the accent marks what the product
- *  actually is (the live part, the door, the breaker), so the orange carries meaning
- *  rather than decorating. Same 32-unit box and stroke weight across all five. */
-const CoverIcon = ({ children }: { children: React.ReactNode }) => (
-  <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.7"
-    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    {children}
-  </svg>
-);
+/** Cover icons — drawn, not raster, so they stay sharp through the PDF export the
+ *  covers go through. All five are traced from photographs of the real products and
+ *  share a 32-unit box, a 1.25 stroke, and charcoal at 6% / 12% / 50% for the greys.
+ *  The orange marks the element that identifies the product — the live indicator,
+ *  the mimic band, the nameplate — so it carries meaning rather than decorating. */
 const ORANGE = "#F16722";
 /** Pilot-light colours on the LV panel icon — green / red / yellow, as on the real
  *  door. The ONLY departure from the three-colour brand palette on the cover; swap
@@ -1236,13 +1231,36 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
   {
     title: "Secondary Switchgear",
     items: ["PRAL", "PSEC", "AEGIS PLUS"],
-    icon: ( // ring unit: switch-disconnector blade off its contact
-      <CoverIcon>
-        <rect x="6" y="6" width="20" height="20" rx="1.5" />
-        <circle cx="16" cy="12" r="1.4" fill={ORANGE} stroke="none" />
-        <line x1="16" y1="13.4" x2="20" y2="20" />
-        <line x1="11" y1="21" x2="21" y2="21" />
-      </CoverIcon>
+    // RMU line-up drawn from the supplied photograph. The orange mimic band running
+    // across the middle is what identifies this product on sight, so it carries the
+    // accent — three cubicles, instruments above, cable compartments below.
+    icon: (
+      <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.25"
+        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="4.2" y="3.4" width="23.6" height="25" rx="1" fill="rgba(88,88,89,0.06)" />
+        {/* instrument compartments */}
+        {[8.13, 16, 23.87].map((cx) => (
+          <rect key={`m${cx}`} x={cx - 1.7} y="5.6" width="3.4" height="2.7" rx="0.4"
+            fill="rgba(88,88,89,0.5)" stroke="none" />
+        ))}
+        {/* the mimic band — the product's signature */}
+        <rect x="4.2" y="10.6" width="23.6" height="5.6" fill={ORANGE} stroke="none" />
+        {[8.13, 16, 23.87].map((cx) => (
+          <g key={`s${cx}`} stroke="#fff" strokeWidth="0.85">
+            <circle cx={cx} cy="12.6" r="0.85" />
+            <line x1={cx} y1="13.45" x2={cx} y2="14.9" />
+          </g>
+        ))}
+        {/* cable compartments */}
+        <line x1="12.07" y1="16.2" x2="12.07" y2="26.6" />
+        <line x1="19.93" y1="16.2" x2="19.93" y2="26.6" />
+        {[8.13, 16, 23.87].map((cx) => (
+          <rect key={`w${cx}`} x={cx - 1.5} y="17.6" width="3" height="1.7" rx="0.3"
+            fill="rgba(88,88,89,0.55)" stroke="none" />
+        ))}
+        {/* base rail */}
+        <rect x="4.2" y="26.6" width="23.6" height="1.8" rx="0.3" fill="rgba(88,88,89,0.5)" stroke="none" />
+      </svg>
     ),
   },
   {
