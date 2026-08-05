@@ -210,15 +210,22 @@ function paginatePanel(host: HTMLElement, headerEl: HTMLElement | null, panelEl:
  * Must run while the page block is still mounted, or the rects are all zero.
  */
 function addPageLinks(pdf: jsPDF, page: HTMLElement): void {
-  const anchors = page.querySelectorAll<HTMLElement>("[data-pdf-link]");
+  // EVERY anchor, not just tagged ones — the cover's certifications, address, phone,
+  // email and social icons are ordinary <a> elements and were all dead in the export.
+  // data-pdf-link stays supported as an override for a clickable area that is not an
+  // anchor. mailto: and tel: work as PDF URI actions just like http.
+  const anchors = page.querySelectorAll<HTMLElement>("a[href], [data-pdf-link]");
   if (!anchors.length) return;
   const box = page.getBoundingClientRect();
   if (!box.width || !box.height) return;
   const sx = PW / box.width;
   const sy = PH / box.height;
+  const seen = new Set<HTMLElement>();
   for (const a of anchors) {
-    const url = a.getAttribute("data-pdf-link");
-    if (!url) continue;
+    if (seen.has(a)) continue; // an anchor carrying data-pdf-link matches both selectors
+    seen.add(a);
+    const url = a.getAttribute("data-pdf-link") || a.getAttribute("href") || "";
+    if (!url || url.startsWith("#")) continue; // in-page anchors mean nothing in the PDF
     const r = a.getBoundingClientRect();
     if (!r.width || !r.height) continue;
     pdf.link((r.left - box.left) * sx, (r.top - box.top) * sy, r.width * sx, r.height * sy, { url });
