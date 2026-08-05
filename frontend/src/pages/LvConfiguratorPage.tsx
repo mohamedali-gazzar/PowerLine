@@ -1154,6 +1154,11 @@ const CoverIcon = ({ children }: { children: React.ReactNode }) => (
   </svg>
 );
 const ORANGE = "#F16722";
+/** Pilot-light colours on the LV panel icon — green / red / yellow, as on the real
+ *  door. The ONLY departure from the three-colour brand palette on the cover; swap
+ *  this line for charcoal tints to bring it back inside the guidelines:
+ *    ["rgba(88,88,89,0.55)", "rgba(88,88,89,0.35)", "rgba(88,88,89,0.18)"]  */
+const PANEL_LAMPS = ["#2FA84F", "#D64545", "#E8B93A"];
 
 /** The product range printed on the offer covers. Edit here — it is the same strip on
  *  the Technical and Commercial covers, which are one component. */
@@ -1161,13 +1166,37 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
   {
     title: "LV Enclosures",
     items: ["PLP MAX", "PLP CORE", "PLP MINI"],
-    icon: ( // cubicle: door split, tiers, live indicator
-      <CoverIcon>
-        <rect x="7" y="4" width="18" height="24" rx="1.5" />
-        <line x1="16" y1="4" x2="16" y2="28" />
-        <line x1="7" y1="12" x2="25" y2="12" />
-        <rect x="18.5" y="15" width="4" height="4" rx="0.8" fill={ORANGE} stroke="none" />
-      </CoverIcon>
+    // LV control panel drawn from the supplied photograph: metering row, pilot
+    // lights, rotary selector, nameplate — the door's actual reading order.
+    //
+    // The lamps are the one place this cover leaves the three-colour palette. Green,
+    // red and yellow are the real indication colours on the door, kept at the owner's
+    // instruction; PANEL_LAMPS is the single switch back to a palette-only version.
+    icon: (
+      <svg viewBox="0 0 32 32" className="h-7 w-7" fill="none" stroke="#585859" strokeWidth="1.25"
+        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="5.5" y="2.5" width="21" height="27" rx="1.2" fill="rgba(88,88,89,0.06)" />
+        {/* 1 — metering: each with a needle, swung to a different reading so the row
+            reads as three live instruments rather than three identical blocks */}
+        {[
+          { x: 8, tip: -1.15 },
+          { x: 13.5, tip: 0 },
+          { x: 19, tip: 1.15 },
+        ].map(({ x, tip }) => (
+          <g key={x}>
+            <rect x={x} y="6.9" width="5" height="4.2" rx="0.5" fill="rgba(88,88,89,0.5)" stroke="none" />
+            <line x1={x + 2.5} y1="10.2" x2={x + 2.5 + tip} y2="8.3" stroke="#fff" strokeWidth="0.9" />
+          </g>
+        ))}
+        {/* 2 — pilot lights: green, red, yellow */}
+        {PANEL_LAMPS.map((c, i) => (
+          <circle key={c} cx={11 + i * 5} cy="15.4" r="1.5" fill={c} stroke="none" />
+        ))}
+        {/* 3 — rotary selector. With the nameplate gone the three rows are re-centred
+            in the door rather than left sitting in its top half. */}
+        <circle cx="16" cy="21.9" r="2.5" fill={ORANGE} stroke="none" />
+        <line x1="16" y1="21.9" x2="16" y2="20.2" stroke="#fff" strokeWidth="1.1" />
+      </svg>
     ),
   },
   {
@@ -1219,12 +1248,26 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
   {
     title: "Primary Switchgear",
     items: ["PLGEAR"],
-    icon: ( // withdrawable breaker: the isolating cross
-      <CoverIcon>
-        <rect x="7" y="4" width="18" height="24" rx="1.5" />
-        <line x1="12" y1="11" x2="20" y2="19" /><line x1="20" y1="11" x2="12" y2="19" />
-        <rect x="13.5" y="23" width="5" height="2.5" rx="0.8" fill={ORANGE} stroke="none" />
-      </CoverIcon>
+    // MV cubicle drawn from the supplied photograph, distilled to what identifies it
+    // at 28px: the protection-relay row, the dark control plate carrying the breaker
+    // mimic, and the cable compartment below.
+    icon: (
+      <svg viewBox="0 0 32 32" className="h-7 w-7" fill="none" stroke="#585859" strokeWidth="1.25"
+        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="5.5" y="2.5" width="21" height="27" rx="1.2" fill="rgba(88,88,89,0.06)" />
+        {/* relay / metering row */}
+        <rect x="7.6" y="4.6" width="16.8" height="5" rx="0.7" fill="rgba(88,88,89,0.12)" />
+        <rect x="9" y="6.1" width="3.4" height="2" rx="0.4" fill={ORANGE} stroke="none" />
+        <rect x="13.8" y="6.1" width="3.4" height="2" rx="0.4" fill={ORANGE} stroke="none" />
+        <rect x="18.6" y="6.1" width="3.4" height="2" rx="0.4" fill={ORANGE} stroke="none" />
+        {/* control plate with the breaker mimic */}
+        <rect x="8.6" y="12" width="14.8" height="9" rx="0.8" fill="rgba(88,88,89,0.82)" stroke="none" />
+        <circle cx="16" cy="15.4" r="1.5" stroke="#fff" strokeWidth="1" />
+        <line x1="16" y1="16.9" x2="16" y2="18.9" stroke="#fff" strokeWidth="1" />
+        {/* cable compartment */}
+        <rect x="7.6" y="23.4" width="16.8" height="4.6" rx="0.7" fill="rgba(88,88,89,0.12)" />
+        <rect x="13.6" y="24.9" width="4.8" height="1.8" rx="0.3" fill="rgba(88,88,89,0.45)" stroke="none" />
+      </svg>
     ),
   },
   {
