@@ -201,6 +201,8 @@ export interface LvImportDiff {
   priceMoved?: boolean;
   /** Description / Brand / Type / Poles rewrites carried by this row. */
   fields?: LvImportFieldChange[];
+  /** Row carried no item code and was matched on description — applied only on opt-in. */
+  noCode?: boolean;
 }
 
 export interface LvImportSummary {
@@ -214,6 +216,9 @@ export interface LvImportSummary {
   /** New items with no price: not added, because they would quote as free. */
   unpriced: number;
   duplicates: number;
+  /** Rows with no item code, matched on description — offered as an opt-in. */
+  noCodeUpdates: number;
+  noCodeAdditions: number;
   /** Update rows that move the price. */
   priceUpdates: number;
   /** Update rows that rewrite a data column (description / brand / type / poles). */
@@ -232,6 +237,8 @@ export interface LvImportPreview {
   summary: LvImportSummary;
   updates: LvImportDiff[];
   additions: LvImportDiff[];
+  /** Rows with no item code, for review before they are included. */
+  noCodeItems: LvImportDiff[];
   warnings: string[];
   truncated: boolean;
   expiresAt: string;
@@ -447,10 +454,10 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ rows }),
       }),
-    lvImportApply: (batchId: string) =>
+    lvImportApply: (batchId: string, includeNoCode = false) =>
       request<{ ok: true; updated: number; added: number; skipped: number; published: boolean; version: number | null; blockers?: string[] }>(
         `/pricing/lv/import/${batchId}/apply`,
-        { method: "POST" },
+        { method: "POST", body: JSON.stringify({ includeNoCode }) },
       ),
     lvImportCancel: (batchId: string) =>
       request<{ ok: true }>(`/pricing/lv/import/${batchId}/cancel`, { method: "POST" }),

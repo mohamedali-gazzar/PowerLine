@@ -100,10 +100,15 @@ export interface DiffEntry {
   priceMoved?: boolean;
   /** Non-price columns this row would rewrite (components only). */
   fields?: FieldChange[];
+  /** True when the sheet row carried no item code and was matched on description
+   *  (or is a brand-new code-less item). Applied only if the uploader opts in. */
+  noCode?: boolean;
   row?: RawRow;
 }
 
 const normRef = (v: string) => String(v ?? "").trim().toUpperCase().replace(/\s+/g, "");
+/** Description key for rows carrying no item code — matches catalog.findByName. */
+const normDesc = (v: string) => String(v ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 const searchText = (...parts: string[]) => parts.join(" ").toLowerCase();
 
 /**
@@ -139,6 +144,17 @@ export async function postLvImportPreview(req: Request, res: Response) {
     ]);
     const compByRef = new Map(components.filter((c) => c.ref).map((c) => [normRef(c.ref), c]));
     const enclByRef = new Map(enclosures.filter((e) => e.ref).map((e) => [normRef(e.ref), e]));
+    // Rows with no item code can only be matched on description, so index the
+    // catalogue that way too. Ambiguous descriptions are never matched silently.
+    const byDesc = new Map<string, typeof components>();
+    for (const c of components) {
+      for (const key of new Set([normDesc(c.d), normDesc(c.n)])) {
+        if (!key) continue;
+        const list = byDesc.get(key) ?? [];
+        list.push(c);
+        byDesc.set(key, list);
+      }
+    }
 
     const diff: DiffEntry[] = [];
     const warnings: string[] = [];
@@ -149,10 +165,109 @@ export async function postLvImportPreview(req: Request, res: Response) {
     const seen = new Set<string>();
     let duplicates = 0;
 
+    type Comp = (typeof components)[number];
+    type Encl = (typeof enclosures)[number];
+    /** The diff for a row that already exists, whether matched by code or by
+     *  description. Returns null when nothing moved. Shared so a code-less row is
+     *  judged by exactly the same rules as a coded one. */
+    const diffForExisting = (comp: Comp | undefined, encl: Encl | undefined, row: RawRow, useEur: number, useEgp: number): DiffEntry | null => {
+      const existing = (comp ?? encl)!;
+      const shown = row.code.trim() || row.description.trim();
+      // A blank price cell means "no new information", never "make it free" —
+      // but the row can still carry a data change, so it is not skipped here.
+      const priceGiven = useEur > 0 || useEgp > 0;
+      if (!priceGiven && (existing.eur > 0 || existing.egp > 0)) blankKept++;
+      const priceMoved = priceGiven && !(sameMoney(existing.eur, useEur) && sameMoney(existing.egp, useEgp));
+
+      // Data columns. Same rule as the price: a blank (or zero) cell says nothing.
+      // Driven off APPLIABLE_FIELDS, so adding a column to the catalogue means
+      // adding one entry there and one alias in the sheet parser — not a new branch.
+      const fields: FieldChange[] = [];
+      if (comp) {
+        const sheet: Record<FieldChange["field"], string | number> = {
+          d: row.description, brand: row.brand, t: row.type, f: row.family, r: row.rating,
+          poles: row.poles, cuP: row.cuP, cuC: row.cuC, stock: row.stock,
+        };
+        for (const key of Object.keys(APPLIABLE_FIELDS) as FieldChange["field"][]) {
+          const now = sheet[key];
+          const was = (comp as unknown as Record<string, unknown>)[key];
+          if (NUMERIC_FIELDS.has(key)) {
+            const n = Number(now) || 0;
+            if (n > 0 && Math.abs(n - (Number(was) || 0)) > 1e-9) {
+              fields.push({ field: key, label: APPLIABLE_FIELDS[key], from: String(was ?? 0), to: String(n) });
+            }
+          } else {
+            const to = String(now ?? "").trim();
+            if (to && to !== String(was ?? "").trim()) {
+              fields.push({ field: key, label: APPLIABLE_FIELDS[key], from: String(was ?? ""), to });
+            }
+          }
+        }
+        // A rename moves the key the combination builders resolve parts by.
+        if (fields.some((f) => f.field === "d")) {
+          warnings.push(`${shown}: description renamed — any combination template that names the old text will stop finding this part.`);
+        }
+      } else if (encl && row.description.trim() && row.description.trim() !== encl.name.trim()) {
+        // An enclosure's name is parsed for dimensions and is half its unique key.
+        warnings.push(`${shown}: enclosure description differs — left as is (cell matching parses that name). Price still updated.`);
+      }
+
+      if (!priceMoved && !fields.length) return null;
+      return {
+        kind: "update",
+        entity: comp ? "LvComponent" : "LvEnclosure",
+        entityId: existing.id,
+        code: row.code.trim(),
+        label: (comp ? comp.d || comp.n : (encl as { name: string }).name) || shown,
+        fromEur: existing.eur,
+        fromEgp: existing.egp,
+        // A data-only row replays its own price, so apply never rewrites it.
+        eur: priceMoved ? useEur : existing.eur,
+        egp: priceMoved ? useEgp : existing.egp,
+        pct: priceMoved && existing.eur > 0 && useEur > 0 ? ((useEur - existing.eur) / existing.eur) * 100 : undefined,
+        priceMoved,
+        fields,
+      };
+    };
+
     for (const row of rows) {
       const code = normRef(row.code);
       if (!code) {
+        // No item code. These used to be counted and dropped, which quietly lost
+        // whole rows — the catalogue legitimately holds code-less entries ("Space
+        // for MCB 3P", current transformers). Match them on description instead and
+        // put them in front of the uploader as an opt-in.
         noCode++;
+        const key = normDesc(row.description);
+        if (!key) {
+          warnings.push("A row has neither an item code nor a description — nothing to match it on.");
+          continue;
+        }
+        const hits = byDesc.get(key) ?? [];
+        if (hits.length > 1) {
+          warnings.push(`“${row.description.trim()}”: no item code and ${hits.length} items share that description — skipped, it cannot be matched safely.`);
+          continue;
+        }
+        const eurN = Number(row.eur) || 0;
+        const egpN = Number(row.egp) || 0;
+        const useEurN = eurN > 0 ? eurN : 0;
+        const useEgpN = eurN > 0 ? 0 : egpN;
+        if (hits.length === 1) {
+          const entry = diffForExisting(hits[0], undefined, row, useEurN, useEgpN);
+          if (entry) diff.push({ ...entry, noCode: true });
+          else unchanged++;
+          continue;
+        }
+        // Brand new, and with no code the only handle on it is its description.
+        if (useEurN === 0 && useEgpN === 0) {
+          unpriced++;
+          warnings.push(`“${row.description.trim()}”: no item code and no price — it would quote as free, so it is not offered.`);
+          continue;
+        }
+        diff.push({
+          kind: "add", entity: "LvComponent", code: "", label: row.description.trim(),
+          eur: useEurN, egp: useEgpN, row, noCode: true,
+        });
         continue;
       }
       if (seen.has(code)) {
@@ -174,67 +289,9 @@ export async function postLvImportPreview(req: Request, res: Response) {
       const existing = comp ?? encl;
 
       if (existing) {
-        // A blank price cell means "no new information", never "make it free" —
-        // but the row can still carry a data change, so it is not skipped here.
-        const priceGiven = useEur > 0 || useEgp > 0;
-        if (!priceGiven && (existing.eur > 0 || existing.egp > 0)) blankKept++;
-        const priceMoved =
-          priceGiven && !(sameMoney(existing.eur, useEur) && sameMoney(existing.egp, useEgp));
-
-        // Data columns. Same rule as the price: a blank (or zero) cell says nothing.
-        // Driven off APPLIABLE_FIELDS, so adding a column to the catalogue means
-        // adding one entry there and one alias in the sheet parser — not a new branch.
-        const fields: FieldChange[] = [];
-        if (comp) {
-          const sheet: Record<FieldChange["field"], string | number> = {
-            d: row.description, brand: row.brand, t: row.type, f: row.family, r: row.rating,
-            poles: row.poles, cuP: row.cuP, cuC: row.cuC, stock: row.stock,
-          };
-          for (const key of Object.keys(APPLIABLE_FIELDS) as FieldChange["field"][]) {
-            const now = sheet[key];
-            const was = (comp as unknown as Record<string, unknown>)[key];
-            if (NUMERIC_FIELDS.has(key)) {
-              const n = Number(now) || 0;
-              if (n > 0 && Math.abs(n - (Number(was) || 0)) > 1e-9) {
-                fields.push({ field: key, label: APPLIABLE_FIELDS[key], from: String(was ?? 0), to: String(n) });
-              }
-            } else {
-              const to = String(now ?? "").trim();
-              if (to && to !== String(was ?? "").trim()) {
-                fields.push({ field: key, label: APPLIABLE_FIELDS[key], from: String(was ?? ""), to });
-              }
-            }
-          }
-          // A rename moves the key the combination builders resolve parts by.
-          if (fields.some((f) => f.field === "d")) {
-            warnings.push(
-              `${row.code}: description renamed — any combination template that names the old text will stop finding this part.`,
-            );
-          }
-        } else if (encl && row.description.trim() && row.description.trim() !== encl.name.trim()) {
-          // An enclosure's name is parsed for dimensions and is half its unique key.
-          warnings.push(`${row.code}: enclosure description differs — left as is (cell matching parses that name). Price still updated.`);
-        }
-
-        if (!priceMoved && !fields.length) {
-          unchanged++;
-          continue;
-        }
-        diff.push({
-          kind: "update",
-          entity: comp ? "LvComponent" : "LvEnclosure",
-          entityId: existing.id,
-          code: row.code.trim(),
-          label: (comp ? comp.d || comp.n : (encl as { name: string }).name) || row.code,
-          fromEur: existing.eur,
-          fromEgp: existing.egp,
-          // A data-only row replays its own price, so apply never rewrites it.
-          eur: priceMoved ? useEur : existing.eur,
-          egp: priceMoved ? useEgp : existing.egp,
-          pct: priceMoved && existing.eur > 0 && useEur > 0 ? ((useEur - existing.eur) / existing.eur) * 100 : undefined,
-          priceMoved,
-          fields,
-        });
+        const entry = diffForExisting(comp, encl, row, useEur, useEgp);
+        if (entry) diff.push(entry);
+        else unchanged++;
         continue;
       }
 
@@ -259,14 +316,21 @@ export async function postLvImportPreview(req: Request, res: Response) {
       });
     }
 
-    const updates = diff.filter((d) => d.kind === "update");
-    const additions = diff.filter((d) => d.kind === "add");
+    // Code-less rows are held apart: they are shown for review and applied only if
+    // the uploader ticks them, so they never inflate the headline counts.
+    const coded = diff.filter((d) => !d.noCode);
+    const noCodeEntries = diff.filter((d) => d.noCode);
+    const updates = coded.filter((d) => d.kind === "update");
+    const additions = coded.filter((d) => d.kind === "add");
     const pcts = updates.map((u) => u.pct).filter((p): p is number => typeof p === "number").sort((a, b) => a - b);
 
     const summary = {
       rowsRead: rows.length,
       updates: updates.length,
       additions: additions.length,
+      // Rows with no item code, matched on description instead — opt-in.
+      noCodeUpdates: noCodeEntries.filter((d) => d.kind === "update").length,
+      noCodeAdditions: noCodeEntries.filter((d) => d.kind === "add").length,
       unchanged,
       blankKept,
       noCode,
@@ -301,6 +365,7 @@ export async function postLvImportPreview(req: Request, res: Response) {
       summary,
       updates: updates.slice(0, DETAIL_CAP),
       additions: additions.slice(0, DETAIL_CAP),
+      noCodeItems: noCodeEntries.slice(0, DETAIL_CAP),
       warnings: warnings.slice(0, 50),
       truncated: updates.length > DETAIL_CAP || additions.length > DETAIL_CAP,
       expiresAt: batch.expiresAt,
@@ -327,7 +392,9 @@ export async function postLvImportApply(req: Request, res: Response) {
       return res.status(410).json({ error: "That preview is over an hour old — please upload the file again." });
     }
 
-    const diff = JSON.parse(batch.diff) as DiffEntry[];
+    // Code-less rows apply only when the uploader ticked them in the preview.
+    const includeNoCode = req.body?.includeNoCode === true;
+    const diff = (JSON.parse(batch.diff) as DiffEntry[]).filter((d) => includeNoCode || !d.noCode);
     const by = req.userEmail ?? "";
     const actorId = req.userId ?? null;
 
@@ -415,7 +482,12 @@ export async function postLvImportApply(req: Request, res: Response) {
 
       if (d.kind === "add") {
         // Guard against the same part being added twice by two overlapping imports.
-        const clash = await prisma.lvComponent.findFirst({ where: { ref: d.code } });
+        // A code-less row has no reference to match on — an empty `ref` would collide
+        // with every other code-less row in the catalogue — so it is matched on its
+        // description, which is the only handle it has.
+        const clash = d.code
+          ? await prisma.lvComponent.findFirst({ where: { ref: d.code } })
+          : await prisma.lvComponent.findFirst({ where: { OR: [{ d: d.label }, { n: d.label }] } });
         if (clash) { skipped++; continue; }
         const r = d.row;
         const row = await prisma.lvComponent.create({

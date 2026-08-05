@@ -121,8 +121,10 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<LvImportPreview | null>(null);
-  const [tab, setTab] = useState<"updates" | "additions" | "warnings">("updates");
+  const [tab, setTab] = useState<"updates" | "additions" | "noCode" | "warnings">("updates");
   const [done, setDone] = useState("");
+  // Rows with no item code are matched on description and applied only if ticked.
+  const [includeNoCode, setIncludeNoCode] = useState(false);
 
   const pickFile = () => {
     setError("");
@@ -162,7 +164,7 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
     setBusy("Applying…");
     setError("");
     try {
-      const r = await api.pricing.lvImportApply(preview.batchId);
+      const r = await api.pricing.lvImportApply(preview.batchId, includeNoCode);
       setPreview(null);
       const head = `${r.updated.toLocaleString()} item(s) updated, ${r.added} item(s) added`;
       if (r.published) {
@@ -191,6 +193,9 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
   };
 
   const s = preview?.summary;
+  const noCodeTotal = (s?.noCodeUpdates ?? 0) + (s?.noCodeAdditions ?? 0);
+  // The code-less rows count towards Apply only once they are ticked.
+  const applyCount = (s ? s.updates + s.additions : 0) + (includeNoCode ? noCodeTotal : 0);
 
   return (
     <>
@@ -265,13 +270,36 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
                 </p>
               )}
 
-              {(s.unpriced > 0 || s.duplicates > 0 || s.noCode > 0) && (
+              {/* Rows with no item code — matched on description and offered, not dropped. */}
+              {noCodeTotal > 0 && (
+                <label className="mt-2 flex cursor-pointer items-start gap-2.5 rounded-lg border border-brand/40 bg-brand-tint p-2.5">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-brand"
+                    checked={includeNoCode} onChange={(e) => setIncludeNoCode(e.target.checked)} />
+                  <span className="text-xs text-ink">
+                    <b>
+                      {noCodeTotal} row{noCodeTotal === 1 ? "" : "s"} have no item code
+                    </b>{" "}
+                    — matched on description instead
+                    {s.noCodeUpdates > 0 && s.noCodeAdditions > 0
+                      ? ` (${s.noCodeUpdates} to update, ${s.noCodeAdditions} to add)`
+                      : s.noCodeAdditions > 0
+                      ? ` (${s.noCodeAdditions} would be added as new)`
+                      : ` (${s.noCodeUpdates} would be updated)`}
+                    . Tick to include them, then review them in the{" "}
+                    <button type="button" onClick={() => setTab("noCode")} className="font-bold underline underline-offset-2">
+                      No item code
+                    </button>{" "}
+                    tab.
+                  </span>
+                </label>
+              )}
+
+              {(s.unpriced > 0 || s.duplicates > 0) && (
                 <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs font-semibold text-amber-800 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">
                   ⚠ Skipped:{" "}
                   {[
                     s.unpriced > 0 && `${s.unpriced} new item(s) with no price`,
                     s.duplicates > 0 && `${s.duplicates} repeated item code(s)`,
-                    s.noCode > 0 && `${s.noCode} row(s) with no item code`,
                   ]
                     .filter(Boolean)
                     .join(" · ")}
@@ -279,18 +307,23 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
               )}
 
               {/* Detail */}
-              <div className="mt-3 flex gap-1.5">
-                {(["updates", "additions", "warnings"] as const).map((t) => {
-                  const n = t === "updates" ? preview.updates.length : t === "additions" ? preview.additions.length : preview.warnings.length;
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {(["updates", "additions", "noCode", "warnings"] as const).map((t) => {
+                  const n =
+                    t === "updates" ? preview.updates.length
+                    : t === "additions" ? preview.additions.length
+                    : t === "noCode" ? (preview.noCodeItems?.length ?? 0)
+                    : preview.warnings.length;
+                  if (t === "noCode" && !n) return null;
                   return (
                     <button
                       key={t}
                       onClick={() => setTab(t)}
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition ${
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${t === "noCode" ? "" : "capitalize"} ${
                         tab === t ? "border-brand bg-brand text-white" : "border-line bg-white text-muted hover:border-brand/40"
                       }`}
                     >
-                      {t} ({n})
+                      {t === "noCode" ? "No item code" : t} ({n})
                     </button>
                   );
                 })}
@@ -311,20 +344,26 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-surface text-left uppercase tracking-wider text-muted">
                       <tr>
-                        <th className="px-3 py-2 font-bold">Item code</th>
+                        <th className="px-3 py-2 font-bold">{tab === "noCode" ? "Matched by" : "Item code"}</th>
                         <th className="px-3 py-2 font-bold">Description</th>
-                        {tab === "updates" && <th className="px-3 py-2 text-right font-bold">Was</th>}
-                        <th className="px-3 py-2 text-right font-bold">{tab === "updates" ? "Becomes" : "Price"}</th>
-                        {tab === "updates" && <th className="px-3 py-2 text-right font-bold">Change</th>}
+                        {tab !== "additions" && <th className="px-3 py-2 text-right font-bold">Was</th>}
+                        <th className="px-3 py-2 text-right font-bold">{tab === "additions" ? "Price" : "Becomes"}</th>
+                        {tab !== "additions" && <th className="px-3 py-2 text-right font-bold">Change</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {(tab === "updates" ? preview.updates : preview.additions).map((d, i) => {
+                      {(tab === "updates" ? preview.updates : tab === "noCode" ? preview.noCodeItems ?? [] : preview.additions).map((d, i) => {
                         // A data-only row keeps its price — show it as untouched, not as a move.
-                        const priceHeld = tab === "updates" && d.priceMoved === false;
+                        const priceHeld = tab !== "additions" && d.priceMoved === false;
                         return (
                         <tr key={d.code + i} className="border-t border-line align-top">
-                          <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-muted">{d.code}</td>
+                          <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-muted">
+                            {d.code || (
+                              <span className="font-sans not-italic text-brand-dark">
+                                {d.kind === "add" ? "new · no code" : "description"}
+                              </span>
+                            )}
+                          </td>
                           <td className="px-3 py-1.5 text-ink">
                             {d.label}
                             {!!d.fields?.length && (
@@ -345,27 +384,27 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
                               </div>
                             )}
                           </td>
-                          {tab === "updates" && (
+                          {tab !== "additions" && (
                             <td className="whitespace-nowrap px-3 py-1.5 text-right text-muted">
-                              {money(d.fromEur ?? 0, d.fromEgp ?? 0)}
+                              {d.kind === "add" ? "—" : money(d.fromEur ?? 0, d.fromEgp ?? 0)}
                             </td>
                           )}
                           <td className="whitespace-nowrap px-3 py-1.5 text-right font-semibold text-ink">
                             {priceHeld ? <span className="font-normal text-muted">kept</span> : money(d.eur, d.egp)}
                           </td>
-                          {tab === "updates" && (
+                          {tab !== "additions" && (
                             <td
                               className={`whitespace-nowrap px-3 py-1.5 text-right font-semibold ${
                                 (d.pct ?? 0) > 0 ? "text-amber-700 dark:text-amber-300" : "text-muted"
                               }`}
                             >
-                              {priceHeld ? "—" : pct(d.pct)}
+                              {d.kind === "add" ? "new" : priceHeld ? "—" : pct(d.pct)}
                             </td>
                           )}
                         </tr>
                         );
                       })}
-                      {(tab === "updates" ? preview.updates : preview.additions).length === 0 && (
+                      {(tab === "updates" ? preview.updates : tab === "noCode" ? preview.noCodeItems ?? [] : preview.additions).length === 0 && (
                         <tr>
                           <td colSpan={5} className="p-4 text-center text-muted">
                             Nothing in this list.
@@ -392,8 +431,8 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
                 <button className="btn-ghost" onClick={cancel} disabled={!!busy}>
                   Cancel
                 </button>
-                <button className="btn-primary" onClick={apply} disabled={!!busy || s.updates + s.additions === 0}>
-                  {busy || `Apply ${(s.updates + s.additions).toLocaleString()} change${s.updates + s.additions === 1 ? "" : "s"}`}
+                <button className="btn-primary" onClick={apply} disabled={!!busy || applyCount === 0}>
+                  {busy || `Apply ${applyCount.toLocaleString()} change${applyCount === 1 ? "" : "s"}`}
                 </button>
               </div>
             </div>
