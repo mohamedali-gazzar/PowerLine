@@ -1173,15 +1173,35 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
   {
     title: "Transformers",
     items: ["PDTR"],
-    icon: ( // tank, cooling fins, HV/LV bushings — one live
-      <CoverIcon>
-        <rect x="9" y="11" width="14" height="14" rx="1.5" />
-        <line x1="9" y1="15" x2="6" y2="15" /><line x1="9" y1="21" x2="6" y2="21" />
-        <line x1="23" y1="15" x2="26" y2="15" /><line x1="23" y1="21" x2="26" y2="21" />
-        <line x1="13" y1="11" x2="13" y2="8" /><line x1="19" y1="11" x2="19" y2="8" />
-        <circle cx="13" cy="6.5" r="1.6" fill={ORANGE} stroke="none" />
-        <circle cx="19" cy="6.5" r="1.6" />
-      </CoverIcon>
+    // Distribution transformer, redrawn from the supplied artwork as vector: three
+    // bushings, tank, side radiators, plinth and the bolt. The original's yellow
+    // becomes Powerline orange; its blue-greys and black outline become charcoal at
+    // reduced strength, because a slate blue would be a fourth colour.
+    icon: (
+      <svg viewBox="0 0 32 32" className="h-7 w-7" fill="none" stroke="#585859" strokeWidth="1.25"
+        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {/* bushings — three stacks of insulator sheds on their posts */}
+        {[8.6, 16, 23.4].map((cx) => (
+          <g key={cx}>
+            <line x1={cx} y1="2.4" x2={cx} y2="4.4" />
+            <rect x={cx - 2.5} y="4.4" width="5" height="5.2" rx="1.1" fill={ORANGE} />
+            <line x1={cx - 2.5} y1="6.1" x2={cx + 2.5} y2="6.1" />
+            <line x1={cx - 2.5} y1="7.9" x2={cx + 2.5} y2="7.9" />
+            <line x1={cx} y1="9.6" x2={cx} y2="11" />
+          </g>
+        ))}
+        {/* lid, radiators, tank, plinth */}
+        <rect x="5.2" y="11" width="21.6" height="2.6" rx="0.9" fill="rgba(88,88,89,0.12)" />
+        <rect x="2.6" y="15.4" width="3.4" height="7.6" rx="1" fill="rgba(88,88,89,0.12)" />
+        <rect x="26" y="15.4" width="3.4" height="7.6" rx="1" fill="rgba(88,88,89,0.12)" />
+        <rect x="6" y="13.6" width="20" height="12.4" rx="1.1" fill="rgba(88,88,89,0.06)" />
+        <line x1="10.4" y1="13.6" x2="10.4" y2="26" />
+        <line x1="21.6" y1="13.6" x2="21.6" y2="26" />
+        <rect x="8.4" y="26" width="15.2" height="2.4" rx="0.8" fill="rgba(88,88,89,0.12)" />
+        {/* the bolt */}
+        <path d="M17.5 15.4 L13.2 20.6 L15.8 20.6 L14.6 24.6 L18.9 19.2 L16.3 19.2 Z"
+          fill={ORANGE} strokeWidth="1" />
+      </svg>
     ),
   },
   {
