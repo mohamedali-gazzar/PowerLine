@@ -10,20 +10,23 @@ import * as XLSX from "xlsx";
 import { api, type LvImportPreview, type LvImportRow } from "../api";
 import { bundledCatalog } from "../lv/catalogSource";
 
-/** The columns the template ships with, in order. */
+/** The columns the template ships with, in order.
+ *  Every one of these is read by the import — the template used to advertise
+ *  IP / Mounting / RAL / Cross Section, which nothing ever parsed, so a filled-in
+ *  column silently did nothing. Only offer what the import can actually apply. */
 export const TEMPLATE_COLUMNS = [
-  "Type",
-  "Description",
   "Item Code",
+  "Description",
+  "Type",
+  "Family",
+  "Rating",
+  "Brand",
+  "Poles",
   "ABB Price list in EURO",
   "Market Price in EGP",
-  "IP",
-  "Mounting",
-  "RAL",
-  "Cross Section",
   "Weight/Panel/Pole",
   "Weight/Cell/Pole",
-  "Brand",
+  "Stock",
 ] as const;
 
 /** Headers arrive with stray spaces and varying case — match on a flattened key. */
@@ -31,6 +34,8 @@ const flat = (s: string) => String(s ?? "").trim().toLowerCase().replace(/\s+/g,
 
 const HEADER_ALIASES: Record<string, string> = {
   "type": "type",
+  "family": "family",
+  "rating": "rating",
   "description": "description",
   "item code": "code",
   "code": "code",
@@ -43,6 +48,10 @@ const HEADER_ALIASES: Record<string, string> = {
   "egp": "egp",
   "brand": "brand",
   "poles": "poles",
+  // These two ship in the template and were parsed by nobody until now.
+  "weight/panel/pole": "cuP",
+  "weight/cell/pole": "cuC",
+  "stock": "stock",
 };
 
 const toNum = (v: unknown): number => {
@@ -76,12 +85,17 @@ export function parseWorkbook(buf: ArrayBuffer): { rows: LvImportRow[]; missing:
 
     rows.push({
       type: String(mapped.type ?? "").trim(),
+      family: String(mapped.family ?? "").trim(),
+      rating: String(mapped.rating ?? "").trim(),
       description,
       code,
       eur: toNum(mapped.eur),
       egp: toNum(mapped.egp),
       brand: String(mapped.brand ?? "").trim(),
       poles: Math.trunc(toNum(mapped.poles)),
+      cuP: toNum(mapped.cuP),
+      cuC: toNum(mapped.cuC),
+      stock: String(mapped.stock ?? "").trim(),
     });
   }
 
@@ -108,24 +122,28 @@ export function catalogueRows(): LvImportRow[] {
     if (!c.ref) continue; // spacers carry no part number and no price
     rows.push({
       type: c.t ?? "",
+      family: c.f ?? "",
+      rating: c.r ?? "",
       description: c.d ?? "",
       code: c.ref,
       eur: c.eur ?? 0,
       egp: c.egp ?? 0,
       brand: c.brand ?? "",
       poles: c.poles ?? 0,
+      cuP: c.cuP ?? 0,
+      cuC: c.cuC ?? 0,
+      stock: c.stock ?? "",
     });
   }
   for (const e of ENCLOSURES) {
     if (!e.ref) continue;
     rows.push({
-      type: "",
+      type: "", family: "", rating: "",
       description: e.name ?? "",
       code: e.ref,
       eur: e.eur ?? 0,
       egp: e.egp ?? 0,
-      brand: "",
-      poles: 0,
+      brand: "", poles: 0, cuP: 0, cuC: 0, stock: "",
     });
   }
   return rows;

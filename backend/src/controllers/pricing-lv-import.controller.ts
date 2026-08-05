@@ -30,15 +30,22 @@ const BATCH_TTL_MS = 60 * 60 * 1000;
 /** Detail rows sent back for display — the full set is stored in the batch. */
 const DETAIL_CAP = 300;
 
-/** A row as it comes off the spreadsheet, before any interpretation. */
+/** A row as it comes off the spreadsheet, before any interpretation.
+ *  Every data column a component carries is accepted — the template shipped
+ *  Weight/Panel/Pole and Weight/Cell/Pole long before anything read them. */
 const rawRowSchema = z.object({
   type: z.string().default(""),
+  family: z.string().default(""),
+  rating: z.string().default(""),
   description: z.string().default(""),
   code: z.string().default(""),
   eur: z.number().default(0),
   egp: z.number().default(0),
   brand: z.string().default(""),
   poles: z.number().int().default(0),
+  cuP: z.number().default(0),   // copper kg/pole — panels
+  cuC: z.number().default(0),   // copper kg/pole — cells
+  stock: z.string().default(""),
 });
 
 const previewSchema = z.object({ rows: z.array(rawRowSchema).min(1).max(6000) });
@@ -48,22 +55,33 @@ type RawRow = z.infer<typeof rawRowSchema>;
 /** One non-price column the sheet would rewrite on an already-catalogued item. */
 export interface FieldChange {
   /** LvComponent column. Only the keys in APPLIABLE_FIELDS are ever written. */
-  field: "d" | "brand" | "t" | "poles";
+  field: "d" | "brand" | "t" | "f" | "r" | "poles" | "cuP" | "cuC" | "stock";
   /** Human label for the preview ("Description", "Brand", …). */
   label: string;
   from: string;
   to: string;
 }
 
-/** The only columns an import may rewrite, and how each reaches the row.
+/** Every column an import may rewrite, and the label it reports.
  *  A whitelist on purpose: the diff is replayed from stored JSON, so nothing
- *  outside this map can ever be written, whatever a batch claims. */
+ *  outside this map can ever be written, whatever a batch claims.
+ *
+ *  This is the component's whole data set bar two: `ref` is the key rows are
+ *  matched on, and `sortIndex` is catalogue ORDER, which is load-bearing for
+ *  the combination builders and must never come from a spreadsheet. */
 const APPLIABLE_FIELDS: Record<FieldChange["field"], string> = {
   d: "Description",
   brand: "Brand",
   t: "Type",
+  f: "Family",
+  r: "Rating",
   poles: "Poles",
+  cuP: "Weight/Panel/Pole",
+  cuC: "Weight/Cell/Pole",
+  stock: "Stock",
 };
+/** Columns compared as numbers rather than trimmed text. */
+const NUMERIC_FIELDS = new Set<FieldChange["field"]>(["poles", "cuP", "cuC"]);
 
 export interface DiffEntry {
   kind: "update" | "add";
@@ -112,8 +130,9 @@ export async function postLvImportPreview(req: Request, res: Response) {
       prisma.lvComponent.findMany({
         select: {
           id: true, ref: true, d: true, n: true, eur: true, egp: true,
-          // the data columns an import may rewrite, plus the ones that feed `search`
-          t: true, f: true, r: true, brand: true, poles: true,
+          // EVERY column an import may rewrite must be selected — a field left out here
+          // reads as undefined, compares as 0/"", and reports a change on every row.
+          t: true, f: true, r: true, brand: true, poles: true, cuP: true, cuC: true, stock: true,
         },
       }),
       prisma.lvEnclosure.findMany({ select: { id: true, ref: true, name: true, eur: true, egp: true } }),
@@ -162,20 +181,29 @@ export async function postLvImportPreview(req: Request, res: Response) {
         const priceMoved =
           priceGiven && !(sameMoney(existing.eur, useEur) && sameMoney(existing.egp, useEgp));
 
-        // Data columns. Same rule as the price: a blank cell says nothing.
+        // Data columns. Same rule as the price: a blank (or zero) cell says nothing.
+        // Driven off APPLIABLE_FIELDS, so adding a column to the catalogue means
+        // adding one entry there and one alias in the sheet parser — not a new branch.
         const fields: FieldChange[] = [];
         if (comp) {
-          const text = (field: FieldChange["field"], was: string, now: string) => {
-            const to = now.trim();
-            if (to && to !== (was ?? "").trim()) {
-              fields.push({ field, label: APPLIABLE_FIELDS[field], from: was ?? "", to });
-            }
+          const sheet: Record<FieldChange["field"], string | number> = {
+            d: row.description, brand: row.brand, t: row.type, f: row.family, r: row.rating,
+            poles: row.poles, cuP: row.cuP, cuC: row.cuC, stock: row.stock,
           };
-          text("t", comp.t, row.type);
-          text("d", comp.d, row.description);
-          text("brand", comp.brand, row.brand);
-          if (row.poles > 0 && row.poles !== comp.poles) {
-            fields.push({ field: "poles", label: APPLIABLE_FIELDS.poles, from: String(comp.poles), to: String(row.poles) });
+          for (const key of Object.keys(APPLIABLE_FIELDS) as FieldChange["field"][]) {
+            const now = sheet[key];
+            const was = (comp as unknown as Record<string, unknown>)[key];
+            if (NUMERIC_FIELDS.has(key)) {
+              const n = Number(now) || 0;
+              if (n > 0 && Math.abs(n - (Number(was) || 0)) > 1e-9) {
+                fields.push({ field: key, label: APPLIABLE_FIELDS[key], from: String(was ?? 0), to: String(n) });
+              }
+            } else {
+              const to = String(now ?? "").trim();
+              if (to && to !== String(was ?? "").trim()) {
+                fields.push({ field: key, label: APPLIABLE_FIELDS[key], from: String(was ?? ""), to });
+              }
+            }
           }
           // A rename moves the key the combination builders resolve parts by.
           if (fields.some((f) => f.field === "d")) {
@@ -327,22 +355,19 @@ export async function postLvImportApply(req: Request, res: Response) {
           if (writePrice) { data.eur = d.eur; data.egp = d.egp; }
 
           // Post-update values, needed for the `search` column below.
-          let nt = cur.t, nd = cur.d, nBrand = cur.brand;
+          const next = { t: cur.t, f: cur.f, r: cur.r, d: cur.d, brand: cur.brand };
           for (const fc of d.fields ?? []) {
             if (!(fc.field in APPLIABLE_FIELDS)) continue; // whitelist — replayed JSON is not trusted
-            if (fc.field === "d") {
-              // d and n are both combination lookup keys and must not drift apart.
-              data.d = fc.to; data.n = fc.to; nd = fc.to;
-            } else if (fc.field === "brand") {
-              data.brand = fc.to; nBrand = fc.to;
-            } else if (fc.field === "t") {
-              data.t = fc.to; nt = fc.to;
-            } else if (fc.field === "poles") {
-              data.poles = Number(fc.to) || 0;
+            if (NUMERIC_FIELDS.has(fc.field)) {
+              data[fc.field] = fc.field === "poles" ? Math.trunc(Number(fc.to) || 0) : Number(fc.to) || 0;
+              continue;
             }
+            data[fc.field] = fc.to;
+            if (fc.field === "d") data.n = fc.to; // d and n are both combination lookup keys — never let them drift
+            if (fc.field in next) (next as Record<string, string>)[fc.field] = fc.to;
           }
           // Keep the one lowercase column the price-list search reads (schema: "t f r d ref brand").
-          if ((d.fields?.length ?? 0) > 0) data.search = searchText(nt, cur.f, cur.r, nd, cur.ref, nBrand);
+          if ((d.fields?.length ?? 0) > 0) data.search = searchText(next.t, next.f, next.r, next.d, cur.ref, next.brand);
 
           await prisma.lvComponent.update({ where: { id: cur.id }, data });
 
@@ -397,16 +422,21 @@ export async function postLvImportApply(req: Request, res: Response) {
           data: {
             sortIndex: nextSortIndex++,
             t: r?.type?.trim() || "",
-            f: "",
-            r: "",
+            // Family and rating used to be dropped here, which is how rows ended up in the
+            // catalogue with a blank family that no later import could put back.
+            f: r?.family?.trim() || "",
+            r: r?.rating?.trim() || "",
             d: d.label,
             n: d.label,
             ref: d.code,
             brand: r?.brand?.trim() || "ABB",
             poles: r?.poles ?? 0,
+            cuP: r?.cuP ?? 0,
+            cuC: r?.cuC ?? 0,
+            stock: r?.stock?.trim() || "",
             eur: d.eur,
             egp: d.egp,
-            search: searchText(r?.type ?? "", d.label, d.code, r?.brand ?? ""),
+            search: searchText(r?.type ?? "", r?.family ?? "", r?.rating ?? "", d.label, d.code, r?.brand ?? ""),
             updatedBy: by,
           },
         });

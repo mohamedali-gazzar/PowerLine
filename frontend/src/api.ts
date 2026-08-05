@@ -166,17 +166,22 @@ export interface LvRow {
 /** One spreadsheet line, already parsed out of the workbook. */
 export interface LvImportRow {
   type: string;
+  family: string;
+  rating: string;
   description: string;
   code: string;
   eur: number;
   egp: number;
   brand: string;
   poles: number;
+  cuP: number;   // Weight/Panel/Pole
+  cuC: number;   // Weight/Cell/Pole
+  stock: string;
 }
 
 /** A non-price column the sheet would rewrite on an already-catalogued item. */
 export interface LvImportFieldChange {
-  field: "d" | "brand" | "t" | "poles";
+  field: "d" | "brand" | "t" | "f" | "r" | "poles" | "cuP" | "cuC" | "stock";
   label: string;
   from: string;
   to: string;
