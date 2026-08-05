@@ -173,6 +173,75 @@ export async function refreshCatalog(token: string | null): Promise<number | nul
   }
 }
 
+/** What a manual "check for updates" found. */
+export interface CatalogUpdate {
+  ok: boolean;          // false only when the catalogue could not be reached
+  changed: boolean;
+  version: number;
+  prices: number;
+  brands: number;
+  descriptions: number;
+  otherData: number;    // type / family / rating / poles / copper weight / stock
+  added: number;
+  removed: number;
+}
+
+/**
+ * Fetch the published catalogue and report what moved.
+ *
+ * refreshCatalog() answers "am I current?" with a version number, which tells an
+ * offer author nothing. This says what actually changed since their session
+ * started — prices, brands, descriptions, new items — so a check before quoting
+ * is worth making. Read-only as far as the price list is concerned: it only
+ * swaps what THIS browser quotes from.
+ */
+export async function checkCatalogUpdates(token: string | null): Promise<CatalogUpdate> {
+  const none = (ok: boolean, changed = false): CatalogUpdate => ({
+    ok, changed, version: loadedVersion, prices: 0, brands: 0, descriptions: 0, otherData: 0, added: 0, removed: 0,
+  });
+  try {
+    const res = await fetch("/api/catalog/lv", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) return none(false);
+    const body = (await res.json()) as { source: string; version: number; data: CatalogPayload | null };
+    if (!body?.data?.components?.length || body.source !== "db") return none(true);
+    if (body.version === loadedVersion) return none(true);
+
+    // Snapshot BEFORE installing — installCatalog replaces the array contents.
+    // Rows without a part number are spacers: they cannot be matched between two
+    // catalogues, so counting them would report the same "new items" every time.
+    const wasList = [...COMPONENTS].filter((c) => c.ref);
+    const was = new Map(wasList.map((c) => [c.ref, c]));
+    const now = body.data.components.filter((c) => c.ref);
+
+    let prices = 0, brands = 0, descriptions = 0, otherData = 0, added = 0;
+    for (const c of now) {
+      const b = was.get(c.ref);
+      if (!b) { added++; continue; }
+      if (Math.abs((b.eur || 0) - (c.eur || 0)) > 1e-9 || Math.abs((b.egp || 0) - (c.egp || 0)) > 1e-9) prices++;
+      if (String(b.brand ?? "") !== String(c.brand ?? "")) brands++;
+      if (String(b.d ?? "") !== String(c.d ?? "") || String(b.n ?? "") !== String(c.n ?? "")) descriptions++;
+      if (
+        String(b.t ?? "") !== String(c.t ?? "") || String(b.f ?? "") !== String(c.f ?? "") ||
+        String(b.r ?? "") !== String(c.r ?? "") || (b.poles || 0) !== (c.poles || 0) ||
+        Math.abs((b.cuP || 0) - (c.cuP || 0)) > 1e-9 || Math.abs((b.cuC || 0) - (c.cuC || 0)) > 1e-9 ||
+        String(b.stock ?? "") !== String(c.stock ?? "")
+      ) otherData++;
+    }
+    const nowRefs = new Set(now.map((c) => c.ref));
+    const removed = wasList.filter((c) => !nowRefs.has(c.ref)).length;
+
+    installCatalog(body.data, body.version);
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({ version: body.version, data: body.data }));
+    } catch {
+      /* quota — the app still works, it just re-fetches next time */
+    }
+    return { ok: true, changed: true, version: body.version, prices, brands, descriptions, otherData, added, removed };
+  } catch {
+    return none(false);
+  }
+}
+
 /** Install the cached catalogue synchronously (before first paint). */
 export function installCachedCatalog(): number {
   const cached = readCache();

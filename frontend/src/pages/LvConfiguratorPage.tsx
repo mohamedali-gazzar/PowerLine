@@ -33,6 +33,7 @@ import { rankSearchOptions } from "../lv/search";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
 import { getToken } from "../api";
+import { checkCatalogUpdates } from "../lv/catalogSource";
 import wdFldImg from "../assets/wd-fld.png";
 import wdRhdImg from "../assets/wd-rhd.png";
 import wdRheImg from "../assets/wd-rhe.png";
@@ -557,13 +558,16 @@ export default function LvConfiguratorPage() {
               </button>
             )}
           </div>
-          {erpCount > 0 && (
-            <button onClick={exportErpCsv}
-              title={`Download ${erpCount} panel${erpCount > 1 ? "s" : ""} as an ERPNext "Bulk Edit Items" CSV for your ERP`}
-              className="rounded-full border border-brand bg-white px-4 py-1.5 text-xs font-bold text-brand-dark hover:bg-brand-light no-print">
-              ⬇ ERP CSV
-            </button>
-          )}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {erpCount > 0 && (
+              <button onClick={exportErpCsv}
+                title={`Download ${erpCount} panel${erpCount > 1 ? "s" : ""} as an ERPNext "Bulk Edit Items" CSV for your ERP`}
+                className="rounded-full border border-brand bg-white px-4 py-1.5 text-xs font-bold text-brand-dark hover:bg-brand-light no-print">
+                ⬇ ERP CSV
+              </button>
+            )}
+            <CatalogUpdateCheck />
+          </div>
         </div>
       </div>
 
@@ -869,6 +873,60 @@ const CoverMailI = () => (
     <rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-10 6L2 7" />
   </svg>
 );
+/**
+ * "Check for updates" — the price list is edited centrally and published, so an
+ * offer can be started on a catalogue that has since moved. This re-reads the
+ * published catalogue and says what changed: prices, brands, descriptions, new
+ * items. Available to every role — it only swaps what this browser quotes from
+ * and never writes to the price list, unlike the price-admin catalogue tools.
+ */
+function CatalogUpdateCheck() {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [warn, setWarn] = useState(false);
+
+  const run = async () => {
+    setBusy(true);
+    setMsg("");
+    const u = await checkCatalogUpdates(getToken());
+    setBusy(false);
+    if (!u.ok) {
+      setWarn(true);
+      setMsg("Couldn’t reach the price list — still quoting on the catalogue already loaded.");
+      return;
+    }
+    setWarn(false);
+    if (!u.changed) {
+      setMsg(`Up to date — price list version ${u.version}.`);
+      return;
+    }
+    const parts = [
+      u.prices && `${u.prices} price${u.prices === 1 ? "" : "s"}`,
+      u.brands && `${u.brands} brand${u.brands === 1 ? "" : "s"}`,
+      u.descriptions && `${u.descriptions} description${u.descriptions === 1 ? "" : "s"}`,
+      u.otherData && `${u.otherData} other data change${u.otherData === 1 ? "" : "s"}`,
+      u.added && `${u.added} new item${u.added === 1 ? "" : "s"}`,
+      u.removed && `${u.removed} removed`,
+    ].filter(Boolean) as string[];
+    setMsg(`Updated to version ${u.version} — ${parts.length ? parts.join(" · ") : "no item changes"}. This offer now prices from it.`);
+  };
+
+  return (
+    <div className="flex flex-col items-end gap-1 no-print">
+      <button onClick={run} disabled={busy}
+        title="Re-read the published price list and show what changed — prices, brands, descriptions and new items"
+        className="rounded-full border border-line bg-white px-4 py-1.5 text-xs font-bold text-ink hover:border-brand/50 hover:text-brand-dark disabled:opacity-60">
+        {busy ? "Checking…" : "⟳ Check for updates"}
+      </button>
+      {msg && (
+        <span className={`max-w-[22rem] text-right text-[11px] leading-snug ${warn ? "font-semibold text-red-700" : "text-muted"}`}>
+          {msg}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Technical" | "Commercial" }) {
   const [staff] = useStaff();
   const mgr = staff.salesManagers.find((m) => m.name === SALES_MANAGER);
