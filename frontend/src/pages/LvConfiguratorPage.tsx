@@ -1148,7 +1148,7 @@ function ChangeRow({ it }: { it: CatalogChangeItem }) {
  *  actually is (the live part, the door, the breaker), so the orange carries meaning
  *  rather than decorating. Same 32-unit box and stroke weight across all five. */
 const CoverIcon = ({ children }: { children: React.ReactNode }) => (
-  <svg viewBox="0 0 32 32" className="h-7 w-7" fill="none" stroke="#585859" strokeWidth="1.7"
+  <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.7"
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {children}
   </svg>
@@ -1173,7 +1173,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
     // red and yellow are the real indication colours on the door, kept at the owner's
     // instruction; PANEL_LAMPS is the single switch back to a palette-only version.
     icon: (
-      <svg viewBox="0 0 32 32" className="h-7 w-7" fill="none" stroke="#585859" strokeWidth="1.25"
+      <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.25"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="5.5" y="2.5" width="21" height="27" rx="1.2" fill="rgba(88,88,89,0.06)" />
         {/* 1 — metering: each with a needle, swung to a different reading so the row
@@ -1207,7 +1207,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
     // becomes Powerline orange; its blue-greys and black outline become charcoal at
     // reduced strength, because a slate blue would be a fourth colour.
     icon: (
-      <svg viewBox="0 0 32 32" className="h-7 w-7" fill="none" stroke="#585859" strokeWidth="1.25"
+      <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.25"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         {/* bushings — three stacks of insulator sheds on their posts */}
         {[8.6, 16, 23.4].map((cx) => (
@@ -1252,7 +1252,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
     // at 28px: the protection-relay row, the dark control plate carrying the breaker
     // mimic, and the cable compartment below.
     icon: (
-      <svg viewBox="0 0 32 32" className="h-7 w-7" fill="none" stroke="#585859" strokeWidth="1.25"
+      <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.25"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="5.5" y="2.5" width="21" height="27" rx="1.2" fill="rgba(88,88,89,0.06)" />
         {/* relay / metering row */}
@@ -1277,7 +1277,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
     // nameplate, the double doors on their centre seam, and the dark plinth. The
     // nameplate takes the orange — on the real kiosk that plate IS the brand mark.
     icon: (
-      <svg viewBox="0 0 32 32" className="h-7 w-7" fill="none" stroke="#585859" strokeWidth="1.25"
+      <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.25"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         {/* gabled roof cap */}
         <path d="M3.8 10.6 L16 4.6 L28.2 10.6 Z" fill="rgba(88,88,89,0.12)" />
