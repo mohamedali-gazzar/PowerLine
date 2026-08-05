@@ -1273,12 +1273,24 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
   {
     title: "Kiosk",
     items: ["PCSS"],
-    icon: ( // packaged substation: canopy over the enclosure, access door
-      <CoverIcon>
-        <path d="M4 13 L16 6 L28 13" />
-        <rect x="7" y="13" width="18" height="13" rx="1" />
-        <rect x="13.5" y="18" width="5" height="8" rx="0.6" fill={ORANGE} stroke="none" />
-      </CoverIcon>
+    // PCSS drawn from the supplied photograph: the gabled roof cap with its
+    // nameplate, the double doors on their centre seam, and the dark plinth. The
+    // nameplate takes the orange — on the real kiosk that plate IS the brand mark.
+    icon: (
+      <svg viewBox="0 0 32 32" className="h-7 w-7" fill="none" stroke="#585859" strokeWidth="1.25"
+        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {/* gabled roof cap */}
+        <path d="M3.8 10.6 L16 4.6 L28.2 10.6 Z" fill="rgba(88,88,89,0.12)" />
+        <rect x="12.6" y="7.6" width="6.8" height="2.1" rx="0.35" fill={ORANGE} stroke="none" />
+        {/* body: double doors on a centre seam */}
+        <rect x="5.4" y="10.6" width="21.2" height="15.2" rx="0.6" fill="rgba(88,88,89,0.06)" />
+        <line x1="16" y1="10.6" x2="16" y2="25.8" />
+        <rect x="15.2" y="16.6" width="1.6" height="3" rx="0.4" fill="rgba(88,88,89,0.6)" stroke="none" />
+        <line x1="14.6" y1="13.4" x2="17.4" y2="13.4" strokeWidth="1" />
+        <line x1="14.6" y1="22.6" x2="17.4" y2="22.6" strokeWidth="1" />
+        {/* plinth */}
+        <rect x="4.6" y="25.8" width="22.8" height="2.3" rx="0.4" fill="rgba(88,88,89,0.5)" stroke="none" />
+      </svg>
     ),
   },
 ];
