@@ -1106,6 +1106,16 @@ export function exportBlockers(s: LvState): ExportCheck[] {
 }
 
 // ── Search ───────────────────────────────────────────────────────────────────
+/**
+ * Retired = removed from the price list, so it must not be offered for new work.
+ *
+ * The published payload deliberately KEEPS retired rows (buildLvPayload) because the
+ * combination builders resolve their parts by description and would break if a row
+ * vanished — so findByName must still see them. Only the pickers hide them. The flag
+ * is absent on the bundled catalogue, so undefined means active.
+ */
+export const isRetired = (c: { active?: boolean }): boolean => c.active === false;
+
 // Strict, progressive AND-filter + relevance ranking for the component search box.
 // The query is split into space-separated tokens; a component matches only when its
 // full text (name + desc + reference + type + family + rating + brand) contains EVERY
@@ -1127,6 +1137,7 @@ export function searchComponents(q: string, limit = 50): DbComponent[] {
   const ratingQuery = /^\d+(?:\.\d+)?$/.test(raw) ? parseFloat(raw) : NaN;
   const scored: { c: DbComponent; score: number; pos: number }[] = [];
   for (const c of COMPONENTS) {
+    if (isRetired(c)) continue; // "Remove" in the price list means: stop offering it here
     const hay = `${c.n} ${c.d} ${c.ref} ${c.t} ${c.f} ${c.r} ${c.brand}`.toLowerCase();
     if (!terms.every((t) => hay.includes(t))) continue; // strict AND across all tokens
     const desc = (c.n || "").toLowerCase();

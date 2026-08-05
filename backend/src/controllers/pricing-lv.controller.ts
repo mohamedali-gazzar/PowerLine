@@ -333,6 +333,9 @@ export async function retireLvItem(req: Request, res: Response) {
           actorId: req.userId ?? null, actorEmail: by,
         },
       });
+      // Retiring used to skip this, so "Remove" changed the draft and nothing else —
+      // the item kept being offered until some later edit happened to publish.
+      await publishCurrentPrices(by, `${active ? "Restored" : "Removed"}: ${row.d || row.ref}`);
       return res.json({ ok: true, row: updated });
     }
 
@@ -347,6 +350,7 @@ export async function retireLvItem(req: Request, res: Response) {
         actorId: req.userId ?? null, actorEmail: by,
       },
     });
+    await publishCurrentPrices(by, `${active ? "Restored" : "Removed"}: ${row.name || row.ref}`);
     res.json({ ok: true, row: updated });
   } catch (e) {
     fail(res, e);

@@ -27,6 +27,10 @@ export interface DbComponent {
   cuC: number;  // copper kg/pole — cells
   brand: string;
   stock: string;
+  /** false = retired from the price list. Absent on the bundled catalogue (= active).
+   *  Retired rows stay in the payload so findByName keeps resolving combination
+   *  templates; the pickers filter them out. See isRetired in store.ts. */
+  active?: boolean;
 }
 export const COMPONENTS = componentsJson as DbComponent[];
 
