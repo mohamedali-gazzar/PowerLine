@@ -4527,12 +4527,16 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                           // Combination-qty (×N) control: MCC groups (by name) + custom combinations (flagged).
                           const scalable = /\(Type \d+\)/.test(g) ||
                             !!secComps.find((x) => !isSpacer(x) && (effGroup.get(x.id) || "") === g)?.comboScalable;
-                          const gIds = secComps.filter((c) => !isSpacer(c) && (effGroup.get(c.id) || "") === g).map((c) => c.id);
-                          // This group's combination instance (if any). One combo can span several
-                          // groups (Sync → Source 1 / Source 2 / Bus Coupler / Accessories), so its
-                          // select-all covers EVERY row of the combo across the panel — one tick, whole combo.
-                          const gComboId = secComps.find((x) => !isSpacer(x) && (effGroup.get(x.id) || "") === g)?.comboId || "";
-                          const selIds = gComboId ? p.components.filter((c) => !isSpacer(c) && c.comboId === gComboId).map((c) => c.id) : gIds;
+                          // A group's tick selects THAT group, nothing else.
+                          //
+                          // It used to select every row sharing the group's comboId, so that one tick
+                          // took a combination spanning several groups (Sync → Source 1 / Source 2 /
+                          // Bus Coupler). But comboId is also shared by groups that are independent in
+                          // every way that matters — duplicate a combination a few times and G1…G4 all
+                          // carry one id — and then ticking G4 selected the whole section. Selecting a
+                          // group has to mean the group; comboId is not a reliable stand-in for "one
+                          // combination", and it drives nothing else (not price, not qty).
+                          const selIds = secComps.filter((c) => !isSpacer(c) && (effGroup.get(c.id) || "") === g).map((c) => c.id);
                           const selOn = selIds.filter((id) => selected.has(id)).length;
                           rows.push(
                             <tr key={`grp-${sec}-${g}`} className="align-middle">
@@ -4594,15 +4598,14 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                                   )}
                                 </div>
                               </td>
-                              {/* Last column — select-all for this combination (whole combo when it
-                                  spans several groups) / this group otherwise. Shown in every section. */}
+                              {/* Last column — select / clear every row in THIS group. Shown in every section. */}
                               <td className="py-1 pr-1 text-right">
                                 {selIds.length > 0 && (
                                   <input type="checkbox" className="h-3.5 w-3.5 cursor-pointer accent-brand align-middle"
                                     checked={selOn === selIds.length}
                                     ref={(el) => { if (el) el.indeterminate = selOn > 0 && selOn < selIds.length; }}
                                     onChange={(e) => setIdsSel(selIds, e.target.checked)}
-                                    title={gComboId ? "Select / clear the whole combination" : "Select / clear all in this group"} />
+                                    title="Select / clear all in this group" />
                                 )}
                               </td>
                             </tr>
