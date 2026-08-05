@@ -1352,7 +1352,10 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
   return (
     <section data-pdf-cover className="a4-sheet flex flex-col overflow-hidden" style={{ breakAfter: "page" }}>
       <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
-      <div className="flex flex-1 flex-col px-12 pb-2 pt-12">
+      {/* pb-8: the address sat 7px off the trimmed edge, which reads as a printing
+          error rather than a margin. The 24px comes off the gap above the footer
+          (pt-8 → pt-2 below), so the page height is unchanged. */}
+      <div className="flex flex-1 flex-col px-12 pb-8 pt-12">
         <div className="flex items-center justify-between">
           <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-32" />
           {s.project.date && (
@@ -1424,7 +1427,7 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
             </div>
           ))}
         </div>
-        <div className="mt-auto pt-8">
+        <div className="mt-auto pt-2">
           <div className="h-[3px] w-[calc(100%+3rem)] rounded" style={{ background: TRED }} />
           <div className="mt-6 flex flex-wrap items-center gap-3">
             {[
