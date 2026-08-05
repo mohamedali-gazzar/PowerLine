@@ -1275,10 +1275,13 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
           {COVER_RANGE.map((col, i) => (
             <div key={col.title} className={`px-4 ${i === 0 ? "pl-0" : "border-l border-line"}`}>
               <div className="mb-2.5">{col.icon}</div>
-              <div className="font-display text-[10px] font-bold uppercase leading-tight tracking-[0.13em] text-charcoal">
-                {col.title}
+              {/* Two-line box, bottom-aligned: "Secondary Switchgear" wraps and the others
+                  do not, so without it their rules and product lists sat at different
+                  heights across the strip. Titles hang from the same baseline instead. */}
+              <div className="flex h-[25px] items-end font-display text-[10px] font-bold uppercase leading-tight tracking-[0.13em] text-charcoal">
+                <span>{col.title}</span>
               </div>
-              <div className="mt-1.5 mb-3 h-[2px] w-7 rounded-full" style={{ background: TRED }} />
+              <div className="mt-2 mb-3 h-[2px] w-7 rounded-full" style={{ background: TRED }} />
               <ul className="space-y-1.5">
                 {col.items.map((it) => (
                   <li key={it} className="text-[13px] font-medium leading-tight text-charcoal">{it}</li>
