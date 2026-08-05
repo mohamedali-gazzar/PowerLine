@@ -1143,6 +1143,16 @@ function ChangeRow({ it }: { it: CatalogChangeItem }) {
   );
 }
 
+/** The product range printed on the offer covers. Edit here — it is the same strip on
+ *  the Technical and Commercial covers, which are one component. */
+const COVER_RANGE: { title: string; items: string[] }[] = [
+  { title: "LV Enclosures", items: ["PLP MAX", "PLP CORE", "PLP MINI"] },
+  { title: "Transformers", items: ["PDTR"] },
+  { title: "Secondary Switchgear", items: ["PRAL", "PSEC", "AEGIS PLUS"] },
+  { title: "Primary Switchgear", items: ["PLGEAR"] },
+  { title: "Kiosk", items: ["PCSS"] },
+];
+
 function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Technical" | "Commercial" }) {
   const [staff] = useStaff();
   const mgr = staff.salesManagers.find((m) => m.name === SALES_MANAGER);
@@ -1190,36 +1200,22 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
             </div>
           )}
         </div>
-        <div className="mt-6 grid grid-cols-4 gap-5">
-          {[
-            { label: "LV MDBs", icon: (
-              <svg viewBox="0 0 48 64" className="h-16 w-12" fill="none" stroke="#585859" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="12" y="8" width="24" height="48" rx="2" /><line x1="24" y1="8" x2="24" y2="56" /><line x1="12" y1="28" x2="36" y2="28" />
-                <rect x="21" y="30" width="6" height="6" rx="1" fill="#F16722" stroke="none" />
-              </svg>
-            ) },
-            { label: "LV Sub DBs", icon: (
-              <svg viewBox="0 0 48 64" className="h-16 w-12" fill="none" stroke="#585859" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="12" y="8" width="24" height="48" rx="2" /><line x1="12" y1="26" x2="36" y2="26" /><line x1="12" y1="40" x2="36" y2="40" />
-                <rect x="21" y="30" width="6" height="6" rx="1" fill="#F16722" stroke="none" />
-              </svg>
-            ) },
-            { label: "SF6 RMUs", icon: (
-              <svg viewBox="0 0 48 64" className="h-16 w-12" fill="none" stroke="#585859" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="13" y="8" width="22" height="48" rx="2" /><circle cx="24" cy="22" r="5" /><line x1="24" y1="27" x2="24" y2="36" />
-                <rect x="21" y="44" width="6" height="6" rx="1" fill="#F16722" stroke="none" />
-              </svg>
-            ) },
-            { label: "Air RMUs", icon: (
-              <svg viewBox="0 0 48 64" className="h-16 w-12" fill="none" stroke="#585859" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="13" y="8" width="22" height="48" rx="2" /><circle cx="24" cy="20" r="4.5" /><circle cx="24" cy="34" r="4.5" />
-                <rect x="21" y="46" width="6" height="6" rx="1" fill="#F16722" stroke="none" />
-              </svg>
-            ) },
-          ].map((c) => (
-            <div key={c.label} className="flex flex-col items-center gap-4 rounded-2xl bg-surface px-4 py-5">
-              {c.icon}
-              <div className="text-lg font-bold text-ink">{c.label}</div>
+        {/* What Powerline supplies. Hairline-ruled columns, no boxes: the cover already
+            carries a 7xl title, an orange rule and a full-bleed orange bar, so this reads
+            as evidence rather than a second headline. Category labels in Nexa (display),
+            the product lines in Poppins — the brand's display/body split. */}
+        <div className="mt-7 grid grid-cols-5">
+          {COVER_RANGE.map((col, i) => (
+            <div key={col.title} className={`px-4 ${i === 0 ? "pl-0" : "border-l border-line"}`}>
+              <div className="font-display text-[10px] font-bold uppercase leading-tight tracking-[0.13em] text-charcoal">
+                {col.title}
+              </div>
+              <div className="mt-1.5 mb-3 h-[2px] w-7 rounded-full" style={{ background: TRED }} />
+              <ul className="space-y-1.5">
+                {col.items.map((it) => (
+                  <li key={it} className="text-[13px] font-medium leading-tight text-charcoal">{it}</li>
+                ))}
+              </ul>
             </div>
           ))}
         </div>
