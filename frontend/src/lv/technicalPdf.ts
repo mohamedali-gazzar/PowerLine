@@ -199,6 +199,32 @@ function paginatePanel(host: HTMLElement, headerEl: HTMLElement | null, panelEl:
   return pages;
 }
 
+/**
+ * Re-attach hyperlinks after a page has been rasterised.
+ *
+ * Every page goes into the PDF as an image, so an <a> in the source is just
+ * pixels by the time the customer opens the file. jsPDF can carry a link
+ * annotation instead: measure the anchor inside its page block, scale px → mm,
+ * and lay the clickable rectangle over the same spot on the page.
+ *
+ * Must run while the page block is still mounted, or the rects are all zero.
+ */
+function addPageLinks(pdf: jsPDF, page: HTMLElement): void {
+  const anchors = page.querySelectorAll<HTMLElement>("[data-pdf-link]");
+  if (!anchors.length) return;
+  const box = page.getBoundingClientRect();
+  if (!box.width || !box.height) return;
+  const sx = PW / box.width;
+  const sy = PH / box.height;
+  for (const a of anchors) {
+    const url = a.getAttribute("data-pdf-link");
+    if (!url) continue;
+    const r = a.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    pdf.link((r.left - box.left) * sx, (r.top - box.top) * sy, r.width * sx, r.height * sy, { url });
+  }
+}
+
 export async function exportTechnicalPdf(opts: ExportOpts): Promise<void> {
   const { printArea, filename } = opts;
   const cover = printArea.querySelector<HTMLElement>("[data-pdf-cover]");
@@ -241,6 +267,7 @@ export async function exportTechnicalPdf(opts: ExportOpts): Promise<void> {
       const img = await htmlToImage.toJpeg(pages[i], { quality: 0.92, backgroundColor: "#ffffff", pixelRatio: 2, fontEmbedCSS });
       if (i > 0) pdf.addPage();
       pdf.addImage(img, "JPEG", 0, 0, PW, PH);
+      addPageLinks(pdf, pages[i]);
     }
     pdf.save(filename.toLowerCase().endsWith(".pdf") ? filename : `${filename}.pdf`);
   } finally {

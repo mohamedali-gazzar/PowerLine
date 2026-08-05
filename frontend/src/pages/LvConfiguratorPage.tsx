@@ -1156,11 +1156,16 @@ const ORANGE = "#F16722";
 const PANEL_LAMPS = ["#2FA84F", "#D64545", "#E8B93A"];
 
 /** The product range printed on the offer covers. Edit here — it is the same strip on
- *  the Technical and Commercial covers, which are one component. */
-const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] = [
+ *  the Technical and Commercial covers, which are one component.
+ *
+ *  `href` makes the icon and title a link to that product's page. A category with no
+ *  href simply is not a link — better than guessing a URL that 404s on a document
+ *  already sent to a customer. */
+const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode; href?: string }[] = [
   {
     title: "LV Enclosures",
     items: ["PLP MAX", "PLP CORE", "PLP MINI"],
+    href: "https://www.powerlinei.com/low-voltage",
     // LV control panel drawn from the supplied photograph: metering row, pilot
     // lights, rotary selector, nameplate — the door's actual reading order.
     //
@@ -1197,46 +1202,60 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
   {
     title: "Transformers",
     items: ["PDTR"],
-    // Distribution transformer, redrawn from the supplied artwork as vector: three
-    // bushings, tank, side radiators, plinth and the bolt. The original's yellow
-    // becomes Powerline orange; its blue-greys and black outline become charcoal at
-    // reduced strength, because a slate blue would be a fourth colour.
+    href: "https://www.powerlinei.com/products/dry-type-transformers",
+    // Cast-resin DRY-TYPE transformer, drawn from the supplied photograph — the three
+    // exposed coil limbs between a clamping beam and the base frame. That silhouette
+    // is what says "dry type" rather than the oil tank it replaces, so the coils take
+    // the orange and everything structural stays charcoal.
     icon: (
-      <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.25"
+      <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.06"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        {/* bushings — three stacks of insulator sheds on their posts */}
-        {[8.6, 16, 23.4].map((cx) => (
-          <g key={cx}>
-            <line x1={cx} y1="2.4" x2={cx} y2="4.4" />
-            <rect x={cx - 2.5} y="4.4" width="5" height="5.2" rx="1.1" fill={ORANGE} />
-            <line x1={cx - 2.5} y1="6.1" x2={cx + 2.5} y2="6.1" />
-            <line x1={cx - 2.5} y1="7.9" x2={cx + 2.5} y2="7.9" />
-            <line x1={cx} y1="9.6" x2={cx} y2="11" />
+        {/* Drawn 4.3→27.2 tall, then scaled to the 2.5→29.5 the other icons occupy, so
+            the five sit at one height in the strip. Stroke widths are pre-divided by
+            the 1.179 factor to come out at the set's 1.25 after scaling. */}
+        <g transform="translate(-2.865 -2.57) scale(1.179)">
+        {/* clamping beam with the nameplate */}
+        <rect x="3.6" y="4.3" width="24.8" height="2.9" rx="0.5" fill="rgba(88,88,89,0.55)" stroke="none" />
+        <rect x="12.4" y="5.1" width="7.2" height="1.3" rx="0.25" fill="rgba(255,255,255,0.9)" stroke="none" />
+        {/* three cast-resin coil limbs */}
+        {[5.4, 13.2, 21].map((x) => (
+          <g key={x}>
+            <rect x={x} y="8.1" width="5.6" height="14.8" rx="2.4" fill={ORANGE} stroke="none" />
+            <rect x={x + 1.7} y="7.2" width="2.2" height="1.5" rx="0.3" fill="rgba(88,88,89,0.7)" stroke="none" />
           </g>
         ))}
-        {/* lid, radiators, tank, plinth */}
-        <rect x="5.2" y="11" width="21.6" height="2.6" rx="0.9" fill="rgba(88,88,89,0.12)" />
-        <rect x="2.6" y="15.4" width="3.4" height="7.6" rx="1" fill="rgba(88,88,89,0.12)" />
-        <rect x="26" y="15.4" width="3.4" height="7.6" rx="1" fill="rgba(88,88,89,0.12)" />
-        <rect x="6" y="13.6" width="20" height="12.4" rx="1.1" fill="rgba(88,88,89,0.06)" />
-        <line x1="10.4" y1="13.6" x2="10.4" y2="26" />
-        <line x1="21.6" y1="13.6" x2="21.6" y2="26" />
-        <rect x="8.4" y="26" width="15.2" height="2.4" rx="0.8" fill="rgba(88,88,89,0.12)" />
-        {/* the bolt */}
-        <path d="M17.5 15.4 L13.2 20.6 L15.8 20.6 L14.6 24.6 L18.9 19.2 L16.3 19.2 Z"
-          fill={ORANGE} strokeWidth="1" />
+        {/* HV connection bars — the delta: each limb's top to the next limb's bottom.
+            The long return bar from limb 3 back to limb 1 is what crosses the other
+            two and gives the X you see on the real unit. Bolted at every terminal. */}
+        <g stroke="#585859" strokeWidth="1.19">
+          <line x1="8.2" y1="11" x2="16" y2="20" />
+          <line x1="16" y1="11" x2="23.8" y2="20" />
+          <line x1="23.8" y1="11" x2="8.2" y2="20" />
+        </g>
+        {[8.2, 16, 23.8].flatMap((cx) => [11, 20].map((cy) => (
+          <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="1" fill="rgba(88,88,89,0.9)" stroke="none" />
+        )))}
+        {/* base frame and skid */}
+        <rect x="3.6" y="23" width="24.8" height="2.7" rx="0.5" fill="rgba(88,88,89,0.55)" stroke="none" />
+        <rect x="6.6" y="25.7" width="4.4" height="1.5" rx="0.3" fill="rgba(88,88,89,0.35)" stroke="none" />
+        <rect x="21" y="25.7" width="4.4" height="1.5" rx="0.3" fill="rgba(88,88,89,0.35)" stroke="none" />
+        </g>
       </svg>
     ),
   },
   {
     title: "Secondary Switchgear",
     items: ["PRAL", "PSEC", "AEGIS PLUS"],
+    href: "https://www.powerlinei.com/secondary-switchgear",
     // RMU line-up drawn from the supplied photograph. The orange mimic band running
     // across the middle is what identifies this product on sight, so it carries the
     // accent — three cubicles, instruments above, cable compartments below.
     icon: (
-      <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.25"
+      <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.157"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {/* Drawn 3.4→28.4 tall, then scaled to the 2.5→29.5 the other icons occupy.
+            Stroke widths pre-divided by the 1.08 factor to land on the set's 1.25. */}
+        <g transform="translate(-1.28 -1.172) scale(1.08)">
         <rect x="4.2" y="3.4" width="23.6" height="25" rx="1" fill="rgba(88,88,89,0.06)" />
         {/* instrument compartments */}
         {[8.13, 16, 23.87].map((cx) => (
@@ -1246,7 +1265,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
         {/* the mimic band — the product's signature */}
         <rect x="4.2" y="10.6" width="23.6" height="5.6" fill={ORANGE} stroke="none" />
         {[8.13, 16, 23.87].map((cx) => (
-          <g key={`s${cx}`} stroke="#fff" strokeWidth="0.85">
+          <g key={`s${cx}`} stroke="#fff" strokeWidth="0.787">
             <circle cx={cx} cy="12.6" r="0.85" />
             <line x1={cx} y1="13.45" x2={cx} y2="14.9" />
           </g>
@@ -1260,12 +1279,14 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
         ))}
         {/* base rail */}
         <rect x="4.2" y="26.6" width="23.6" height="1.8" rx="0.3" fill="rgba(88,88,89,0.5)" stroke="none" />
+        </g>
       </svg>
     ),
   },
   {
     title: "Primary Switchgear",
     items: ["PLGEAR"],
+    href: "https://www.powerlinei.com/primary-switchgear",
     // MV cubicle drawn from the supplied photograph, distilled to what identifies it
     // at 28px: the protection-relay row, the dark control plate carrying the breaker
     // mimic, and the cable compartment below.
@@ -1291,12 +1312,16 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
   {
     title: "Kiosk",
     items: ["PCSS"],
+    href: "https://www.powerlinei.com/products/pcss",
     // PCSS drawn from the supplied photograph: the gabled roof cap with its
     // nameplate, the double doors on their centre seam, and the dark plinth. The
     // nameplate takes the orange — on the real kiosk that plate IS the brand mark.
     icon: (
-      <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.25"
+      <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.088"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {/* Drawn 4.6→28.1 tall, then scaled to the 2.5→29.5 the other icons occupy.
+            Stroke widths pre-divided by the 1.149 factor to land on the set's 1.25. */}
+        <g transform="translate(-2.383 -2.785) scale(1.149)">
         {/* gabled roof cap */}
         <path d="M3.8 10.6 L16 4.6 L28.2 10.6 Z" fill="rgba(88,88,89,0.12)" />
         <rect x="12.6" y="7.6" width="6.8" height="2.1" rx="0.35" fill={ORANGE} stroke="none" />
@@ -1304,10 +1329,11 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] =
         <rect x="5.4" y="10.6" width="21.2" height="15.2" rx="0.6" fill="rgba(88,88,89,0.06)" />
         <line x1="16" y1="10.6" x2="16" y2="25.8" />
         <rect x="15.2" y="16.6" width="1.6" height="3" rx="0.4" fill="rgba(88,88,89,0.6)" stroke="none" />
-        <line x1="14.6" y1="13.4" x2="17.4" y2="13.4" strokeWidth="1" />
-        <line x1="14.6" y1="22.6" x2="17.4" y2="22.6" strokeWidth="1" />
+        <line x1="14.6" y1="13.4" x2="17.4" y2="13.4" strokeWidth="0.87" />
+        <line x1="14.6" y1="22.6" x2="17.4" y2="22.6" strokeWidth="0.87" />
         {/* plinth */}
         <rect x="4.6" y="25.8" width="22.8" height="2.3" rx="0.4" fill="rgba(88,88,89,0.5)" stroke="none" />
+        </g>
       </svg>
     ),
   },
@@ -1367,13 +1393,28 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
         <div className="mt-7 grid grid-cols-5">
           {COVER_RANGE.map((col, i) => (
             <div key={col.title} className={`px-4 ${i === 0 ? "pl-0" : "border-l border-line"}`}>
-              <div className="mb-2.5">{col.icon}</div>
-              {/* Two-line box, bottom-aligned: "Secondary Switchgear" wraps and the others
-                  do not, so without it their rules and product lists sat at different
-                  heights across the strip. Titles hang from the same baseline instead. */}
-              <div className="flex h-[25px] items-end font-display text-[10px] font-bold uppercase leading-tight tracking-[0.13em] text-charcoal">
-                <span>{col.title}</span>
-              </div>
+              {/* Icon + title are one link to the product page. data-pdf-link carries the
+                  URL into the PDF export, which rasterises each page — without it the
+                  anchor would be a picture of a link in the file customers receive. */}
+              {(() => {
+                const head = (
+                  <>
+                    <div className="mb-2.5">{col.icon}</div>
+                    {/* Two-line box, bottom-aligned: "Secondary Switchgear" wraps and the
+                        others do not, so without it their rules and product lists sat at
+                        different heights. Titles hang from the same baseline instead. */}
+                    <div className="flex h-[25px] items-end font-display text-[10px] font-bold uppercase leading-tight tracking-[0.13em] text-charcoal">
+                      <span>{col.title}</span>
+                    </div>
+                  </>
+                );
+                return col.href ? (
+                  <a href={col.href} target="_blank" rel="noopener noreferrer" data-pdf-link={col.href}
+                    className="block text-inherit no-underline" title={`Open ${col.title} on powerlinei.com`}>
+                    {head}
+                  </a>
+                ) : head;
+              })()}
               <div className="mt-2 mb-3 h-[2px] w-7 rounded-full" style={{ background: TRED }} />
               <ul className="space-y-1.5">
                 {col.items.map((it) => (
