@@ -1352,10 +1352,11 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
   return (
     <section data-pdf-cover className="a4-sheet flex flex-col overflow-hidden" style={{ breakAfter: "page" }}>
       <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
-      {/* pb-8: the address sat 7px off the trimmed edge, which reads as a printing
-          error rather than a margin. The 24px comes off the gap above the footer
-          (pt-8 → pt-2 below), so the page height is unchanged. */}
-      <div className="flex flex-1 flex-col px-12 pb-8 pt-12">
+      {/* pb-14: the address once sat 7px off the trimmed edge, inside the margin a real
+          trim would eat. The slack now lives ABOVE the range strip (mt-auto there
+          rather than on the footer), so the strip sits low on the page and the footer
+          rides up with it, instead of the two being separated by a dead band. */}
+      <div className="flex flex-1 flex-col px-12 pb-14 pt-12">
         <div className="flex items-center justify-between">
           <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-32" />
           {s.project.date && (
@@ -1373,27 +1374,33 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
               {s.project.optyNo && <div className="mb-2 text-[14px] font-semibold text-muted">{s.project.optyNo}</div>}
               {s.project.name && <div className="text-base text-ink">{s.project.name}</div>}
               {s.project.customer && <div className="mb-3 text-base text-muted">{s.project.customer}</div>}
-              {coverContacts.length > 0 && (
-                <div className="mt-2 grid w-fit grid-cols-[4rem_auto_auto_auto] items-baseline gap-x-4 gap-y-1 text-left text-[12px] text-muted">
-                  <div className="col-span-4 h-3" />
-                  {coverContacts.map((c) => (
-                    <div key={c.role} className="contents">
-                      <span className="inline-block w-16 text-[12px] font-semibold text-ink">{c.role}:</span>
-                      <span className="whitespace-nowrap">{c.name}</span>
-                      <span className="whitespace-nowrap">{c.phone && <a href={coverTel(c.phone)} className="text-inherit no-underline"><CoverPhoneI />{c.phone}</a>}</span>
-                      <span className="whitespace-nowrap">{c.email && <a href={`mailto:${c.email}`} className="text-inherit no-underline"><CoverMailI />{c.email}</a>}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </div>
+
+        {/* Contacts and the range strip share the band between the customer line and
+            the footer rule. justify-evenly gives three EQUAL gaps — above the contacts,
+            between contacts and strip, and below the strip — so neither block hugs the
+            text above it. Both were previously pinned: the contacts to the customer
+            line, the strip to the footer, leaving one dead band in the middle. */}
+        <div className="flex flex-1 flex-col justify-evenly">
+          {coverContacts.length > 0 && (
+            <div className="grid w-fit grid-cols-[4rem_auto_auto_auto] items-baseline gap-x-4 gap-y-1 text-left text-[12px] text-muted">
+              {coverContacts.map((c) => (
+                <div key={c.role} className="contents">
+                  <span className="inline-block w-16 text-[12px] font-semibold text-ink">{c.role}:</span>
+                  <span className="whitespace-nowrap">{c.name}</span>
+                  <span className="whitespace-nowrap">{c.phone && <a href={coverTel(c.phone)} className="text-inherit no-underline"><CoverPhoneI />{c.phone}</a>}</span>
+                  <span className="whitespace-nowrap">{c.email && <a href={`mailto:${c.email}`} className="text-inherit no-underline"><CoverMailI />{c.email}</a>}</span>
+                </div>
+              ))}
+            </div>
+          )}
         {/* What Powerline supplies. Hairline-ruled columns, no boxes: the cover already
             carries a 7xl title, an orange rule and a full-bleed orange bar, so this reads
             as evidence rather than a second headline. Category labels in Nexa (display),
             the product lines in Poppins — the brand's display/body split. */}
-        <div className="mt-7 grid grid-cols-5">
+        <div className="grid grid-cols-5">
           {COVER_RANGE.map((col, i) => (
             <div key={col.title} className={`px-4 ${i === 0 ? "pl-0" : "border-l border-line"}`}>
               {/* Icon + title are one link to the product page. data-pdf-link carries the
@@ -1426,8 +1433,11 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
               </ul>
             </div>
           ))}
+          </div>
         </div>
-        <div className="mt-auto pt-2">
+        {/* No top margin: the justify-evenly band above owns the spacing, so a margin
+            here would push the strip off its centre. */}
+        <div data-cover-footer>
           <div className="h-[3px] w-[calc(100%+3rem)] rounded" style={{ background: TRED }} />
           <div className="mt-6 flex flex-wrap items-center gap-3">
             {[
