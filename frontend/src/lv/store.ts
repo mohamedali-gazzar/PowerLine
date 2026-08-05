@@ -108,6 +108,12 @@ export interface LvPanel {
   cablesEgp?: number;     // LCP/KWHM: cables cost, EGP — manual
   lcpBox?: { H: number; W: number; D: number }; // LCP/KWHM: chosen SR-Basic box (auto-sized, editable)
   lcpBox2?: { H: number; W: number; D: number }; // LCP/KWHM: 2nd enclosure box (Double layout only)
+  // LCP/KWHM: enclosure chosen by catalogue reference instead of by size. Primo, Minicenter,
+  // Pro-E and IS2 name their boxes by capacity ("3PH-E-KWHM", "24 line") and carry no
+  // dimensions at all, so H×W×D cannot address them. When set, the reference wins over
+  // lcpBox and prices the panel directly from that catalogue row.
+  lcpEnclRef?: string;
+  lcpEnclRef2?: string; // second enclosure (Double layout)
   sections: string[];
   activeSection: string;
   components: PanelComponent[];
@@ -547,11 +553,32 @@ export function lcpEnclosureDbPrice(box: LcpBox | null | undefined, f: Factors, 
 export function lcpBox2Of(p: LvPanel): LcpBox | null {
   return p.panelsSizing?.layout === "Double" ? (p.lcpBox2 ?? null) : null;
 }
+/** Every box in a family that is named rather than dimensioned — Primo "3PH-E-KWHM",
+ *  Minicenter, Pro-E, IS2. These can only be addressed by catalogue reference, which is
+ *  why lcpSizes() (which parses H×W×D out of the name) returns nothing for them. */
+export function lcpNamedBoxes(fam: string): DbEnclosure[] {
+  return ENCLOSURES.filter((e) => e.fam === fam && !parseEnclDims(e.name) && (e.eur > 0 || e.egp > 0));
+}
+/** A catalogue enclosure by reference (the LCP/KWHM reference-picked box). */
+export const lcpEnclByRef = (ref?: string): DbEnclosure | undefined =>
+  ref ? ENCLOSURES.find((e) => e.ref === ref) : undefined;
+/** EGP price of a reference-picked enclosure; 0 when the reference no longer resolves. */
+export function lcpRefPriceEgp(ref: string | undefined, f: Factors): number {
+  const e = lcpEnclByRef(ref);
+  return e ? enclosurePriceEgp(e, f) : 0;
+}
 /** LCP enclosure cost — the catalogue (price-list) cost of the chosen box(es) in the panel's
- *  enclosure family; Double sums both. */
+ *  enclosure family; Double sums both. A reference-picked box wins over the sized one. */
 export function lcpEnclosureEgp(p: LvPanel, f: Factors): number {
   const fam = p.panelsSizing?.family ?? "SR-Basic";
-  return lcpEnclosureDbPrice(lcpBoxOf(p), f, fam) + lcpEnclosureDbPrice(lcpBox2Of(p), f, fam);
+  const one = p.lcpEnclRef ? lcpRefPriceEgp(p.lcpEnclRef, f) : lcpEnclosureDbPrice(lcpBoxOf(p), f, fam);
+  const two =
+    p.panelsSizing?.layout === "Double"
+      ? p.lcpEnclRef2
+        ? lcpRefPriceEgp(p.lcpEnclRef2, f)
+        : lcpEnclosureDbPrice(lcpBox2Of(p), f, fam)
+      : 0;
+  return one + two;
 }
 /** Parse H×W×D (mm) from an enclosure name — dims aren't in the DB H/W/D fields. Handles
  *  the SR-Basic "new" prefix, the Local "L" prefix, PLP "… 2000 x 400 x 700mm", etc. Returns

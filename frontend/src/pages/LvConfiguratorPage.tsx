@@ -13,6 +13,7 @@ import {
 import {
   newPanel, newSparePanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
+  lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
@@ -2115,14 +2116,25 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
   const overCeiling = !isDouble && G > 0 && !box;   // beyond a single panel (> ~75 groups)
   const rows = p.components;
   const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
-  const enclEgp = lcpEnclosureDbPrice(box, f, fam) + lcpEnclosureDbPrice(box2, f, fam);   // one box, or two (Double)
+  const enclEgp = lcpEnclosureEgp(p, f);   // one box, or two (Double); honours a reference pick
   const cablesMissing = !((p.cablesEgp ?? 0) > 0);
-  // Sizing dropdown — every box size in the selected family, priced from the catalogue.
-  const sizeOptions = lcpSizes(fam).map((sz) => ({
-    key: `${sz.H}x${sz.W}x${sz.D}`,
-    label: `${sz.H} × ${sz.W} × ${sz.D} mm`,
-    hint: `${fmtEgp(lcpEnclosureDbPrice(sz, f, fam))} EGP`,
-  }));
+  // Sizing dropdown — the family's boxes, priced from the catalogue. Families that name their
+  // boxes by capacity (Primo "3PH-E-KWHM", Minicenter, Pro-E, IS2) carry no H×W×D at all, so
+  // they are listed by name and addressed by catalogue reference instead of by size.
+  const sizeOptions = [
+    ...lcpSizes(fam).map((sz) => ({
+      key: `${sz.H}x${sz.W}x${sz.D}`,
+      label: `${sz.H} × ${sz.W} × ${sz.D} mm`,
+      hint: `${fmtEgp(lcpEnclosureDbPrice(sz, f, fam))} EGP`,
+    })),
+    ...lcpNamedBoxes(fam).map((e) => ({
+      key: `ref:${e.ref}`,
+      label: e.name,
+      hint: `${fmtEgp(enclosurePriceEgp(e, f))} EGP`,
+    })),
+  ];
+  const refBox = lcpEnclByRef(p.lcpEnclRef);    // reference-picked box (non-dimensioned family)
+  const refBox2 = lcpEnclByRef(p.lcpEnclRef2);
   // Auto-sizing candidates + which one is chosen. KWHM uses its meter-per-row rule; LCP the
   // groups-per-row rule. Both pick the lowest-priced candidate box.
   const kwhmMode = isKwhm && !!kwhmContentCfg(content);
@@ -2141,8 +2153,18 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
     : "";
   const keyOfBox = (b: { H: number; W: number; D: number } | null) => (b ? `${b.H}x${b.W}x${b.D}` : "");
   const parseBox = (key: string) => { const m = key.match(/(\d+)x(\d+)x(\d+)/); return m ? { H: +m[1], W: +m[2], D: +m[3] } : null; };
-  const pickSize = (key: string) => { const b = parseBox(key); if (b) u({ lcpBox: b }); };
-  const pickSize2 = (key: string) => { const b = parseBox(key); if (b) u({ lcpBox2: b }); };
+  // The two ways of addressing a box are mutually exclusive — picking one clears the other,
+  // so the panel never carries a stale size next to a reference (or the reverse).
+  const sizeValue = p.lcpEnclRef ? `ref:${p.lcpEnclRef}` : keyOfBox(box);
+  const sizeValue2 = p.lcpEnclRef2 ? `ref:${p.lcpEnclRef2}` : keyOfBox(box2);
+  const pickSize = (key: string) => {
+    if (key.startsWith("ref:")) { u({ lcpEnclRef: key.slice(4), lcpBox: undefined }); return; }
+    const b = parseBox(key); if (b) u({ lcpBox: b, lcpEnclRef: undefined });
+  };
+  const pickSize2 = (key: string) => {
+    if (key.startsWith("ref:")) { u({ lcpEnclRef2: key.slice(4), lcpBox2: undefined }); return; }
+    const b = parseBox(key); if (b) u({ lcpBox2: b, lcpEnclRef2: undefined });
+  };
   return (
     <div className="space-y-4 animate-fade-up">
       {/* Header */}
@@ -2309,13 +2331,18 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
           </div>
           <div>
             <L>{isDouble ? "Sizing (1)" : "Sizing"}</L>
-            <SearchSelect value={keyOfBox(box)} placeholder="Search size — one selection…" options={sizeOptions} onPick={pickSize} heightMatch />
-            {!isDouble && (overCeiling ? (
+            <SearchSelect value={sizeValue} placeholder="Search size — one selection…" options={sizeOptions} onPick={pickSize} heightMatch />
+            {!isDouble && (refBox ? (
+              <p className="mt-1 text-[11px] text-muted">{fam} “{refBox.name}” · {refBox.ref} — chosen from the catalogue, not auto-sized.</p>
+            ) : overCeiling ? (
               <p className="mt-1 text-[11px] font-semibold text-red-600">
                 {G} groups exceed a single panel (max ≈ {5 * LCP_MAX_ROWS}). Split into multiple LCP panels.
               </p>
             ) : G > 0 && box ? (
-              <p className="mt-1 text-[11px] text-muted">Auto-sized from {G} group{G === 1 ? "" : "s"} · recommended {box.H} × {box.W} × {box.D} mm</p>
+              <p className="mt-1 text-[11px] text-muted">
+                Auto-sized from {G} group{G === 1 ? "" : "s"} · recommended {box.H} × {box.W} × {box.D} mm
+                {!lcpSizes(fam).length && <> — {fam} has no sized boxes, so this one is priced from SR-Basic</>}
+              </p>
             ) : (
               <p className="mt-1 text-[11px] text-muted">Enter {countLabel} above to auto-size, or pick a size.</p>
             ))}
@@ -2323,8 +2350,10 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
           {isDouble && (
             <div>
               <L>Sizing (2)</L>
-              <SearchSelect value={keyOfBox(box2)} placeholder="Search size — one selection…" options={sizeOptions} onPick={pickSize2} heightMatch />
-              <p className="mt-1 text-[11px] text-muted">Second enclosure — pick its size (not auto-recommended).</p>
+              <SearchSelect value={sizeValue2} placeholder="Search size — one selection…" options={sizeOptions} onPick={pickSize2} heightMatch />
+              <p className="mt-1 text-[11px] text-muted">
+                {refBox2 ? <>{fam} “{refBox2.name}” · {refBox2.ref}</> : "Second enclosure — pick its size (not auto-recommended)."}
+              </p>
             </div>
           )}
           </div>
