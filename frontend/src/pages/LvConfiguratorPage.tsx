@@ -1731,18 +1731,12 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                     <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">Qty</th>
                     <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">Description</th>
                     <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">ADJ</th>
+                    {/* Header carries no control. The eye used to sit here, inside the
+                        orange header row — document content, not UI — so it printed in
+                        the offer and was baked into the exported PDF. The toggle lives
+                        above the offer instead; this column just obeys it. */}
                     {!hideBrand && (
-                      <th className="px-2 text-left py-1 text-[12px] font-bold leading-[17px]">
-                        <span className="inline-flex items-center gap-1">Brand
-                          <button type="button" onClick={() => setHideBrand(true)} title="Hide the Brand column from the offer"
-                            className="no-print inline-flex opacity-80 transition hover:opacity-100">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-                              <circle cx="12" cy="12" r="3" />
-                            </svg>
-                          </button>
-                        </span>
-                      </th>
+                      <th className="px-2 text-left py-1 text-[12px] font-bold leading-[17px]">Brand</th>
                     )}
                     <th className="px-2 text-left py-1 text-[12px] font-bold leading-[17px]">NOTE</th>
                   </tr>

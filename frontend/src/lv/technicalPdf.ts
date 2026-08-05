@@ -263,6 +263,11 @@ export async function exportTechnicalPdf(opts: ExportOpts): Promise<void> {
     // them without re-fetching per page. Nexa is a system font and needs no embedding.
     let fontEmbedCSS: string | undefined;
     try { fontEmbedCSS = await htmlToImage.getFontEmbedCSS(host); } catch { /* fall back to per-call embedding */ }
+    // .no-print only exists inside @media print, and this export renders SCREEN styles,
+    // so anything marked no-print would otherwise be baked into the PDF. The pages are
+    // clones, so stripping here cannot touch the live offer.
+    for (const p of pages) for (const el of p.querySelectorAll<HTMLElement>(".no-print")) el.remove();
+
     for (let i = 0; i < pages.length; i++) {
       const img = await htmlToImage.toJpeg(pages[i], { quality: 0.92, backgroundColor: "#ffffff", pixelRatio: 2, fontEmbedCSS });
       if (i > 0) pdf.addPage();
