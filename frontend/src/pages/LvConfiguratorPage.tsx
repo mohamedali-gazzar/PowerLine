@@ -1143,14 +1143,81 @@ function ChangeRow({ it }: { it: CatalogChangeItem }) {
   );
 }
 
+/** Cover icons — drawn, not raster, so they stay sharp through the PDF export.
+ *  Charcoal linework with ONE orange accent each: the accent marks what the product
+ *  actually is (the live part, the door, the breaker), so the orange carries meaning
+ *  rather than decorating. Same 32-unit box and stroke weight across all five. */
+const CoverIcon = ({ children }: { children: React.ReactNode }) => (
+  <svg viewBox="0 0 32 32" className="h-7 w-7" fill="none" stroke="#585859" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {children}
+  </svg>
+);
+const ORANGE = "#F16722";
+
 /** The product range printed on the offer covers. Edit here — it is the same strip on
  *  the Technical and Commercial covers, which are one component. */
-const COVER_RANGE: { title: string; items: string[] }[] = [
-  { title: "LV Enclosures", items: ["PLP MAX", "PLP CORE", "PLP MINI"] },
-  { title: "Transformers", items: ["PDTR"] },
-  { title: "Secondary Switchgear", items: ["PRAL", "PSEC", "AEGIS PLUS"] },
-  { title: "Primary Switchgear", items: ["PLGEAR"] },
-  { title: "Kiosk", items: ["PCSS"] },
+const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode }[] = [
+  {
+    title: "LV Enclosures",
+    items: ["PLP MAX", "PLP CORE", "PLP MINI"],
+    icon: ( // cubicle: door split, tiers, live indicator
+      <CoverIcon>
+        <rect x="7" y="4" width="18" height="24" rx="1.5" />
+        <line x1="16" y1="4" x2="16" y2="28" />
+        <line x1="7" y1="12" x2="25" y2="12" />
+        <rect x="18.5" y="15" width="4" height="4" rx="0.8" fill={ORANGE} stroke="none" />
+      </CoverIcon>
+    ),
+  },
+  {
+    title: "Transformers",
+    items: ["PDTR"],
+    icon: ( // tank, cooling fins, HV/LV bushings — one live
+      <CoverIcon>
+        <rect x="9" y="11" width="14" height="14" rx="1.5" />
+        <line x1="9" y1="15" x2="6" y2="15" /><line x1="9" y1="21" x2="6" y2="21" />
+        <line x1="23" y1="15" x2="26" y2="15" /><line x1="23" y1="21" x2="26" y2="21" />
+        <line x1="13" y1="11" x2="13" y2="8" /><line x1="19" y1="11" x2="19" y2="8" />
+        <circle cx="13" cy="6.5" r="1.6" fill={ORANGE} stroke="none" />
+        <circle cx="19" cy="6.5" r="1.6" />
+      </CoverIcon>
+    ),
+  },
+  {
+    title: "Secondary Switchgear",
+    items: ["PRAL", "PSEC", "AEGIS PLUS"],
+    icon: ( // ring unit: switch-disconnector blade off its contact
+      <CoverIcon>
+        <rect x="6" y="6" width="20" height="20" rx="1.5" />
+        <circle cx="16" cy="12" r="1.4" fill={ORANGE} stroke="none" />
+        <line x1="16" y1="13.4" x2="20" y2="20" />
+        <line x1="11" y1="21" x2="21" y2="21" />
+      </CoverIcon>
+    ),
+  },
+  {
+    title: "Primary Switchgear",
+    items: ["PLGEAR"],
+    icon: ( // withdrawable breaker: the isolating cross
+      <CoverIcon>
+        <rect x="7" y="4" width="18" height="24" rx="1.5" />
+        <line x1="12" y1="11" x2="20" y2="19" /><line x1="20" y1="11" x2="12" y2="19" />
+        <rect x="13.5" y="23" width="5" height="2.5" rx="0.8" fill={ORANGE} stroke="none" />
+      </CoverIcon>
+    ),
+  },
+  {
+    title: "Kiosk",
+    items: ["PCSS"],
+    icon: ( // packaged substation: canopy over the enclosure, access door
+      <CoverIcon>
+        <path d="M4 13 L16 6 L28 13" />
+        <rect x="7" y="13" width="18" height="13" rx="1" />
+        <rect x="13.5" y="18" width="5" height="8" rx="0.6" fill={ORANGE} stroke="none" />
+      </CoverIcon>
+    ),
+  },
 ];
 
 function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Technical" | "Commercial" }) {
@@ -1207,6 +1274,7 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
         <div className="mt-7 grid grid-cols-5">
           {COVER_RANGE.map((col, i) => (
             <div key={col.title} className={`px-4 ${i === 0 ? "pl-0" : "border-l border-line"}`}>
+              <div className="mb-2.5">{col.icon}</div>
               <div className="font-display text-[10px] font-bold uppercase leading-tight tracking-[0.13em] text-charcoal">
                 {col.title}
               </div>
