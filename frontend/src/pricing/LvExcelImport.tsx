@@ -213,10 +213,18 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
     try {
       const r = await api.pricing.lvImportApply(preview.batchId);
       setPreview(null);
-      setDone(
-        `${r.updated.toLocaleString()} item(s) updated, ${r.added} item(s) added — ` +
-          (r.published ? "live in quotations now." : "saved, but publishing failed; press “Update price list & database”."),
-      );
+      const head = `${r.updated.toLocaleString()} item(s) updated, ${r.added} item(s) added`;
+      if (r.published) {
+        setDone(`${head} — live in quotations now.`);
+      } else {
+        // Saved to the draft but NOT published, so nobody sees it yet. The guards are
+        // RMU-side, so say which one stopped it instead of leaving it to be discovered.
+        setError(
+          `${head}, but they are NOT live yet — publishing was blocked.` +
+            (r.blockers?.length ? ` ${r.blockers.join(" · ")}.` : "") +
+            ` Fix that, then press “Update price list & database”.`,
+        );
+      }
       onApplied();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not apply the import.");

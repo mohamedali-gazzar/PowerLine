@@ -488,12 +488,30 @@ async function pruneSnapshots(): Promise<void> {
  * publish half had a problem — the list can always be published by hand.
  */
 export async function publishCurrentPrices(actorEmail: string, note: string): Promise<number | null> {
+  return (await publishCurrentPricesDetailed(actorEmail, note)).version;
+}
+
+/**
+ * As publishCurrentPrices, but says WHY it declined.
+ *
+ * The guards below are RMU-side, so an unrelated gap there (a panel priced 0, a
+ * missing add-on) silently stopped an LV catalogue import from reaching anyone:
+ * the draft updated, the snapshot did not, and the app kept serving old data
+ * with no visible reason. Callers surface `blockers` so that is never invisible.
+ */
+export async function publishCurrentPricesDetailed(
+  actorEmail: string,
+  note: string,
+): Promise<{ version: number | null; blockers: string[] }> {
+  const blocked = (blockers: string[]) => ({ version: null, blockers });
   try {
     const built = await buildRmuPayload();
     // The same guards as a manual publish — never send a broken list to quoting.
-    for (const v of Object.values(built.panels)) if (!(v > 0)) return null;
-    for (const v of Object.values(built.lucy)) if (!(v > 0)) return null;
-    if (!built.addOns.outdoorEnclosure) return null;
+    const bad: string[] = [];
+    for (const [k, v] of Object.entries(built.panels)) if (!(v > 0)) bad.push(`RMU panel “${k}” has no price`);
+    for (const [k, v] of Object.entries(built.lucy)) if (!(v > 0)) bad.push(`Lucy “${k}” has no price`);
+    if (!built.addOns.outdoorEnclosure) bad.push("The Outdoor Enclosure add-on is missing");
+    if (bad.length) return blocked(bad);
 
     const book = await prisma.priceBook.findUnique({ where: { id: "singleton" } });
     const version = (book?.version ?? 0) + 1;
@@ -527,9 +545,10 @@ export async function publishCurrentPrices(actorEmail: string, note: string): Pr
     await prisma.priceChange.updateMany({ where: { version: null }, data: { version } });
     await refreshPriceBook(true);
     await pruneSnapshots();
-    return version;
-  } catch {
-    return null; // the edit itself succeeded; publishing can be retried by hand
+    return { version, blockers: [] };
+  } catch (e) {
+    // the edit itself succeeded; publishing can be retried by hand
+    return blocked([e instanceof Error ? e.message : "Publishing failed."]);
   }
 }
 

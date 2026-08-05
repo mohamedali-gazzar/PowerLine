@@ -410,7 +410,7 @@ export const api = {
         body: JSON.stringify({ rows }),
       }),
     lvImportApply: (batchId: string) =>
-      request<{ ok: true; updated: number; added: number; skipped: number; published: boolean; version: number | null }>(
+      request<{ ok: true; updated: number; added: number; skipped: number; published: boolean; version: number | null; blockers?: string[] }>(
         `/pricing/lv/import/${batchId}/apply`,
         { method: "POST" },
       ),

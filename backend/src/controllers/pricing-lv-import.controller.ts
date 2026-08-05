@@ -23,7 +23,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { fail } from "../lib/http";
-import { publishCurrentPrices } from "./pricing.controller";
+import { publishCurrentPricesDetailed } from "./pricing.controller";
 
 /** How long a previewed batch stays applicable. */
 const BATCH_TTL_MS = 60 * 60 * 1000;
@@ -425,8 +425,13 @@ export async function postLvImportApply(req: Request, res: Response) {
     await prisma.priceImportBatch.update({ where: { id: batch.id }, data: { status: "APPLIED" } });
 
     // Live immediately — changing a price and it reaching a quotation are one act.
-    const version = await publishCurrentPrices(by, `Spreadsheet import: ${updated} updated, ${added} added`);
-    res.json({ ok: true, updated, added, skipped, published: version !== null, version });
+    // The publish guards are RMU-side, so an unrelated gap there can stop an LV import
+    // from reaching anyone. Pass the reason back rather than reporting a bare failure.
+    const pub = await publishCurrentPricesDetailed(by, `Spreadsheet import: ${updated} updated, ${added} added`);
+    res.json({
+      ok: true, updated, added, skipped,
+      published: pub.version !== null, version: pub.version, blockers: pub.blockers,
+    });
   } catch (e) {
     fail(res, e);
   }
