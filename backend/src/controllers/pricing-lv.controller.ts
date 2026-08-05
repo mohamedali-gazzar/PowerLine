@@ -411,3 +411,63 @@ export async function getLvCatalog(_req: Request, res: Response) {
     fail(res, e);
   }
 }
+
+/** How many changed items to name; the counts always cover everything. */
+const CHANGE_DETAIL_CAP = 60;
+
+/**
+ * GET /api/catalog/lv/changes?since=<version>
+ *
+ * What actually changed in the price list, read from the audit trail — every
+ * PriceChange is stamped with the version it went live in, so this is the real
+ * record rather than a guess from comparing payloads.
+ *
+ * `since` given and behind → everything published since then. Otherwise the most
+ * recent version's changes, so "what came in the last upload?" is always
+ * answerable even when the caller is already up to date.
+ *
+ * Deliberately NOT price-admin gated: reading what changed is how someone about
+ * to quote checks they are on current prices. It exposes no editing.
+ */
+export async function getLvCatalogChanges(req: Request, res: Response) {
+  try {
+    const book = await prisma.priceBook.findUnique({ where: { id: "singleton" } });
+    const latest = book?.version ?? 0;
+    if (!latest) return res.json({ version: 0, from: 0, counts: {}, total: 0, items: [], publishedAt: null, publishedBy: "", note: "" });
+
+    const sinceRaw = Number(req.query.since);
+    const since = Number.isFinite(sinceRaw) && sinceRaw > 0 ? Math.min(sinceRaw, latest) : latest;
+    // Behind → everything since. Current → just the newest version's changes.
+    const from = since < latest ? since : latest - 1;
+
+    const where = { domain: "LV", version: { gt: from, lte: latest } } as const;
+    const [rows, total] = await Promise.all([
+      prisma.priceChange.findMany({
+        where,
+        orderBy: [{ version: "desc" }, { createdAt: "desc" }],
+        take: CHANGE_DETAIL_CAP,
+        select: { version: true, label: true, field: true, oldValue: true, newValue: true, actorEmail: true, createdAt: true },
+      }),
+      prisma.priceChange.count({ where }),
+    ]);
+
+    const counts: Record<string, number> = {};
+    for (const g of await prisma.priceChange.groupBy({ by: ["field"], where, _count: { field: true } })) {
+      counts[g.field] = g._count.field;
+    }
+
+    res.setHeader("Cache-Control", "no-cache");
+    res.json({
+      version: latest,
+      from,
+      counts,
+      total,
+      items: rows,
+      publishedAt: book?.publishedAt ?? null,
+      publishedBy: book?.publishedBy ?? "",
+      note: book?.note ?? "",
+    });
+  } catch (e) {
+    fail(res, e);
+  }
+}

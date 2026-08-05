@@ -36,6 +36,7 @@ import {
   createLvComponent,
   retireLvItem,
   getLvCatalog,
+  getLvCatalogChanges,
 } from "./controllers/pricing-lv.controller";
 import { getAbbDatasheet } from "./controllers/abb.controller";
 import {
@@ -113,6 +114,9 @@ export function createApp() {
   app.post("/api/pricing/rmu", requireAuth, requirePriceAdmin, createRmuPrice);
   // LV catalogue (2,121 components + 253 enclosures)
   app.get("/api/catalog/lv", requireAuth, getLvCatalog);
+  // What changed in the price list — readable by everyone, so an offer author can
+  // check they are quoting on current prices without price-admin rights.
+  app.get("/api/catalog/lv/changes", requireAuth, getLvCatalogChanges);
   // ABB data-sheet proxy — resolve + stream a component's PDF by order code
   app.get("/api/abb/datasheet", requireAuth, getAbbDatasheet);
   app.get("/api/pricing/lv", requireAuth, requirePriceAdmin, listLvPrices);

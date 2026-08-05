@@ -32,8 +32,8 @@ import {
 import { rankSearchOptions } from "../lv/search";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
-import { getToken } from "../api";
-import { checkCatalogUpdates } from "../lv/catalogSource";
+import { getToken, api, type CatalogChanges } from "../api";
+import { checkCatalogUpdates, catalogVersion } from "../lv/catalogSource";
 import wdFldImg from "../assets/wd-fld.png";
 import wdRhdImg from "../assets/wd-rhd.png";
 import wdRheImg from "../assets/wd-rhe.png";
@@ -880,48 +880,103 @@ const CoverMailI = () => (
  * items. Available to every role — it only swaps what this browser quotes from
  * and never writes to the price list, unlike the price-admin catalogue tools.
  */
+/** Audit field name → how it reads in the changelog. */
+const CHANGE_FIELD_LABEL: Record<string, string> = {
+  price: "price", brand: "brand", description: "description", type: "type",
+  family: "family", rating: "rating", poles: "poles", stock: "stock",
+  "weight/panel/pole": "copper weight", "weight/cell/pole": "copper weight",
+  __created: "added", __retired: "removed", __restored: "restored",
+};
+
 function CatalogUpdateCheck() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [warn, setWarn] = useState(false);
+  const [changes, setChanges] = useState<CatalogChanges | null>(null);
+  const [open, setOpen] = useState(false);
 
   const run = async () => {
     setBusy(true);
     setMsg("");
+    setChanges(null);
+    setOpen(false);
+    const before = catalogVersion();
     const u = await checkCatalogUpdates(getToken());
-    setBusy(false);
     if (!u.ok) {
+      setBusy(false);
       setWarn(true);
       setMsg("Couldn’t reach the price list — still quoting on the catalogue already loaded.");
       return;
     }
     setWarn(false);
-    if (!u.changed) {
-      setMsg(`Up to date — price list version ${u.version}.`);
+    // Ask what actually changed. Behind → everything since; already current → the
+    // most recent upload, so "what came in last time?" is always answerable.
+    let c: CatalogChanges | null = null;
+    try {
+      c = await api.catalog.lvChanges(before || undefined);
+    } catch {
+      /* changelog is a nicety — the refresh above already did the important part */
+    }
+    setBusy(false);
+    setChanges(c);
+    const headline = u.changed ? `Updated to version ${u.version}` : `Up to date — version ${u.version}`;
+    if (!c || !c.total) {
+      setMsg(`${headline}. No item changes recorded.`);
       return;
     }
-    const parts = [
-      u.prices && `${u.prices} price${u.prices === 1 ? "" : "s"}`,
-      u.brands && `${u.brands} brand${u.brands === 1 ? "" : "s"}`,
-      u.descriptions && `${u.descriptions} description${u.descriptions === 1 ? "" : "s"}`,
-      u.otherData && `${u.otherData} other data change${u.otherData === 1 ? "" : "s"}`,
-      u.added && `${u.added} new item${u.added === 1 ? "" : "s"}`,
-      u.removed && `${u.removed} removed`,
-    ].filter(Boolean) as string[];
-    setMsg(`Updated to version ${u.version} — ${parts.length ? parts.join(" · ") : "no item changes"}. This offer now prices from it.`);
+    const parts = Object.entries(c.counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([f, n]) => `${n} ${CHANGE_FIELD_LABEL[f] ?? f}${n === 1 ? "" : "s"}`);
+    setMsg(`${headline} · ${parts.join(" · ")}`);
   };
+
+  const money = (v: string | null) => (v ?? "—");
 
   return (
     <div className="flex flex-col items-end gap-1 no-print">
       <button onClick={run} disabled={busy}
-        title="Re-read the published price list and show what changed — prices, brands, descriptions and new items"
+        title="Re-read the published price list and show what changed in the latest upload"
         className="rounded-full border border-line bg-white px-4 py-1.5 text-xs font-bold text-ink hover:border-brand/50 hover:text-brand-dark disabled:opacity-60">
         {busy ? "Checking…" : "⟳ Check for updates"}
       </button>
       {msg && (
-        <span className={`max-w-[22rem] text-right text-[11px] leading-snug ${warn ? "font-semibold text-red-700" : "text-muted"}`}>
+        <span className={`max-w-[26rem] text-right text-[11px] leading-snug ${warn ? "font-semibold text-red-700" : "text-muted"}`}>
           {msg}
+          {!!changes?.total && (
+            <>
+              {" "}
+              <button onClick={() => setOpen((o) => !o)} className="font-semibold text-brand-dark underline underline-offset-2">
+                {open ? "hide" : `show ${changes.total} change${changes.total === 1 ? "" : "s"}`}
+              </button>
+            </>
+          )}
         </span>
+      )}
+      {open && changes && (
+        <div className="max-h-72 w-[30rem] overflow-auto rounded-lg border border-line bg-white p-2 text-left shadow-lift">
+          <div className="mb-1 px-1 text-[10px] uppercase tracking-wider text-muted">
+            Version {changes.version}
+            {changes.publishedBy ? ` · ${changes.publishedBy}` : ""}
+            {changes.note ? ` · ${changes.note}` : ""}
+          </div>
+          <table className="w-full text-[11px]">
+            <tbody>
+              {changes.items.map((it, i) => (
+                <tr key={i} className="border-t border-line align-top">
+                  <td className="px-1 py-1 text-ink">{it.label}</td>
+                  <td className="whitespace-nowrap px-1 py-1 text-muted">{CHANGE_FIELD_LABEL[it.field] ?? it.field}</td>
+                  <td className="px-1 py-1 text-right text-muted">{money(it.oldValue)}</td>
+                  <td className="px-1 py-1 text-right font-semibold text-ink">→ {money(it.newValue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {changes.total > changes.items.length && (
+            <p className="px-1 pt-1 text-[10px] text-muted/80">
+              Showing the {changes.items.length} most recent of {changes.total}.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

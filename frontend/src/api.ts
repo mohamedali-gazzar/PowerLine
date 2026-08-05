@@ -237,6 +237,27 @@ export interface LvImportPreview {
   expiresAt: string;
 }
 
+/** One line of the price-list changelog. */
+export interface CatalogChangeItem {
+  version: number;
+  label: string;
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  actorEmail: string;
+  createdAt: string;
+}
+export interface CatalogChanges {
+  version: number;
+  from: number;
+  counts: Record<string, number>;
+  total: number;
+  items: CatalogChangeItem[];
+  publishedAt: string | null;
+  publishedBy: string;
+  note: string;
+}
+
 export interface PriceChangeRow {
   id: string;
   label: string;
@@ -431,6 +452,13 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ note: note ?? "" }),
       }),
+  },
+
+  // ── LV catalogue (readable by every role) ──────────────────────────────────
+  catalog: {
+    /** What changed in the price list — since `sinceVersion`, else the latest upload. */
+    lvChanges: (sinceVersion?: number) =>
+      request<CatalogChanges>(`/catalog/lv/changes${sinceVersion ? `?since=${sinceVersion}` : ""}`),
   },
 
   // ── Account (profile, history, stats) ───────────────────────────────────────
