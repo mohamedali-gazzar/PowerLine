@@ -20,8 +20,10 @@ import {
   type LvPanel, type PanelComponent,
 } from "./store";
 
-/** One line of a standard panel: how many, and the catalogue description. */
-interface StdPart { qty: number; desc: string }
+/** One line of a standard panel: how many, and the catalogue description.
+ *  `poles` overrides the catalogue's pole count — connection copper is costed as
+ *  cuC × poles, so a part the catalogue left at 0 poles would contribute none. */
+interface StdPart { qty: number; desc: string; poles?: number }
 
 export interface StdPanel {
   name: string;              // e.g. "MDB 630A+4SWF+15kVAR"
@@ -58,9 +60,11 @@ const PFC_BANK = (breaker: string, caps: number): StdPart[] => [
   { qty: 1, desc: "Fan 25*25" },
   { qty: 1, desc: "Thermostat" },
 ];
-/** Switch-fuse outgoings: each way is one switch fuse plus three HRC fuses. */
+/** Switch-fuse outgoings: each way is one switch fuse plus three HRC fuses.
+ *  The catalogue lists every switch fuse at 0 poles, which would zero its
+ *  connection copper (cuC × poles) — a 3-phase way has 3, so it is set here. */
 const SWF_WAYS = (ways: number): StdPart[] => [
-  { qty: ways, desc: "Switch Fuse 630A V" },
+  { qty: ways, desc: "Switch Fuse 630A V", poles: 3 },
   { qty: ways * 3, desc: "HRC Fuse 400A" },
 ];
 
@@ -88,7 +92,7 @@ const FAMILIES: Record<string, StdFamily> = {
   "500": {
     base: "MDB 1000A", ratingA: 1000,
     incomer: "ACB E1.2C 1000A-50kA 1000 AF Ekip Touch LI 3P F F", ctRatio: "1000/5",
-    kvar: 25, pfcBreaker: "MCCB A1N 63A-36kA 125 AF TMF 3P", pfcCaps: 1,
+    kvar: 25, pfcBreaker: "MCCB A1N 63A-36kA 125 AF TMF 3P", pfcCaps: 2,
     swfWays: 6, cbWays: 5, cbBreaker: "MCCB XT4N 250A-36kA 250 AF TMA 3P",
   },
   "800": {
@@ -153,9 +157,10 @@ export function stdPanel(kva: string, pfc: string, outgoings: string): StdPanel 
  *  missing part is visible on the panel instead of silently dropped. */
 function partToComponent(part: StdPart, section: string): PanelComponent {
   const db = findByName(part.desc);
-  return db
+  const c = db
     ? toPanelComponent(db, section, part.qty)
     : freeComponent(part.desc, section, part.qty);
+  return part.poles != null ? { ...c, poles: part.poles } : c;
 }
 
 /** The PLP cell table for a standard panel: the catalogue rows for PLP depth 70,

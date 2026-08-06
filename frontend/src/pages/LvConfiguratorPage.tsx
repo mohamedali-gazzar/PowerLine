@@ -16,7 +16,7 @@ import {
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
-  withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
+  withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
   type SpecNote, type SpecSubNote, type ProjectSpecKey,
 } from "../lv/store";
@@ -4118,8 +4118,8 @@ function copperEnterNav(e: { key: string; preventDefault: () => void; currentTar
 // ── Standard Panels view (inside the Components card) ───────────────────────
 // Pick TR kVA + P.F.C + Outgoings and the whole panel is built from the house
 // standard: name, components, PLP cells and main-busbar copper.
-function StandardPanelsView({ p, u, isEdms }: {
-  p: LvPanel; u: (patch: Partial<LvPanel>) => void; isEdms: boolean;
+function StandardPanelsView({ p, u }: {
+  p: LvPanel; u: (patch: Partial<LvPanel>) => void;
 }) {
   const kva = p.stdTrKva ?? STD_TR_KVA_DEFAULT;
   const pfc = p.stdPfc ?? "No";
@@ -4137,8 +4137,8 @@ function StandardPanelsView({ p, u, isEdms }: {
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
           <L>TR: KVA</L>
-          {/* Standard EDMS carries an extra 300 kVA size. */}
-          <Sel value={kva} options={isEdms ? STD_TR_KVA_EDMS : STD_TR_KVA}
+          {/* This view is EDMS-only, so it always offers the EDMS sizes (incl. 300). */}
+          <Sel value={kva} options={STD_TR_KVA_EDMS}
             onChange={(v) => u({ stdTrKva: v })} />
         </div>
         <div>
@@ -4179,6 +4179,8 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   const [pfcTab, setPfcTab] = useState<"known" | "calc">("known"); // P.F.C window: known-data entry vs calculation
   const [pfcCalcKvar, setPfcCalcKvar] = useState<number | null>(null); // required kVAR from the calc tab → known tab
   const [replaceOpen, setReplaceOpen] = useState(false); // "Replace component" (across panels) window
+  // The Standard Panels picker is a Standard EDMS feature only.
+  const isEdmsPanel = s.kind === "edms";
   const hits = useMemo(() => searchComponents(q, 40), [q]);
   const effGroup = effectiveGroups(p.components); // combination grouping incl. inherited groups
   // Current combination multiplier for a group (from an item's qty ÷ its base qty).
@@ -4891,7 +4893,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   return (
     <div ref={cardRef} className="card relative p-5">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="sec-head !mb-0">Standard Panels</h2>
+        <h2 className="sec-head !mb-0">{isEdmsPanel ? "Standard Panels" : "Components"}</h2>
         <button type="button" onClick={() => setReplaceOpen(true)}
           title="Find a component used in this quotation and replace it across all / selected panels"
           className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-white px-3 py-1 text-[11px] font-bold text-brand-dark transition hover:border-brand hover:bg-brand-light">
@@ -4901,9 +4903,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       {replaceOpen && <ReplaceComponentModal s={s} replaceComponent={replaceComponent} factors={s.factors} onClose={() => setReplaceOpen(false)} />}
       {neutralPrompt && <NeutralPromptModal breaker={neutralPrompt.breaker} sensor={neutralPrompt.sensor} onAdd={confirmNeutral} onClose={() => setNeutralPrompt(null)} />}
 
-      {/* The standard picker sits ABOVE the component body — the sections, search
-          and editable list stay put, so a built panel can be adjusted straight away. */}
-      <StandardPanelsView p={p} u={u} isEdms={s.kind === "edms"} />
+      {/* Standard EDMS only. The picker sits ABOVE the component body — the sections,
+          search and editable list stay put, so a built panel can be adjusted straight away. */}
+      {isEdmsPanel && <StandardPanelsView p={p} u={u} />}
 
       {/* Sticky header: section tabs + search bar stay pinned below the tab bar while
           the component list scrolls; unpins automatically when this card ends. */}
