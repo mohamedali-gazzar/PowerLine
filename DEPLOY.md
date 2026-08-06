@@ -47,7 +47,14 @@ the Prisma provider to `postgresql` when it sees Vercel's `VERCEL` env var, and
    | `SMTP_USER`    | `verification@powerline.com.eg`                | for e-mail |
    | `SMTP_PASS`    | 16-character Google **App Password**           | for e-mail |
    | `SMTP_FROM`    | `PowerLine <verification@powerline.com.eg>`    | for e-mail |
-   | `APP_URL`      | the deployed site URL, e.g. `https://powerline.vercel.app` | for e-mail links |
+   | `APP_URL`      | the deployed site URL **including `https://`**, e.g. `https://powerline.vercel.app` — no trailing slash | strongly recommended |
+
+   `APP_URL` is what the "Open the quotation" button in every notification e-mail
+   points at. The app falls back to working the address out from the request, which
+   is correct on Vercel — but set it anyway: it is the difference between a link
+   that is guaranteed to work and one that depends on proxy headers. Get it wrong
+   (a bare `powerline.vercel.app` with no `https://`, or a trailing slash) and the
+   button breaks, so copy it exactly from the address bar.
 
    Without the `SMTP_*` set, sign-up verification, password reset and every QTN
    workflow notification are **disabled** — in production sending raises a visible

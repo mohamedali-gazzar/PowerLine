@@ -143,7 +143,10 @@ export function appUrl(path: string, fallbackOrigin?: string): string {
   const configured = (process.env.APP_URL || process.env.CORS_ORIGIN || "").split(",")[0].trim();
   const base = configured || (fallbackOrigin ?? "").trim();
   const tail = path.startsWith("/") ? path : `/${path}`;
-  if (!/^https?:\/\//i.test(base)) {
+  // Require a HOST after the scheme, not just "http://". A scheme with an empty
+  // host produces "http:///lv/qtn/..." — three slashes — which mail clients happily
+  // render as a link and which goes nowhere when clicked.
+  if (!/^https?:\/\/[^/\s]+/i.test(base)) {
     console.warn(
       "[email] no absolute site address available — the link in this e-mail will not open. " +
         "Set APP_URL to the site's URL."
