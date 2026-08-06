@@ -47,7 +47,7 @@ import {
   proEIp31Disabled, retable, defaultCellConfig, type CellType,
 } from "../lv/cells";
 import {
-  COPPER_RATINGS, csaFor, copperWeight, copperTotal, roundUpRating, ratingForCsa, pctOf,
+  COPPER_RATINGS, csaFor, copperWeight, copperTotal,
 } from "../lv/copper";
 import { panelPoles, POLE_CM, POLE_KINDS, GROUP_LABEL, KIND_LABEL, type PoleGroup, type PoleKind } from "../lv/poles";
 import { stdPanel, applyStdPanel, STD_EDMS_KVA } from "../lv/standardEdms";
@@ -4125,10 +4125,6 @@ function StandardPanelsView({ p, u, isEdms }: {
   const pfc = p.stdPfc ?? "No";
   const out = p.stdOutgoings ?? STD_OUTGOINGS[0];
   const std = stdPanel(kva, pfc, out);
-  const parts = std ? [...std.main, ...std.pfc, ...std.out] : [];
-  const cellLines = std
-    ? Object.entries(std.cells).map(([w, q]) => `${q} × 2000x${w}x700`).concat("1 × LSides_70")
-    : [];
   const apply = () => {
     if (!std) return;
     if (p.components.length && !confirm(
@@ -4137,7 +4133,7 @@ function StandardPanelsView({ p, u, isEdms }: {
     u(applyStdPanel(p, std));
   };
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
           <L>TR: KVA</L>
@@ -4163,49 +4159,13 @@ function StandardPanelsView({ p, u, isEdms }: {
             : <> Standards exist for {STD_EDMS_KVA.join(", ")} kVA so far.</>}
         </p>
       ) : (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand/40 bg-brand-tint/40 p-3">
-            <div>
-              <p className="text-sm font-extrabold text-ink">{std.name}</p>
-              <p className="text-[11px] text-muted">
-                {std.ratingA} A busbar · {parts.reduce((t, x) => t + x.qty, 0)} items · PLP {cellLines.join(", ")}
-              </p>
-            </div>
-            <button type="button" onClick={apply} className="btn-primary shrink-0">Build this panel</button>
-          </div>
-          <div className="overflow-hidden rounded-lg border border-line">
-            <table className="w-full text-sm">
-              <thead className="bg-surface text-left text-[11px] uppercase tracking-wide text-muted">
-                <tr><th className="w-16 px-3 py-2">Qty</th><th className="px-3 py-2">Description</th></tr>
-              </thead>
-              <tbody>
-                {(["Main Incoming", std.pfcSection, "Outgoings"] as (string | null)[]).map((sec) => {
-                  const rows = sec === "Main Incoming" ? std.main : sec === "Outgoings" ? std.out : std.pfc;
-                  if (!sec || !rows.length) return null;
-                  return (
-                    <Fragment key={sec}>
-                      <tr className="border-t border-line bg-surface/60">
-                        <td colSpan={2} className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-dark">{sec}</td>
-                      </tr>
-                      {rows.map((x, i) => (
-                        <tr key={`${sec}-${i}`} className="border-t border-line/60">
-                          <td className="px-3 py-1.5 font-semibold">{x.qty}</td>
-                          <td className="px-3 py-1.5">{x.desc}</td>
-                        </tr>
-                      ))}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-[11px] text-muted">
-            Copper (main busbar, mm):{" "}
-            {Object.entries(std.copper).map(([r, l]) =>
-              `${r} A — ${[l.p && `phase ${l.p}`, l.n && `neutral ${l.n}`, l.e && `earth ${l.e}`].filter(Boolean).join(", ")}`
-            ).join(" · ")}
-          </p>
-        </>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-brand/40 bg-brand-tint/40 px-2.5 py-1">
+          <p className="text-xs font-bold text-ink">{std.name}</p>
+          <button type="button" onClick={apply}
+            className="shrink-0 rounded-md bg-brand px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-brand-dark">
+            Build this panel
+          </button>
+        </div>
       )}
     </div>
   );
@@ -4219,8 +4179,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   const [pfcTab, setPfcTab] = useState<"known" | "calc">("known"); // P.F.C window: known-data entry vs calculation
   const [pfcCalcKvar, setPfcCalcKvar] = useState<number | null>(null); // required kVAR from the calc tab → known tab
   const [replaceOpen, setReplaceOpen] = useState(false); // "Replace component" (across panels) window
-  // Which view this card shows: the component list, or the standard-panel picker.
-  const [cardView, setCardView] = useState<"components" | "standard">("components");
   const hits = useMemo(() => searchComponents(q, 40), [q]);
   const effGroup = effectiveGroups(p.components); // combination grouping incl. inherited groups
   // Current combination multiplier for a group (from an item's qty ÷ its base qty).
@@ -4933,32 +4891,19 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   return (
     <div ref={cardRef} className="card relative p-5">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
-        {/* Card view switch — build the panel component by component, or pick a
-            ready-made standard panel. */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {([["standard", "Standard Panels"], ["components", "Components"]] as const).map(([v, label]) => (
-            <button key={v} type="button" onClick={() => setCardView(v)}
-              className={`rounded-full border px-3.5 py-1.5 text-sm font-bold transition-colors ${
-                cardView === v ? "border-brand bg-brand text-white shadow-soft" : "border-line bg-white text-muted hover:border-brand/40"
-              }`}>
-              {label}
-            </button>
-          ))}
-        </div>
-        {cardView === "components" && (
-          <button type="button" onClick={() => setReplaceOpen(true)}
-            title="Find a component used in this quotation and replace it across all / selected panels"
-            className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-white px-3 py-1 text-[11px] font-bold text-brand-dark transition hover:border-brand hover:bg-brand-light">
-            ⇄ Replace component
-          </button>
-        )}
+        <h2 className="sec-head !mb-0">Standard Panels</h2>
+        <button type="button" onClick={() => setReplaceOpen(true)}
+          title="Find a component used in this quotation and replace it across all / selected panels"
+          className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-white px-3 py-1 text-[11px] font-bold text-brand-dark transition hover:border-brand hover:bg-brand-light">
+          ⇄ Replace component
+        </button>
       </div>
       {replaceOpen && <ReplaceComponentModal s={s} replaceComponent={replaceComponent} factors={s.factors} onClose={() => setReplaceOpen(false)} />}
       {neutralPrompt && <NeutralPromptModal breaker={neutralPrompt.breaker} sensor={neutralPrompt.sensor} onAdd={confirmNeutral} onClose={() => setNeutralPrompt(null)} />}
 
-      {cardView === "standard" ? (
-        <StandardPanelsView p={p} u={u} isEdms={s.kind === "edms"} />
-      ) : (<>
+      {/* The standard picker sits ABOVE the component body — the sections, search
+          and editable list stay put, so a built panel can be adjusted straight away. */}
+      <StandardPanelsView p={p} u={u} isEdms={s.kind === "edms"} />
 
       {/* Sticky header: section tabs + search bar stay pinned below the tab bar while
           the component list scrolls; unpins automatically when this card ends. */}
@@ -5656,8 +5601,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
           {fmtEgp(colSum(hoverSum.col))}
         </div>, document.body
       )}
-
-      </>)}
     </div>
   );
 }
@@ -6810,20 +6753,12 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
     // Total busbar copper weight flows into the panel cost.
     u({ copperTool: next, mainBusbarKg: Math.round(copperTotal(type, next) * 10) / 10 });
   };
-  const inc = p.ratingA || 0;
-  const hiP = inc ? roundUpRating(inc) : 0;
-  // Neutral / Earth are sized from the phase busbar's C.S.A (not the rating): take the
-  // % of the phase C.S.A, then round up to the next standard bar.
-  const phaseCsa = hiP ? csaFor(type, hiP) : 0;
-  const hiN = phaseCsa ? ratingForCsa(type, pctOf(p.neutral) * phaseCsa) : 0;
-  const hiE = phaseCsa ? ratingForCsa(type, pctOf(p.earth) * phaseCsa) : 0;
   const total = copperTotal(type, tool);
-  const cell = (rating: number, key: "p" | "n" | "e", hi: boolean, color: string) => {
+  const cell = (rating: number, key: "p" | "n" | "e") => {
     const v = tool[String(rating)]?.[key] ?? 0;
     return (
       <input className="input h-8 w-16 px-1 text-center text-sm" inputMode="decimal" value={v || ""} placeholder="0"
         data-coppercol={key} onKeyDown={copperEnterNav}
-        style={hi ? { boxShadow: `inset 0 0 0 2px ${color}`, background: `${color}22`, color, fontWeight: 700 } : undefined}
         onChange={(e) => setLen(rating, key, parseFloat(e.target.value.replace(/[^\d.]/g, "")) || 0)} />
     );
   };
@@ -6852,15 +6787,11 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
               const wkg = copperWeight(row.p, csa, 3) + copperWeight(row.n, csa, 1) + copperWeight(row.e, csa, 1);
               return (
                 <tr key={r} className="border-t border-line/60">
-                  <td className="whitespace-nowrap px-1 py-0.5 font-semibold">{r} A
-                    {hiP === r && <span className="ml-1 rounded px-1 text-[9px] font-bold text-white" style={{ background: "#dc2626" }}>P</span>}
-                    {hiN === r && <span className="ml-1 rounded px-1 text-[9px] font-bold text-white" style={{ background: "#111827" }}>N</span>}
-                    {hiE === r && <span className="ml-1 rounded px-1 text-[9px] font-bold text-white" style={{ background: "#16a34a" }}>E</span>}
-                  </td>
+                  <td className="whitespace-nowrap px-1 py-0.5 font-semibold">{r} A</td>
                   <td className="px-1 py-0.5 text-muted">{csa}</td>
-                  <td className="px-1 py-0.5 text-center">{cell(r, "p", hiP === r, "#dc2626")}</td>
-                  <td className="px-1 py-0.5 text-center">{cell(r, "n", hiN === r, "#111827")}</td>
-                  <td className="px-1 py-0.5 text-center">{cell(r, "e", hiE === r, "#16a34a")}</td>
+                  <td className="px-1 py-0.5 text-center">{cell(r, "p")}</td>
+                  <td className="px-1 py-0.5 text-center">{cell(r, "n")}</td>
+                  <td className="px-1 py-0.5 text-center">{cell(r, "e")}</td>
                   <td className="px-1 py-0.5 text-right font-semibold">{wkg ? wkg.toFixed(1) : "—"}</td>
                 </tr>
               );

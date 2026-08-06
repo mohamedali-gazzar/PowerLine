@@ -14,7 +14,7 @@
 
 import { findByName } from "./catalog";
 import { cellTable, type CellConfig } from "./cells";
-import type { CopperTool } from "./copper";
+import { copperTotal, type CopperTool } from "./copper";
 import {
   DEFAULT_SECTIONS, toPanelComponent, freeComponent,
   type LvPanel, type PanelComponent,
@@ -46,10 +46,14 @@ const MAIN_AUX = (ctRatio: string): StdPart[] => [
   { qty: 1, desc: "LV Socket 220V" },
   { qty: 1, desc: "LV LED Lamp, 220V" },
 ];
+// The standard capacitor is the Frako part (it replaced the Hitachi one). The 500
+// kVA sheet writes the "- 14.5kVAR @400V" suffix twice; that is the same single
+// catalogue item, so the canonical name is used for all three sizes.
+const PFC_CAPACITOR = "Capacitor 25 kVAR @ 525V - 14.5kVAR @400V";
 /** A capacitor bank: its breaker, capacitors, and the cubicle's ventilation kit. */
 const PFC_BANK = (breaker: string, caps: number): StdPart[] => [
   { qty: 1, desc: breaker },
-  { qty: caps, desc: "Capacitor 25 kVAR @ 525V" },
+  { qty: caps, desc: PFC_CAPACITOR },
   { qty: 1, desc: "Filter  25*25" },
   { qty: 1, desc: "Fan 25*25" },
   { qty: 1, desc: "Thermostat" },
@@ -195,7 +199,10 @@ export function applyStdPanel(p: LvPanel, std: StdPanel): LvPanel {
     // The standard's copper is the whole main busbar, so the manual override and
     // the panels-mode auto rule must not also apply.
     copperTool: { ...std.copper },
-    mainBusbarKg: 0,
+    // The Copper Tool derives the busbar weight from its lengths on every edit;
+    // do the same on apply (same rounding) so the panel cost is right immediately
+    // instead of reading 0 KG until someone touches a length.
+    mainBusbarKg: Math.round(copperTotal("PLP", std.copper) * 10) / 10,
     mainBusbarOverride: false,
   };
 }
