@@ -327,7 +327,6 @@ export default function PricingAdminPage() {
 
           <div className="mb-3 flex flex-wrap gap-2">
             <History onChanged={loadAll} />
-            {status.role === "OWNER" && <AccessPanel />}
           </div>
 
           {section === "LV" && status.counts.lvComponents === 0 && (
@@ -887,63 +886,6 @@ function History({ onChanged }: { onChanged: () => void }) {
                   Undo
                 </button>
               )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-/** Owner-only: give a colleague price-editing access, or take it away. */
-function AccessPanel() {
-  const [open, setOpen] = useState(false);
-  const [users, setUsers] = useState<{ id: string; email: string; name: string; role: string }[] | null>(null);
-  const [err, setErr] = useState("");
-
-  const load = () => api.pricing.users().then((r) => setUsers(r.users)).catch((e) => setErr((e as Error).message));
-  useEffect(() => {
-    if (open) load();
-  }, [open]);
-
-  const change = async (id: string, role: string) => {
-    setErr("");
-    try {
-      await api.pricing.setRole(id, role);
-      await load();
-    } catch (e) {
-      setErr((e as Error).message);
-    }
-  };
-
-  if (!open)
-    return (
-      <button className="btn-ghost" onClick={() => setOpen(true)}>
-        👥 Who can edit prices
-      </button>
-    );
-
-  return (
-    <div className="card mb-4 p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="sec-head mb-0">Who can edit prices</h2>
-        <button className="btn-ghost" onClick={() => setOpen(false)}>Close</button>
-      </div>
-      {err && <p className="mb-2 text-sm font-semibold text-red-700">{err}</p>}
-      {!users && <div className="skeleton h-32" />}
-      {users && (
-        <ul className="max-h-72 space-y-1 overflow-y-auto text-sm">
-          {users.map((u) => (
-            <li key={u.id} className="flex items-center justify-between gap-3 border-b border-line/60 py-1.5">
-              <span className="min-w-0">
-                <span className="block truncate font-medium text-ink">{u.name || u.email}</span>
-                <span className="text-[11px] text-muted">{u.email}</span>
-              </span>
-              <select className="input w-40 shrink-0" value={u.role} onChange={(e) => change(u.id, e.target.value)}>
-                <option value="USER">No access</option>
-                <option value="PRICE_ADMIN">Can edit prices</option>
-                <option value="OWNER">Owner</option>
-              </select>
             </li>
           ))}
         </ul>

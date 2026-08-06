@@ -47,6 +47,18 @@ import {
 import { withPriceBook } from "./middleware/priceBook";
 import { requirePriceAdmin, requireOwner } from "./middleware/roles";
 import {
+  listNotifications,
+  markRead,
+  markAllRead,
+} from "./controllers/notifications.controller";
+import {
+  myAccess,
+  permCatalogue,
+  listAccessUsers,
+  setAccess,
+  accessHistory,
+} from "./controllers/access.controller";
+import {
   PRODUCT_TYPES,
   VOLTAGES,
   RTU_TYPES,
@@ -92,6 +104,21 @@ export function createApp() {
   // ── Accounts system ────────────────────────────────────────────────────────
   app.use("/api/auth", authRouter);
   app.use("/api/qtns", qtnsRouter); // per-user LV quotations (requireAuth inside)
+
+  // In-app notifications
+  app.get("/api/notifications", requireAuth, listNotifications);
+  app.post("/api/notifications/read-all", requireAuth, markAllRead); // before "/:id/read"
+  app.post("/api/notifications/:id/read", requireAuth, markRead);
+
+  // Access Center — all permission management lives here. `/me` is authenticated
+  // only (every signed-in user must be able to ask what they may do); the rest
+  // needs access.manage.
+  app.get("/api/access/me", requireAuth, myAccess);
+  app.get("/api/access/catalogue", requireAuth, permCatalogue);
+  app.get("/api/access/users", requireAuth, requireOwner, listAccessUsers);
+  app.post("/api/access/users/:id", requireAuth, requireOwner, setAccess);
+  app.get("/api/access/history", requireAuth, requireOwner, accessHistory);
+
   app.put("/api/profile", requireAuth, updateProfile);
   app.get("/api/account/history", requireAuth, history);
   app.get("/api/stats/weekly", requireAuth, weeklyStats);

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getQtn, saveQtn, renameQtn, submitQtn, unsubmitQtn, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
+import { getQtn, saveQtn, renameQtn, transitionQtn, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
 import { useStaff, SALES_MANAGER } from "../staff";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
@@ -34,7 +34,10 @@ import {
 import { rankSearchOptions } from "../lv/search";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
-import { getToken, api, MAX_ATTACHMENT_BYTES, type CatalogChanges, type CatalogChangeItem, type QtnAttachmentDto } from "../api";
+import {
+  getToken, api, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
+  type CatalogChanges, type CatalogChangeItem, type QtnAttachmentDto, type QtnStatus,
+} from "../api";
 import { checkCatalogUpdates, catalogVersion } from "../lv/catalogSource";
 import wdFldImg from "../assets/wd-fld.png";
 import wdRhdImg from "../assets/wd-rhd.png";
@@ -262,8 +265,14 @@ export default function LvConfiguratorPage() {
   const [matAbbOnly, setMatAbbOnly] = useState(false);
   // RPT-1: the QTN number is editable after creation (kept unique per user).
   const [qtnNum, setQtnNum] = useState("");
-  // Submitted = the QTN is marked complete; it then counts in the team's weekly chart.
-  const [submitted, setSubmitted] = useState(false);
+  // Where this quotation sits in the approval workflow. The server owns it; the
+  // client only renders it and offers the moves the server will accept.
+  const [status, setStatus] = useState<QtnStatus>("DRAFT");
+  const [wf, setWf] = useState<{ approverEmail: string; returnReason: string; ownerId: string; ownerEmail: string }>(
+    { approverEmail: "", returnReason: "", ownerId: "", ownerEmail: "" }
+  );
+  const [myPerms, setMyPerms] = useState<string[]>([]);
+  const [wfError, setWfError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   // Cancelled = this revision was superseded by a newer amendment (a higher revision of
   // the same base exists). Derived from the QTN list; makes the revision read-only.
@@ -280,7 +289,11 @@ export default function LvConfiguratorPage() {
         setRec(r);
         setHist({ past: [], present: r.state, future: [] });
         setQtnNum(r.number);
-        setSubmitted(r.submitted);
+        setStatus(r.status);
+        setWf({
+          approverEmail: r.approverEmail, returnReason: r.returnReason,
+          ownerId: r.ownerId, ownerEmail: r.ownerEmail,
+        });
         if (!localStorage.getItem(tabKey)) {
           if (r.state.kind === "spare") setTab("spare");
           else if (r.state.panels.length) setTab("panels");
@@ -299,34 +312,66 @@ export default function LvConfiguratorPage() {
       .catch(() => {});
     return () => { alive = false; };
   }, [qtnNum]);
-  // Read-only when submitted OR cancelled — both freeze content editing.
-  const readOnly = submitted || cancelled;
+  // What the signed-in user may do. Server-computed on every load — the JWT lives
+  // for 30 days, so it must never be the source of this.
+  useEffect(() => {
+    let alive = true;
+    api.access.me()
+      .then((a) => { if (alive) setMyPerms(a.perms); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Content is frozen while the quotation is under review, approved or submitted —
+  // and separately when this revision has been superseded.
+  const lockedByStatus = status === "WAITING_APPROVAL" || status === "APPROVED" || status === "SUBMITTED";
+  const canEditWaiting = status === "WAITING_APPROVAL" && myPerms.includes("qtn.editWaiting");
+  const readOnly = (lockedByStatus && !canEditWaiting) || cancelled;
 
   // Renames the QTN on the backend (unique, non-empty). Edited from the Project tab.
   const renameQtnNumber = async (n: string): Promise<{ ok: boolean; error?: string }> => {
     if (!rec) return { ok: false, error: "Quotation not found." };
-    if (readOnly) return { ok: false, error: cancelled ? "Cancelled revision — read-only." : "Submitted — reopen to edit." };
+    if (readOnly) {
+      return {
+        ok: false,
+        error: cancelled ? "Cancelled revision — read-only." : `${QTN_STATUS_LABEL[status]} — cannot be renamed.`,
+      };
+    }
     const res = await renameQtn(rec.id, n);
     if (res.ok) setQtnNum(n.trim());
     return res;
   };
-  // Mark the QTN submitted (complete) — it then counts in the team's weekly chart.
-  const doSubmit = async () => {
-    if (!rec || submitted || cancelled) return;
-    if (!confirm("Mark this QTN as submitted? It will count in the team's weekly submissions.")) return;
+
+  /** Move the quotation through the workflow. Surfaces the server's reason on
+   *  refusal — the old submit/reopen handlers swallowed every error, so a rejected
+   *  action looked like nothing happened at all. */
+  const doTransition = async (to: QtnStatus, opts?: { confirm?: string; note?: string }) => {
+    if (!rec) return;
+    if (opts?.confirm && !confirm(opts.confirm)) return;
     setSubmitting(true);
-    try { await submitQtn(rec.id); setSubmitted(true); }
-    catch { /* ignore */ }
-    finally { setSubmitting(false); }
+    setWfError("");
+    try {
+      await transitionQtn(rec.id, to, opts?.note);
+      setStatus(to);
+      if (to === "RETURNED") setWf((w) => ({ ...w, returnReason: opts?.note ?? "" }));
+      if (to === "DRAFT") setWf((w) => ({ ...w, returnReason: "" }));
+    } catch (e) {
+      setWfError((e as Error).message || "That action was refused.");
+    } finally {
+      setSubmitting(false);
+    }
   };
-  // Reopen a submitted QTN for editing — it stops counting as submitted until re-submitted.
-  const doReopen = async () => {
-    if (!rec || !submitted) return;
-    if (!confirm("Reopen this submitted QTN for editing? It won't count as submitted until you submit it again.")) return;
-    setSubmitting(true);
-    try { await unsubmitQtn(rec.id); setSubmitted(false); }
-    catch { /* ignore */ }
-    finally { setSubmitting(false); }
+
+  const isOwner = !wf.ownerId || wf.ownerId === rec?.ownerId;
+  const canApprove = myPerms.includes("qtn.approve");
+  const canReturn = canApprove || myPerms.includes("qtn.return");
+  const canReopen = myPerms.includes("qtn.reopen");
+
+  const askReturn = () => {
+    const note = window.prompt("Why is this quotation being returned? (required)");
+    if (note === null) return;
+    if (!note.trim()) { setWfError("A reason is required when returning a quotation."); return; }
+    void doTransition("RETURNED", { note: note.trim() });
   };
 
   const apply = (updater: (old: LvState) => LvState) =>
@@ -565,15 +610,50 @@ export default function LvConfiguratorPage() {
           <div className="flex items-center gap-2">
             <button className="btn-ghost" disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)">↶ Undo</button>
             <button className="btn-ghost" disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
-            {submitted ? (
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-100 px-3 py-2 text-sm font-bold text-green-700"
-                title="This QTN is submitted and counts in the team's weekly chart">
-                ✓ Submitted
-              </span>
-            ) : (
-              <button className="btn-primary" disabled={submitting || cancelled} onClick={doSubmit}
-                title={cancelled ? "Cancelled revision — read-only" : "Mark this QTN as submitted (counts in the dashboard chart)"}>
+            {/* Current stage, always visible. */}
+            <span className={`inline-flex items-center rounded-lg px-3 py-2 text-sm font-bold ${QTN_STATUS_STYLE[status]}`}
+              title={`Workflow stage: ${QTN_STATUS_LABEL[status]}`}>
+              {QTN_STATUS_LABEL[status]}
+            </span>
+            {/* Only the moves this user may actually make. */}
+            {!cancelled && (status === "DRAFT" || status === "RETURNED") && (
+              <button className="btn-primary" disabled={submitting} onClick={() => doTransition("WAITING_APPROVAL", {
+                confirm: "Send this quotation for approval? You won't be able to edit it while it's under review.",
+              })}>
+                {submitting ? "Sending…" : "Send for approval"}
+              </button>
+            )}
+            {!cancelled && status === "WAITING_APPROVAL" && canApprove && (
+              <button className="btn-primary" disabled={submitting} onClick={() => doTransition("APPROVED", {
+                confirm: "Approve this quotation? The creator will be notified that it's ready to submit.",
+              })}>
+                ✓ Approve
+              </button>
+            )}
+            {!cancelled && status === "WAITING_APPROVAL" && canReturn && (
+              <button className="btn-ghost" disabled={submitting} onClick={askReturn}>
+                ↩ Return for revision
+              </button>
+            )}
+            {!cancelled && status === "WAITING_APPROVAL" && isOwner && (
+              <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
+                confirm: "Withdraw this quotation from approval and return it to draft?",
+              })}>
+                Withdraw
+              </button>
+            )}
+            {!cancelled && status === "APPROVED" && (
+              <button className="btn-primary" disabled={submitting} onClick={() => doTransition("SUBMITTED", {
+                confirm: "Submit this quotation? This is final — it becomes read-only.",
+              })}>
                 {submitting ? "Submitting…" : "✓ Submit"}
+              </button>
+            )}
+            {status === "SUBMITTED" && canReopen && (
+              <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
+                confirm: "Reopen this submitted quotation for editing?",
+              })}>
+                🔓 Reopen
               </button>
             )}
           </div>
@@ -590,23 +670,49 @@ export default function LvConfiguratorPage() {
         </div>
       </div>
 
-      {cancelled ? (
+      {/* Cancellation and workflow status are INDEPENDENT. They used to be an
+          either/or, so a cancelled+submitted quotation showed only the red banner
+          and lost its reopen action entirely — unrecoverable through the UI. */}
+      {cancelled && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 no-print animate-fade-up">
           <p className="text-sm font-semibold text-red-800">
             🚫 This revision was cancelled by a newer amendment — read-only.
           </p>
         </div>
-      ) : submitted ? (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-green-300 bg-green-50 px-4 py-2.5 no-print animate-fade-up">
-          <p className="text-sm font-semibold text-green-800">
-            🔒 This QTN is submitted and read-only — reopen it to make changes.
-          </p>
-          <button className="btn-ghost h-8 shrink-0 px-3 text-xs" disabled={submitting} onClick={doReopen}
-            title="Reopen this QTN for editing (it stops counting as submitted until re-submitted)">
-            🔓 Reopen to edit
-          </button>
+      )}
+      {wfError && (
+        <div className="mb-4 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 no-print animate-fade-up">
+          <p className="text-sm font-semibold text-red-800">⚠ {wfError}</p>
         </div>
-      ) : null}
+      )}
+      {status === "RETURNED" && wf.returnReason && (
+        <div className="mb-4 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 no-print animate-fade-up">
+          <p className="text-sm font-bold text-red-800">↩ Returned for revision</p>
+          <p className="mt-0.5 whitespace-pre-wrap text-sm text-red-800">{wf.returnReason}</p>
+          {wf.approverEmail && <p className="mt-1 text-[11px] text-red-700">— {wf.approverEmail}</p>}
+        </div>
+      )}
+      {status === "WAITING_APPROVAL" && (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 no-print animate-fade-up">
+          <p className="text-sm font-semibold text-amber-800">
+            🔒 Waiting for approval — locked while it is under review.
+          </p>
+        </div>
+      )}
+      {status === "APPROVED" && (
+        <div className="mb-4 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2.5 no-print animate-fade-up">
+          <p className="text-sm font-semibold text-sky-800">
+            ✓ Approved{wf.approverEmail ? ` by ${wf.approverEmail}` : ""} — ready for final submission.
+          </p>
+        </div>
+      )}
+      {status === "SUBMITTED" && (
+        <div className="mb-4 rounded-xl border border-green-300 bg-green-50 px-4 py-2.5 no-print animate-fade-up">
+          <p className="text-sm font-semibold text-green-800">
+            🔒 Submitted and read-only.{canReopen ? " Reopen it to make changes." : ""}
+          </p>
+        </div>
+      )}
 
       {/* Tabs — sticky header so sections are reachable without scrolling up.
           Negative margins let the bg band span the full content width; py keeps a

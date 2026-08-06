@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { api, type HistoryItem, type WeekStat } from "../api";
+import {
+  api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
+  type HistoryItem, type WeekStat, type QtnStatus, type QtnListItemDto, type MyAccess,
+} from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { createQtn } from "../lv/qtns";
 import { QtnNumberInput, qtnPrefix } from "../components/QtnNumberInput";
@@ -11,17 +14,36 @@ import { QtnNumberInput, qtnPrefix } from "../components/QtnNumberInput";
 export default function HomeDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [history, setHistory] = useState<HistoryItem[] | null>(null);
+  const [rows, setRows] = useState<MyQtnRow[] | null>(null);
   const [weeks, setWeeks] = useState<WeekStat[] | null>(null);
+  const [access, setAccess] = useState<MyAccess | null>(null);
+  const [status, setStatus] = useState<QtnStatus | "ALL">("ALL");
+  const [query, setQuery] = useState("");
   const [chooser, setChooser] = useState(false);
 
   useEffect(() => {
-    api.account.history().then((r) => setHistory(r.items)).catch(() => setHistory([]));
+    // account.history() merges LV + RMU, but its LV rows only carry the old
+    // submitted flag — the workflow status lives on /qtns. So the LV half comes
+    // from qtns.list() and only the RMU rows are kept from the merged history.
+    Promise.all([
+      api.qtns.list().catch(() => [] as QtnListItemDto[]),
+      api.account.history().then((r) => r.items).catch(() => [] as HistoryItem[]),
+    ]).then(([lv, merged]) => setRows(myQtnRows(lv, merged)));
     api.account.weekly().then((r) => setWeeks(r.weeks)).catch(() => setWeeks([]));
+    // A failed probe must not hand out permissions — fall back to holding none.
+    api.access.me().then(setAccess).catch(() => setAccess({ tier: "ENGINEER", perms: [], role: "USER" }));
   }, []);
 
+  const can = (perm: string) => Boolean(access?.perms.includes(perm));
   const totalSubs = weeks?.reduce((a, w) => a + w.total, 0) ?? 0;
   const mySubs = weeks?.reduce((a, w) => a + w.mine, 0) ?? 0;
+
+  const needle = query.trim().toLowerCase();
+  const visible = (rows ?? []).filter(
+    (r) =>
+      (status === "ALL" || r.status === status) &&
+      (!needle || `${r.number} ${r.projectName} ${r.customer}`.toLowerCase().includes(needle))
+  );
 
   return (
     <div className="animate-fade-up">
@@ -40,8 +62,13 @@ export default function HomeDashboard() {
           <button className="btn-primary" onClick={() => setChooser(true)}>+ New QTN</button>
           <button className="btn-ghost" onClick={() => navigate("/kiosks")}>🏗️ P-CSS selector</button>
           <button className="btn-ghost" onClick={() => navigate("/pricing")}>💲 Price list</button>
+          {can("access.manage") && (
+            <button className="btn-ghost" onClick={() => navigate("/access")}>🔑 Access Center</button>
+          )}
         </div>
       </div>
+
+      {can("qtn.approve") && <ApprovalInbox />}
 
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Performance chart */}
@@ -66,7 +93,11 @@ export default function HomeDashboard() {
         {/* Section shortcuts */}
         <div className="grid gap-3 content-start">
           <ShortcutCard icon="⚡" title="RMU Offers History" desc="Ring Main Unit technical & commercial offers" onClick={() => navigate("/rmu")} />
-          <ShortcutCard icon="📊" title="LV Offers History" desc="Low-voltage panel quotations" onClick={() => navigate("/lv")} />
+          {/* /lv lists everyone's quotations, and that endpoint 403s without the
+              permission — so the way in is only offered to those who have it. */}
+          {can("qtn.viewAll") && (
+            <ShortcutCard icon="📊" title="LV Offers History" desc="All submitted and in-progress quotations, from everyone" onClick={() => navigate("/lv")} />
+          )}
           <ShortcutCard icon="🏗️" title="P-CSS Selector" desc="Size a packaged substation, step by step" onClick={() => navigate("/kiosks")} />
           <ShortcutCard icon="💲" title="Price list" desc="Change prices online — live, no waiting" onClick={() => navigate("/pricing")} />
         </div>
@@ -74,16 +105,38 @@ export default function HomeDashboard() {
 
       {/* QTN history */}
       <div className="mt-5 card overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3">
-          <h2 className="sec-head mb-0">Your QTN history</h2>
-          <span className="text-xs text-muted">{history?.length ?? 0} items</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+          <h2 className="sec-head mb-0">My QTN History</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              className="input w-60 py-1.5 text-xs"
+              placeholder="Search number, project or customer"
+              aria-label="Search quotations"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <select
+              className="input w-auto py-1.5 text-xs"
+              aria-label="Filter by status"
+              value={status}
+              onChange={(e) => setStatus(e.target.value as QtnStatus | "ALL")}
+            >
+              <option value="ALL">All statuses</option>
+              {QTN_STATUSES.map((s) => (
+                <option key={s} value={s}>{QTN_STATUS_LABEL[s]}</option>
+              ))}
+            </select>
+            <span className="text-xs text-muted">{visible.length} items</span>
+          </div>
         </div>
-        {history === null ? (
+        {rows === null ? (
           <div className="space-y-2 p-5">{[0, 1, 2].map((i) => <div key={i} className="skeleton h-10" />)}</div>
-        ) : history.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div className="p-10 text-center text-sm text-muted">
             No quotations yet — press <b className="text-ink">+ New QTN</b> to start your first one.
           </div>
+        ) : visible.length === 0 ? (
+          <div className="p-10 text-center text-sm text-muted">Nothing matches that search.</div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-brand-tint text-left text-[11px] uppercase tracking-wide text-brand-dark">
@@ -97,24 +150,20 @@ export default function HomeDashboard() {
               </tr>
             </thead>
             <tbody>
-              {history.map((h) => (
-                <tr key={`${h.kind}-${h.id}`}
+              {visible.map((r) => (
+                <tr key={`${r.kind}-${r.id}`}
                   className="cursor-pointer border-t border-line transition-colors hover:bg-brand-tint"
-                  onClick={() => navigate(h.link)}>
+                  onClick={() => navigate(r.link)}>
                   <td className="px-5 py-2.5 font-bold">
-                    <span className="rounded-md bg-brand-light px-2 py-0.5 font-mono text-xs text-brand-dark">{h.number}</span>
+                    <span className="rounded-md bg-brand-light px-2 py-0.5 font-mono text-xs text-brand-dark">{r.number}</span>
                   </td>
                   <td className="px-5 py-2.5">
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${h.kind === "LV" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>{h.kind}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${r.kind === "LV" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>{r.kind}</span>
                   </td>
-                  <td className="px-5 py-2.5">{h.projectName || <span className="text-muted">—</span>}</td>
-                  <td className="px-5 py-2.5 text-muted">{h.customer || "—"}</td>
-                  <td className="px-5 py-2.5">
-                    {h.submitted
-                      ? <span className="text-xs font-semibold text-green-600">● Submitted</span>
-                      : <span className="text-xs text-muted">○ Draft</span>}
-                  </td>
-                  <td className="px-5 py-2.5 text-xs text-muted">{new Date(h.updatedAt).toLocaleDateString()}</td>
+                  <td className="px-5 py-2.5">{r.projectName || <span className="text-muted">—</span>}</td>
+                  <td className="px-5 py-2.5 text-muted">{r.customer || "—"}</td>
+                  <td className="px-5 py-2.5"><StatusBadge status={r.status} /></td>
+                  <td className="px-5 py-2.5 text-xs text-muted">{new Date(r.updatedAt).toLocaleDateString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -123,6 +172,121 @@ export default function HomeDashboard() {
       </div>
 
       {chooser && <NewQtnChooser onClose={() => setChooser(false)} />}
+    </div>
+  );
+}
+
+// ── My QTN history (LV workflow rows + RMU offers, one list) ─────────────────
+interface MyQtnRow {
+  kind: "LV" | "RMU";
+  id: string;
+  number: string;
+  projectName: string;
+  customer: string;
+  updatedAt: string;
+  status: QtnStatus;
+  link: string;
+}
+
+function myQtnRows(lv: QtnListItemDto[], merged: HistoryItem[]): MyQtnRow[] {
+  return [
+    ...lv.map((q) => ({
+      kind: "LV" as const,
+      id: q.id,
+      number: q.number,
+      projectName: q.projectName,
+      customer: q.customer,
+      updatedAt: q.updatedAt,
+      // A server mid-rollout may not send a status yet; the legacy flag still maps
+      // onto the two states that mean the same thing.
+      status: q.status ?? (q.submitted ? "SUBMITTED" : "DRAFT"),
+      link: `/lv/qtn/${q.id}`,
+    })),
+    // RMU offers have no approval workflow at all, so their single submitted flag
+    // is placed on the same two states — one filter then covers both kinds.
+    ...merged
+      .filter((h) => h.kind === "RMU")
+      .map((h) => ({
+        kind: h.kind,
+        id: h.id,
+        number: h.number,
+        projectName: h.projectName,
+        customer: h.customer,
+        updatedAt: h.updatedAt,
+        status: (h.submitted ? "SUBMITTED" : "DRAFT") as QtnStatus,
+        link: h.link,
+      })),
+  ].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+}
+
+function StatusBadge({ status }: { status: QtnStatus }) {
+  return (
+    <span className={`chip whitespace-nowrap text-[11px] ${QTN_STATUS_STYLE[status]}`}>
+      {QTN_STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+// ── Approval inbox ───────────────────────────────────────────────────────────
+/** How long a quotation has waited, in the coarsest unit that still says something. */
+function waitedFor(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+  if (mins < 60) return mins <= 1 ? "just now" : `${mins} minutes`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return hours === 1 ? "1 hour" : `${hours} hours`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "1 day" : `${days} days`;
+}
+
+/** Only rendered for users holding qtn.approve — /qtns/queue 403s for anyone else. */
+function ApprovalInbox() {
+  const navigate = useNavigate();
+  const [queue, setQueue] = useState<QtnListItemDto[] | null>(null);
+
+  useEffect(() => {
+    api.qtns.queue().then(setQueue).catch(() => setQueue([]));
+  }, []);
+
+  return (
+    <div className="card mb-5 overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3">
+        <h2 className="sec-head mb-0">Waiting for your approval</h2>
+        {queue && queue.length > 0 && (
+          <span className="chip bg-amber-100 text-amber-700">{queue.length} waiting</span>
+        )}
+      </div>
+      {queue === null ? (
+        <div className="space-y-2 px-5 pb-5">{[0, 1].map((i) => <div key={i} className="skeleton h-10" />)}</div>
+      ) : queue.length === 0 ? (
+        <p className="px-5 pb-5 text-sm text-muted">Nothing waiting — the queue is clear.</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="bg-brand-tint text-left text-[11px] uppercase tracking-wide text-brand-dark">
+            <tr>
+              <th className="px-5 py-2.5">QTN No</th>
+              <th className="px-5 py-2.5">Project</th>
+              <th className="px-5 py-2.5">Created by</th>
+              <th className="px-5 py-2.5">Waiting</th>
+            </tr>
+          </thead>
+          <tbody>
+            {queue.map((q) => (
+              <tr key={q.id}
+                className="cursor-pointer border-t border-line transition-colors hover:bg-brand-tint"
+                onClick={() => navigate(`/lv/qtn/${q.id}`)}>
+                <td className="px-5 py-2.5 font-bold">
+                  <span className="rounded-md bg-brand-light px-2 py-0.5 font-mono text-xs text-brand-dark">{q.number}</span>
+                </td>
+                <td className="px-5 py-2.5">{q.projectName || <span className="text-muted">—</span>}</td>
+                <td className="px-5 py-2.5 text-muted">{q.ownerName || q.ownerEmail || "—"}</td>
+                <td className="px-5 py-2.5 text-xs text-muted">
+                  {waitedFor(q.submittedForApprovalAt || q.updatedAt)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

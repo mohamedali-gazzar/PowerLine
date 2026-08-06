@@ -3,7 +3,7 @@
 // (per signed-in user) via /api/qtns — the functions below are async wrappers
 // that also apply forward-compatible state normalization + the client-computed
 // summary the server stores alongside the JSON state.
-import { api, type QtnSummaryInput } from "../api";
+import { api, type QtnSummaryInput, type QtnStatus, type QtnRecordDto } from "../api";
 import {
   initialState,
   newSparePanel,
@@ -22,6 +22,16 @@ export interface QtnRecord {
   createdAt: string;
   updatedAt: string;
   submitted: boolean;
+  /** Approval state. The server computes it — never derive it on the client. */
+  status: QtnStatus;
+  /** True while the content is frozen (waiting / approved / submitted). */
+  locked: boolean;
+  approverEmail: string;
+  approvedAt: string | null;
+  returnReason: string;
+  ownerId: string;
+  ownerEmail: string;
+  ownerName: string;
   state: LvState;
 }
 
@@ -34,6 +44,11 @@ export interface QtnListItem {
   panels: number;
   totalEgp: number;
   submitted?: boolean;
+  status: QtnStatus;
+  locked: boolean;
+  ownerEmail: string;
+  ownerName: string;
+  approverEmail: string;
 }
 
 /** Client-computed summary stored next to the JSON state (so listing/stats need
@@ -144,24 +159,48 @@ function normalize(state: LvState): LvState {
   return state;
 }
 
-const toRecord = (r: {
-  id: string;
-  number: string;
-  createdAt: string;
-  updatedAt: string;
-  submitted: boolean;
-  state: unknown;
-}): QtnRecord => ({
+const toRecord = (r: QtnRecordDto): QtnRecord => ({
   id: r.id,
   number: r.number,
   createdAt: r.createdAt,
   updatedAt: r.updatedAt,
   submitted: r.submitted,
+  // Old servers mid-rollout won't send these; fall back to the legacy flag so the
+  // page still renders rather than showing an undefined status.
+  status: r.status ?? (r.submitted ? "SUBMITTED" : "DRAFT"),
+  locked: r.locked ?? Boolean(r.submitted),
+  approverEmail: r.approverEmail ?? "",
+  approvedAt: r.approvedAt ?? null,
+  returnReason: r.returnReason ?? "",
+  ownerId: r.ownerId ?? "",
+  ownerEmail: r.ownerEmail ?? "",
+  ownerName: r.ownerName ?? "",
   state: normalize(r.state as LvState),
 });
 
+/** My quotations — every status, including drafts. */
 export async function listQtns(): Promise<QtnListItem[]> {
   return api.qtns.list();
+}
+
+/** Every non-draft quotation across all users (LV Offers History). */
+export async function listAllQtns(): Promise<QtnListItem[]> {
+  return api.qtns.listAll();
+}
+
+/** Quotations waiting for approval — only for users who may approve. */
+export async function listApprovalQueue(): Promise<QtnListItem[]> {
+  return api.qtns.queue();
+}
+
+/** Move a quotation through the workflow. Throws with the server's message so the
+ *  caller can show WHY a transition was refused instead of failing silently. */
+export async function transitionQtn(id: string, to: QtnStatus, note?: string) {
+  return api.qtns.transition(id, to, note);
+}
+
+export async function qtnEvents(id: string) {
+  return api.qtns.events(id);
 }
 
 export async function getQtn(id: string): Promise<QtnRecord | null> {

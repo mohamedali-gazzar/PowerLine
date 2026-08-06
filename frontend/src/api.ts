@@ -92,7 +92,45 @@ export interface QtnSummaryInput {
   panelsCount?: number;
   totalEgp?: number;
 }
-export interface QtnListItemDto {
+/** The approval states a quotation moves through. Mirrors the server's
+ *  domain/qtnStatus.ts — the server is the authority; this is for rendering. */
+export const QTN_STATUSES = [
+  "DRAFT", "WAITING_APPROVAL", "RETURNED", "APPROVED", "SUBMITTED",
+] as const;
+export type QtnStatus = (typeof QTN_STATUSES)[number];
+
+export const QTN_STATUS_LABEL: Record<QtnStatus, string> = {
+  DRAFT: "Draft",
+  WAITING_APPROVAL: "Waiting for approval",
+  RETURNED: "Returned for revision",
+  APPROVED: "Approved — waiting for submission",
+  SUBMITTED: "Submitted",
+};
+
+/** Badge colours, keyed by status. */
+export const QTN_STATUS_STYLE: Record<QtnStatus, string> = {
+  DRAFT: "bg-slate-100 text-slate-600",
+  WAITING_APPROVAL: "bg-amber-100 text-amber-700",
+  RETURNED: "bg-red-100 text-red-700",
+  APPROVED: "bg-sky-100 text-sky-700",
+  SUBMITTED: "bg-green-100 text-green-700",
+};
+
+/** Workflow fields the server attaches to every QTN payload. */
+export interface QtnWorkflow {
+  status: QtnStatus;
+  statusLabel: string;
+  locked: boolean;
+  approverEmail: string;
+  approvedAt: string | null;
+  returnReason: string;
+  submittedForApprovalAt: string | null;
+  ownerId: string;
+  ownerEmail: string;
+  ownerName: string;
+}
+
+export interface QtnListItemDto extends QtnWorkflow {
   id: string;
   number: string;
   updatedAt: string;
@@ -102,13 +140,51 @@ export interface QtnListItemDto {
   totalEgp: number;
   submitted: boolean;
 }
-export interface QtnRecordDto {
+export interface QtnRecordDto extends QtnWorkflow {
   id: string;
   number: string;
   createdAt: string;
   updatedAt: string;
   submitted: boolean;
   state: unknown;
+}
+/** One row of a quotation's audit trail. */
+export interface QtnEventDto {
+  id: string;
+  action: string;
+  fromStatus: string | null;
+  toStatus: string;
+  note: string;
+  actorEmail: string;
+  createdAt: string;
+}
+export interface NotificationDto {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  link: string;
+  qtnId: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+/** What the signed-in user is allowed to do — computed by the server on every
+ *  request, never derived from the long-lived JWT. */
+export interface MyAccess {
+  tier: "ADMIN" | "ENGINEER";
+  perms: string[];
+  role: string;
+}
+export interface AccessUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  tier: "ADMIN" | "ENGINEER";
+  perms: string[];
+  migrated: boolean;
+  notifyByEmail: boolean;
+  createdAt: string;
 }
 /** A file attached to a quotation on the Specs tab. Metadata only — the bytes are
  *  fetched separately via attachmentLink(), so listing stays cheap. */
@@ -383,6 +459,17 @@ export const api = {
     remove: (id: string) => request<void>(`/qtns/${id}`, { method: "DELETE" }),
     duplicate: (id: string) =>
       request<QtnRecordDto>(`/qtns/${id}/duplicate`, { method: "POST" }),
+    /** Every non-draft quotation, all users — the LV Offers History list. */
+    listAll: () => request<QtnListItemDto[]>("/qtns/all"),
+    /** Quotations waiting for approval (needs qtn.approve). */
+    queue: () => request<QtnListItemDto[]>("/qtns/queue"),
+    /** Move a quotation through the workflow. `note` is required when returning. */
+    transition: (id: string, to: QtnStatus, note?: string) =>
+      request<{ ok: true; status: QtnStatus; statusLabel: string }>(`/qtns/${id}/transition`, {
+        method: "POST",
+        body: JSON.stringify({ to, ...(note ? { note } : {}) }),
+      }),
+    events: (id: string) => request<QtnEventDto[]>(`/qtns/${id}/events`),
     submit: (id: string) => request<{ ok: true }>(`/qtns/${id}/submit`, { method: "POST" }),
     unsubmit: (id: string) => request<{ ok: true }>(`/qtns/${id}/unsubmit`, { method: "POST" }),
 
@@ -514,5 +601,24 @@ export const api = {
       request<{ user: AuthUser }>("/profile", { method: "PUT", body: JSON.stringify(data) }),
     history: () => request<{ items: HistoryItem[] }>("/account/history"),
     weekly: () => request<{ weeks: WeekStat[] }>("/stats/weekly"),
+  },
+
+  // ── In-app notifications ────────────────────────────────────────────────────
+  notifications: {
+    list: () => request<{ items: NotificationDto[]; unread: number }>("/notifications"),
+    read: (id: string) => request<{ ok: true }>(`/notifications/${id}/read`, { method: "POST" }),
+    readAll: () => request<{ ok: true }>("/notifications/read-all", { method: "POST" }),
+  },
+
+  // ── Access Center ───────────────────────────────────────────────────────────
+  access: {
+    /** What the signed-in user may do. Every gate in the UI reads this. */
+    me: () => request<MyAccess>("/access/me"),
+    catalogue: () =>
+      request<{ tiers: string[]; perms: { key: string; label: string }[] }>("/access/catalogue"),
+    users: () => request<{ users: AccessUser[] }>("/access/users"),
+    setAccess: (id: string, data: { tier?: string; perms?: string[] }) =>
+      request<{ ok: true }>(`/access/users/${id}`, { method: "POST", body: JSON.stringify(data) }),
+    history: () => request<{ items: PriceChangeRow[] }>("/access/history"),
   },
 };

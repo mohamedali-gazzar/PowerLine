@@ -1,29 +1,132 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listQtns, createQtn, deleteQtn, duplicateQtn, amendQtn, supersededNumbers, nextQtnNumber, type QtnListItem } from "../lv/qtns";
+import { listQtns, listAllQtns, createQtn, deleteQtn, duplicateQtn, amendQtn, supersededNumbers, nextQtnNumber, type QtnListItem } from "../lv/qtns";
+import { api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE, type QtnStatus } from "../api";
+import { useAuth } from "../auth/AuthContext";
 import { fmtEgp, DEFAULT_FACTORS } from "../lv/catalog";
 import { QtnNumberInput, qtnPrefix } from "../components/QtnNumberInput";
 
-/** LV landing page — the list of quotations. "+ New QTN" opens a fresh
- *  workspace (Project / Pricing / Panels / Technical / Commercial / Material). */
+/** Deleting is refused (409) once a quotation has entered the approval flow, so
+ *  the button is only offered on the two stages the server still accepts. */
+const DELETABLE = new Set<QtnStatus>(["DRAFT", "RETURNED"]);
+
+/** LV landing page — the offers history. "+ New QTN" opens a fresh workspace
+ *  (Project / Pricing / Panels / Technical / Commercial / Material). */
 export default function LvQtnListPage() {
   const navigate = useNavigate();
-  const [qtns, setQtns] = useState<QtnListItem[]>([]);
+  const { user } = useAuth();
+  const [qtns, setQtns] = useState<QtnListItem[] | null>(null); // null = first load in flight
+  /** True when the list holds every user's quotations, not just the signed-in one's. */
+  const [scopeAll, setScopeAll] = useState(false);
+  const [loadErr, setLoadErr] = useState("");
+  const [actionErr, setActionErr] = useState("");
   const [creating, setCreating] = useState(false);
   const [num, setNum] = useState("");
   const [suggestion, setSuggestion] = useState("");
   const [err, setErr] = useState("");
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState<QtnStatus | "">("");
+  const [owner, setOwner] = useState("");
+  const [approver, setApprover] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
   const reload = async () => {
+    // Which list this page may show is the server's call, so ask before fetching:
+    // /qtns/all 403s for everyone without qtn.viewAll and would blank the page.
+    let all = false;
     try {
-      setQtns(await listQtns());
+      all = (await api.access.me()).perms.includes("qtn.viewAll");
     } catch {
+      /* unreadable access record — fall back to the personal list */
+    }
+    try {
+      const rows = all ? await listAllQtns() : await listQtns();
+      setScopeAll(all);
+      setQtns(rows);
+      setLoadErr("");
+    } catch (e) {
+      const msg = (e as Error).message || "Could not load the quotations.";
+      // A refused cross-user read still leaves the user's own list readable.
+      if (all) {
+        try {
+          setQtns(await listQtns());
+          setScopeAll(false);
+          setLoadErr(`${msg} — showing your own quotations instead.`);
+          return;
+        } catch {
+          /* both calls failed — report the first message below */
+        }
+      }
       setQtns([]);
+      setScopeAll(false);
+      setLoadErr(msg);
     }
   };
   useEffect(() => {
     reload();
   }, []);
+
+  const rows = qtns ?? [];
+  // A quotation saved before the workflow shipped carries no status; read it as a
+  // draft so the badge and the delete guard both have something to work with.
+  const statusOf = (x: QtnListItem): QtnStatus => x.status ?? "DRAFT";
+
+  // Filter options come from the fetched rows — there is no facets endpoint for
+  // quotations, and the lists are short enough to derive client-side.
+  const owners = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const x of qtns ?? []) if (x.ownerEmail) m.set(x.ownerEmail, x.ownerName || x.ownerEmail);
+    return [...m].map(([email, name]) => ({ email, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [qtns]);
+  const approvers = useMemo(
+    () => [...new Set((qtns ?? []).map((x) => x.approverEmail).filter(Boolean))].sort(),
+    [qtns]
+  );
+
+  const filtersOn = Boolean(q || status || owner || approver || from || to);
+  const clearFilters = () => { setQ(""); setStatus(""); setOwner(""); setApprover(""); setFrom(""); setTo(""); };
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    // The pickers give a calendar day, so the "to" bound has to cover its whole day.
+    const fromMs = from ? new Date(`${from}T00:00:00`).getTime() : null;
+    const toMs = to ? new Date(`${to}T23:59:59.999`).getTime() : null;
+    return (qtns ?? []).filter((x) => {
+      if (status && (x.status ?? "DRAFT") !== status) return false;
+      if (owner && x.ownerEmail !== owner) return false;
+      if (approver && x.approverEmail !== approver) return false;
+      if (fromMs !== null || toMs !== null) {
+        const t = new Date(x.updatedAt).getTime();
+        if (fromMs !== null && t < fromMs) return false;
+        if (toMs !== null && t > toMs) return false;
+      }
+      if (needle && ![x.number, x.projectName, x.customer].some((f) => (f || "").toLowerCase().includes(needle)))
+        return false;
+      return true;
+    });
+  }, [qtns, q, status, owner, approver, from, to]);
+
+  // QTN numbers superseded by a higher revision — shown as "Cancelled". Numbers
+  // repeat across users, so revisions are matched within one owner's numbering
+  // only; otherwise one user's "-2" would cancel another user's original.
+  const cancelledIds = useMemo(() => {
+    const byOwner = new Map<string, QtnListItem[]>();
+    for (const x of qtns ?? []) {
+      const g = byOwner.get(x.ownerEmail || "");
+      if (g) g.push(x); else byOwner.set(x.ownerEmail || "", [x]);
+    }
+    const out = new Set<string>();
+    for (const group of byOwner.values()) {
+      const dead = supersededNumbers(group.map((x) => x.number));
+      for (const x of group) if (dead.has(x.number)) out.add(x.id);
+    }
+    return out;
+  }, [qtns]);
+
+  const myEmail = (user?.email || "").toLowerCase();
+  const canDelete = (x: QtnListItem) =>
+    DELETABLE.has(statusOf(x)) && (!scopeAll || (x.ownerEmail || "").toLowerCase() === myEmail);
 
   const onNew = () => {
     setNum(""); // start empty — the full number is typed
@@ -40,40 +143,73 @@ export default function LvQtnListPage() {
       setErr((e as Error).message || "Could not create the quotation.");
     }
   };
-  const onDelete = async (e: React.MouseEvent, id: string) => {
+  const onDelete = async (e: React.MouseEvent, x: QtnListItem) => {
     e.stopPropagation();
-    if (!confirm("Delete this QTN?")) return;
-    try { await deleteQtn(id); await reload(); } catch { /* ignore */ }
+    if (!confirm(`Delete ${x.number}?`)) return;
+    setActionErr("");
+    try {
+      await deleteQtn(x.id);
+      await reload();
+    } catch (e2) {
+      setActionErr((e2 as Error).message || `Could not delete ${x.number}.`);
+    }
   };
   const onDuplicate = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
+    setActionErr("");
     const rec = await duplicateQtn(id);
     if (rec) navigate(`/lv/qtn/${rec.id}`);
+    else setActionErr("Could not duplicate that quotation.");
   };
   // Amend = open a new revision (QTN-…-N+1); the current revision is thereby cancelled.
   const onAmend = async (e: React.MouseEvent, id: string, number: string) => {
     e.stopPropagation();
     if (!confirm(`Amend ${number}?\nThis opens a new revision and cancels ${number}.`)) return;
+    setActionErr("");
     const rec = await amendQtn(id, number);
     if (rec) navigate(`/lv/qtn/${rec.id}`);
+    else setActionErr(`Could not amend ${number}.`);
   };
-  // QTN numbers superseded by a higher revision — shown as "Cancelled".
-  const cancelled = supersededNumbers(qtns.map((q) => q.number));
+
+  const count = filtered.length === rows.length
+    ? `${rows.length} saved`
+    : `${filtered.length} of ${rows.length} shown`;
 
   return (
     <div>
-      <div className="mb-5 flex items-center justify-between animate-fade-up">
+      <div className="mb-5 flex items-start justify-between gap-4 animate-fade-up">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">LV — Quotations</h1>
-          <p className="text-sm text-muted">{qtns.length} saved · ABB panel configurator</p>
+          <h1 className="text-2xl font-extrabold tracking-tight">LV — Offers History</h1>
+          <p className="text-sm text-muted">
+            {qtns === null ? "Loading…" : count} · {scopeAll ? "all users" : "your quotations"}
+          </p>
+          {qtns !== null && !scopeAll && (
+            <p className="mt-1 text-xs text-muted">
+              You are seeing only your own quotations — viewing everyone&apos;s needs the view-all permission.
+            </p>
+          )}
         </div>
-        <button className="btn-primary" onClick={onNew}>+ New QTN</button>
+        <button className="btn-primary shrink-0" onClick={onNew}>+ New QTN</button>
       </div>
 
-      {qtns.length === 0 ? (
+      {loadErr && (
+        <div className="card mb-3 border-red-200 bg-red-50 p-3 text-sm text-red-700 animate-fade-in">{loadErr}</div>
+      )}
+      {actionErr && (
+        <div className="card mb-3 flex items-start justify-between gap-3 border-red-200 bg-red-50 p-3 text-sm text-red-700 animate-fade-in">
+          <span>{actionErr}</span>
+          <button className="text-xs font-semibold hover:underline" onClick={() => setActionErr("")}>Dismiss</button>
+        </div>
+      )}
+
+      {qtns === null ? (
+        <div className="space-y-2">
+          {[0, 1, 2].map((i) => <div key={i} className="skeleton h-14" />)}
+        </div>
+      ) : rows.length === 0 ? (
         <div className="card p-12 text-center animate-fade-up">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-brand-tint text-2xl">⚡</div>
-          <p className="text-muted">No quotations yet.</p>
+          <p className="text-muted">{scopeAll ? "No quotations have been sent for approval yet." : "No quotations yet."}</p>
           <p className="mx-auto mt-1 max-w-md text-xs text-muted">
             A QTN holds the whole job — project data, pricing settings, panels &amp; components,
             and generates the Technical / Commercial offers and Material List.
@@ -81,50 +217,122 @@ export default function LvQtnListPage() {
           <button className="btn-primary mt-4" onClick={onNew}>Create your first QTN</button>
         </div>
       ) : (
-        <div className="card overflow-hidden animate-fade-up">
-          <table className="w-full text-sm">
-            <thead className="bg-brand-tint text-left text-[11px] uppercase tracking-wide text-brand-dark">
-              <tr>
-                <th className="px-4 py-3">QTN No</th>
-                <th className="px-4 py-3">Project</th>
-                <th className="px-4 py-3">Customer</th>
-                <th className="px-4 py-3">Panels</th>
-                <th className="px-4 py-3">Total (USD incl. VAT)</th>
-                <th className="px-4 py-3">Updated</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {qtns.map((q, i) => (
-                <tr key={q.id}
-                  className="cursor-pointer border-t border-line transition-colors hover:bg-brand-tint animate-fade-up"
-                  style={{ animationDelay: `${i * 0.04}s` }}
-                  onClick={() => navigate(`/lv/qtn/${q.id}`)}>
-                  <td className="px-4 py-3 font-bold text-ink">
-                    <span className={`rounded-md px-2 py-0.5 font-mono text-xs font-bold ${cancelled.has(q.number) ? "bg-surface text-muted line-through" : "bg-brand-light text-brand-dark"}`}>{q.number}</span>
-                    {cancelled.has(q.number) && (
-                      <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">Cancelled</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">{q.projectName || <span className="text-muted">—</span>}</td>
-                  <td className="px-4 py-3 text-muted">{q.customer || "—"}</td>
-                  <td className="px-4 py-3 text-muted">{q.panels}</td>
-                  <td className="px-4 py-3 font-semibold" title={`${fmtEgp(q.totalEgp)} EGP · @ ${DEFAULT_FACTORS.usd} EGP/USD`}>{"$" + fmtEgp(q.totalEgp / DEFAULT_FACTORS.usd)}</td>
-                  <td className="px-4 py-3 text-xs text-muted">{new Date(q.updatedAt).toLocaleDateString()}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-3" onClick={(e) => e.stopPropagation()}>
-                      {!cancelled.has(q.number) && (
-                        <button onClick={(e) => onAmend(e, q.id, q.number)} className="font-semibold text-brand-dark hover:underline" title="Open a new revision — cancels this one">Amend</button>
-                      )}
-                      <button onClick={(e) => onDuplicate(e, q.id)} className="font-semibold text-brand hover:underline">Duplicate</button>
-                      <button onClick={(e) => onDelete(e, q.id)} className="text-red-500 hover:underline">Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {/* Filters run over the rows already fetched — no round trip per keystroke. */}
+          <div className="card mb-3 flex flex-wrap items-end gap-2 p-3 animate-fade-up">
+            <div className="min-w-[200px] flex-1">
+              <label className="label" htmlFor="qtn-search">Search</label>
+              <input id="qtn-search" className="input" placeholder="QTN number, project or customer…"
+                value={q} onChange={(e) => setQ(e.target.value)} />
+            </div>
+            <div>
+              <label className="label" htmlFor="qtn-status">Status</label>
+              <select id="qtn-status" className="input w-56" value={status}
+                onChange={(e) => setStatus(e.target.value as QtnStatus | "")}>
+                <option value="">All statuses</option>
+                {QTN_STATUSES.map((s) => <option key={s} value={s}>{QTN_STATUS_LABEL[s]}</option>)}
+              </select>
+            </div>
+            {owners.length > 1 && (
+              <div>
+                <label className="label" htmlFor="qtn-owner">Creator</label>
+                <select id="qtn-owner" className="input w-44" value={owner} onChange={(e) => setOwner(e.target.value)}>
+                  <option value="">All creators</option>
+                  {owners.map((o) => <option key={o.email} value={o.email}>{o.name}</option>)}
+                </select>
+              </div>
+            )}
+            {approvers.length > 0 && (
+              <div>
+                <label className="label" htmlFor="qtn-approver">Approver</label>
+                <select id="qtn-approver" className="input w-44" value={approver} onChange={(e) => setApprover(e.target.value)}>
+                  <option value="">All approvers</option>
+                  {approvers.map((a) => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="label" htmlFor="qtn-from">Updated from</label>
+              <input id="qtn-from" type="date" className="input w-40" value={from} max={to || undefined}
+                onChange={(e) => setFrom(e.target.value)} />
+            </div>
+            <div>
+              <label className="label" htmlFor="qtn-to">Updated to</label>
+              <input id="qtn-to" type="date" className="input w-40" value={to} min={from || undefined}
+                onChange={(e) => setTo(e.target.value)} />
+            </div>
+            {filtersOn && <button className="btn-ghost" onClick={clearFilters}>Clear filters</button>}
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="card p-10 text-center animate-fade-up">
+              <p className="text-muted">No quotations match these filters.</p>
+              <button className="btn-ghost mt-4" onClick={clearFilters}>Clear filters</button>
+            </div>
+          ) : (
+            <div className="card overflow-x-auto animate-fade-up">
+              <table className="w-full text-sm">
+                <thead className="bg-brand-tint text-left text-[11px] uppercase tracking-wide text-brand-dark">
+                  <tr>
+                    <th className="px-4 py-3">QTN No</th>
+                    <th className="px-4 py-3">Status</th>
+                    {scopeAll && <th className="px-4 py-3">Owner</th>}
+                    <th className="px-4 py-3">Project</th>
+                    <th className="px-4 py-3">Customer</th>
+                    <th className="px-4 py-3">Panels</th>
+                    <th className="px-4 py-3">Total (USD incl. VAT)</th>
+                    <th className="px-4 py-3">Updated</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((x, i) => {
+                    const st = statusOf(x);
+                    const dead = cancelledIds.has(x.id);
+                    return (
+                      <tr key={x.id}
+                        className="cursor-pointer border-t border-line transition-colors hover:bg-brand-tint animate-fade-up"
+                        style={{ animationDelay: `${i * 0.04}s` }}
+                        onClick={() => navigate(`/lv/qtn/${x.id}`)}>
+                        <td className="px-4 py-3 font-bold text-ink">
+                          <span className={`rounded-md px-2 py-0.5 font-mono text-xs font-bold ${dead ? "bg-surface text-muted line-through" : "bg-brand-light text-brand-dark"}`}>{x.number}</span>
+                          {dead && (
+                            <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">Cancelled</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${QTN_STATUS_STYLE[st]}`}
+                            title={x.approverEmail ? `${QTN_STATUS_LABEL[st]} · approver ${x.approverEmail}` : QTN_STATUS_LABEL[st]}>
+                            {QTN_STATUS_LABEL[st]}
+                          </span>
+                        </td>
+                        {scopeAll && (
+                          <td className="px-4 py-3 text-muted" title={x.ownerEmail}>{x.ownerName || x.ownerEmail || "—"}</td>
+                        )}
+                        <td className="px-4 py-3">{x.projectName || <span className="text-muted">—</span>}</td>
+                        <td className="px-4 py-3 text-muted">{x.customer || "—"}</td>
+                        <td className="px-4 py-3 text-muted">{x.panels}</td>
+                        <td className="px-4 py-3 font-semibold" title={`${fmtEgp(x.totalEgp)} EGP · @ ${DEFAULT_FACTORS.usd} EGP/USD`}>{"$" + fmtEgp(x.totalEgp / DEFAULT_FACTORS.usd)}</td>
+                        <td className="px-4 py-3 text-xs text-muted">{new Date(x.updatedAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-3" onClick={(e) => e.stopPropagation()}>
+                            {!dead && (
+                              <button onClick={(e) => onAmend(e, x.id, x.number)} className="font-semibold text-brand-dark hover:underline" title="Open a new revision — cancels this one">Amend</button>
+                            )}
+                            <button onClick={(e) => onDuplicate(e, x.id)} className="font-semibold text-brand hover:underline">Duplicate</button>
+                            {canDelete(x) && (
+                              <button onClick={(e) => onDelete(e, x)} className="text-red-500 hover:underline">Delete</button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {creating && (

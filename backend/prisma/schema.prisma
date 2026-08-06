@@ -141,11 +141,22 @@ model User {
   /// (may edit prices AND grant access). Read from the DB per request — never
   /// trusted from the JWT, so revoking access takes effect immediately.
   role          String   @default("USER")
+  /// Access model: "ADMIN" | "ENGINEER". NULL = not migrated yet, in which case
+  /// permissions are derived from `role` — so adding this column changes nothing
+  /// until the Access Center writes to it.
+  tier          String?
+  /// Granted permission keys as a JSON array string, e.g. ["prices.edit"].
+  /// SQLite has no array type and Prisma's Json isn't supported there, so this
+  /// follows the same string-holds-JSON precedent as LvQtn.state.
+  perms         String   @default("[]")
+  /// Opt out of workflow e-mail; in-app notifications still fire.
+  notifyByEmail Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  lvQtns LvQtn[]
-  offers Offer[]
+  lvQtns        LvQtn[]
+  offers        Offer[]
+  notifications Notification[]
 }
 
 /// One-time numeric codes emailed for sign-up verification and password reset.
@@ -176,8 +187,30 @@ model LvQtn {
   customer    String    @default("")
   panelsCount Int       @default(0)
   totalEgp    Float     @default(0)
+  /// MIRROR COLUMNS. Kept so the weekly-submissions chart keeps working unchanged,
+  /// but never written by hand again — statusWrite() in domain/qtnStatus.ts owns
+  /// them. submittedAt is now sticky: reopening no longer nulls it, so a quotation
+  /// cannot silently move between weeks in the chart's history.
   submitted   Boolean   @default(false)
   submittedAt DateTime?
+  /// Approval state: DRAFT | WAITING_APPROVAL | RETURNED | APPROVED | SUBMITTED.
+  /// NULL = written before the workflow existed; ALWAYS read via qtnStatus(), which
+  /// falls back to the `submitted` mirror. Deliberately NOT defaulted: `db push`
+  /// stamps a default onto every existing row, which would reset live submitted
+  /// quotations to Draft the moment the column appears, with no backfill hook to
+  /// catch it (deploys run `prisma db push` with no data step).
+  status                 String?
+  statusAt               DateTime?
+  /// When it entered WAITING_APPROVAL — orders the approval queue.
+  submittedForApprovalAt DateTime?
+  /// Who approved/returned it. Plain id + e-mail with no foreign key, so deleting a
+  /// user never breaks a quotation or its history (same reasoning as
+  /// LvAttachment.byEmail).
+  approverId    String?
+  approverEmail String    @default("")
+  approvedAt    DateTime?
+  /// Why it was sent back. Mandatory on a RETURN transition.
+  returnReason  String    @default("")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -185,6 +218,8 @@ model LvQtn {
 
   @@unique([ownerId, number])
   @@index([ownerId])
+  @@index([status])
+  @@index([status, updatedAt])
 }
 
 /// A file attached to a quotation (Specs tab) — client specifications, drawings,
@@ -205,6 +240,57 @@ model LvAttachment {
   createdAt DateTime @default(now())
 
   @@index([qtnId])
+}
+
+/// Append-only history of everything that happens to a quotation.
+///
+/// Deliberately has NO relation to LvQtn: a cascade delete (as on LvAttachment)
+/// would erase exactly what an audit trail exists to survive. qtnNumber, ownerEmail
+/// and actorEmail are denormalised for the same reason — a row must stay readable
+/// after the quotation, or the user, is gone. Nothing ever updates or deletes these
+/// rows; immutability is by convention, as with PriceChange.
+model QtnEvent {
+  id         String   @id @default(cuid())
+  qtnId      String
+  qtnNumber  String   @default("")
+  ownerId    String?
+  ownerEmail String   @default("")
+  /// CREATE | REQUEST_APPROVAL | APPROVE | RETURN | SUBMIT | WITHDRAW | REOPEN
+  action     String   @default("")
+  fromStatus String?
+  toStatus   String   @default("")
+  /// Return reason or free-text comment.
+  note       String   @default("")
+  actorId    String?
+  actorEmail String   @default("")
+  createdAt  DateTime @default(now())
+
+  @@index([qtnId, createdAt])
+  @@index([toStatus, createdAt])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
+
+/// In-app notification inbox. Email is best-effort on top of this: the row is the
+/// record of truth, `emailedAt`/`emailError` say whether delivery actually happened
+/// so a silent mail failure is visible rather than invisible.
+model Notification {
+  id         String    @id @default(cuid())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  /// QTN_WAITING | QTN_APPROVED | QTN_RETURNED | QTN_SUBMITTED | ACCESS_CHANGED
+  kind       String    @default("")
+  title      String    @default("")
+  body       String    @default("")
+  link       String    @default("")
+  qtnId      String?
+  readAt     DateTime?
+  emailedAt  DateTime?
+  emailError String    @default("")
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

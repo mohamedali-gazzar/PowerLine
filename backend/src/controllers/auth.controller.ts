@@ -8,7 +8,12 @@ import {
   signToken,
   genCode,
 } from "../lib/auth";
-import { sendMail, emailConfigured } from "../services/email.service";
+import {
+  sendMail,
+  emailConfigured,
+  emailShell,
+  emailCodeBlock,
+} from "../services/email.service";
 import {
   registerSchema,
   verifySchema,
@@ -18,11 +23,47 @@ import {
   resetSchema,
 } from "../validation/auth.schema";
 
-const CODE_TTL_MIN = 15;
+/** How long a one-time code stays valid. Configurable so it can be tuned without
+ *  a code change; 10 minutes is the default. */
+const CODE_TTL_MIN = Math.max(1, parseInt(process.env.OTP_TTL_MINUTES || "10", 10) || 10);
 const MAX_ATTEMPTS = 6;
 // The code is only echoed back in the response when there's no real email AND we
 // aren't in production — so production never leaks codes even if misconfigured.
 const DEV = process.env.NODE_ENV !== "production";
+
+// ── Rate limiting ───────────────────────────────────────────────────────────
+// Without this, /forgot and /register are free code-generation endpoints: each call
+// deletes the previous code and mails a new one, so anyone could spam a colleague's
+// inbox or grind the 6-digit space by requesting fresh codes.
+//
+// Deliberately in-process. A shared store would be better, but this runs on
+// serverless where each instance is short-lived, and an imperfect limit applied
+// everywhere beats a perfect one that needs infrastructure we do not have. It
+// blunts the obvious abuse; it is not a defence against a distributed attacker.
+const RATE_MAX = 5; // requests per key per window
+const RATE_WINDOW_MS = 15 * 60_000;
+const rateHits = new Map<string, number[]>();
+
+function rateLimited(key: string): boolean {
+  const now = Date.now();
+  const hits = (rateHits.get(key) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
+  hits.push(now);
+  rateHits.set(key, hits);
+  // Bound the map so a long-lived process can't grow it without limit.
+  if (rateHits.size > 5000) {
+    for (const [k, v] of rateHits) {
+      if (!v.some((t) => now - t < RATE_WINDOW_MS)) rateHits.delete(k);
+    }
+  }
+  return hits.length > RATE_MAX;
+}
+
+/** Same limit keyed by both the address and the caller, so one noisy client cannot
+ *  lock out an address and one address cannot be hammered from many clients. */
+function tooManyRequests(req: Request, email: string): boolean {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "";
+  return rateLimited(`email:${email}`) || (ip ? rateLimited(`ip:${ip}`) : false);
+}
 
 /** Create + "send" a fresh code, replacing any prior one for this email+purpose. */
 async function issueCode(email: string, purpose: "signup" | "reset"): Promise<string> {
@@ -40,10 +81,17 @@ async function issueCode(email: string, purpose: "signup" | "reset"): Promise<st
     purpose === "signup"
       ? "Your PowerLine verification code"
       : "Your PowerLine password-reset code";
+  const heading =
+    purpose === "signup" ? "Confirm your e-mail" : "Reset your password";
   await sendMail({
     to: email,
     subject,
     text: `Your PowerLine code is ${code}. It expires in ${CODE_TTL_MIN} minutes. If you didn't request this, you can ignore this email.`,
+    html: emailShell(
+      heading,
+      emailCodeBlock(code) +
+        `<p style="margin:0;font-size:13px;line-height:1.55;color:#8b8f98">This code expires in ${CODE_TTL_MIN} minutes. If you didn't request it, you can ignore this e-mail.</p>`
+    ),
   });
   return code;
 }
@@ -83,6 +131,11 @@ async function checkCode(
 export async function register(req: Request, res: Response) {
   try {
     const { email } = registerSchema.parse(req.body);
+    if (tooManyRequests(req, email)) {
+      return res.status(429).json({
+        error: "Too many verification requests. Please wait a few minutes and try again.",
+      });
+    }
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return res
@@ -180,9 +233,30 @@ export async function devLogin(_req: Request, res: Response) {
 export async function forgot(req: Request, res: Response) {
   try {
     const { email } = forgotSchema.parse(req.body);
+    if (tooManyRequests(req, email)) {
+      console.warn("[forgot] rate limited for %s", email);
+      return res.status(429).json({
+        error: "Too many reset requests. Please wait a few minutes and try again.",
+      });
+    }
     const user = await prisma.user.findUnique({ where: { email } });
     let devCode: string | undefined;
-    if (user) devCode = await issueCode(email, "reset");
+    if (user) {
+      // Security log: who asked for a reset and when.
+      console.info("[forgot] reset code issued for %s at %s", email, new Date().toISOString());
+      devCode = await issueCode(email, "reset");
+    } else {
+      // Still answer 200 so the endpoint can't be used to enumerate accounts, but
+      // say so in the log — otherwise "no such account" and "mail never sent" are
+      // indistinguishable from the outside, which is exactly the confusion that
+      // made this look broken.
+      console.warn("[forgot] no account for %s — no code issued", email);
+    }
+    if (!emailConfigured) {
+      console.warn(
+        "[forgot] SMTP is not configured — no e-mail was sent. Set SMTP_HOST, SMTP_USER and SMTP_PASS."
+      );
+    }
     res.json({ ok: true, ...(!emailConfigured && DEV && devCode ? { devCode } : {}) });
   } catch (e) {
     fail(res, e);
@@ -202,6 +276,9 @@ export async function reset(req: Request, res: Response) {
       data: { passwordHash: await hashPassword(password) },
     });
     await prisma.emailCode.deleteMany({ where: { email, purpose: "reset" } });
+    // Security log: a password actually changed. Kept separate from the request log
+    // above so "someone asked" and "someone succeeded" are distinguishable.
+    console.info("[reset] password changed for %s at %s", email, new Date().toISOString());
     res.json({ token: signToken({ sub: user.id, email: user.email }), user: pub(user) });
   } catch (e) {
     fail(res, e);

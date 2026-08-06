@@ -18,6 +18,8 @@ import LvConfiguratorPage from "./pages/LvConfiguratorPage";
 const PricingAdminPage = React.lazy(() => import("./pages/PricingAdminPage"));
 // Same for the P-CSS selector — it carries the full breaker catalogue.
 const PcssSelectorPage = React.lazy(() => import("./pages/PcssSelectorPage"));
+// And for the Access Center — only admins ever open it.
+const AccessCenterPage = React.lazy(() => import("./pages/AccessCenterPage"));
 // Brand fonts — self-hosted via @fontsource so local dev stays offline-capable.
 import "@fontsource/poppins/300.css";
 import "@fontsource/poppins/400.css";
@@ -71,6 +73,14 @@ function Gate() {
           element={
             <React.Suspense fallback={<div className="skeleton h-64" />}>
               <PricingAdminPage />
+            </React.Suspense>
+          }
+        />
+        <Route
+          path="access"
+          element={
+            <React.Suspense fallback={<div className="skeleton h-64" />}>
+              <AccessCenterPage />
             </React.Suspense>
           }
         />
