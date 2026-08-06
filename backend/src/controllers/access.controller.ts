@@ -70,12 +70,16 @@ export async function setAccess(req: Request, res: Response) {
     const actorEmail = req.userEmail ?? "";
     const target = await prisma.user.findUnique({
       where: { id: req.params.id },
-      select: { id: true, email: true, role: true, tier: true, perms: true },
+      select: { id: true, email: true, role: true, tier: true, perms: true, notifyByEmail: true },
     });
     if (!target) return res.status(404).json({ error: "User not found." });
 
     const nextTier = req.body?.tier as Tier | undefined;
     const nextPermsRaw = req.body?.perms as string[] | undefined;
+    // Turning e-mail off does NOT stop notifications — the in-app inbox still
+    // fills. It only decides whether a copy is also posted out.
+    const nextNotify =
+      typeof req.body?.notifyByEmail === "boolean" ? (req.body.notifyByEmail as boolean) : undefined;
 
     if (nextTier && !(TIERS as readonly string[]).includes(nextTier)) {
       return res.status(400).json({ error: "Unknown access level." });
@@ -91,9 +95,10 @@ export async function setAccess(req: Request, res: Response) {
       ? nextPermsRaw.filter((p): p is Perm => (PERMS as readonly string[]).includes(p))
       : undefined;
 
-    const data: { tier?: string; perms?: string } = {};
+    const data: { tier?: string; perms?: string; notifyByEmail?: boolean } = {};
     if (nextTier) data.tier = nextTier;
     if (nextPerms) data.perms = JSON.stringify(nextPerms);
+    if (nextNotify !== undefined) data.notifyByEmail = nextNotify;
     if (!Object.keys(data).length) return res.json({ ok: true });
 
     const prevTier = target.tier ?? (target.role === "OWNER" ? "ADMIN" : "ENGINEER");
@@ -106,6 +111,13 @@ export async function setAccess(req: Request, res: Response) {
     }
     if (data.perms && data.perms !== target.perms) {
       changes.push({ field: "perms", oldValue: target.perms || "[]", newValue: data.perms });
+    }
+    if (data.notifyByEmail !== undefined && data.notifyByEmail !== target.notifyByEmail) {
+      changes.push({
+        field: "notifyByEmail",
+        oldValue: target.notifyByEmail ? "on" : "off",
+        newValue: data.notifyByEmail ? "on" : "off",
+      });
     }
     for (const c of changes) {
       await prisma.priceChange.create({
@@ -128,7 +140,15 @@ export async function setAccess(req: Request, res: Response) {
           title: "Your access has been updated",
           body: `${actorEmail} updated your access in the PowerLine Access Center.`,
           link: "/",
-          details: changes.map((c) => [c.field === "tier" ? "Access level" : "Permissions", c.newValue] as [string, string]),
+          details: changes.map(
+            (c) =>
+              [
+                c.field === "tier" ? "Access level"
+                : c.field === "notifyByEmail" ? "E-mail notifications"
+                : "Permissions",
+                c.newValue,
+              ] as [string, string]
+          ),
         });
       } catch (e) {
         console.error("[access] notification failed", e);

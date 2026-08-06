@@ -620,7 +620,7 @@ export const api = {
     catalogue: () =>
       request<{ tiers: string[]; perms: { key: string; label: string }[] }>("/access/catalogue"),
     users: () => request<{ users: AccessUser[] }>("/access/users"),
-    setAccess: (id: string, data: { tier?: string; perms?: string[] }) =>
+    setAccess: (id: string, data: { tier?: string; perms?: string[]; notifyByEmail?: boolean }) =>
       request<{ ok: true }>(`/access/users/${id}`, { method: "POST", body: JSON.stringify(data) }),
     history: () => request<{ items: PriceChangeRow[] }>("/access/history"),
   },
