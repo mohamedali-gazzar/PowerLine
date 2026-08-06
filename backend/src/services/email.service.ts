@@ -130,9 +130,40 @@ export function emailButton(href: string, label: string): string {
   )}</a></p>`;
 }
 
-/** Absolute URL for a link inside an email (relative paths don't work in mail). */
-export function appUrl(path: string): string {
-  const base = (process.env.APP_URL || process.env.CORS_ORIGIN || "").split(",")[0].trim();
-  if (!base) return path;
-  return `${base.replace(/\/+$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+/**
+ * Absolute URL for a link inside an e-mail.
+ *
+ * A relative path is useless in an inbox — there is no page for the mail client to
+ * resolve it against, so the button simply does nothing. `fallbackOrigin` is the
+ * address the request itself arrived on, which means links work with no
+ * configuration at all; APP_URL still wins when it is set (useful behind a proxy
+ * or a custom domain).
+ */
+export function appUrl(path: string, fallbackOrigin?: string): string {
+  const configured = (process.env.APP_URL || process.env.CORS_ORIGIN || "").split(",")[0].trim();
+  const base = configured || (fallbackOrigin ?? "").trim();
+  const tail = path.startsWith("/") ? path : `/${path}`;
+  if (!/^https?:\/\//i.test(base)) {
+    console.warn(
+      "[email] no absolute site address available — the link in this e-mail will not open. " +
+        "Set APP_URL to the site's URL."
+    );
+    return tail;
+  }
+  return `${base.replace(/\/+$/, "")}${tail}`;
+}
+
+/** The origin this request arrived on, honouring the proxy headers Vercel sets. */
+export function originOf(req: {
+  headers: Record<string, unknown>;
+  protocol?: string;
+}): string {
+  const h = (k: string) => {
+    const v = req.headers?.[k];
+    return (Array.isArray(v) ? v[0] : v) as string | undefined;
+  };
+  const host = h("x-forwarded-host") || h("host");
+  if (!host) return "";
+  const proto = h("x-forwarded-proto") || req.protocol || "https";
+  return `${String(proto).split(",")[0].trim()}://${String(host).split(",")[0].trim()}`;
 }

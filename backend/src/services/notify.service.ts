@@ -27,6 +27,9 @@ export interface NotifyInput {
   details?: [string, string][];
   /** Approval or revision comment. */
   note?: string;
+  /** The site address this action arrived on, so the e-mail's link is absolute
+   *  even when APP_URL was never configured. */
+  origin?: string;
 }
 
 /** Create the in-app notification, then try to e-mail it. Never throws. */
@@ -49,7 +52,7 @@ export async function notify(n: NotifyInput) {
     });
     if (!u?.email || !u.notifyByEmail || !emailConfigured) return row;
 
-    const href = appUrl(n.link);
+    const href = appUrl(n.link, n.origin);
     const rows: [string, string][] = [...(n.details ?? [])];
     if (n.note) rows.push(["Comment", n.note]);
 
