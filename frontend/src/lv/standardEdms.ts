@@ -61,8 +61,10 @@ const PFC_BANK = (breaker: string, caps: number): StdPart[] => [
   { qty: 1, desc: "Thermostat" },
 ];
 /** Switch-fuse outgoings: each way is one switch fuse plus three HRC fuses.
- *  The catalogue lists every switch fuse at 0 poles, which would zero its
- *  connection copper (cuC × poles) — a 3-phase way has 3, so it is set here. */
+ *  Poles are pinned at 3 deliberately. Connection copper is costed as cuC ×
+ *  poles, and these rows were catalogued at 0 poles — which silently zeroed the
+ *  whole section's copper. The catalogue is fixed, but a standard panel should
+ *  not go back to costing nothing if that data ever regresses. */
 const SWF_WAYS = (ways: number): StdPart[] => [
   { qty: ways, desc: "Switch Fuse 630A V", poles: 3 },
   { qty: ways * 3, desc: "HRC Fuse 400A" },
@@ -97,7 +99,7 @@ const FAMILIES: Record<string, StdFamily> = {
   },
   "800": {
     base: "MDB 1600A", ratingA: 1600,
-    incomer: "ACB E1.2C 1600A-50kA 1600 AF Ekip Touch LI 3P F F", ctRatio: "1000/5",
+    incomer: "ACB E1.2C 1600A-50kA 1600 AF Ekip Touch LI 3P F F", ctRatio: "1600/5",
     kvar: 40, pfcBreaker: "MCCB XT1S 100A-50kA 160 AF TMD 3P", pfcCaps: 3,
     swfWays: 8, cbWays: 6, cbBreaker: "MCCB XT4S 250A-50kA 250 AF TMA 3P",
   },
