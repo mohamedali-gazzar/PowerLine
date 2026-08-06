@@ -211,7 +211,10 @@ export interface HistoryItem {
 }
 export interface PricingStatus {
   role: string;
+  /** May change prices. */
   canEdit: boolean;
+  /** May at least see them — implied by canEdit. */
+  canView: boolean;
   version: number;
   source: "bundled" | "db";
   stale: boolean;

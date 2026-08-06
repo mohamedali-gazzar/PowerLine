@@ -8,7 +8,7 @@ import { buildPriceKey, type RmuConfigInput } from "../domain/assembly";
 import { lucyKey } from "../domain/lucy";
 import { fail } from "../lib/http";
 import { priceBookInfo, refreshPriceBook } from "../domain/pricing-data";
-import { roleOf } from "../middleware/roles";
+import { roleOf, accessOf, canViewPrices } from "../middleware/roles";
 import { seedRmuFromBundle, buildRmuPayload, diffAgainstBundle } from "../services/price-seed.service";
 
 /** GET /api/pricing/version — tiny poll target so a screen can notice that
@@ -76,19 +76,23 @@ async function livePriceListIsBehind(): Promise<boolean> {
 export async function getStatus(req: Request, res: Response) {
   try {
     await refreshPriceBook();
-    const [book, rmuCount, settingCount, lvComponents, lvEnclosures, role, behind] = await Promise.all([
+    const [book, rmuCount, settingCount, lvComponents, lvEnclosures, access, behind] = await Promise.all([
       prisma.priceBook.findUnique({ where: { id: "singleton" } }),
       prisma.rmuPrice.count(),
       prisma.priceSetting.count(),
       prisma.lvComponent.count(),
       prisma.lvEnclosure.count(),
-      roleOf(req.userId),
+      accessOf(req.userId),
       livePriceListIsBehind(),
     ]);
     const info = priceBookInfo();
     res.json({
-      role,
-      canEdit: role === "PRICE_ADMIN" || role === "OWNER",
+      role: access.role,
+      // Sourced from the Access Center's permissions, NOT the legacy role — the
+      // Access Center writes tier/perms and never rewrites `role`, so reading the
+      // role here meant granting price access had no effect at all.
+      canEdit: access.perms.has("prices.edit"),
+      canView: canViewPrices(access),
       version: info.version,
       source: info.source,
       stale: info.stale,

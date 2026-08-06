@@ -127,6 +127,29 @@ export function requirePerm(perm: Perm) {
   };
 }
 
+/** Gate on ANY of several permissions — used where a read is allowed both to
+ *  people who may only look and to people who may also change things. */
+export function requireAnyPerm(...perms: Perm[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const acc = await accessOf(req.userId);
+      if (!perms.some((p) => acc.perms.has(p))) {
+        return res.status(403).json({ error: DENY[perms[0]] ?? "You do not have access to this." });
+      }
+      next();
+    } catch (e) {
+      fail(res, e);
+    }
+  };
+}
+
+/** Being allowed to CHANGE prices implies being allowed to SEE them. */
+export const canViewPrices = (acc: Access) =>
+  acc.perms.has("prices.view") || acc.perms.has("prices.edit");
+
+/** Read-only access to the price list. */
+export const requirePriceViewer = requireAnyPerm("prices.view", "prices.edit");
+
 // Back-compat aliases so every existing wiring site in app.ts stays untouched.
 export const requirePriceAdmin = requirePerm("prices.edit");
 export const requireOwner = requirePerm("access.manage");

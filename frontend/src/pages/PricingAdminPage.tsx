@@ -178,7 +178,10 @@ export default function PricingAdminPage() {
   }
 
   // ── No access ──────────────────────────────────────────────────────────────
-  if (!status.canEdit && status.seedState === "READY") {
+  // Locked only for people with NO price access at all. "View price list" gets the
+  // real page with the editing controls disabled — otherwise granting view-only
+  // access showed the same padlock as granting nothing.
+  if (!status.canView && !status.canEdit && status.seedState === "READY") {
     return (
       <div className="animate-fade-up">
         <h1 className="text-2xl font-extrabold tracking-tight">Price list</h1>
