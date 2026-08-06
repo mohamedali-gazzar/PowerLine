@@ -191,8 +191,12 @@ export interface LvState {
 export const YES_NO = ["No", "Yes"] as const;
 // ── "Standard Panels" option lists (Components card → Standard Panels) ───────
 export const STD_TR_KVA = ["500", "800", "1000", "1500/1600", "2000", "2500"] as const;
-/** Standard EDMS panels are also built at 300 kVA. */
-export const STD_TR_KVA_EDMS: readonly string[] = ["300", ...STD_TR_KVA];
+/** The transformer sizes Standard EDMS has a standard panel for. Listed explicitly
+ *  rather than derived from STD_TR_KVA: that list carries "1500/1600", which is not
+ *  a key any standard is filed under, so it could be picked and never match. */
+export const STD_TR_KVA_EDMS: readonly string[] = [
+  "300", "500", "800", "1000", "1600", "2000", "2500",
+];
 /** The size a panel starts on — the same on every QTN kind, so adding a smaller
  *  option to one of the lists doesn't quietly move the default. */
 export const STD_TR_KVA_DEFAULT = "500";

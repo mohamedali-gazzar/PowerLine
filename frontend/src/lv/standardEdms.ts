@@ -82,6 +82,9 @@ interface StdFamily {
   swfWays: number;     // outgoing ways in the SWF variant
   cbWays: number;      // outgoing ways in the C.B variant
   cbBreaker: string;
+  /** The outgoing breaker's rating as it appears in the panel name. Not always
+   *  250 A — from 1600 kVA up the standard uses 400 A ways. */
+  cbRating: string;
 }
 
 const FAMILIES: Record<string, StdFamily> = {
@@ -89,19 +92,43 @@ const FAMILIES: Record<string, StdFamily> = {
     base: "MDB 630A", ratingA: 630,
     incomer: "MCCB XT5N 630A-36kA 630 AF Ekip Dip LS/i 3P", ctRatio: "800/5",
     kvar: 15, pfcBreaker: "MCCB A1N 40A-36kA 125 AF TMF 3P", pfcCaps: 1,
-    swfWays: 4, cbWays: 4, cbBreaker: "MCCB XT4N 250A-36kA 250 AF TMA 3P",
+    swfWays: 4, cbWays: 4, cbBreaker: "MCCB XT4N 250A-36kA 250 AF TMA 3P", cbRating: "250A",
   },
   "500": {
     base: "MDB 1000A", ratingA: 1000,
     incomer: "ACB E1.2C 1000A-50kA 1000 AF Ekip Touch LI 3P F F", ctRatio: "1000/5",
     kvar: 25, pfcBreaker: "MCCB A1N 63A-36kA 125 AF TMF 3P", pfcCaps: 2,
-    swfWays: 6, cbWays: 5, cbBreaker: "MCCB XT4N 250A-36kA 250 AF TMA 3P",
+    swfWays: 6, cbWays: 5, cbBreaker: "MCCB XT4N 250A-36kA 250 AF TMA 3P", cbRating: "250A",
   },
   "800": {
     base: "MDB 1600A", ratingA: 1600,
     incomer: "ACB E1.2C 1600A-50kA 1600 AF Ekip Touch LI 3P F F", ctRatio: "1600/5",
     kvar: 40, pfcBreaker: "MCCB XT1S 100A-50kA 160 AF TMD 3P", pfcCaps: 3,
-    swfWays: 8, cbWays: 6, cbBreaker: "MCCB XT4S 250A-50kA 250 AF TMA 3P",
+    swfWays: 8, cbWays: 6, cbBreaker: "MCCB XT4S 250A-50kA 250 AF TMA 3P", cbRating: "250A",
+  },
+  "1000": {
+    base: "MDB 2000A", ratingA: 2000,
+    incomer: "ACB E2.2N 2000A-66kA 2000 AF Ekip Touch LI 3P FHR", ctRatio: "2000/5",
+    kvar: 50, pfcBreaker: "MCCB XT1S 125A-50kA 160 AF TMD 3P", pfcCaps: 4,
+    swfWays: 12, cbWays: 8, cbBreaker: "MCCB XT4S 250A-50kA 250 AF TMA 3P", cbRating: "250A",
+  },
+  "1600": {
+    base: "MDB 3200A", ratingA: 3200,
+    incomer: "ACB E4.2N 3200A-66kA 3200 AF Ekip Touch LI 3P FHR", ctRatio: "4000/5",
+    kvar: 75, pfcBreaker: "MCCB XT4H 200A-70kA 250 AF TMA 3P", pfcCaps: 6,
+    swfWays: 18, cbWays: 8, cbBreaker: "MCCB XT5H 400A-70kA 400 AF TMA 3P", cbRating: "400A",
+  },
+  "2000": {
+    base: "MDB 4000A", ratingA: 4000,
+    incomer: "ACB E4.2N 4000A-66kA 4000 AF Ekip Touch LI 3P FHR", ctRatio: "4000/5",
+    kvar: 100, pfcBreaker: "MCCB XT4H 250A-70kA 250 AF TMA 3P", pfcCaps: 7,
+    swfWays: 20, cbWays: 12, cbBreaker: "MCCB XT5H 400A-70kA 400 AF TMA 3P", cbRating: "400A",
+  },
+  "2500": {
+    base: "MDB 5000A", ratingA: 5000,
+    incomer: "ACB E6.2H 5000A-100kA 5000 AF Ekip Touch LI 3P FHR", ctRatio: "5000/5",
+    kvar: 125, pfcBreaker: "MCCB XT5H 400A-70kA 400 AF TMA 3P", pfcCaps: 9,
+    swfWays: 20, cbWays: 16, cbBreaker: "MCCB XT5H 400A-70kA 400 AF TMA 3P", cbRating: "400A",
   },
 };
 
@@ -123,6 +150,26 @@ const VARIANTS: Record<string, { cells: Record<string, number>; copper: CopperTo
   "800|Yes|None":  { cells: { 600: 2 },                 copper: { 400: { p: 0, n: 0, e: 1200 }, 1000: { p: 0, n: 600, e: 0 },  1600: { p: 1200, n: 0, e: 0 } } },
   "800|Yes|SWF":   { cells: { 600: 1, 800: 1, 1000: 1 },copper: { 400: { p: 0, n: 0, e: 2400 }, 1000: { p: 0, n: 1800, e: 0 }, 1600: { p: 3200, n: 0, e: 0 } } },
   "800|Yes|C.B":   { cells: { 600: 4 },                 copper: { 400: { p: 0, n: 0, e: 2400 }, 1000: { p: 0, n: 1800, e: 0 }, 1600: { p: 2400, n: 0, e: 0 } } },
+  // ── 1000 kVA ──
+  "1000|No|None":  { cells: {},                         copper: { 400: { p: 0, n: 0, e: 600 },  1250: { p: 0, n: 600, e: 0 } } },
+  "1000|Yes|None": { cells: { 600: 2 },                 copper: { 400: { p: 0, n: 0, e: 1200 }, 1250: { p: 0, n: 600, e: 0 },  2000: { p: 1200, n: 0, e: 0 } } },
+  "1000|Yes|SWF":  { cells: { 600: 1, 800: 3 },         copper: { 400: { p: 0, n: 0, e: 3000 }, 1250: { p: 0, n: 2400, e: 0 }, 2000: { p: 3800, n: 0, e: 0 } } },
+  "1000|Yes|C.B":  { cells: { 600: 2, 800: 2 },         copper: { 400: { p: 0, n: 0, e: 2800 }, 1250: { p: 0, n: 2200, e: 0 }, 2000: { p: 2800, n: 0, e: 0 } } },
+  // ── 1600 kVA ──
+  "1600|No|None":  { cells: {},                         copper: { 800: { p: 0, n: 0, e: 600 },  2000: { p: 0, n: 600, e: 0 } } },
+  "1600|Yes|None": { cells: { 600: 2 },                 copper: { 800: { p: 0, n: 0, e: 1200 }, 2000: { p: 0, n: 600, e: 0 },  3200: { p: 1200, n: 0, e: 0 } } },
+  "1600|Yes|SWF":  { cells: { 600: 2, 800: 2, 1000: 1 },copper: { 800: { p: 0, n: 0, e: 3800 }, 2000: { p: 0, n: 3200, e: 0 }, 3200: { p: 4600, n: 0, e: 0 } } },
+  "1600|Yes|C.B":  { cells: { 600: 2, 1000: 2 },        copper: { 800: { p: 0, n: 0, e: 3200 }, 2000: { p: 0, n: 3200, e: 0 }, 3200: { p: 3200, n: 0, e: 0 } } },
+  // ── 2000 kVA ──
+  "2000|No|None":  { cells: {},                         copper: { 1000: { p: 0, n: 0, e: 600 },  2500: { p: 0, n: 600, e: 0 } } },
+  "2000|Yes|None": { cells: { 600: 2 },                 copper: { 1000: { p: 0, n: 0, e: 1200 }, 2500: { p: 0, n: 600, e: 0 },  4000: { p: 1200, n: 0, e: 0 } } },
+  "2000|Yes|SWF":  { cells: { 600: 2, 800: 1, 1000: 2 },copper: { 1000: { p: 0, n: 0, e: 4000 }, 2500: { p: 0, n: 3400, e: 0 }, 4000: { p: 4800, n: 0, e: 0 } } },
+  "2000|Yes|C.B":  { cells: { 600: 2, 1000: 3 },        copper: { 1000: { p: 0, n: 0, e: 4200 }, 2500: { p: 0, n: 4200, e: 0 }, 4000: { p: 4200, n: 0, e: 0 } } },
+  // ── 2500 kVA ──
+  "2500|No|None":  { cells: {},                         copper: { 1250: { p: 0, n: 0, e: 1000 }, 3200: { p: 0, n: 1000, e: 0 } } },
+  "2500|Yes|None": { cells: { 600: 1, 1000: 1 },        copper: { 1250: { p: 0, n: 0, e: 1600 }, 3200: { p: 0, n: 1000, e: 0 }, 5000: { p: 1600, n: 0, e: 0 } } },
+  "2500|Yes|SWF":  { cells: { 600: 1, 800: 1, 1000: 3 },copper: { 1250: { p: 0, n: 0, e: 4400 }, 3200: { p: 0, n: 3800, e: 0 }, 5000: { p: 5200, n: 0, e: 0 } } },
+  "2500|Yes|C.B":  { cells: { 600: 1, 1000: 4 },        copper: { 1250: { p: 0, n: 0, e: 4600 }, 3200: { p: 0, n: 4600, e: 0 }, 5000: { p: 4600, n: 0, e: 0 } } },
 };
 
 /** The transformer sizes a standard panel exists for. */
@@ -138,7 +185,7 @@ export function stdPanel(kva: string, pfc: string, outgoings: string): StdPanel 
   // The name reads incomer → outgoing ways → bank, e.g. "MDB 630A+4SWF+15kVAR".
   const ways =
     outgoings === "SWF" ? `+${fam.swfWays}SWF` :
-    outgoings === "C.B" ? `+${fam.cbWays}*250A` : "";
+    outgoings === "C.B" ? `+${fam.cbWays}*${fam.cbRating}` : "";
   const bank = withPfc ? `+${fam.kvar}kVAR` : "";
   return {
     name: `${fam.base}${ways}${bank}`,
