@@ -17,3 +17,18 @@ const summary = z
 export const createQtnSchema = z.object({ number, state: z.unknown(), summary });
 export const updateQtnSchema = z.object({ state: z.unknown(), summary });
 export const numberSchema = z.object({ number });
+
+// ── Specs-tab attachments ───────────────────────────────────────────────────
+// Files travel as base64 inside the JSON body. The cap is set by the PRODUCTION
+// host, not by us: Vercel rejects a serverless request body over 4.5 MB, and
+// base64 inflates bytes by 4/3 — so 3 MB of file is the largest that survives
+// (3 MB × 4/3 = 4 MB, leaving headroom for the JSON envelope).
+export const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
+export const MAX_ATTACHMENTS_PER_QTN = 30;
+
+export const attachmentSchema = z.object({
+  name: z.string().trim().min(1, "File name is required.").max(260),
+  mime: z.string().trim().max(160).optional(),
+  // Plain base64 — the client strips any "data:*;base64," prefix before sending.
+  data: z.string().min(1, "File is empty."),
+});

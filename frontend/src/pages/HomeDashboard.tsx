@@ -228,15 +228,17 @@ function ProfilePhoto() {
   );
 }
 
-// ── New QTN chooser (RMU / LV → number) ───────────────────────────────────────
+// ── New QTN chooser (RMU / LV / Standard EDMS → number) ──────────────────────
+type QtnMode = "lv" | "rmu" | "edms";
+const MODE_LABEL: Record<QtnMode, string> = { lv: "LV", rmu: "RMU", edms: "Standard EDMS" };
 function NewQtnChooser({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"choose" | "lv" | "rmu">("choose");
+  const [mode, setMode] = useState<"choose" | QtnMode>("choose");
   const [number, setNumber] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const start = (m: "lv" | "rmu") => { setNumber(""); setErr(""); setMode(m); };
+  const start = (m: QtnMode) => { setNumber(""); setErr(""); setMode(m); };
   const create = async () => {
     if (!number.trim()) { setErr("Enter the quotation number."); return; }
     if (mode === "rmu") {
@@ -246,7 +248,8 @@ function NewQtnChooser({ onClose }: { onClose: () => void }) {
     }
     setBusy(true);
     try {
-      const rec = await createQtn(number);
+      // Standard EDMS opens the same workspace as LV — only the recorded kind differs.
+      const rec = await createQtn(number, mode === "edms" ? "edms" : "panels");
       navigate(`/lv/qtn/${rec.id}`);
     } catch (e) {
       setErr((e as Error).message || "Could not create the quotation.");
@@ -261,12 +264,12 @@ function NewQtnChooser({ onClose }: { onClose: () => void }) {
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
       <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
       <div role="dialog" aria-modal="true"
-        className="relative w-full max-w-md rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
+        className="relative w-full max-w-lg rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
         {mode === "choose" ? (
           <>
             <h2 className="text-lg font-extrabold tracking-tight">New QTN</h2>
             <p className="mt-0.5 text-xs text-muted">What kind of quotation do you want to create?</p>
-            <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <button onClick={() => start("rmu")}
                 className="rounded-xl border-2 border-line p-4 text-left transition hover:border-brand hover:bg-brand-tint/40">
                 <div className="text-2xl">⚡</div>
@@ -279,6 +282,12 @@ function NewQtnChooser({ onClose }: { onClose: () => void }) {
                 <div className="mt-1 text-sm font-bold text-ink">LV</div>
                 <div className="text-[11px] text-muted">Low-voltage panels</div>
               </button>
+              <button onClick={() => start("edms")}
+                className="rounded-xl border-2 border-line p-4 text-left transition hover:border-brand hover:bg-brand-tint/40">
+                <div className="text-2xl">📋</div>
+                <div className="mt-1 text-sm font-bold text-ink">Standard EDMS</div>
+                <div className="text-[11px] text-muted">Same workspace as LV</div>
+              </button>
             </div>
             <div className="mt-5 flex justify-end">
               <button className="btn-ghost" onClick={onClose}>Cancel</button>
@@ -286,7 +295,7 @@ function NewQtnChooser({ onClose }: { onClose: () => void }) {
           </>
         ) : (
           <>
-            <h2 className="text-lg font-extrabold tracking-tight">New {mode === "rmu" ? "RMU" : "LV"} Quotation</h2>
+            <h2 className="text-lg font-extrabold tracking-tight">New {MODE_LABEL[mode]} Quotation</h2>
             <p className="mt-0.5 text-xs text-muted">
               Type the quotation number — e.g. <b className="font-mono">{qtnPrefix()}00000</b>
             </p>

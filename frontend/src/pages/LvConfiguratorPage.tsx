@@ -16,7 +16,9 @@ import {
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
+  withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
+  type SpecNote, type SpecSubNote, type ProjectSpecKey,
 } from "../lv/store";
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
@@ -32,7 +34,7 @@ import {
 import { rankSearchOptions } from "../lv/search";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
-import { getToken, api, type CatalogChanges, type CatalogChangeItem } from "../api";
+import { getToken, api, MAX_ATTACHMENT_BYTES, type CatalogChanges, type CatalogChangeItem, type QtnAttachmentDto } from "../api";
 import { checkCatalogUpdates, catalogVersion } from "../lv/catalogSource";
 import wdFldImg from "../assets/wd-fld.png";
 import wdRhdImg from "../assets/wd-rhd.png";
@@ -48,9 +50,10 @@ import {
   COPPER_RATINGS, csaFor, copperWeight, copperTotal, roundUpRating, ratingForCsa, pctOf,
 } from "../lv/copper";
 import { panelPoles, POLE_CM, POLE_KINDS, GROUP_LABEL, KIND_LABEL, type PoleGroup, type PoleKind } from "../lv/poles";
+import { stdPanel, applyStdPanel, STD_EDMS_KVA } from "../lv/standardEdms";
 
-type Tab = "project" | "pricing" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "summary";
-const TABS: Tab[] = ["project", "pricing", "panels", "technical", "commercial", "material", "spare", "selectivity"];
+type Tab = "project" | "pricing" | "specs" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "summary";
+const TABS: Tab[] = ["project", "pricing", "specs", "panels", "technical", "commercial", "material", "spare", "selectivity"];
 
 /** Effective combination group per component (id → group). A component keeps its
  *  own group; an ungrouped one sitting between two same-group items (in the same
@@ -393,6 +396,20 @@ export default function LvConfiguratorPage() {
   const totals = useMemo(() => grandTotals(s), [s]);
   const sel = s.panels.find((p) => p.id === s.selectedId) ?? null;
   const isSpareQtn = s.kind === "spare";
+  // Standard EDMS quotations quote panels only — no Spare Parts / LCP / KWHM cells,
+  // so the "Auxiliary Panels" menu is not offered on them.
+  const isEdmsQtn = s.kind === "edms";
+  // The tabs this QTN kind actually has. A spare-parts QTN swaps Panels for Spare
+  // Parts and has no Specs/Selectivity; Standard EDMS carries no coordination study.
+  const tabs: [Tab, string][] = isSpareQtn
+    ? [["project", "Project"], ["pricing", "Pricing Settings"], ["spare", "Spare Parts"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"], ["summary", "Summary"]]
+    : [["project", "Project"], ["pricing", "Pricing Settings"], ["specs", "Specs"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"],
+       ...(isEdmsQtn ? [] : [["selectivity", "Selectivity"] as [Tab, string]]),
+       ["summary", "Summary"]];
+  // The remembered tab can be one this QTN doesn't have (a QTN opened on
+  // Selectivity and later turned into an EDMS one, or a kind whose tab set
+  // changed). Fall back rather than render a blank page.
+  const activeTab: Tab = tabs.some(([t]) => t === tab) ? tab : "project";
   // RPT-1: block every offer/output tab until each panel has its mandatory fields.
   // Spare cells carry no rating/enclosure, so they're exempt from the panel checks.
   const offerIssues = s.panels.flatMap((p, i) =>
@@ -414,7 +431,9 @@ export default function LvConfiguratorPage() {
 
   const addPanel = () => {
     if (readOnly) return;
-    const p = newPanel(s.panels.length + 1);
+    // A new panel starts from whatever was chosen on the Specs tab, so the
+    // project-wide fields don't have to be re-picked for every panel.
+    const p = withProjectSpecs(newPanel(s.panels.length + 1), s.projectSpecs);
     apply((old) => ({ ...old, panels: [...old.panels, p], selectedId: p.id }));
     setTab("panels");
   };
@@ -593,12 +612,10 @@ export default function LvConfiguratorPage() {
           Negative margins let the bg band span the full content width; py keeps a
           solid band so content scrolls cleanly underneath. */}
       <div className="sticky top-0 z-30 -mx-4 mb-4 flex flex-wrap gap-1.5 border-b border-line/60 bg-surface px-4 py-2.5 no-print sm:-mx-6 sm:px-6">
-        {((isSpareQtn
-          ? [["project", "Project"], ["pricing", "Pricing Settings"], ["spare", "Spare Parts"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"], ["summary", "Summary"]]
-          : [["project", "Project"], ["pricing", "Pricing Settings"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"], ["selectivity", "Selectivity"], ["summary", "Summary"]]) as [Tab, string][]).map(([t, label]) => (
+        {tabs.map(([t, label]) => (
           <button key={t} onClick={() => goToTab(t)}
             className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
-              tab === t ? "border-brand bg-brand text-white shadow-soft" : "border-line bg-white text-muted hover:border-brand/40"
+              activeTab === t ? "border-brand bg-brand text-white shadow-soft" : "border-line bg-white text-muted hover:border-brand/40"
             }`}>
             {label}
           </button>
@@ -606,23 +623,24 @@ export default function LvConfiguratorPage() {
       </div>
 
       <div ref={navRef} onKeyDown={onFieldArrowNav}>
-        {tab === "project" && <ProjectTab s={s} up={up} qtnNum={qtnNum} onRenameQtn={renameQtnNumber} />}
-        {tab === "pricing" && <PricingTab s={s} up={up} />}
-        {tab === "panels" && !isSpareQtn && (
+        {activeTab === "project" && <ProjectTab s={s} up={up} qtnNum={qtnNum} onRenameQtn={renameQtnNumber} />}
+        {activeTab === "pricing" && <PricingTab s={s} up={up} />}
+        {activeTab === "specs" && <SpecsTab s={s} up={up} qtnId={rec?.id ?? ""} readOnly={readOnly} />}
+        {activeTab === "panels" && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
             onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
-            onAddSpare={addSpareCell} />
+            onAddSpare={isEdmsQtn ? undefined : addSpareCell} />
         )}
-        {tab === "spare" && isSpareQtn && (
+        {activeTab === "spare" && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
             onAdd={() => addSpareCell("spare")} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
             addLabel="+ Add cell" emptyLabel="No spare cells yet." emptyAddLabel="+ Add your first cell" />
         )}
-        {tab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} />)}
-        {tab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} />)}
-        {tab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
-        {tab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} />}
-        {tab === "summary" && <SummaryTab s={s} up={up} />}
+        {activeTab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} />)}
+        {activeTab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} />)}
+        {activeTab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
+        {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} />}
+        {activeTab === "summary" && <SummaryTab s={s} up={up} />}
       </div>
     </div>
   );
@@ -649,6 +667,375 @@ function OfferBlocked({ issues }: { issues: string[] }) {
       <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-amber-700">
         {issues.map((m, i) => <li key={i}>{m}</li>)}
       </ul>
+    </div>
+  );
+}
+
+// ── Specs ───────────────────────────────────────────────────────────────────
+// The project's specification, in one place: the panel fields that are normally
+// identical across a job, the written spec, the client's comments, and the
+// client's files. Everything here is saved with the QTN, so whoever opens the
+// quotation sees the same data.
+
+/** The panel fields the Specs tab drives project-wide, with their option lists. */
+const SPEC_FIELDS: readonly (readonly [ProjectSpecKey, string, readonly string[]])[] = [
+  ["ambTemp", "Amb. temp", AMB_TEMPS],
+  ["form", "Form", FORMS],
+  ["neutral", "Neutral", NEUTRAL_EARTH],
+  ["earth", "Earth", NEUTRAL_EARTH],
+  ["copperType", "Copper", COPPER_TYPES],
+  ["incomingCables", "Incoming cables", INCOMING_CABLES],
+  ["outgoingCables", "Outgoing cables", OUTGOING_CABLES],
+];
+// The value a brand-new panel starts with — the fallback shown before anything is
+// chosen here and while a QTN still has no panels.
+const SPEC_FALLBACK = newPanel();
+
+/** Human file size for the attachments list. */
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+/** A picked file as plain base64 — FileReader yields a data: URL, so drop its prefix. */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+    r.onerror = () => reject(r.error ?? new Error("Could not read the file."));
+    r.readAsDataURL(file);
+  });
+}
+
+/** A two-level add / edit / remove list: headers, each holding sub-titles.
+ *  "Specs" and "Comments of Client" behave identically, so they share this.
+ *  `defaults` (Specs only) offers the standard headers with one press. */
+function SpecNoteList({ heading, hint, addLabel, headerPlaceholder, notes, onChange, readOnly, defaults }: {
+  heading: string; hint: string; addLabel: string; headerPlaceholder: string;
+  notes: SpecNote[]; onChange: (next: SpecNote[]) => void; readOnly: boolean;
+  defaults?: () => SpecNote[];
+}) {
+  const add = () => onChange([...notes, { id: uid(), title: "", text: "", items: [] }]);
+  const patch = (id: string, p: Partial<SpecNote>) =>
+    onChange(notes.map((n) => (n.id === id ? { ...n, ...p } : n)));
+  const remove = (id: string) => onChange(notes.filter((n) => n.id !== id));
+  // Sub-titles live on their header, so every sub edit is a patch of that header.
+  const subs = (n: SpecNote) => n.items ?? [];
+  const addSub = (n: SpecNote) => patch(n.id, { items: [...subs(n), { id: uid(), title: "", text: "" }] });
+  const patchSub = (n: SpecNote, sid: string, p: Partial<SpecSubNote>) =>
+    patch(n.id, { items: subs(n).map((it) => (it.id === sid ? { ...it, ...p } : it)) });
+  const removeSub = (n: SpecNote, sid: string) =>
+    patch(n.id, { items: subs(n).filter((it) => it.id !== sid) });
+  // Appends only the standard headers not already in the list — never replaces
+  // what is there, so pressing it twice is harmless.
+  const addDefaults = () => {
+    if (!defaults) return;
+    const have = new Set(notes.map((n) => n.title.trim().toLowerCase()));
+    const missing = defaults().filter((d) => !have.has(d.title.trim().toLowerCase()));
+    if (missing.length) onChange([...notes, ...missing]);
+  };
+  const defaultsBtn = defaults && (
+    <button type="button" onClick={addDefaults} disabled={readOnly}
+      title={`Add the standard headers (${defaults().map((d) => d.title).join(", ")}) that aren't listed yet`}
+      className="btn-ghost shrink-0 disabled:opacity-40">+ Standard headers</button>
+  );
+  return (
+    <div className="card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="sec-head mb-0">{heading}</h2>
+          <p className="mt-1 text-xs text-muted">{hint}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {defaultsBtn}
+          <button type="button" onClick={add} disabled={readOnly}
+            className="btn-ghost shrink-0 disabled:opacity-40">{addLabel}</button>
+        </div>
+      </div>
+      {notes.length === 0 ? (
+        <p className="mt-3 rounded-lg bg-surface p-6 text-center text-sm text-muted">
+          Nothing yet — press <b>{addLabel}</b>{defaults ? <> or <b>+ Standard headers</b></> : null}.
+        </p>
+      ) : (
+        <ol className="mt-3 space-y-2">
+          {notes.map((n, i) => (
+            <li key={n.id} className="rounded-lg border border-line bg-surface/40 p-3">
+              {/* Header */}
+              <div className="flex items-center gap-2">
+                <span className="w-5 shrink-0 text-xs font-bold text-muted">{i + 1}.</span>
+                <input className="input flex-1 font-bold" value={n.title} disabled={readOnly}
+                  placeholder={headerPlaceholder} onChange={(e) => patch(n.id, { title: e.target.value })} />
+                <button type="button" onClick={() => addSub(n)} disabled={readOnly}
+                  title="Add a sub-title under this header"
+                  className="shrink-0 rounded px-2 py-1 text-[11px] font-bold text-brand hover:bg-white disabled:opacity-40">+ Sub-title</button>
+                <button type="button" onClick={() => remove(n.id)} disabled={readOnly}
+                  title="Remove this header and everything under it"
+                  className="shrink-0 rounded p-1 text-muted transition-colors hover:bg-white hover:text-red-600 disabled:opacity-40">✕</button>
+              </div>
+              {/* The header's own note — kept for entries written before sub-titles
+                  existed, so it only appears once it holds text. */}
+              {n.text && (
+                <div className="mt-2 pl-7">
+                  <AutoTextarea value={n.text} disabled={readOnly}
+                    onChange={(v) => patch(n.id, { text: v })} />
+                </div>
+              )}
+              {/* Sub-titles */}
+              {subs(n).length > 0 && (
+                <ol className="mt-2 space-y-1.5 pl-7">
+                  {subs(n).map((it, j) => (
+                    <li key={it.id} className="rounded-md border border-line/70 bg-white p-2">
+                      <div className="flex items-center gap-2">
+                        <span className="shrink-0 text-[11px] font-bold text-muted">{i + 1}.{j + 1}</span>
+                        <input className="input flex-1" value={it.title} disabled={readOnly}
+                          placeholder="Sub-title" onChange={(e) => patchSub(n, it.id, { title: e.target.value })} />
+                        <button type="button" onClick={() => removeSub(n, it.id)} disabled={readOnly}
+                          title="Remove this sub-title"
+                          className="shrink-0 rounded p-1 text-muted transition-colors hover:bg-surface hover:text-red-600 disabled:opacity-40">✕</button>
+                      </div>
+                      <div className="mt-1.5 pl-8">
+                        <AutoTextarea value={it.text} disabled={readOnly} placeholder="Write the specification…"
+                          onChange={(v) => patchSub(n, it.id, { text: v })} />
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+/** The client's files. These live in their own table on the server (not in the
+ *  QTN state, which is re-saved on every keystroke), so they are fetched and
+ *  uploaded separately from everything else on this tab. */
+function AttachmentsCard({ qtnId, readOnly }: { qtnId: string; readOnly: boolean }) {
+  const [files, setFiles] = useState<QtnAttachmentDto[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const pick = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!qtnId) return;
+    let alive = true;
+    api.qtns.attachments
+      .list(qtnId)
+      .then((r) => { if (alive) setFiles(r); })
+      .catch(() => { if (alive) { setFiles([]); setError("Could not load the attachments."); } });
+    return () => { alive = false; };
+  }, [qtnId]);
+
+  const onPicked = async (picked: FileList | null) => {
+    if (!picked?.length || !qtnId) return;
+    setBusy(true);
+    setError("");
+    // One at a time: each file is its own request, and the first failure (usually
+    // "too large") should not lose the ones that already went up.
+    for (const f of Array.from(picked)) {
+      if (f.size > MAX_ATTACHMENT_BYTES) {
+        setError(`"${f.name}" is ${fmtBytes(f.size)} — the limit is ${fmtBytes(MAX_ATTACHMENT_BYTES)} per file.`);
+        continue;
+      }
+      try {
+        const data = await fileToBase64(f);
+        const row = await api.qtns.attachments.upload(qtnId, {
+          name: f.name, mime: f.type || "application/octet-stream", data,
+        });
+        setFiles((prev) => [...(prev ?? []), row]);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : `Could not upload "${f.name}".`);
+      }
+    }
+    setBusy(false);
+    if (pick.current) pick.current.value = ""; // so re-picking the same file fires onChange
+  };
+
+  const remove = async (f: QtnAttachmentDto) => {
+    if (!confirm(`Remove "${f.name}" from this QTN?`)) return;
+    try {
+      await api.qtns.attachments.remove(qtnId, f.id);
+      setFiles((prev) => (prev ?? []).filter((x) => x.id !== f.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not remove the file.");
+    }
+  };
+
+  return (
+    <div className="card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="sec-head mb-0">Attachments</h2>
+          <p className="mt-1 text-xs text-muted">
+            Client specifications, drawings, e-mails — saved with the QTN, so they open with it.
+            Up to {fmtBytes(MAX_ATTACHMENT_BYTES)} per file.
+          </p>
+        </div>
+        <button type="button" onClick={() => pick.current?.click()} disabled={readOnly || busy || !qtnId}
+          className="btn-ghost shrink-0 disabled:opacity-40">{busy ? "Uploading…" : "+ Upload files"}</button>
+        <input ref={pick} type="file" multiple className="hidden"
+          onChange={(e) => onPicked(e.target.files)} />
+      </div>
+      {error && (
+        <p className="mt-3 rounded-md border border-red-400/50 bg-red-500/10 px-2 py-1 text-[11px] font-semibold text-red-600">
+          {error}
+        </p>
+      )}
+      {files === null ? (
+        <p className="mt-3 text-sm text-muted">Loading…</p>
+      ) : files.length === 0 ? (
+        <p className="mt-3 rounded-lg bg-surface p-6 text-center text-sm text-muted">
+          No files attached yet.
+        </p>
+      ) : (
+        <ul className="mt-3 divide-y divide-line rounded-lg border border-line">
+          {files.map((f) => (
+            <li key={f.id} className="flex items-center gap-3 px-3 py-2">
+              <a href={api.qtns.attachments.link(qtnId, f.id)} target="_blank" rel="noreferrer"
+                className="min-w-0 flex-1 truncate text-sm font-semibold text-ink hover:text-brand-dark hover:underline"
+                title={`Open ${f.name}`}>
+                {f.name}
+              </a>
+              <span className="shrink-0 text-xs text-muted">{fmtBytes(f.size)}</span>
+              <span className="hidden shrink-0 text-xs text-muted sm:inline">
+                {f.byEmail || "—"} · {fmtDate(String(f.createdAt).slice(0, 10))}
+              </span>
+              <a href={api.qtns.attachments.link(qtnId, f.id, true)} download={f.name}
+                title="Download" className="shrink-0 rounded p-1 text-muted hover:bg-surface hover:text-brand-dark">⬇</a>
+              <button type="button" onClick={() => remove(f)} disabled={readOnly}
+                title="Remove this file"
+                className="shrink-0 rounded p-1 text-muted transition-colors hover:bg-surface hover:text-red-600 disabled:opacity-40">✕</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SpecsTab({ s, up, qtnId, readOnly }: {
+  s: LvState; up: (p: Partial<LvState>) => void; qtnId: string; readOnly: boolean;
+}) {
+  const targets = s.panels.filter((p) => !p.spare); // spare cells carry no specs
+  // What a field reads project-wide: the explicit choice made here, else the value
+  // every panel already agrees on, else what a new panel would start with.
+  const shared = (key: ProjectSpecKey): string | null => {
+    const live = targets.map((p) => p[key]);
+    return live.length && live.every((v) => v === live[0]) ? live[0] : null;
+  };
+  const valueOf = (key: ProjectSpecKey) =>
+    s.projectSpecs?.[key] ?? shared(key) ?? (SPEC_FALLBACK[key] as string);
+  // Choosing a value applies it to every panel at once. Each panel can still be
+  // changed on its own afterwards in Panel details.
+  const setSpec = (key: ProjectSpecKey, v: string) =>
+    up({
+      projectSpecs: { ...(s.projectSpecs ?? {}), [key]: v },
+      panels: s.panels.map((p) => (p.spare ? p : { ...p, [key]: v })),
+    });
+  // "Apply to" — push the value shown here onto CHOSEN panels instead of all of
+  // them. Picking from the dropdown already sets every panel; this is how you put
+  // the project value back on a few panels that were overridden in Panel details.
+  const [applyOpen, setApplyOpen] = useState<ProjectSpecKey | null>(null);
+  const [applySel, setApplySel] = useState<Set<string>>(() => new Set());
+  const applyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!applyOpen) return;
+    const onDown = (e: MouseEvent) => { if (applyRef.current && !applyRef.current.contains(e.target as Node)) setApplyOpen(null); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [applyOpen]);
+  const doApply = (key: ProjectSpecKey) => {
+    const val = valueOf(key);
+    up({ panels: s.panels.map((p) => (applySel.has(p.id) ? { ...p, [key]: val } : p)) });
+    setApplyOpen(null);
+  };
+  // One panel-backed field. Called for the first four and the last three
+  // separately, so Selectivity can sit between them (it opens row 2).
+  const panelField = ([key, label, options]: (typeof SPEC_FIELDS)[number], alignRight = false) => {
+    const mixed = targets.length > 1 && shared(key) === null;
+    const open = applyOpen === key;
+    const allOn = targets.length > 0 && targets.every((p) => applySel.has(p.id));
+    return (
+      <div key={key} className="relative">
+        <div className="flex items-baseline justify-between gap-1.5">
+          <L>{label}</L>
+          <span className="flex shrink-0 items-baseline gap-1.5">
+            {mixed && (
+              <span title="Panels currently have different values — picking one here sets them all"
+                className="text-[10px] font-bold text-amber-600">mixed</span>
+            )}
+            {targets.length > 0 && !readOnly && (
+              <button type="button" onClick={() => { setApplySel(new Set()); setApplyOpen(open ? null : key); }}
+                title={`Put this ${label} on chosen panels only`}
+                className="text-[10px] font-bold text-brand hover:underline">Apply to</button>
+            )}
+          </span>
+        </div>
+        <Sel value={valueOf(key)} options={options}
+          onChange={(v) => { if (!readOnly) setSpec(key, v); }} />
+        {open && (
+          <div ref={applyRef} className={`absolute ${alignRight ? "right-0" : "left-0"} top-full z-30 mt-1 w-56 rounded-lg border border-line bg-white p-2 text-left shadow-lift`}>
+            <p className="mb-1 px-0.5 text-[11px] font-bold text-ink">Apply {label} to…</p>
+            <label className="flex items-center gap-1.5 border-b border-line/60 px-0.5 pb-1.5 text-xs font-semibold text-ink">
+              <input type="checkbox" className="accent-brand" checked={allOn}
+                onChange={() => setApplySel(allOn ? new Set() : new Set(targets.map((p) => p.id)))} />
+              All panels
+            </label>
+            <div className="max-h-40 overflow-auto py-1">
+              {targets.map((p) => (
+                <label key={p.id} className="flex items-center gap-1.5 px-0.5 py-0.5 text-xs text-ink">
+                  <input type="checkbox" className="accent-brand" checked={applySel.has(p.id)}
+                    onChange={() => setApplySel((prev) => { const n = new Set(prev); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })} />
+                  <span className="truncate">{s.panels.indexOf(p) + 1}. {p.name.trim() || "(unnamed)"}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-1.5 border-t border-line/60 pt-1.5">
+              <button type="button" onClick={() => setApplyOpen(null)}
+                className="rounded px-2 py-0.5 text-[11px] font-semibold text-muted hover:text-ink">Cancel</button>
+              <button type="button" disabled={applySel.size === 0} onClick={() => doApply(key)}
+                className="rounded bg-brand px-2.5 py-0.5 text-[11px] font-bold text-white hover:bg-brand-dark disabled:opacity-40">Apply ({applySel.size})</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+  return (
+    <div className="space-y-4 animate-fade-up">
+      <div className="card p-5">
+        <h2 className="sec-head">Project specifications</h2>
+        <p className="mb-3 text-xs text-muted">
+          Applied to <b>all {targets.length || ""} panel{targets.length === 1 ? "" : "s"}</b> the moment you pick a
+          value — including panels added later. A single panel can still be changed on its own in <b>Panels →
+          Panel details</b>, and <b>Apply to</b> puts the value shown here back on just the panels you choose.
+        </p>
+        {/* 4 per row — row 1: Amb. temp · Form · Neutral · Earth
+                        row 2: Selectivity · Copper · Incoming · Outgoing cables */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {SPEC_FIELDS.slice(0, 4).map((f, i) => panelField(f, i === 3))}
+          {/* Project-wide only — a coordination study is a job requirement, not a
+              per-panel setting, so this one is not copied onto the panels. */}
+          <div>
+            <L>Selectivity</L>
+            <Sel value={s.selectivityRequired ?? "No"} options={YES_NO}
+              onChange={(v) => { if (!readOnly) up({ selectivityRequired: v }); }} />
+          </div>
+          {SPEC_FIELDS.slice(4).map((f, i) => panelField(f, i === 2))}
+        </div>
+      </div>
+
+      <SpecNoteList heading="Specs" hint="The project's specification — a header per item, with sub-titles under it."
+        addLabel="+ Specs" headerPlaceholder="Header — e.g. MCB" defaults={defaultSpecs}
+        notes={s.specs ?? []} onChange={(next) => up({ specs: next })} readOnly={readOnly} />
+
+      <SpecNoteList heading="Comments of Client" hint="What the client asked for, in their words."
+        addLabel="+ Comments of Client" headerPlaceholder="Header"
+        notes={s.clientComments ?? []} onChange={(next) => up({ clientComments: next })} readOnly={readOnly} />
+
+      <AttachmentsCard qtnId={qtnId} readOnly={readOnly} />
     </div>
   );
 }
@@ -1842,12 +2229,15 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
 
 /** Commercial Offer — panel prices at the current Pricing Settings. */
 // Auto-growing borderless textarea (the section body).
-function AutoTextarea({ value, onChange, rtl }: { value: string; onChange: (v: string) => void; rtl?: boolean }) {
+function AutoTextarea({ value, onChange, rtl, placeholder, disabled }: {
+  value: string; onChange: (v: string) => void; rtl?: boolean; placeholder?: string; disabled?: boolean;
+}) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => { const el = ref.current; if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }, [value]);
   return (
     <textarea ref={ref} value={value} onChange={(e) => onChange(e.target.value)} rows={1} dir={rtl ? "rtl" : undefined}
-      className={`w-full resize-none whitespace-pre-wrap border-0 bg-transparent p-0 text-[12px] leading-relaxed text-ink outline-none ${rtl ? "text-right" : ""}`} />
+      placeholder={placeholder} disabled={disabled}
+      className={`w-full resize-none whitespace-pre-wrap border-0 bg-transparent p-0 text-[12px] leading-relaxed text-ink outline-none placeholder:text-muted/60 ${rtl ? "text-right" : ""}`} />
   );
 }
 
@@ -3504,70 +3894,16 @@ function PanelEditor({ s, p, up, upPanel }: {
         : x;
     up({ panels: s.panels.map((pp) => (panelIds.has(pp.id) ? { ...pp, components: pp.components.map(swap) } : pp)) });
   };
-  // In the first panel, each "common" field (ambient temp, form, neutral, earth,
-  // copper, incoming/outgoing cables) carries an "Apply to all" link that copies
-  // just that field onto every panel.
-  const isFirstPanel = s.panels[0]?.id === p.id;
-  type CommonKey = "ambTemp" | "form" | "neutral" | "earth" | "copperType" | "incomingCables" | "outgoingCables";
-  // "Apply to" — the first panel can copy any common field onto chosen panels: a
-  // checkbox popover lists the other panels, plus an "All panels" select-all.
-  const [applyOpen, setApplyOpen] = useState<CommonKey | null>(null);
-  const [applySel, setApplySel] = useState<Set<string>>(() => new Set());
-  const applyRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!applyOpen) return;
-    const onDown = (e: MouseEvent) => { if (applyRef.current && !applyRef.current.contains(e.target as Node)) setApplyOpen(null); };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [applyOpen]);
-  const applyTargets = s.panels.filter((pp) => pp.id !== p.id); // every panel except this (source) one
-  const doApply = (key: CommonKey) => {
-    const val = p[key];
-    up({ panels: s.panels.map((pp) => (applySel.has(pp.id) ? { ...pp, [key]: val } : pp)) });
-    setApplyOpen(null);
-  };
-  const commonField = (label: string, key: CommonKey, options: readonly string[], alignRight = false) => {
-    const open = applyOpen === key;
-    const allOn = applyTargets.length > 0 && applyTargets.every((pp) => applySel.has(pp.id));
-    return (
-      <div className="relative">
-        <div className="flex items-baseline justify-between gap-1.5">
-          <L>{label}</L>
-          {isFirstPanel && s.panels.length > 1 && (
-            <button type="button" onClick={() => { setApplySel(new Set()); setApplyOpen(open ? null : key); }}
-              title={`Copy this ${label} onto other panels`}
-              className="shrink-0 text-[10px] font-bold text-brand hover:underline">Apply to</button>
-          )}
-        </div>
-        <Sel value={p[key] as any} onChange={(v) => u({ [key]: v } as Partial<LvPanel>)} options={options as any} />
-        {open && (
-          <div ref={applyRef} className={`absolute ${alignRight ? "right-0" : "left-0"} top-full z-30 mt-1 w-56 rounded-lg border border-line bg-white p-2 text-left shadow-lift`}>
-            <p className="mb-1 px-0.5 text-[11px] font-bold text-ink">Apply {label} to…</p>
-            <label className="flex items-center gap-1.5 border-b border-line/60 px-0.5 pb-1.5 text-xs font-semibold text-ink">
-              <input type="checkbox" className="accent-brand" checked={allOn}
-                onChange={() => setApplySel(allOn ? new Set() : new Set(applyTargets.map((pp) => pp.id)))} />
-              All panels
-            </label>
-            <div className="max-h-40 overflow-auto py-1">
-              {applyTargets.map((pp) => (
-                <label key={pp.id} className="flex items-center gap-1.5 px-0.5 py-0.5 text-xs text-ink">
-                  <input type="checkbox" className="accent-brand" checked={applySel.has(pp.id)}
-                    onChange={() => setApplySel((prev) => { const n = new Set(prev); if (n.has(pp.id)) n.delete(pp.id); else n.add(pp.id); return n; })} />
-                  <span className="truncate">{s.panels.indexOf(pp) + 1}. {pp.name.trim() || "(unnamed)"}</span>
-                </label>
-              ))}
-            </div>
-            <div className="flex justify-end gap-1.5 border-t border-line/60 pt-1.5">
-              <button type="button" onClick={() => setApplyOpen(null)}
-                className="rounded px-2 py-0.5 text-[11px] font-semibold text-muted hover:text-ink">Cancel</button>
-              <button type="button" disabled={applySel.size === 0} onClick={() => doApply(key)}
-                className="rounded bg-brand px-2.5 py-0.5 text-[11px] font-bold text-white hover:bg-brand-dark disabled:opacity-40">Apply ({applySel.size})</button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
+  // The "common" fields (ambient temp, form, neutral, earth, copper,
+  // incoming/outgoing cables) are set for the whole job on the Specs tab, which
+  // writes them onto every panel. Here they stay editable per panel — this is
+  // where you override one panel without touching the rest.
+  const commonField = (label: string, key: ProjectSpecKey, options: readonly string[]) => (
+    <div>
+      <L>{label}</L>
+      <Sel value={p[key] as any} onChange={(v) => u({ [key]: v } as Partial<LvPanel>)} options={options as any} />
+    </div>
+  );
   const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
   // Busbar Rating — auto-selected from the incoming C.B's ampere frame; still editable.
   // 0 (→ "— Select —") means no incoming C.B.
@@ -3673,13 +4009,13 @@ function PanelEditor({ s, p, up, upPanel }: {
           </div>
           <div><L>Short circuit</L><input className="input" value={p.shortCircuit}
             placeholder="e.g. 50 kA" onChange={(e) => u({ shortCircuit: e.target.value })} /></div>
-          {commonField("Amb. temp", "ambTemp", AMB_TEMPS, true)}
+          {commonField("Amb. temp", "ambTemp", AMB_TEMPS)}
           {commonField("Form", "form", FORMS)}
           {commonField("Neutral", "neutral", NEUTRAL_EARTH)}
-          {commonField("Earth", "earth", NEUTRAL_EARTH, true)}
+          {commonField("Earth", "earth", NEUTRAL_EARTH)}
           {commonField("Copper", "copperType", COPPER_TYPES)}
           {commonField("Incoming cables", "incomingCables", INCOMING_CABLES)}
-          {commonField("Outgoing cables", "outgoingCables", OUTGOING_CABLES, true)}
+          {commonField("Outgoing cables", "outgoingCables", OUTGOING_CABLES)}
           {(() => {
             const autoRaw = mainBusbarAutoRaw(p);   // family auto value, ignoring any override
             const isAutoFamily = autoRaw !== null;
@@ -3779,6 +4115,102 @@ function copperEnterNav(e: { key: string; preventDefault: () => void; currentTar
   if (next) { next.focus(); next.select(); }
 }
 
+// ── Standard Panels view (inside the Components card) ───────────────────────
+// Pick TR kVA + P.F.C + Outgoings and the whole panel is built from the house
+// standard: name, components, PLP cells and main-busbar copper.
+function StandardPanelsView({ p, u, isEdms }: {
+  p: LvPanel; u: (patch: Partial<LvPanel>) => void; isEdms: boolean;
+}) {
+  const kva = p.stdTrKva ?? STD_TR_KVA_DEFAULT;
+  const pfc = p.stdPfc ?? "No";
+  const out = p.stdOutgoings ?? STD_OUTGOINGS[0];
+  const std = stdPanel(kva, pfc, out);
+  const parts = std ? [...std.main, ...std.pfc, ...std.out] : [];
+  const cellLines = std
+    ? Object.entries(std.cells).map(([w, q]) => `${q} × 2000x${w}x700`).concat("1 × LSides_70")
+    : [];
+  const apply = () => {
+    if (!std) return;
+    if (p.components.length && !confirm(
+      `Build "${std.name}" from the standard? This replaces this panel's components, cells and copper.`
+    )) return;
+    u(applyStdPanel(p, std));
+  };
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div>
+          <L>TR: KVA</L>
+          {/* Standard EDMS carries an extra 300 kVA size. */}
+          <Sel value={kva} options={isEdms ? STD_TR_KVA_EDMS : STD_TR_KVA}
+            onChange={(v) => u({ stdTrKva: v })} />
+        </div>
+        <div>
+          <L>P.F.C</L>
+          <Sel value={pfc} options={YES_NO} onChange={(v) => u({ stdPfc: v })} />
+        </div>
+        <div>
+          <L>Outgoings</L>
+          <Sel value={out} options={STD_OUTGOINGS} onChange={(v) => u({ stdOutgoings: v })} />
+        </div>
+      </div>
+
+      {!std ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
+          No standard panel for <b>{kva} kVA · P.F.C {pfc} · Outgoings {out}</b>.
+          {STD_EDMS_KVA.includes(kva)
+            ? <> Outgoings are only standardised together with P.F.C — set P.F.C to <b>Yes</b>, or Outgoings to <b>None</b>.</>
+            : <> Standards exist for {STD_EDMS_KVA.join(", ")} kVA so far.</>}
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand/40 bg-brand-tint/40 p-3">
+            <div>
+              <p className="text-sm font-extrabold text-ink">{std.name}</p>
+              <p className="text-[11px] text-muted">
+                {std.ratingA} A busbar · {parts.reduce((t, x) => t + x.qty, 0)} items · PLP {cellLines.join(", ")}
+              </p>
+            </div>
+            <button type="button" onClick={apply} className="btn-primary shrink-0">Build this panel</button>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-line">
+            <table className="w-full text-sm">
+              <thead className="bg-surface text-left text-[11px] uppercase tracking-wide text-muted">
+                <tr><th className="w-16 px-3 py-2">Qty</th><th className="px-3 py-2">Description</th></tr>
+              </thead>
+              <tbody>
+                {(["Main Incoming", std.pfcSection, "Outgoings"] as (string | null)[]).map((sec) => {
+                  const rows = sec === "Main Incoming" ? std.main : sec === "Outgoings" ? std.out : std.pfc;
+                  if (!sec || !rows.length) return null;
+                  return (
+                    <Fragment key={sec}>
+                      <tr className="border-t border-line bg-surface/60">
+                        <td colSpan={2} className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-dark">{sec}</td>
+                      </tr>
+                      {rows.map((x, i) => (
+                        <tr key={`${sec}-${i}`} className="border-t border-line/60">
+                          <td className="px-3 py-1.5 font-semibold">{x.qty}</td>
+                          <td className="px-3 py-1.5">{x.desc}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-muted">
+            Copper (main busbar, mm):{" "}
+            {Object.entries(std.copper).map(([r, l]) =>
+              `${r} A — ${[l.p && `phase ${l.p}`, l.n && `neutral ${l.n}`, l.e && `earth ${l.e}`].filter(Boolean).join(", ")}`
+            ).join(" · ")}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Components card ──────────────────────────────────────────────────────────
 function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void; replaceComponent: (matchRef: string, matchName: string, nc: DbComponent, panelIds: Set<string>) => void; comboKind: ComboKind | null; setComboKind: (k: ComboKind | null) => void }) {
   const [q, setQ] = useState("");
@@ -3787,6 +4219,8 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   const [pfcTab, setPfcTab] = useState<"known" | "calc">("known"); // P.F.C window: known-data entry vs calculation
   const [pfcCalcKvar, setPfcCalcKvar] = useState<number | null>(null); // required kVAR from the calc tab → known tab
   const [replaceOpen, setReplaceOpen] = useState(false); // "Replace component" (across panels) window
+  // Which view this card shows: the component list, or the standard-panel picker.
+  const [cardView, setCardView] = useState<"components" | "standard">("components");
   const hits = useMemo(() => searchComponents(q, 40), [q]);
   const effGroup = effectiveGroups(p.components); // combination grouping incl. inherited groups
   // Current combination multiplier for a group (from an item's qty ÷ its base qty).
@@ -4498,16 +4932,33 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
 
   return (
     <div ref={cardRef} className="card relative p-5">
-      <div className="mb-1 flex items-center justify-between gap-3">
-        <h2 className="sec-head !mb-0">Components</h2>
-        <button type="button" onClick={() => setReplaceOpen(true)}
-          title="Find a component used in this quotation and replace it across all / selected panels"
-          className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-white px-3 py-1 text-[11px] font-bold text-brand-dark transition hover:border-brand hover:bg-brand-light">
-          ⇄ Replace component
-        </button>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+        {/* Card view switch — build the panel component by component, or pick a
+            ready-made standard panel. */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {([["standard", "Standard Panels"], ["components", "Components"]] as const).map(([v, label]) => (
+            <button key={v} type="button" onClick={() => setCardView(v)}
+              className={`rounded-full border px-3.5 py-1.5 text-sm font-bold transition-colors ${
+                cardView === v ? "border-brand bg-brand text-white shadow-soft" : "border-line bg-white text-muted hover:border-brand/40"
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {cardView === "components" && (
+          <button type="button" onClick={() => setReplaceOpen(true)}
+            title="Find a component used in this quotation and replace it across all / selected panels"
+            className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-white px-3 py-1 text-[11px] font-bold text-brand-dark transition hover:border-brand hover:bg-brand-light">
+            ⇄ Replace component
+          </button>
+        )}
       </div>
       {replaceOpen && <ReplaceComponentModal s={s} replaceComponent={replaceComponent} factors={s.factors} onClose={() => setReplaceOpen(false)} />}
       {neutralPrompt && <NeutralPromptModal breaker={neutralPrompt.breaker} sensor={neutralPrompt.sensor} onAdd={confirmNeutral} onClose={() => setNeutralPrompt(null)} />}
+
+      {cardView === "standard" ? (
+        <StandardPanelsView p={p} u={u} isEdms={s.kind === "edms"} />
+      ) : (<>
 
       {/* Sticky header: section tabs + search bar stay pinned below the tab bar while
           the component list scrolls; unpins automatically when this card ends. */}
@@ -5205,6 +5656,8 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
           {fmtEgp(colSum(hoverSum.col))}
         </div>, document.body
       )}
+
+      </>)}
     </div>
   );
 }

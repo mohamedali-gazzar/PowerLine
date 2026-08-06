@@ -101,6 +101,10 @@ export interface LvPanel {
   copperTool: CopperTool; // RPT-1: per-rating copper lengths (Cells → Copper Tool)
   draft: string;          // RPT-1: per-panel scratchpad — never included in outputs
   highlight?: boolean;    // yellow highlighter toggle in the panel list (UI marker only)
+  // "Standard Panels" view (Components card) — the choices that define a standard panel.
+  stdTrKva?: string;      // transformer rating, kVA
+  stdPfc?: string;        // "Yes" | "No" — power-factor correction included
+  stdOutgoings?: string;  // "C.B" | "SWF" — outgoing device type
   spare?: boolean;        // this cell is the Spare-parts list (no sizing/specs; components + copper only)
   spareKind?: string;     // which spare-list variant the cell is: "spare" | "lcp" | "kwhm"
   noGroups?: number;      // LCP: control groups / KWHM: number of meters — drives auto-fill + auto-sizing
@@ -163,13 +167,73 @@ export interface LvState {
   abbItemDiscounts: Record<string, number>;
   // Divider/separator pages for the Technical Offer, each rendered before its panel.
   offerSeparators?: OfferSeparator[];
-  // QTN kind chosen at creation: a normal panel quotation, or a spare-parts
-  // quotation whose single "Spare parts" cell drives all offers.
-  kind?: "panels" | "spare";
+  // QTN kind chosen at creation: a normal panel quotation, a Standard EDMS
+  // quotation (same workspace as "panels" — the kind only records which option
+  // it was started from), or a spare-parts quotation whose single "Spare parts"
+  // cell drives all offers.
+  kind?: "panels" | "edms" | "spare";
   // Free-form sticky notes on the "Summary" tab (draggable/editable annotations).
   summaryNotes?: SummaryNote[];
   // Free-text "Record Results" box on the Pricing Settings tab.
   recordResults?: string;
+  // ── Specs tab ──────────────────────────────────────────────────────────────
+  // Project-wide values for the panel fields that are normally the same across a
+  // job. Setting one here writes it onto every panel at once; a panel can still
+  // be changed individually afterwards (this only records what was last chosen
+  // project-wide, and seeds panels added later).
+  projectSpecs?: ProjectSpecs;
+  // Does the job call for a selectivity (coordination) study? Project-wide, so
+  // unlike the fields above it is not copied onto the panels.
+  selectivityRequired?: string; // "Yes" | "No"
+  specs?: SpecNote[];          // project specification entries
+  clientComments?: SpecNote[]; // the client's comments/requirements
+}
+export const YES_NO = ["No", "Yes"] as const;
+// ── "Standard Panels" option lists (Components card → Standard Panels) ───────
+export const STD_TR_KVA = ["500", "800", "1000", "1500/1600", "2000", "2500"] as const;
+/** Standard EDMS panels are also built at 300 kVA. */
+export const STD_TR_KVA_EDMS: readonly string[] = ["300", ...STD_TR_KVA];
+/** The size a panel starts on — the same on every QTN kind, so adding a smaller
+ *  option to one of the lists doesn't quietly move the default. */
+export const STD_TR_KVA_DEFAULT = "500";
+export const STD_OUTGOINGS = ["C.B", "SWF", "None"] as const;
+/** One entry on the Specs tab — a header (e.g. "MCB") with sub-titles under it.
+ *  Used for both the project spec and the client's comments. */
+export interface SpecNote {
+  id: string;
+  title: string;         // the header, e.g. "MCB"
+  text: string;          // free note under the header — only shown when it holds text
+  items?: SpecSubNote[]; // the sub-titles beneath the header
+}
+/** A sub-title under a Specs header. */
+export interface SpecSubNote {
+  id: string;
+  title: string; // the sub-title, e.g. "Breaking capacity"
+  text: string;  // its body — multi-line
+}
+/** The spec headers a new quotation starts with. */
+export const DEFAULT_SPEC_HEADERS = [
+  "MCB", "MCCB up to 250A", "MCCB 400A and higher", "ACB",
+] as const;
+export const defaultSpecs = (): SpecNote[] =>
+  DEFAULT_SPEC_HEADERS.map((title) => ({ id: uid(), title, text: "", items: [] }));
+/** The panel fields the Specs tab drives project-wide. Same keys as LvPanel. */
+export const PROJECT_SPEC_FIELDS = [
+  "ambTemp", "form", "neutral", "earth", "copperType", "incomingCables", "outgoingCables",
+] as const;
+export type ProjectSpecKey = (typeof PROJECT_SPEC_FIELDS)[number];
+export type ProjectSpecs = Partial<Record<ProjectSpecKey, string>>;
+/** Overlay the project-wide Specs defaults onto a panel — only the keys actually
+ *  set there, so an untouched field keeps the panel's own value. Used when a panel
+ *  is added after the specs were chosen. */
+export function withProjectSpecs(panel: LvPanel, specs?: ProjectSpecs): LvPanel {
+  if (!specs) return panel;
+  const out = { ...panel };
+  for (const k of PROJECT_SPEC_FIELDS) {
+    const v = specs[k];
+    if (v) out[k] = v;
+  }
+  return out;
 }
 /** A draggable, resizable sticky note on the Summary tab. */
 export interface SummaryNote {
@@ -652,6 +716,10 @@ export function initialState(): LvState {
     abbItemDiscounts: {},
     summaryNotes: [],
     recordResults: "",
+    projectSpecs: {},
+    selectivityRequired: "No",
+    specs: defaultSpecs(),
+    clientComments: [],
     kind: "panels",
   };
 }

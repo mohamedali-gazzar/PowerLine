@@ -110,6 +110,19 @@ export interface QtnRecordDto {
   submitted: boolean;
   state: unknown;
 }
+/** A file attached to a quotation on the Specs tab. Metadata only — the bytes are
+ *  fetched separately via attachmentLink(), so listing stays cheap. */
+export interface QtnAttachmentDto {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  byEmail: string;
+  createdAt: string;
+}
+/** Largest file the API accepts. Mirrors MAX_ATTACHMENT_BYTES on the server, which
+ *  is set by Vercel's 4.5 MB request-body limit (base64 inflates bytes by 4/3). */
+export const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
 export interface HistoryItem {
   kind: "LV" | "RMU";
   id: string;
@@ -372,6 +385,21 @@ export const api = {
       request<QtnRecordDto>(`/qtns/${id}/duplicate`, { method: "POST" }),
     submit: (id: string) => request<{ ok: true }>(`/qtns/${id}/submit`, { method: "POST" }),
     unsubmit: (id: string) => request<{ ok: true }>(`/qtns/${id}/unsubmit`, { method: "POST" }),
+
+    // Specs-tab attachments. `data` is plain base64 (no "data:…;base64," prefix).
+    attachments: {
+      list: (id: string) => request<QtnAttachmentDto[]>(`/qtns/${id}/attachments`),
+      upload: (id: string, file: { name: string; mime: string; data: string }) =>
+        request<QtnAttachmentDto>(`/qtns/${id}/attachments`, {
+          method: "POST",
+          body: JSON.stringify(file),
+        }),
+      remove: (id: string, fileId: string) =>
+        request<void>(`/qtns/${id}/attachments/${fileId}`, { method: "DELETE" }),
+      /** Href for opening (dl=false) or downloading (dl=true) an attachment. */
+      link: (id: string, fileId: string, dl?: boolean) =>
+        pdfLink(`/qtns/${id}/attachments/${fileId}`, dl),
+    },
   },
 
   // ── Price list (online, database-backed) ────────────────────────────────────

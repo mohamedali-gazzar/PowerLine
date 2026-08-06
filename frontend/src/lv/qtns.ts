@@ -62,9 +62,11 @@ function normalize(state: LvState): LvState {
   // Safety factor is now a % markup (selling × (1 + safetyFactor)); default 0 (no change).
   // The old default was 1 (a ÷ divisor) — reset it to 0 so it doesn't double the price.
   if (state.factors && (state.factors.safetyFactor == null || state.factors.safetyFactor === 1)) state.factors.safetyFactor = 0;
-  // QTN kind: legacy QTNs (no kind) are panel quotations; a spare-parts QTN is one
-  // whose cells are all spare cells.
-  if (state.kind !== "spare") state.kind = "panels";
+  // QTN kind: legacy QTNs (no kind) are panel quotations. "spare" and "edms" are
+  // the explicit kinds and must survive the round-trip — anything else normalises
+  // to "panels". Adding a kind means listing it here, or it is silently downgraded
+  // on the next load and every check against it stops matching.
+  if (state.kind !== "spare" && state.kind !== "edms") state.kind = "panels";
   // Technical-Offer divider pages: default to none, and drop any whose panel is gone.
   state.offerSeparators = (Array.isArray(state.offerSeparators) ? state.offerSeparators : [])
     .filter((sep) => Array.isArray(state.panels) && state.panels.some((p) => p.id === sep.beforePanelId));
@@ -170,9 +172,21 @@ export async function getQtn(id: string): Promise<QtnRecord | null> {
   }
 }
 
-export async function createQtn(number: string, kind: "panels" | "spare" = "panels"): Promise<QtnRecord> {
+export async function createQtn(
+  number: string,
+  kind: "panels" | "edms" | "spare" = "panels"
+): Promise<QtnRecord> {
   const state = initialState();
   state.kind = kind;
+  if (kind === "edms") {
+    // Standard EDMS quotes to a fixed house standard. Seeding the Specs tab (rather
+    // than a panel) is what makes it stick: every panel added later is created
+    // through withProjectSpecs, so it starts on these values.
+    state.projectSpecs = { ...state.projectSpecs, copperType: "Raychem", ambTemp: "40°C" };
+    // …and to its own selling factor (cost ÷ factor = price), not the global 0.7.
+    // It is a starting value, not a lock — Pricing Settings still edits it.
+    state.factors = { ...state.factors, factor: 0.6 };
+  }
   if (kind === "spare") {
     // A spare-parts QTN opens with its single "Spare parts" cell, selected.
     const sp = newSparePanel();

@@ -181,8 +181,30 @@ model LvQtn {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  attachments LvAttachment[]
+
   @@unique([ownerId, number])
   @@index([ownerId])
+}
+
+/// A file attached to a quotation (Specs tab) — client specifications, drawings,
+/// e-mails. Deliberately NOT stored inside LvQtn.state: that JSON is re-saved on
+/// every keystroke (debounced live-save), so a file in it would be re-uploaded
+/// with each edit. Bytes are held as a base64 data string, the same
+/// serverless-safe approach as User.photo (Vercel has no writable disk).
+model LvAttachment {
+  id     String @id @default(cuid())
+  qtn    LvQtn  @relation(fields: [qtnId], references: [id], onDelete: Cascade)
+  qtnId  String
+  name   String // original filename as uploaded
+  mime   String @default("application/octet-stream")
+  size   Int    @default(0) // decoded byte length (what the UI shows)
+  data   String // base64 (no data: prefix)
+  /// Who uploaded it — kept as plain text so deleting a user never breaks the list.
+  byEmail   String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([qtnId])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
