@@ -87,8 +87,15 @@ export async function accessOf(userId: string | undefined): Promise<Access> {
     return { tier: role === "OWNER" ? "ADMIN" : "ENGINEER", perms: new Set(DERIVED[role]), role };
   }
   const tier = u.tier as Tier;
-  if (tier === "ADMIN") return { tier, perms: new Set(ADMIN_PERMS), role };
-  return { tier, perms: new Set(safeParsePerms(u.perms)), role };
+  const granted = safeParsePerms(u.perms);
+  if (tier === "ADMIN") {
+    // Admin implies everything EXCEPT the self-approval exception, which stays a
+    // deliberate, separately-ticked grant. The explicit grants must be merged in
+    // rather than replaced: returning ADMIN_PERMS alone silently discarded
+    // qtn.approveOwn, so ticking it for an admin could never take effect.
+    return { tier, perms: new Set([...ADMIN_PERMS, ...granted]), role };
+  }
+  return { tier, perms: new Set(granted), role };
 }
 
 /** Convenience for call sites that only need a yes/no. */
