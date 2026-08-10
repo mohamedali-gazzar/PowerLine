@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listQtns, listAllQtns, createQtn, deleteQtn, duplicateQtn, amendQtn, supersededNumbers, nextQtnNumber, type QtnListItem } from "../lv/qtns";
+import { listQtns, listAllQtns, deleteQtn, duplicateQtn, amendQtn, supersededNumbers, type QtnListItem } from "../lv/qtns";
 import { api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE, type QtnStatus } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { fmtEgp, DEFAULT_FACTORS } from "../lv/catalog";
-import { QtnNumberInput, qtnPrefix } from "../components/QtnNumberInput";
+import NewQtnPicker from "../components/NewQtnPicker";
 
 /** Deleting is refused (409) once a quotation has entered the approval flow, so
  *  the button is only offered on the two stages the server still accepts. */
@@ -20,10 +20,7 @@ export default function LvQtnListPage() {
   const [scopeAll, setScopeAll] = useState(false);
   const [loadErr, setLoadErr] = useState("");
   const [actionErr, setActionErr] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [num, setNum] = useState("");
-  const [suggestion, setSuggestion] = useState("");
-  const [err, setErr] = useState("");
+  const [picker, setPicker] = useState(false);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<QtnStatus | "">("");
   const [owner, setOwner] = useState("");
@@ -128,21 +125,7 @@ export default function LvQtnListPage() {
   const canDelete = (x: QtnListItem) =>
     DELETABLE.has(statusOf(x)) && (!scopeAll || (x.ownerEmail || "").toLowerCase() === myEmail);
 
-  const onNew = () => {
-    setNum(""); // start empty — the full number is typed
-    setErr("");
-    setCreating(true);
-    nextQtnNumber().then(setSuggestion).catch(() => {});
-  };
-  const confirmNew = async () => {
-    if (!num.trim()) { setErr("Quotation number is required."); return; }
-    try {
-      const rec = await createQtn(num);
-      navigate(`/lv/qtn/${rec.id}`);
-    } catch (e) {
-      setErr((e as Error).message || "Could not create the quotation.");
-    }
-  };
+  const onNew = () => setPicker(true);
   const onDelete = async (e: React.MouseEvent, x: QtnListItem) => {
     e.stopPropagation();
     if (!confirm(`Delete ${x.number}?`)) return;
@@ -335,61 +318,7 @@ export default function LvQtnListPage() {
         </>
       )}
 
-      {creating && (
-        <NewQtnModal
-          value={num}
-          error={err}
-          suggestion={suggestion}
-          onChange={(v) => { setNum(v); if (err) setErr(""); }}
-          onUseSuggestion={(s) => { setNum(s); setErr(""); }}
-          onCancel={() => setCreating(false)}
-          onConfirm={confirmNew}
-        />
-      )}
-    </div>
-  );
-}
-
-/** Required-number dialog shown when creating a new quotation. */
-function NewQtnModal({ value, error, suggestion, onChange, onUseSuggestion, onCancel, onConfirm }: {
-  value: string;
-  error: string;
-  suggestion: string;
-  onChange: (v: string) => void;
-  onUseSuggestion: (s: string) => void;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    const el = inputRef.current;
-    if (el) { el.focus(); const n = el.value.length; el.setSelectionRange(n, n); } // cursor after the prefix
-  }, []);
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}>
-      <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onCancel} />
-      <div role="dialog" aria-modal="true" aria-label="New quotation"
-        className="relative w-full max-w-sm rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
-        <h2 className="text-lg font-extrabold tracking-tight text-ink">New Quotation</h2>
-        <p className="mt-0.5 text-xs text-muted">Type the quotation number — e.g. <b className="font-mono">{qtnPrefix()}00000</b></p>
-        <label className="label mt-4" htmlFor="qtn-number">
-          Quotation number <span className="text-brand">*</span>
-        </label>
-        <QtnNumberInput id="qtn-number" autoFocus value={value} onChange={onChange} onEnter={onConfirm} />
-        {error ? (
-          <p className="mt-1.5 text-xs font-semibold text-red-600">{error}</p>
-        ) : (
-          <button type="button" className="mt-1.5 text-[11px] text-muted hover:text-brand"
-            onClick={() => onUseSuggestion(suggestion)}>
-            Suggested next: <b>{suggestion}</b> — click to use
-          </button>
-        )}
-        <div className="mt-5 flex justify-end gap-2">
-          <button className="btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className="btn-primary" onClick={onConfirm} disabled={!value.trim()}>Create QTN</button>
-        </div>
-      </div>
+      {picker && <NewQtnPicker desk="lv" onClose={() => setPicker(false)} />}
     </div>
   );
 }

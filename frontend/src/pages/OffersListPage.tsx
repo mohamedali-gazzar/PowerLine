@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { label } from "../options";
 import type { Offer } from "../types";
+import NewQtnPicker from "../components/NewQtnPicker";
 
 const statusColors: Record<string, string> = {
   DRAFT: "bg-line text-muted",
@@ -16,6 +17,7 @@ export default function OffersListPage() {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [picker, setPicker] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -48,9 +50,9 @@ export default function OffersListPage() {
           <h1 className="text-2xl font-extrabold tracking-tight">RMU — Technical Offers</h1>
           <p className="text-sm text-muted">{offers.length} saved · Ring Main Units</p>
         </div>
-        <Link to="/offers/new" className="btn-primary">
-          + New RMU Offer
-        </Link>
+        <button className="btn-primary" onClick={() => setPicker(true)}>
+          + New QTN
+        </button>
       </div>
 
       {loading && (
@@ -76,9 +78,9 @@ export default function OffersListPage() {
             ⚡
           </div>
           <p className="text-muted">No offers yet.</p>
-          <Link to="/offers/new" className="btn-primary mt-4">
+          <button className="btn-primary mt-4" onClick={() => setPicker(true)}>
             Create your first RMU offer
-          </Link>
+          </button>
         </div>
       )}
 
@@ -140,6 +142,8 @@ export default function OffersListPage() {
           </table>
         </div>
       )}
+
+      {picker && <NewQtnPicker desk="mv" onClose={() => setPicker(false)} />}
     </div>
   );
 }

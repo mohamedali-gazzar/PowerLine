@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
   api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type HistoryItem, type WeekStat, type QtnStatus, type QtnListItemDto, type MyAccess,
 } from "../api";
 import { useAuth } from "../auth/AuthContext";
-import { createQtn } from "../lv/qtns";
-import { QtnNumberInput, qtnPrefix } from "../components/QtnNumberInput";
+import NewQtnPicker from "../components/NewQtnPicker";
 
 /** Post-login home: profile, weekly performance, QTN history, and quick actions
  *  (New QTN → RMU/LV, plus the Kiosk tool). */
@@ -60,8 +58,6 @@ export default function HomeDashboard() {
         </div>
         <div className="flex gap-2">
           <button className="btn-primary" onClick={() => setChooser(true)}>+ New QTN</button>
-          <button className="btn-ghost" onClick={() => navigate("/kiosks")}>🏗️ P-CSS selector</button>
-          <button className="btn-ghost" onClick={() => navigate("/pricing")}>💲 Price list</button>
           {can("access.manage") && (
             <button className="btn-ghost" onClick={() => navigate("/access")}>🔑 Access Center</button>
           )}
@@ -171,7 +167,7 @@ export default function HomeDashboard() {
         )}
       </div>
 
-      {chooser && <NewQtnChooser onClose={() => setChooser(false)} />}
+      {chooser && <NewQtnPicker desk="all" onClose={() => setChooser(false)} />}
     </div>
   );
 }
@@ -392,91 +388,4 @@ function ProfilePhoto() {
   );
 }
 
-// ── New QTN chooser (RMU / LV / Standard EDMS → number) ──────────────────────
-type QtnMode = "lv" | "rmu" | "edms";
-const MODE_LABEL: Record<QtnMode, string> = { lv: "LV", rmu: "RMU", edms: "Standard EDMS" };
-function NewQtnChooser({ onClose }: { onClose: () => void }) {
-  const navigate = useNavigate();
-  const [mode, setMode] = useState<"choose" | QtnMode>("choose");
-  const [number, setNumber] = useState("");
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const start = (m: QtnMode) => { setNumber(""); setErr(""); setMode(m); };
-  const create = async () => {
-    if (!number.trim()) { setErr("Enter the quotation number."); return; }
-    if (mode === "rmu") {
-      // RMU offers are created in the offer form; carry the QTN into its cover field.
-      navigate(`/offers/new?qtn=${encodeURIComponent(number)}`);
-      return;
-    }
-    setBusy(true);
-    try {
-      // Standard EDMS opens the same workspace as LV — only the recorded kind differs.
-      const rec = await createQtn(number, mode === "edms" ? "edms" : "panels");
-      navigate(`/lv/qtn/${rec.id}`);
-    } catch (e) {
-      setErr((e as Error).message || "Could not create the quotation.");
-      setBusy(false);
-    }
-  };
-
-  // Rendered via a portal to <body> so a transformed ancestor (animate-fade-up)
-  // can't turn the fixed overlay into a partial, inset box.
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
-      <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
-      <div role="dialog" aria-modal="true"
-        className="relative w-full max-w-lg rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
-        {mode === "choose" ? (
-          <>
-            <h2 className="text-lg font-extrabold tracking-tight">New QTN</h2>
-            <p className="mt-0.5 text-xs text-muted">What kind of quotation do you want to create?</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <button onClick={() => start("rmu")}
-                className="rounded-xl border-2 border-line p-4 text-left transition hover:border-brand hover:bg-brand-tint/40">
-                <div className="text-2xl">⚡</div>
-                <div className="mt-1 text-sm font-bold text-ink">RMU</div>
-                <div className="text-[11px] text-muted">Ring Main Unit (MV)</div>
-              </button>
-              <button onClick={() => start("lv")}
-                className="rounded-xl border-2 border-line p-4 text-left transition hover:border-brand hover:bg-brand-tint/40">
-                <div className="text-2xl">📊</div>
-                <div className="mt-1 text-sm font-bold text-ink">LV</div>
-                <div className="text-[11px] text-muted">Low-voltage panels</div>
-              </button>
-              <button onClick={() => start("edms")}
-                className="rounded-xl border-2 border-line p-4 text-left transition hover:border-brand hover:bg-brand-tint/40">
-                <div className="text-2xl">📋</div>
-                <div className="mt-1 text-sm font-bold text-ink">Standard EDMS</div>
-                <div className="text-[11px] text-muted">Same workspace as LV</div>
-              </button>
-            </div>
-            <div className="mt-5 flex justify-end">
-              <button className="btn-ghost" onClick={onClose}>Cancel</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <h2 className="text-lg font-extrabold tracking-tight">New {MODE_LABEL[mode]} Quotation</h2>
-            <p className="mt-0.5 text-xs text-muted">
-              Type the quotation number — e.g. <b className="font-mono">{qtnPrefix()}00000</b>
-            </p>
-            <label className="label mt-4" htmlFor="qtn-number">Quotation number <span className="text-brand">*</span></label>
-            <QtnNumberInput id="qtn-number" autoFocus value={number}
-              onChange={(v) => { setNumber(v); if (err) setErr(""); }} onEnter={create} />
-            {err && <p className="mt-1.5 text-xs font-semibold text-red-600">{err}</p>}
-            <div className="mt-5 flex justify-between">
-              <button className="btn-ghost" onClick={() => setMode("choose")}>← Back</button>
-              <button className="btn-primary" onClick={create} disabled={busy || !number.trim()}>
-                {busy ? "Creating…" : mode === "rmu" ? "Continue" : "Create QTN"}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>,
-    document.body
-  );
-}
+// The New QTN card picker now lives in ../components/NewQtnPicker (desk-scoped).
