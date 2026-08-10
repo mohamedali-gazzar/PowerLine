@@ -9,30 +9,12 @@ import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { api, type LvImportPreview, type LvImportRow, type LvRow } from "../api";
 
-/** The columns the template ships with, in order.
- *  Every one of these is read by the import — the template used to advertise
- *  IP / Mounting / RAL / Cross Section, which nothing ever parsed, so a filled-in
- *  column silently did nothing. Only offer what the import can actually apply. */
-export const TEMPLATE_COLUMNS = [
-  "Item Code",
-  "Description",
-  "Type",
-  "Family",
-  "Rating",
-  "Brand",
-  "Poles",
-  "ABB Price list in EURO",
-  "Market Price in EGP",
-  "Weight/Panel/Pole",
-  "Weight/Cell/Pole",
-  "Stock",
-] as const;
-
-/** The EMPTY template mirrors the master "Configurator Price list" sheet exactly —
- *  same columns, order and (quirky) spacing — so a downloaded blank lines up with the
- *  file the catalogue is maintained in. On upload the import reads Type, Description,
- *  Item Code, the two prices, the two weights and Brand; IP / Mounting / RAL /
- *  Cross Section / ABB Discount are carried for reference and are not applied. */
+/** Both downloads — the blank template and the current-catalogue export — use the
+ *  master "Configurator Price list" layout exactly: same columns, order and (quirky)
+ *  spacing, so they line up with the sheet the catalogue is maintained in. On upload
+ *  the import reads Type, Description, Item Code, the two prices, the two weights and
+ *  Brand; IP / Mounting / RAL / Cross Section / ABB Discount ride along for reference
+ *  and are not applied. */
 export const EMPTY_TEMPLATE_COLUMNS = [
   "Type",
   "Description",
@@ -154,10 +136,11 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
     fileRef.current?.click();
   };
 
-  // Export the whole current catalogue in the SAME columns the import reads, so
-  // it round-trips: download, edit prices/weights/stock, re-upload. Values are
-  // the current ones, so a re-upload with no edits is a no-op. Paged (server
-  // caps a page at 200), fetched in catalogue (sortIndex) order.
+  // Export the whole current catalogue in the master price-list layout, so it
+  // matches the sheet the catalogue is maintained in and re-imports cleanly by
+  // Item Code. IP / Mounting / RAL / Cross Section are blank (components carry
+  // none); ABB Discount follows the system's rule (an ABB item priced in EUR).
+  // Paged (server caps a page at 200), in catalogue (sortIndex) order.
   const downloadCurrent = async () => {
     setError("");
     setDone("");
@@ -171,10 +154,18 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
         setDl(`Preparing… ${rows.length.toLocaleString()} / ${r.total.toLocaleString()}`);
         if (rows.length >= r.total || r.rows.length === 0) break;
       }
-      const header = TEMPLATE_COLUMNS as unknown as string[];
+      const header = EMPTY_TEMPLATE_COLUMNS as unknown as string[];
       const body = rows.map((r) => [
-        r.ref ?? "", r.d ?? "", r.t ?? "", r.f ?? "", r.r ?? "", r.brand ?? "",
-        r.poles ?? 0, r.eur ?? 0, r.egp ?? 0, r.cuP ?? 0, r.cuC ?? 0, r.stock ?? "",
+        r.t ?? "",                                            // Type
+        r.d ?? "",                                            // Description
+        r.ref ?? "",                                          // Item Code
+        r.eur ?? 0,                                           // ABB Price list in EURO
+        r.egp ?? 0,                                           // Market Price in EGP
+        "", "", "", "",                                       // IP · Mounting · RAL · Cross Section (components carry none)
+        r.cuP ?? 0,                                           // Weight/Panel/Pole
+        r.cuC ?? 0,                                           // Weight/Cell/Pole
+        r.brand ?? "",                                        // Brand
+        r.brand === "ABB" && (r.eur ?? 0) > 0 ? "Yes" : "No", // ABB Discount (system rule)
       ]);
       const ws = XLSX.utils.aoa_to_sheet([header, ...body]);
       // Size each column to its widest cell (header or data), within reason.
