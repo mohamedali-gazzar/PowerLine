@@ -7,7 +7,7 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
-import { api, type LvImportPreview, type LvImportRow } from "../api";
+import { api, type LvImportPreview, type LvImportRow, type LvRow } from "../api";
 
 /** The columns the template ships with, in order.
  *  Every one of these is read by the import — the template used to advertise
@@ -119,6 +119,7 @@ const money = (eur: number, egp: number) => (eur > 0 ? `€${eur.toFixed(2)}` : 
 export default function LvExcelImport({ onApplied }: { onApplied: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState("");
+  const [dl, setDl] = useState(""); // "Download current" progress text
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<LvImportPreview | null>(null);
   const [tab, setTab] = useState<"updates" | "additions" | "noCode" | "warnings">("updates");
@@ -130,6 +131,44 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
     setError("");
     setDone("");
     fileRef.current?.click();
+  };
+
+  // Export the whole current catalogue in the SAME columns the import reads, so
+  // it round-trips: download, edit prices/weights/stock, re-upload. Values are
+  // the current ones, so a re-upload with no edits is a no-op. Paged (server
+  // caps a page at 200), fetched in catalogue (sortIndex) order.
+  const downloadCurrent = async () => {
+    setError("");
+    setDone("");
+    setDl("Preparing…");
+    try {
+      const take = 200;
+      const rows: LvRow[] = [];
+      for (let page = 0; ; page++) {
+        const r = await api.pricing.lvList({ kind: "components", take, page });
+        rows.push(...r.rows);
+        setDl(`Preparing… ${rows.length.toLocaleString()} / ${r.total.toLocaleString()}`);
+        if (rows.length >= r.total || r.rows.length === 0) break;
+      }
+      const header = TEMPLATE_COLUMNS as unknown as string[];
+      const body = rows.map((r) => [
+        r.ref ?? "", r.d ?? "", r.t ?? "", r.f ?? "", r.r ?? "", r.brand ?? "",
+        r.poles ?? 0, r.eur ?? 0, r.egp ?? 0, r.cuP ?? 0, r.cuC ?? 0, r.stock ?? "",
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([header, ...body]);
+      // Size each column to its widest cell (header or data), within reason.
+      ws["!cols"] = header.map((c, i) => ({
+        wch: Math.max(12, Math.min(40, body.reduce((m, row) => Math.max(m, String(row[i] ?? "").length), c.length) + 2)),
+      }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Price list");
+      XLSX.writeFile(wb, "PowerLine LV price list (current).xlsx");
+      setDone(`Downloaded ${rows.length.toLocaleString()} items.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not build the current price list.");
+    } finally {
+      setDl("");
+    }
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -200,10 +239,13 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <button className="btn-primary" onClick={pickFile} disabled={!!busy}>
+        <button className="btn-primary" onClick={pickFile} disabled={!!busy || !!dl}>
           {busy || "⬆ Update from Excel"}
         </button>
-        <button className="btn-ghost" onClick={downloadTemplate} disabled={!!busy}>
+        <button className="btn-ghost" onClick={downloadCurrent} disabled={!!busy || !!dl}>
+          {dl || "⬇ Download Current Excel"}
+        </button>
+        <button className="btn-ghost" onClick={downloadTemplate} disabled={!!busy || !!dl}>
           ⬇ Empty template
         </button>
         <input

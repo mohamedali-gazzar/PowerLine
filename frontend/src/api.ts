@@ -250,6 +250,9 @@ export interface LvRow {
   ref?: string;
   brand?: string;
   poles?: number;
+  cuP?: number; // copper kg/pole — panels
+  cuC?: number; // copper kg/pole — cells
+  stock?: string;
   // enclosures
   fam?: string;
   name?: string;
