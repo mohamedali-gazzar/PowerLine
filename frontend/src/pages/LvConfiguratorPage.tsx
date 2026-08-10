@@ -2375,7 +2375,10 @@ function TermsEditor({ value, onSave, rtl }: { value: TermsSection[]; onSave: (v
 
 function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void }) {
   // RPT-1: selling currency — default USD; EGP-based prices convert via the Pricing rate.
-  const [cur, setCur] = useState<"USD" | "EGP">("USD");
+  // Stored on the quotation, not in this tab, so the ERP export quotes in the same
+  // currency the customer was quoted in.
+  const cur = s.offerCurrency ?? "USD";
+  const setCur = (c: "USD" | "EGP") => up({ offerCurrency: c });
   if (!s.panels.length) {
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Commercial Offer is generated from them.</div>;
   }

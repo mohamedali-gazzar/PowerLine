@@ -70,9 +70,18 @@ export function buildErpItemsCsv(s: LvState): string {
     const fam = ERP_FAM[panelFamily(p)];
     if (!fam) continue;                                       // family with no ERP mapping → skip
 
-    const unit = round2(calcPanel(p, s.factors, s.abbItemDiscounts).sellUnit);
+    // Two currencies, as the ERP expects: the transaction columns follow whatever the
+    // Commercial Offer was quoted in, while the "(Company Currency)" columns are
+    // always EGP. Both used to carry the EGP figure, so a USD offer exported as EGP.
+    const egpUnit = round2(calcPanel(p, s.factors, s.abbItemDiscounts).sellUnit);
+    const usdRate = s.factors.usd || 0;
+    // Fall back to EGP if there is no rate to convert with — a silent divide by zero
+    // would put Infinity in the price column.
+    const inUsd = (s.offerCurrency ?? "USD") === "USD" && usdRate > 0;
+    const unit = inUsd ? round2(egpUnit / usdRate) : egpUnit;
     const qty = p.qty || 1;
     const amount = round2(unit * qty);
+    const baseAmount = round2(egpUnit * qty);
 
     const r = blank();
     r[IX.item_code] = fam.item;
@@ -88,11 +97,11 @@ export function buildErpItemsCsv(s: LvState): string {
     r[IX.conversion_factor] = 1;
     r[IX.stock_qty] = qty;
     r[IX.price_list_rate] = unit;
-    r[IX.base_price_list_rate] = unit;
+    r[IX.base_price_list_rate] = egpUnit;
     r[IX.rate] = unit;
-    r[IX.base_rate] = unit;
+    r[IX.base_rate] = egpUnit;
     r[IX.amount] = amount;
-    r[IX.base_amount] = amount;
+    r[IX.base_amount] = baseAmount;
     r[IX.item_tax_template] = fam.noTax ? "" : TAX_TEMPLATE;
     r[IX.item_tax_rate] = fam.noTax ? "{}" : TAX_RATE_JSON;
     r[IX.warehouse] = WAREHOUSE;

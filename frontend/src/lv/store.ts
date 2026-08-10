@@ -176,6 +176,10 @@ export interface LvState {
   summaryNotes?: SummaryNote[];
   // Free-text "Record Results" box on the Pricing Settings tab.
   recordResults?: string;
+  /** Currency the Commercial Offer is quoted in. Lives on the quotation rather than
+   *  in the tab's own state so the ERP export can quote in the same currency the
+   *  customer was — otherwise the offer said USD and the CSV said EGP. */
+  offerCurrency?: "USD" | "EGP";
   // ── Specs tab ──────────────────────────────────────────────────────────────
   // Project-wide values for the panel fields that are normally the same across a
   // job. Setting one here writes it onto every panel at once; a panel can still
@@ -720,6 +724,7 @@ export function initialState(): LvState {
     abbItemDiscounts: {},
     summaryNotes: [],
     recordResults: "",
+    offerCurrency: "USD",
     projectSpecs: {},
     selectivityRequired: "No",
     specs: defaultSpecs(),
@@ -823,7 +828,7 @@ export function duplicatePanel(p: LvPanel, name: string): LvPanel {
 const BUSBAR_AUTO_FAMILIES = new Set(["SR-Basic", "Unikit", "Local (Sheet Metal)", "Pillars"]);
 /** Families built without a main busbar. A weight of 0 is CORRECT for these, so the
  *  pre-export check must not report it as something the engineer forgot to enter. */
-export const NO_BUSBAR_FAMILIES = new Set(["Minicenter", "Primo"]);
+export const NO_BUSBAR_FAMILIES = new Set(["Minicenter", "Primo", "Coffree"]);
 // Pillar-type enclosures ("7 Lines" …) carry no H×W×D in the name, so the busbar
 // rule uses this fixed pillar height instead of parsing one out of the name.
 const PILLAR_HEIGHT_MM = 1000;
