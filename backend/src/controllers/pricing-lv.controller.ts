@@ -259,6 +259,8 @@ const newComponentSchema = z.object({
   ref: z.string().trim().min(2, "Enter the Reference."),
   brand: z.string().trim().min(1, "Enter the Brand."),
   poles: z.number().int().min(0, "Enter the number of poles."),
+  cuP: z.number().min(0).default(0), // copper kg/pole — panels
+  cuC: z.number().min(0).default(0), // copper kg/pole — cells
   eur: z.number().min(0),
   egp: z.number().min(0).default(0),
 });
@@ -292,7 +294,7 @@ export async function createLvComponent(req: Request, res: Response) {
       data: {
         sortIndex,
         t: v.t, f: v.f, r: v.r, d: v.d, n: v.d, ref: v.ref,
-        brand: v.brand, poles: v.poles, eur: v.eur, egp: v.egp,
+        brand: v.brand, poles: v.poles, cuP: v.cuP, cuC: v.cuC, eur: v.eur, egp: v.egp,
         search: [v.t, v.f, v.r, v.d, v.ref, v.brand].join(" ").toLowerCase(),
         updatedBy: by,
       },

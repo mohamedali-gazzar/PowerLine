@@ -426,7 +426,7 @@ function AddLvComponent({
   brands: string[];
   onAdded: () => void;
 }) {
-  const empty = { t: "", f: "", r: "", d: "", ref: "", brand: "ABB", poles: "3", eur: "", egp: "" };
+  const empty = { t: "", f: "", r: "", d: "", ref: "", brand: "", poles: "3", cuP: "", cuC: "", eur: "", egp: "" };
   const [open, setOpen] = useState(false);
   const [v, setV] = useState<Record<string, string>>(empty);
   const [err, setErr] = useState("");
@@ -445,6 +445,8 @@ function AddLvComponent({
         ref: v.ref.trim(),
         brand: v.brand.trim(),
         poles: Number(v.poles) || 0,
+        cuP: Number(v.cuP) || 0,
+        cuC: Number(v.cuC) || 0,
         eur: Number(v.eur) || 0,
         egp: Number(v.egp) || 0,
       });
@@ -489,7 +491,7 @@ function AddLvComponent({
   return (
     <div className="card mb-3 border-brand/40 p-4">
       <h2 className="sec-head">Add a component</h2>
-      <p className="mb-3 text-xs text-muted">All fields are required. It is added to the end of the catalogue.</p>
+      <p className="mb-3 text-xs text-muted">All fields are required except the copper weights (leave 0 if the item has none). It is added to the end of the catalogue.</p>
       <div className="grid gap-3 sm:grid-cols-3">
         <F k="t" label="Type" ph="MCCB" list={types} />
         <F k="f" label="Family" ph="XT2S" />
@@ -504,6 +506,15 @@ function AddLvComponent({
           <label className="label">Poles</label>
           <input className="input" type="number" min={0} value={v.poles} onChange={(e) => set("poles", e.target.value)} />
         </div>
+        <div>
+          <label className="label">Weight/Panel/Pole</label>
+          <input className="input" type="number" min={0} step="0.001" placeholder="0" value={v.cuP} onChange={(e) => set("cuP", e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Weight/Cell/Pole</label>
+          <input className="input" type="number" min={0} step="0.001" placeholder="0" value={v.cuC} onChange={(e) => set("cuC", e.target.value)} />
+        </div>
+        <div className="hidden sm:block" aria-hidden />
         <div>
           <label className="label">Price EUR</label>
           <input className="input" type="number" min={0} step="0.01" value={v.eur} onChange={(e) => { set("eur", e.target.value); if (e.target.value) set("egp", ""); }} />
@@ -752,11 +763,16 @@ function LvPrices() {
                 <th className="px-4 py-2 w-28">Brand</th>
                 <th className="px-4 py-2 w-28 text-right">Price EUR</th>
                 <th className="px-4 py-2 w-28 text-right">Price EGP</th>
+                {kind === "components" && <th className="px-4 py-2 w-16 text-right">Poles</th>}
+                {kind === "components" && <th className="px-4 py-2 w-24 text-right">Weight/Panel/Pole</th>}
+                {kind === "components" && <th className="px-4 py-2 w-24 text-right">Weight/Cell/Pole</th>}
                 <th className="px-4 py-2 w-20"></th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {rows.map((r) => {
+                const isComp = kind === "components";
+                return (
                 <tr key={r.id} className={`border-t border-line ${r.active === false ? "bg-slate-50/70" : ""}`}>
                   <td className="px-4 py-2">
                     <div className={`font-medium ${r.active === false ? "text-muted line-through" : "text-ink"}`}>
@@ -773,28 +789,42 @@ function LvPrices() {
                   </td>
                   <td className="px-4 py-2 text-xs text-muted">{r.t || r.fam}</td>
                   <td className="px-4 py-2 text-xs font-medium text-ink">{r.brand || "—"}</td>
-                  <td className="px-4 py-2 text-right">
-                    <input
-                      type="number" min={0} step="0.01" defaultValue={r.eur} disabled={busy === r.id}
-                      className="input w-24 text-right"
-                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                      onBlur={(e) => {
-                        const v = Number(e.target.value);
-                        if (v !== r.eur) save(r, v, v > 0 ? 0 : r.egp);
-                      }}
-                    />
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <input
-                      type="number" min={0} step="0.01" defaultValue={r.egp} disabled={busy === r.id}
-                      className="input w-24 text-right"
-                      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                      onBlur={(e) => {
-                        const v = Number(e.target.value);
-                        if (v !== r.egp) save(r, v > 0 ? 0 : r.eur, v);
-                      }}
-                    />
-                  </td>
+                  {isComp ? (
+                    <>
+                      {/* Prices are read-only here — they are managed through the Excel upload. */}
+                      <td className="px-4 py-2 text-right font-medium text-ink">{r.eur ? r.eur.toFixed(2) : "—"}</td>
+                      <td className="px-4 py-2 text-right font-medium text-ink">{r.egp ? r.egp.toLocaleString() : "—"}</td>
+                      <td className="px-4 py-2 text-right text-xs text-ink">{r.poles ? r.poles : "—"}</td>
+                      <td className="px-4 py-2 text-right text-xs text-ink">{r.cuP ? r.cuP : "—"}</td>
+                      <td className="px-4 py-2 text-right text-xs text-ink">{r.cuC ? r.cuC : "—"}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-4 py-2 text-right">
+                        <input
+                          type="number" min={0} step="0.01" defaultValue={r.eur} disabled={busy === r.id}
+                          className="input w-24 text-right"
+                          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                          onBlur={(e) => {
+                            const v = Number(e.target.value);
+                            if (v !== r.eur) save(r, v, v > 0 ? 0 : r.egp);
+                          }}
+                        />
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <input
+                          type="number" min={0} step="0.01" defaultValue={r.egp} disabled={busy === r.id}
+                          className="input w-24 text-right"
+                          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                          onBlur={(e) => {
+                            const v = Number(e.target.value);
+                            if (v !== r.egp) save(r, v > 0 ? 0 : r.eur, v);
+                          }}
+                        />
+                      </td>
+                    </>
+                  )}
+                  {/* Remove / Restore stays in the UI (prices are still Excel-only). */}
                   <td className="px-4 py-2 text-right">
                     <button
                       type="button"
@@ -807,14 +837,16 @@ function LvPrices() {
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
       <p className="mt-2 text-[11px] text-muted">
-        Each item is priced in ONE currency — filling EUR clears EGP and vice versa, exactly as the
-        calculator expects.
+        {kind === "components"
+          ? "Prices, poles and copper weights are read-only here — set them through the Excel upload above (matched on Item Code), then re-upload. Use Remove to stop offering an item."
+          : "Each item is priced in ONE currency — filling EUR clears EGP and vice versa, exactly as the calculator expects."}
       </p>
     </div>
   );
