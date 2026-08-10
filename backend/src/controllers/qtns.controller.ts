@@ -1,4 +1,4 @@
-﻿import type { Request, Response } from "express";
+import type { Request, Response } from "express";
 import { ZodError } from "zod";
 import { prisma } from "../lib/prisma";
 import {
@@ -63,7 +63,7 @@ const record = (q: QtnRow) => {
   try {
     state = JSON.parse(q.state);
   } catch {
-    // A corrupt/legacy state row shouldn't crash the request â€” return an empty state.
+    // A corrupt/legacy state row shouldn't crash the request — return an empty state.
   }
   return {
     id: q.id,
@@ -94,10 +94,10 @@ const listItem = (q: QtnRow) => ({
   ownerName: q.owner?.name ?? "",
 });
 
-// â”€â”€ Visibility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Visibility ───────────────────────────────────────────────────────────────
 // Every QTN read used to be hard-scoped to `ownerId`, which meant an approver
 // literally could not open the quotation they were being asked to approve. Reads
-// widen for qtn.viewAll; WRITES stay owner-only â€” approvers review, they don't edit.
+// widen for qtn.viewAll; WRITES stay owner-only — approvers review, they don't edit.
 
 const ownerSelect = { owner: { select: { email: true, name: true } } } as const;
 
@@ -199,7 +199,7 @@ export async function getNextNumber(req: Request, res: Response) {
   }
 }
 
-// GET /api/qtns/:id â€” own it, or hold qtn.viewAll (an approver must be able to
+// GET /api/qtns/:id — own it, or hold qtn.viewAll (an approver must be able to
 // open what they are approving).
 export async function getOne(req: Request, res: Response) {
   try {
@@ -240,7 +240,7 @@ export async function create(req: Request, res: Response) {
   }
 }
 
-// PUT /api/qtns/:id  { state, summary }  â€” debounced live-save from the configurator
+// PUT /api/qtns/:id  { state, summary }  — debounced live-save from the configurator
 export async function update(req: Request, res: Response) {
   try {
     const { state, summary } = updateQtnSchema.parse(req.body);
@@ -266,7 +266,7 @@ export async function update(req: Request, res: Response) {
   }
 }
 
-// PATCH /api/qtns/:id/number  { number } â†’ { ok, error? }  (200 even on dup)
+// PATCH /api/qtns/:id/number  { number } → { ok, error? }  (200 even on dup)
 export async function rename(req: Request, res: Response) {
   try {
     const ownerId = req.userId as string;
@@ -329,7 +329,7 @@ export async function duplicate(req: Request, res: Response) {
         totalEgp: src.totalEgp,
       },
     });
-    // Carry the Specs-tab files over too â€” a duplicate is usually a new revision
+    // Carry the Specs-tab files over too — a duplicate is usually a new revision
     // of the same job, and the client's specs still apply to it.
     const files = await prisma.lvAttachment.findMany({ where: { qtnId: src.id } });
     if (files.length) {
@@ -345,7 +345,7 @@ export async function duplicate(req: Request, res: Response) {
   }
 }
 
-// â”€â”€ Workflow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Workflow ────────────────────────────────────────────────────────────────
 
 /** Who may perform a given move, and why not. `null` = allowed. */
 async function transitionDenial(
@@ -367,7 +367,7 @@ async function transitionDenial(
     if (denied) return denied;
     // Self-approval is off unless explicitly granted.
     if (isOwner && !acc.perms.has("qtn.approveOwn")) {
-      return "You cannot approve your own quotation â€” another approver must review it.";
+      return "You cannot approve your own quotation — another approver must review it.";
     }
     return null;
   }
@@ -392,7 +392,7 @@ async function transitionDenial(
   return "Unsupported transition.";
 }
 
-/** Tell everyone who needs to know. Never throws â€” mail must not fail an approval. */
+/** Tell everyone who needs to know. Never throws — mail must not fail an approval. */
 async function announce(
   q: { id: string; number: string; ownerId: string; projectName: string },
   to: QtnStatus,
@@ -404,9 +404,9 @@ async function announce(
   const when = new Date().toLocaleString("en-GB");
   const details: [string, string][] = [
     ["QTN", q.number],
-    ["Project", q.projectName || "â€”"],
+    ["Project", q.projectName || "—"],
     ["Status", QTN_STATUS_LABEL[to]],
-    ["By", actorEmail || "â€”"],
+    ["By", actorEmail || "—"],
     ["When", when],
   ];
   try {
@@ -423,7 +423,7 @@ async function announce(
     if (to === "APPROVED") {
       await notify({
         userId: q.ownerId, kind: "QTN_APPROVED",
-        title: `QTN ${q.number} approved â€” ready to submit`,
+        title: `QTN ${q.number} approved — ready to submit`,
         body: `${actorEmail} approved quotation ${q.number}. It is ready for final submission.`,
         link, qtnId: q.id, details, note, origin,
       });
@@ -518,7 +518,7 @@ export async function unsubmit(req: Request, res: Response) {
   return transition(req, res);
 }
 
-/** GET /api/qtns/queue â€” quotations waiting for approval (needs qtn.approve). */
+/** GET /api/qtns/queue — quotations waiting for approval (needs qtn.approve). */
 export async function queue(req: Request, res: Response) {
   try {
     const rows = await prisma.lvQtn.findMany({
@@ -532,7 +532,7 @@ export async function queue(req: Request, res: Response) {
   }
 }
 
-/** GET /api/qtns/all â€” every non-draft quotation (LV Offers History). */
+/** GET /api/qtns/all — every non-draft quotation (LV Offers History). */
 export async function listAll(req: Request, res: Response) {
   try {
     const rows = await prisma.lvQtn.findMany({
@@ -553,7 +553,7 @@ export async function listAll(req: Request, res: Response) {
   }
 }
 
-/** GET /api/qtns/:id/events â€” the audit trail. */
+/** GET /api/qtns/:id/events — the audit trail. */
 export async function events(req: Request, res: Response) {
   try {
     const q = await visibleQtn(req);
@@ -572,12 +572,12 @@ export async function events(req: Request, res: Response) {
   }
 }
 
-// â”€â”€ Specs-tab attachments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Specs-tab attachments ───────────────────────────────────────────────────
 // Kept out of LvQtn.state on purpose: that JSON is re-saved on an 800 ms debounce
 // while the user types, so a file living in it would be re-uploaded on every
 // keystroke. These endpoints move the bytes exactly once.
 
-/** The quotation, if it belongs to the caller â€” for attachment WRITES.
+/** The quotation, if it belongs to the caller — for attachment WRITES.
  *  `status` must be selected: the lock checks below read it, and a narrower select
  *  would leave them reading `undefined` and silently letting writes through. */
 async function ownedQtn(req: Request) {
@@ -587,7 +587,7 @@ async function ownedQtn(req: Request) {
   });
 }
 
-/** For attachment READS â€” an approver must be able to open the specs they review. */
+/** For attachment READS — an approver must be able to open the specs they review. */
 async function readableQtn(req: Request) {
   const acc = await accessOf(req.userId);
   const where = acc.perms.has("qtn.viewAll")
@@ -596,7 +596,7 @@ async function readableQtn(req: Request) {
   return prisma.lvQtn.findFirst({ where, select: { id: true } });
 }
 
-// GET /api/qtns/:id/attachments  â†’ metadata only (never the bytes, so opening the
+// GET /api/qtns/:id/attachments  → metadata only (never the bytes, so opening the
 // Specs tab stays light no matter how much is attached)
 export async function listAttachments(req: Request, res: Response) {
   try {
@@ -613,7 +613,7 @@ export async function listAttachments(req: Request, res: Response) {
   }
 }
 
-// POST /api/qtns/:id/attachments  { name, mime, data }  â€” data is plain base64
+// POST /api/qtns/:id/attachments  { name, mime, data }  — data is plain base64
 export async function uploadAttachment(req: Request, res: Response) {
   try {
     const q = await ownedQtn(req);
@@ -621,7 +621,7 @@ export async function uploadAttachment(req: Request, res: Response) {
     if (isLocked(qtnStatus(q))) return lockedResponse(res, qtnStatus(q));
     const { name, mime, data } = attachmentSchema.parse(req.body);
     // Decode to measure the REAL size and to reject anything that isn't valid
-    // base64 â€” the client-reported length can't be trusted.
+    // base64 — the client-reported length can't be trusted.
     const buf = Buffer.from(data, "base64");
     if (!buf.length) return res.status(400).json({ error: "File is empty or not valid base64." });
     if (buf.length > MAX_ATTACHMENT_BYTES) {
@@ -650,7 +650,7 @@ export async function uploadAttachment(req: Request, res: Response) {
   }
 }
 
-// GET /api/qtns/:id/attachments/:fileId  â€” streams the file itself. A plain browser
+// GET /api/qtns/:id/attachments/:fileId  — streams the file itself. A plain browser
 // navigation, so it authenticates via ?t= (see middleware/auth readToken).
 export async function downloadAttachment(req: Request, res: Response) {
   try {

@@ -1,13 +1,13 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, type AccessUser, type MyAccess, type PriceChangeRow } from "../api";
 import { useAuth } from "../auth/AuthContext";
 
-// Access Center â€” who is an admin, and what each engineer is allowed to do.
+// Access Center — who is an admin, and what each engineer is allowed to do.
 //
 // Tier is the coarse switch, the ticks are the fine one, and the ticks only
 // mean anything for engineers: an admin already holds everything, so an
 // editable tick there would promise a trim that the server will not honour.
-// The single exception is approving your own quotations â€” deliberately NOT
+// The single exception is approving your own quotations — deliberately NOT
 // implied by admin, so it stays a real tick at every tier.
 
 const TIER_LABEL: Record<string, string> = { ADMIN: "Admin", ENGINEER: "Engineer" };
@@ -109,7 +109,7 @@ export default function AccessCenterPage() {
       api.access.history().then((h) => setHistory(h.items)).catch(() => {});
       api.access.me().then(setMe).catch(() => {}); // you may have just changed your own access
     } catch (e) {
-      // The server refused â€” drop the edit. Leaving the attempted value on
+      // The server refused — drop the edit. Leaving the attempted value on
       // screen reads as saved, which is how someone ends up believing they
       // removed an admin they did not.
       discard(u.id);
@@ -135,16 +135,16 @@ export default function AccessCenterPage() {
     );
   }
 
-  // â”€â”€ No access â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── No access ──────────────────────────────────────────────────────────────
   if (!me || !me.perms.includes("access.manage")) {
     return (
       <div className="animate-fade-up">
         <h1 className="text-2xl font-extrabold tracking-tight">Access Center</h1>
         <div className="card mt-4 p-6 text-center">
-          <div className="text-3xl">ðŸ”’</div>
+          <div className="text-3xl">🔒</div>
           <p className="mt-2 font-bold text-ink">You don't have access to user management</p>
           <p className="mt-1 text-sm text-muted">
-            Ask an admin to give you access. You can keep using the app normally â€” offers and
+            Ask an admin to give you access. You can keep using the app normally — offers and
             quotations are unaffected.
           </p>
           {gateError && <p className="mt-2 text-xs text-muted">{gateError}</p>}
@@ -166,7 +166,7 @@ export default function AccessCenterPage() {
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <input
           className="input max-w-md"
-          placeholder="Search by name, email or roleâ€¦"
+          placeholder="Search by name, email or role…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -212,7 +212,7 @@ export default function AccessCenterPage() {
         </div>
       )}
 
-      {/* â”€â”€ Who changed what â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Who changed what ─────────────────────────────────────────────── */}
       <div className="mt-8">
         <h2 className="sec-head">Access history</h2>
         {!history && <div className="skeleton h-32" />}
@@ -238,8 +238,8 @@ export default function AccessCenterPage() {
                     <tr key={h.id} className="border-t border-line">
                       <td className="px-4 py-2 font-medium text-ink">{h.label}</td>
                       <td className="px-4 py-2 font-mono text-[11px] text-muted">{h.field}</td>
-                      <td className="px-4 py-2 text-xs text-muted">{h.oldValue || "â€”"}</td>
-                      <td className="px-4 py-2 text-xs font-semibold text-ink">{h.newValue || "â€”"}</td>
+                      <td className="px-4 py-2 text-xs text-muted">{h.oldValue || "—"}</td>
+                      <td className="px-4 py-2 text-xs font-semibold text-ink">{h.newValue || "—"}</td>
                       <td className="px-4 py-2 text-xs text-muted">{h.actorEmail || "unknown"}</td>
                       <td className="px-4 py-2 text-xs text-muted">
                         {new Date(h.createdAt).toLocaleString()}
@@ -307,9 +307,9 @@ function UserCard({
           {!user.migrated && (
             <p
               className="mt-1 text-[11px] font-semibold text-amber-700"
-              title="This account predates tiers and permissions â€” the server still reads its old role."
+              title="This account predates tiers and permissions — the server still reads its old role."
             >
-              Still on the legacy role â€œ{user.role || "USER"}â€
+              Still on the legacy role “{user.role || "USER"}”
             </p>
           )}
         </div>
@@ -331,7 +331,7 @@ function UserCard({
             ))}
           </select>
 
-          {/* Turning this off does not silence the person — the in-app bell still
+          {/* Turning this off does not silence the person � the in-app bell still
               fills. It only decides whether a copy is also e-mailed. */}
           <label className="mt-3 flex items-start gap-2 text-sm text-ink">
             <input
@@ -346,7 +346,7 @@ function UserCard({
               <span className="block text-[11px] text-muted">
                 {draft.notifyByEmail
                   ? "Gets workflow emails as well as in-app alerts"
-                  : "In-app alerts only — no email"}
+                  : "In-app alerts only � no email"}
               </span>
             </span>
           </label>
@@ -357,7 +357,7 @@ function UserCard({
         {isAdmin && (
           <p className="mb-2 text-xs text-muted">
             Admins hold every permission, so these are fixed. Approving your own quotations is the
-            one exception â€” it stays a separate tick.
+            one exception — it stays a separate tick.
           </p>
         )}
         {perms.length === 0 ? (
@@ -391,7 +391,7 @@ function UserCard({
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button className="btn-primary" disabled={!dirty || busy} onClick={onSave}>
-          {busy ? "Savingâ€¦" : "Save changes"}
+          {busy ? "Saving…" : "Save changes"}
         </button>
         {dirty && !busy && (
           <button className="btn-ghost" onClick={onDiscard}>

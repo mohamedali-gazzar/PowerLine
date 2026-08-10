@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import cors from "cors";
 import offersRouter from "./routes/offers.routes";
 import authRouter from "./routes/auth.routes";
@@ -101,7 +101,7 @@ export function createApp() {
     });
   });
 
-  // â”€â”€ Accounts system â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Accounts system ────────────────────────────────────────────────────────
   app.use("/api/auth", authRouter);
   app.use("/api/qtns", qtnsRouter); // per-user LV quotations (requireAuth inside)
 
@@ -110,7 +110,7 @@ export function createApp() {
   app.post("/api/notifications/read-all", requireAuth, markAllRead); // before "/:id/read"
   app.post("/api/notifications/:id/read", requireAuth, markRead);
 
-  // Access Center â€” all permission management lives here. `/me` is authenticated
+  // Access Center — all permission management lives here. `/me` is authenticated
   // only (every signed-in user must be able to ask what they may do); the rest
   // needs access.manage.
   app.get("/api/access/me", requireAuth, myAccess);
@@ -123,7 +123,7 @@ export function createApp() {
   app.get("/api/account/history", requireAuth, history);
   app.get("/api/stats/weekly", requireAuth, weeklyStats);
 
-  // â”€â”€ Price list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Price list ─────────────────────────────────────────────────────────────
   // Prices come from the published snapshot in the database (see pricing-data.ts).
   // withPriceBook refreshes the in-process cache when the version changed, which
   // is what makes a publish live on the next request with no redeploy.
@@ -132,9 +132,9 @@ export function createApp() {
   app.get("/api/pricing/verify", requireAuth, getVerify);
   app.post("/api/pricing/seed", requireAuth, postSeed);
   app.get("/api/catalog/rmu", requireAuth, withPriceBook, getRmuCatalog);
-  // Editing â€” price-admin only. Saves go to the DRAFT; customers only see them
+  // Editing — price-admin only. Saves go to the DRAFT; customers only see them
   // once "Update price list & database" (publish) is pressed.
-  // READ endpoints accept "view price list" as well as "edit" â€” otherwise granting
+  // READ endpoints accept "view price list" as well as "edit" — otherwise granting
   // someone view-only access left them with a page they could open but not fill.
   app.get("/api/pricing/rmu", requireAuth, requirePriceViewer, listRmuPrices);
   app.patch("/api/pricing/rmu/:id", requireAuth, requirePriceAdmin, updateRmuPrice);
@@ -143,10 +143,10 @@ export function createApp() {
   app.post("/api/pricing/rmu", requireAuth, requirePriceAdmin, createRmuPrice);
   // LV catalogue (2,121 components + 253 enclosures)
   app.get("/api/catalog/lv", requireAuth, getLvCatalog);
-  // What changed in the price list â€” readable by everyone, so an offer author can
+  // What changed in the price list — readable by everyone, so an offer author can
   // check they are quoting on current prices without price-admin rights.
   app.get("/api/catalog/lv/changes", requireAuth, getLvCatalogChanges);
-  // ABB data-sheet proxy â€” resolve + stream a component's PDF by order code
+  // ABB data-sheet proxy — resolve + stream a component's PDF by order code
   app.get("/api/abb/datasheet", requireAuth, getAbbDatasheet);
   app.get("/api/pricing/lv", requireAuth, requirePriceViewer, listLvPrices);
   app.get("/api/pricing/lv/facets", requireAuth, requirePriceViewer, getLvFacets);
@@ -162,13 +162,13 @@ export function createApp() {
 
   app.get("/api/pricing/history", requireAuth, requirePriceViewer, getHistory);
   app.post("/api/pricing/changes/:id/undo", requireAuth, requirePriceAdmin, postUndo);
-  // Granting access is owner-only â€” a price admin cannot promote themselves.
+  // Granting access is owner-only — a price admin cannot promote themselves.
   app.get("/api/pricing/users", requireAuth, requireOwner, listUsers);
   app.post("/api/pricing/users/:id/role", requireAuth, requireOwner, setUserRole);
   app.get("/api/pricing/pending", requireAuth, requirePriceViewer, getPending);
   app.post("/api/pricing/publish", requireAuth, requirePriceAdmin, postPublish);
 
-  // RMU offers â€” optionalAuth records a signed-in user as the offer's owner.
+  // RMU offers — optionalAuth records a signed-in user as the offer's owner.
   // withPriceBook ensures an offer is priced against the current published list.
   app.use("/api/offers", optionalAuth, withPriceBook, offersRouter);
 
