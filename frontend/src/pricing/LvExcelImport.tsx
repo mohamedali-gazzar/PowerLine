@@ -28,6 +28,27 @@ export const TEMPLATE_COLUMNS = [
   "Stock",
 ] as const;
 
+/** The EMPTY template mirrors the master "Configurator Price list" sheet exactly —
+ *  same columns, order and (quirky) spacing — so a downloaded blank lines up with the
+ *  file the catalogue is maintained in. On upload the import reads Type, Description,
+ *  Item Code, the two prices, the two weights and Brand; IP / Mounting / RAL /
+ *  Cross Section / ABB Discount are carried for reference and are not applied. */
+export const EMPTY_TEMPLATE_COLUMNS = [
+  "Type",
+  "Description",
+  "Item Code",
+  " ABB Price list in EURO ",
+  " Market Price in EGP ",
+  "IP",
+  "Mounting",
+  "RAL",
+  "Cross Section",
+  "Weight/Panel/Pole",
+  "Weight/Cell/Pole",
+  " Brand ",
+  " ABB Discount ",
+] as const;
+
 /** Headers arrive with stray spaces and varying case — match on a flattened key. */
 const flat = (s: string) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -106,8 +127,8 @@ export function parseWorkbook(buf: ArrayBuffer): { rows: LvImportRow[]; missing:
 
 /** Download an empty workbook with the expected columns. */
 export function downloadTemplate() {
-  const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_COLUMNS as unknown as string[]]);
-  ws["!cols"] = TEMPLATE_COLUMNS.map((c) => ({ wch: Math.max(12, Math.min(38, c.length + 6)) }));
+  const ws = XLSX.utils.aoa_to_sheet([EMPTY_TEMPLATE_COLUMNS as unknown as string[]]);
+  ws["!cols"] = EMPTY_TEMPLATE_COLUMNS.map((c) => ({ wch: Math.max(12, Math.min(38, c.length + 6)) }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Price list");
   XLSX.writeFile(wb, "PowerLine LV price list template.xlsx");
