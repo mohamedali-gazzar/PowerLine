@@ -28,6 +28,12 @@ const bellIcon = (
     <path d="M13.7 21a2 2 0 0 1-3.4 0" />
   </svg>
 );
+const pinIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 17v5" />
+    <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+  </svg>
+);
 
 export default function App() {
   const { user, signOut } = useAuth();
@@ -35,17 +41,41 @@ export default function App() {
   const { pathname } = useLocation();
   const initials = (user?.name || user?.email || "?").trim().slice(0, 1).toUpperCase();
 
+  // Sidebar pin cycle (persisted). Each click on the pin advances the state:
+  //   "off"  — auto-hide rail: thin, expands on hover, overlays the content.
+  //   "min"  — pinned minimized: locked thin, no hover-expand.
+  //   "open" — pinned open: locked expanded, content pushed aside.
+  // off → min → open → off …
+  const [pinMode, setPinMode] = useState<"off" | "min" | "open">(() => {
+    try { const v = localStorage.getItem("pl.sidebarPin"); return v === "min" || v === "open" ? v : "off"; }
+    catch { return "off"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("pl.sidebarPin", pinMode); } catch { /* ignore */ }
+  }, [pinMode]);
+  const cyclePin = () => setPinMode((m) => (m === "off" ? "min" : m === "min" ? "open" : "off"));
+
+  // Class fragments that vary by pin state. "open" is always expanded; "min" is
+  // always the thin rail (no hover); "off" is thin but hover-expands.
+  const asideW = pinMode === "open" ? "w-60 shadow-2xl" : pinMode === "min" ? "w-14" : "w-14 group-hover:w-60 group-hover:shadow-2xl";
+  const rowJustify = pinMode === "open" ? "justify-start" : pinMode === "min" ? "justify-center" : "justify-center group-hover:justify-start";
+  const lbl = pinMode === "open" ? "whitespace-nowrap" : pinMode === "min" ? "hidden" : "hidden whitespace-nowrap group-hover:inline";
+  const blockLbl = pinMode === "open" ? "block" : pinMode === "min" ? "hidden" : "hidden group-hover:block";
+  const markCls = pinMode === "open" ? "hidden" : pinMode === "min" ? "" : "group-hover:hidden";
+  const fullLogoCls = pinMode === "open" ? "block" : pinMode === "min" ? "hidden" : "hidden group-hover:block";
+  const pinTitle =
+    pinMode === "off" ? "Pin the sidebar (minimized)" :
+    pinMode === "min" ? "Pinned minimized — click to pin open" :
+    "Pinned open — click to unpin";
+
   return (
     <div className="min-h-screen">
-      {/* Auto-hide sidebar: a thin rail by default that expands on hover and
-          overlays the content (so the content keeps its full width). Product
-          sections live on the Home dashboard, so the rail only needs Home and
-          the notification bell. */}
+      {/* Sidebar. The pin (bottom) cycles: auto-hide → locked-minimized → locked-open. */}
       <div className="group fixed inset-y-0 left-0 z-40">
-        <aside className="flex h-full w-14 flex-col overflow-hidden bg-sidebar transition-[width] duration-200 ease-out group-hover:w-60 group-hover:shadow-2xl">
-          <Link to="/" className="flex items-center justify-center px-3 py-5 group-hover:justify-start" title="PowerLine — Home">
-            <img src="/brand/mark-white.png" alt="PowerLine" className="h-9 w-auto shrink-0 group-hover:hidden" />
-            <img src="/brand/logo-white.png" alt="PowerLine" className="hidden h-10 w-auto group-hover:block" />
+        <aside className={`flex h-full flex-col overflow-hidden bg-sidebar transition-[width] duration-200 ease-out ${asideW}`}>
+          <Link to="/" className={`flex items-center px-3 py-5 ${rowJustify}`} title="PowerLine — Home">
+            <img src="/brand/mark-white.png" alt="PowerLine" className={`h-9 w-auto shrink-0 ${markCls}`} />
+            <img src="/brand/logo-white.png" alt="PowerLine" className={`h-10 w-auto ${fullLogoCls}`} />
           </Link>
 
           <nav className="mt-1 flex flex-1 flex-col gap-1 px-2.5">
@@ -53,29 +83,35 @@ export default function App() {
               to="/"
               end
               title="Home"
-              className={({ isActive }) =>
-                `nav-item justify-center group-hover:justify-start ${isActive ? "nav-item-active" : ""}`
-              }
+              className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}
             >
               <span className="shrink-0">{homeIcon}</span>
-              <span className="hidden whitespace-nowrap group-hover:inline">Home</span>
+              <span className={lbl}>Home</span>
             </NavLink>
 
-            <NotificationBell />
+            <NotificationBell pinMode={pinMode} />
           </nav>
 
-          {/* Dark / light mode toggle */}
-          <div className="px-2.5 pb-1">
+          {/* Pin toggle + dark/light mode */}
+          <div className="flex flex-col gap-1 px-2.5 pb-1">
+            <button
+              type="button"
+              onClick={cyclePin}
+              title={pinTitle}
+              aria-pressed={pinMode !== "off"}
+              className={`nav-item w-full ${rowJustify} ${pinMode !== "off" ? "nav-item-active" : ""}`}
+            >
+              <span className="shrink-0">{pinIcon}</span>
+              <span className={lbl}>{pinMode === "open" ? "Pinned open" : pinMode === "min" ? "Pinned" : "Pin sidebar"}</span>
+            </button>
             <button
               type="button"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              className="nav-item w-full justify-center group-hover:justify-start"
+              className={`nav-item w-full ${rowJustify}`}
             >
               <span className="shrink-0">{theme === "dark" ? sunIcon : moonIcon}</span>
-              <span className="hidden whitespace-nowrap group-hover:inline">
-                {theme === "dark" ? "Light mode" : "Dark mode"}
-              </span>
+              <span className={lbl}>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
             </button>
           </div>
 
@@ -89,7 +125,7 @@ export default function App() {
                   initials
                 )}
               </div>
-              <div className="hidden min-w-0 flex-1 whitespace-nowrap group-hover:block">
+              <div className={`min-w-0 flex-1 whitespace-nowrap ${blockLbl}`}>
                 <p className="truncate text-xs font-bold text-white">{user?.name || user?.email}</p>
                 <button onClick={signOut} className="text-[11px] text-white/50 transition hover:text-white">
                   Sign out
@@ -100,8 +136,8 @@ export default function App() {
         </aside>
       </div>
 
-      {/* Main content — offset by the thin rail; the expanded sidebar overlays it. */}
-      <div className="pl-14">
+      {/* Main content — "open" pushes it aside; "off"/"min" keep the thin rail. */}
+      <div className={`transition-[padding] duration-200 ${pinMode === "open" ? "pl-60" : "pl-14"}`}>
         <main className="mx-auto w-full max-w-[1800px] px-4 py-6 sm:px-6">
           <div key={pathname} className="animate-fade-up">
             <Outlet />
@@ -123,8 +159,12 @@ function ago(iso: string): string {
 }
 
 /** Unread count in the rail, with a dropdown of the recent notifications. */
-function NotificationBell() {
+function NotificationBell({ pinMode }: { pinMode: "off" | "min" | "open" }) {
   const navigate = useNavigate();
+  const rowJustify = pinMode === "open" ? "justify-start" : pinMode === "min" ? "justify-center" : "justify-center group-hover:justify-start";
+  const lbl = pinMode === "open" ? "whitespace-nowrap" : pinMode === "min" ? "hidden" : "hidden whitespace-nowrap group-hover:inline";
+  // The dropdown anchors just past the rail — further out when pinned open (240px).
+  const panelLeft = pinMode === "open" ? "left-60" : "left-16";
   const [items, setItems] = useState<NotificationDto[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
@@ -197,7 +237,7 @@ function NotificationBell() {
         onClick={toggle}
         title="Notifications"
         aria-label={unread > 0 ? `Notifications (${unread} unread)` : "Notifications"}
-        className="nav-item w-full justify-center group-hover:justify-start"
+        className={`nav-item w-full ${rowJustify}`}
       >
         <span className="relative shrink-0">
           {bellIcon}
@@ -207,7 +247,7 @@ function NotificationBell() {
             </span>
           )}
         </span>
-        <span className="hidden whitespace-nowrap group-hover:inline">Notifications</span>
+        <span className={lbl}>Notifications</span>
       </button>
 
       {open && createPortal(
@@ -217,7 +257,7 @@ function NotificationBell() {
             role="dialog"
             aria-label="Notifications"
             style={{ top }}
-            className="fixed left-16 z-50 w-80 max-w-[calc(100vw-5rem)] overflow-hidden rounded-xl2 border border-line bg-white shadow-lift animate-pop"
+            className={`fixed ${panelLeft} z-50 w-80 max-w-[calc(100vw-5rem)] overflow-hidden rounded-xl2 border border-line bg-white shadow-lift animate-pop`}
           >
             <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
               <span className="text-sm font-bold text-ink">Notifications</span>
