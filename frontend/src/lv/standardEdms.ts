@@ -30,8 +30,12 @@ export interface StdPanel {
   ratingA: number;           // busbar / incomer rating
   pfcSection: string | null; // the P.F.C section's name, e.g. "P.F.C 15 kVAR"
   cells: Record<string, number>; // PLP cell width (mm) → qty; sides are always 1
-  /** PLP depth in cm (70 or 90). Varies BY VARIANT, not by transformer size — the
-   *  base panel of each large size is 900 deep while its other variants are 700. */
+  /** PLP depth in cm: 70 up to 800 kVA, 90 for 1000–2000, 110 at 2500.
+   *
+   *  Taken from the family label at the head of each sheet block (PLP_70 / PLP_90 /
+   *  PLP_110), NOT from the box row names. On the larger sheets the label reads
+   *  PLP_90 or PLP_110 while some rows still read "...x700" — those were left behind
+   *  when the family changed, and following them fits the wrong, cheaper enclosure. */
   depth: number;
   copper: CopperTool;        // rating → { p, n, e } lengths in mm
   main: StdPart[];           // Main Incoming
@@ -169,10 +173,10 @@ const VARIANTS: Record<string, { cells: Record<string, number>; depth?: number; 
   "2000|Yes|SWF":  { cells: { 600: 2, 800: 1, 1000: 2 }, depth: 90,copper: { 1000: { p: 0, n: 0, e: 4000 }, 2500: { p: 0, n: 3400, e: 0 }, 4000: { p: 4800, n: 0, e: 0 } } },
   "2000|Yes|C.B":  { cells: { 600: 2, 1000: 3 }, depth: 90,        copper: { 1000: { p: 0, n: 0, e: 4200 }, 2500: { p: 0, n: 4200, e: 0 }, 4000: { p: 4200, n: 0, e: 0 } } },
   // ── 2500 kVA ──
-  "2500|No|None":  { cells: { 1000: 1 }, depth: 90,       copper: { 1250: { p: 0, n: 0, e: 1000 }, 3200: { p: 0, n: 1000, e: 0 } } },
-  "2500|Yes|None": { cells: { 600: 1, 1000: 1 }, depth: 90,        copper: { 1250: { p: 0, n: 0, e: 1600 }, 3200: { p: 0, n: 1000, e: 0 }, 5000: { p: 1600, n: 0, e: 0 } } },
-  "2500|Yes|SWF":  { cells: { 600: 1, 800: 1, 1000: 3 }, depth: 90,copper: { 1250: { p: 0, n: 0, e: 4400 }, 3200: { p: 0, n: 3800, e: 0 }, 5000: { p: 5200, n: 0, e: 0 } } },
-  "2500|Yes|C.B":  { cells: { 600: 1, 1000: 4 }, depth: 90,        copper: { 1250: { p: 0, n: 0, e: 4600 }, 3200: { p: 0, n: 4600, e: 0 }, 5000: { p: 4600, n: 0, e: 0 } } },
+  "2500|No|None":  { cells: { 1000: 1 }, depth: 110,       copper: { 1250: { p: 0, n: 0, e: 1000 }, 3200: { p: 0, n: 1000, e: 0 } } },
+  "2500|Yes|None": { cells: { 600: 1, 1000: 1 }, depth: 110,        copper: { 1250: { p: 0, n: 0, e: 1600 }, 3200: { p: 0, n: 1000, e: 0 }, 5000: { p: 1600, n: 0, e: 0 } } },
+  "2500|Yes|SWF":  { cells: { 600: 1, 800: 1, 1000: 3 }, depth: 110,copper: { 1250: { p: 0, n: 0, e: 4400 }, 3200: { p: 0, n: 3800, e: 0 }, 5000: { p: 5200, n: 0, e: 0 } } },
+  "2500|Yes|C.B":  { cells: { 600: 1, 1000: 4 }, depth: 110,        copper: { 1250: { p: 0, n: 0, e: 4600 }, 3200: { p: 0, n: 4600, e: 0 }, 5000: { p: 4600, n: 0, e: 0 } } },
 };
 
 /** The transformer sizes a standard panel exists for. */
