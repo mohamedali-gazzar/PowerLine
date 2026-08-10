@@ -4263,12 +4263,16 @@ function StandardPanelsView({ p, u }: {
       </div>
 
       {!std ? (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-          No standard panel for <b>{kva} kVA · P.F.C {pfc} · Outgoings {out}</b>.
-          {STD_EDMS_KVA.includes(kva)
-            ? <> Outgoings are only standardised together with P.F.C — set P.F.C to <b>Yes</b>, or Outgoings to <b>None</b>.</>
-            : <> Standards exist for {STD_EDMS_KVA.join(", ")} kVA so far.</>}
-        </p>
+        // Same compact strip as the build bar below, so the row keeps its height
+        // whether the selection lands on a standard or on a gap.
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1">
+          <p className="text-xs font-semibold text-amber-800">
+            No standard for <b>{kva} kVA · P.F.C {pfc} · {out}</b>
+            {STD_EDMS_KVA.includes(kva)
+              ? <> — outgoings need P.F.C set to <b>Yes</b>, or Outgoings <b>None</b>.</>
+              : <> — standards exist for {STD_EDMS_KVA.join(", ")} kVA.</>}
+          </p>
+        </div>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-brand/40 bg-brand-tint/40 px-2.5 py-1">
           <p className="text-xs font-bold text-ink">{std.name}</p>
