@@ -821,6 +821,9 @@ export function duplicatePanel(p: LvPanel, name: string): LvPanel {
 // run the full panel height, one bar per pole. Copper density ≈ 9e-6 kg/mm³.
 //   KG = Area(mm²) × PanelHeight(mm) × Poles × 0.000009   (× 2 for a Double panel)
 const BUSBAR_AUTO_FAMILIES = new Set(["SR-Basic", "Unikit", "Local (Sheet Metal)", "Pillars"]);
+/** Families built without a main busbar. A weight of 0 is CORRECT for these, so the
+ *  pre-export check must not report it as something the engineer forgot to enter. */
+export const NO_BUSBAR_FAMILIES = new Set(["Minicenter", "Primo"]);
 // Pillar-type enclosures ("7 Lines" …) carry no H×W×D in the name, so the busbar
 // rule uses this fixed pillar height instead of parsing one out of the name.
 const PILLAR_HEIGHT_MM = 1000;
@@ -1165,7 +1168,12 @@ export function exportBlockers(s: LvState): ExportCheck[] {
         .filter(([, k]) => !anyLen(k)).map(([lbl]) => lbl);
       if (unfilled.length) reasons.push(`${unfilled.join(" / ")} length not entered`);
     }
-    if ((mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) <= 0) reasons.push("busbar weight is 0");
+    // Minicenter and Primo have no main busbar, so 0 kg is the right answer for
+    // them — flagging it sent engineers looking for a number that does not exist.
+    const family = p.sizingMode === "panels" ? p.panelsSizing?.family ?? "" : "";
+    if (!NO_BUSBAR_FAMILIES.has(family) && (mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) <= 0) {
+      reasons.push("busbar weight is 0");
+    }
     if (reasons.length) missingCopper.push(`${tag}: ${reasons.join("; ")}`);
   });
   const out: ExportCheck[] = [];
