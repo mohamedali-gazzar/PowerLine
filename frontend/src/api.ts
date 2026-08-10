@@ -257,6 +257,8 @@ export interface LvRow {
   fam?: string;
   name?: string;
   ip?: string;
+  mount?: string;
+  ral?: string;
 }
 /** One spreadsheet line, already parsed out of the workbook. */
 export interface LvImportRow {

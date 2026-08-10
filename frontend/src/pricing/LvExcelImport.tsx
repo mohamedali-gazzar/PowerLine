@@ -147,15 +147,22 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
     setDl("Preparing…");
     try {
       const take = 200;
-      const rows: LvRow[] = [];
-      for (let page = 0; ; page++) {
-        const r = await api.pricing.lvList({ kind: "components", take, page });
-        rows.push(...r.rows);
-        setDl(`Preparing… ${rows.length.toLocaleString()} / ${r.total.toLocaleString()}`);
-        if (rows.length >= r.total || r.rows.length === 0) break;
-      }
+      const fetchAll = async (kind: "components" | "enclosures") => {
+        const out: LvRow[] = [];
+        for (let page = 0; ; page++) {
+          const r = await api.pricing.lvList({ kind, take, page });
+          out.push(...r.rows);
+          setDl(`Preparing… ${kind} ${out.length.toLocaleString()} / ${r.total.toLocaleString()}`);
+          if (out.length >= r.total || r.rows.length === 0) break;
+        }
+        return out;
+      };
+      const comps = await fetchAll("components");
+      const encs = await fetchAll("enclosures");
       const header = EMPTY_TEMPLATE_COLUMNS as unknown as string[];
-      const body = rows.map((r) => [
+      // Components carry Type/prices/weights/Brand; enclosures & cells carry their
+      // family (→ Type), IP/Mounting/RAL and price. Both flow into one master sheet.
+      const compBody = comps.map((r) => [
         r.t ?? "",                                            // Type
         r.d ?? "",                                            // Description
         r.ref ?? "",                                          // Item Code
@@ -167,6 +174,22 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
         r.brand ?? "",                                        // Brand
         r.brand === "ABB" && (r.eur ?? 0) > 0 ? "Yes" : "No", // ABB Discount (system rule)
       ]);
+      const encBody = encs.map((r) => [
+        r.fam ?? "",   // Type ← enclosure family
+        r.name ?? "",  // Description
+        r.ref ?? "",   // Item Code
+        r.eur ?? 0,    // ABB Price list in EURO
+        r.egp ?? 0,    // Market Price in EGP
+        r.ip ?? "",    // IP
+        r.mount ?? "", // Mounting
+        r.ral ?? "",   // RAL
+        "",            // Cross Section
+        "",            // Weight/Panel/Pole
+        "",            // Weight/Cell/Pole
+        "",            // Brand (enclosures store none)
+        "No",          // ABB Discount (an enclosure is never ABB-discounted)
+      ]);
+      const body = [...compBody, ...encBody];
       const ws = XLSX.utils.aoa_to_sheet([header, ...body]);
       // Size each column to its widest cell (header or data), within reason.
       ws["!cols"] = header.map((c, i) => ({
@@ -175,7 +198,7 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Price list");
       XLSX.writeFile(wb, "PowerLine LV price list (current).xlsx");
-      setDone(`Downloaded ${rows.length.toLocaleString()} items.`);
+      setDone(`Downloaded ${body.length.toLocaleString()} items (${comps.length.toLocaleString()} components + ${encs.length.toLocaleString()} enclosures & cells).`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not build the current price list.");
     } finally {
