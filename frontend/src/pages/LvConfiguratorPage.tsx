@@ -2036,8 +2036,9 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
   const editSeparator = (id: string, text: string) => up({ offerSeparators: separators.map((x) => (x.id === id ? { ...x, text } : x)) });
   const removeSeparator = (id: string) => up({ offerSeparators: separators.filter((x) => x.id !== id) });
   // Eye toggle to hide the Brand column from the technical offer (and its PDF, since the
-  // PDF is captured from this DOM).
-  const [hideBrand, setHideBrand] = useState(false);
+  // PDF is captured from this DOM). Hidden by default — a customer-facing offer does
+  // not normally name the supplier, so showing it is the deliberate act.
+  const [hideBrand, setHideBrand] = useState(true);
   if (!s.panels.length) {
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Technical Offer is generated from them.</div>;
   }
