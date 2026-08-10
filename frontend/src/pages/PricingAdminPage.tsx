@@ -28,7 +28,7 @@ export default function PricingAdminPage() {
   const [toast, setToast] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [progress, setProgress] = useState("");
-  const [section, setSection] = useState<"RMU" | "LV">("RMU");
+  const [section, setSection] = useState<"RMU" | "LV">("LV");
   const autoImported = useRef(false); // guard: import the LV catalogue once per visit
 
   const loadAll = async () => {
@@ -310,7 +310,7 @@ export default function PricingAdminPage() {
         <>
           {/* Which price list are you editing? */}
           <div className="mb-4 flex gap-2 border-b border-line">
-            {(["RMU", "LV"] as const).map((s) => (
+            {(["LV", "RMU"] as const).map((s) => (
               <button
                 key={s}
                 onClick={() => setSection(s)}

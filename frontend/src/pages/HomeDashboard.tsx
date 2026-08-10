@@ -66,36 +66,22 @@ export default function HomeDashboard() {
 
       {can("qtn.approve") && <ApprovalInbox />}
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        {/* Performance chart */}
-        <div className="card p-5 lg:col-span-2">
-          <div className="mb-1 flex items-end justify-between">
-            <div>
-              <h2 className="sec-head">Weekly submissions</h2>
-              <p className="text-xs text-muted">QTNs submitted across the team (last 8 weeks)</p>
-            </div>
-            <div className="text-right text-xs">
-              <div><b className="text-base text-ink">{totalSubs}</b> team</div>
-              <div className="text-brand-dark"><b className="text-base">{mySubs}</b> you</div>
-            </div>
+      {/* Performance chart (RMU/LV history + Price list now live in the sidebar) */}
+      <div className="card p-5">
+        <div className="mb-1 flex items-end justify-between">
+          <div>
+            <h2 className="sec-head">Weekly submissions</h2>
+            <p className="text-xs text-muted">QTNs submitted across the team (last 8 weeks)</p>
           </div>
-          {weeks ? <WeeklyChart weeks={weeks} /> : <div className="skeleton h-40" />}
-          <div className="mt-2 flex items-center gap-4 text-[11px] text-muted">
-            <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-brand" /> You</span>
-            <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-brand-light" /> Others</span>
+          <div className="text-right text-xs">
+            <div><b className="text-base text-ink">{totalSubs}</b> team</div>
+            <div className="text-brand-dark"><b className="text-base">{mySubs}</b> you</div>
           </div>
         </div>
-
-        {/* Section shortcuts */}
-        <div className="grid gap-3 content-start">
-          <ShortcutCard icon="⚡" title="RMU Offers History" desc="Ring Main Unit technical & commercial offers" onClick={() => navigate("/rmu")} />
-          {/* /lv lists everyone's quotations, and that endpoint 403s without the
-              permission — so the way in is only offered to those who have it. */}
-          {can("qtn.viewAll") && (
-            <ShortcutCard icon="📊" title="LV Offers History" desc="All submitted and in-progress quotations, from everyone" onClick={() => navigate("/lv")} />
-          )}
-          <ShortcutCard icon="🏗️" title="P-CSS Selector" desc="Size a packaged substation, step by step" onClick={() => navigate("/kiosks")} />
-          <ShortcutCard icon="💲" title="Price list" desc="Change prices online — live, no waiting" onClick={() => navigate("/pricing")} />
+        {weeks ? <WeeklyChart weeks={weeks} /> : <div className="skeleton h-40" />}
+        <div className="mt-2 flex items-center gap-4 text-[11px] text-muted">
+          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-brand" /> You</span>
+          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-brand-light" /> Others</span>
         </div>
       </div>
 
@@ -284,18 +270,6 @@ function ApprovalInbox() {
         </table>
       )}
     </div>
-  );
-}
-
-function ShortcutCard({ icon, title, desc, onClick }: { icon: string; title: string; desc: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="card flex items-start gap-3 p-4 text-left transition hover:border-brand/40 hover:shadow-soft">
-      <span className="text-2xl">{icon}</span>
-      <span>
-        <span className="block text-sm font-bold text-ink">{title}</span>
-        <span className="block text-xs text-muted">{desc}</span>
-      </span>
-    </button>
   );
 }
 
