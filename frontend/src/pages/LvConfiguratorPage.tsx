@@ -2106,7 +2106,11 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
           <PageHeader s={s} qtnRef={qtnRef} />
           <div data-pdf-notes>
           {([["General Notes :-", "notesGeneral"], ["Additional Notes :-", "notesAdditional"]] as [string, NotesKey][]).map(([title, key]) => (
-            <div key={key} className="mt-5">
+            // An empty group keeps its heading on screen — that is how you add the
+            // first note — but is marked no-print so the export doesn't carry a
+            // bare "Additional Notes :-" with nothing under it. The PDF builder
+            // strips .no-print from its clone, so this covers the PDF and printing.
+            <div key={key} className={`mt-5 ${notesOf(key).length === 0 ? "no-print" : ""}`}>
               <h3 className="mb-2 text-lg font-bold italic underline" style={{ color: TRED }}>{title}</h3>
               <ol className="space-y-1">
                 {notesOf(key).map((n, i) => (
