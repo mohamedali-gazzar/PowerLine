@@ -4,7 +4,7 @@
 // server never deals with file uploads. Nothing is written until the summary
 // has been read and confirmed.
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { api, type LvImportPreview, type LvImportRow, type LvRow } from "../api";
@@ -119,7 +119,7 @@ export function downloadTemplate() {
 const pct = (v: number | null | undefined) => (typeof v === "number" ? `${v >= 0 ? "+" : ""}${v.toFixed(1)}%` : "—");
 const money = (eur: number, egp: number) => (eur > 0 ? `€${eur.toFixed(2)}` : egp > 0 ? `${egp.toLocaleString()} EGP` : "—");
 
-export default function LvExcelImport({ onApplied }: { onApplied: () => void }) {
+export default function LvExcelImport({ onApplied, extra }: { onApplied: () => void; extra?: ReactNode }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState("");
   const [dl, setDl] = useState(""); // "Download current" progress text
@@ -290,6 +290,7 @@ export default function LvExcelImport({ onApplied }: { onApplied: () => void }) 
           className="hidden"
           onChange={onFile}
         />
+        {extra}
       </div>
 
       {error && !preview && (

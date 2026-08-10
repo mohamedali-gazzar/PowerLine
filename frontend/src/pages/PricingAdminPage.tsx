@@ -309,26 +309,25 @@ export default function PricingAdminPage() {
       {status.seedState === "READY" && (
         <>
           {/* Which price list are you editing? */}
-          <div className="mb-4 flex gap-2 border-b border-line">
-            {(["LV", "RMU"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setSection(s)}
-                className={`-mb-px border-b-2 px-4 py-2 text-sm font-bold transition ${
-                  section === s
-                    ? "border-brand text-brand-dark"
-                    : "border-transparent text-muted hover:text-brand-dark"
-                }`}
-              >
-                {s === "RMU" ? "⚡ RMU / MV prices" : "🔌 LV prices"}
-                <span className="ml-2 text-[11px] font-semibold text-muted">
-                  {s === "RMU" ? status.counts.rmuPrices : status.counts.lvComponents + status.counts.lvEnclosures}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="mb-3 flex flex-wrap gap-2">
+          <div className="mb-4 flex items-center justify-between gap-2 border-b border-line">
+            <div className="flex gap-2">
+              {(["LV", "RMU"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSection(s)}
+                  className={`-mb-px border-b-2 px-4 py-2 text-sm font-bold transition ${
+                    section === s
+                      ? "border-brand text-brand-dark"
+                      : "border-transparent text-muted hover:text-brand-dark"
+                  }`}
+                >
+                  {s === "RMU" ? "⚡ RMU / MV prices" : "🔌 LV prices"}
+                  <span className="ml-2 text-[11px] font-semibold text-muted">
+                    {s === "RMU" ? status.counts.rmuPrices : status.counts.lvComponents + status.counts.lvEnclosures}
+                  </span>
+                </button>
+              ))}
+            </div>
             <History onChanged={loadAll} />
           </div>
 
@@ -421,13 +420,14 @@ function AddLvComponent({
   types,
   brands,
   onAdded,
+  onClose,
 }: {
   types: string[];
   brands: string[];
   onAdded: () => void;
+  onClose: () => void;
 }) {
   const empty = { t: "", f: "", r: "", d: "", ref: "", brand: "", poles: "3", cuP: "", cuC: "", eur: "", egp: "" };
-  const [open, setOpen] = useState(false);
   const [v, setV] = useState<Record<string, string>>(empty);
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
@@ -451,22 +451,15 @@ function AddLvComponent({
         egp: Number(v.egp) || 0,
       });
       setV(empty);
-      setOpen(false);
       void refreshCatalog(getToken()); // adding an item publishes too
       onAdded();
+      onClose();
     } catch (e) {
       setErr((e as Error).message);
     } finally {
       setSaving(false);
     }
   };
-
-  if (!open)
-    return (
-      <button className="btn-ghost mb-3" onClick={() => setOpen(true)}>
-        + Add a component
-      </button>
-    );
 
   const F = ({ k, label, ph, list }: { k: string; label: string; ph?: string; list?: string[] }) => (
     <div>
@@ -529,7 +522,7 @@ function AddLvComponent({
         <button className="btn-primary" onClick={submit} disabled={saving}>
           {saving ? "Adding…" : "Add component"}
         </button>
-        <button className="btn-ghost" onClick={() => { setOpen(false); setErr(""); }}>Cancel</button>
+        <button className="btn-ghost" onClick={onClose}>Cancel</button>
       </div>
     </div>
   );
@@ -551,6 +544,7 @@ function LvPrices() {
   const [facets, setFacets] = useState<{ types: string[]; brands: string[]; families: string[] } | null>(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
+  const [addOpen, setAddOpen] = useState(false); // "+ Add a component" form (now opened from the button row)
   const take = 50;
 
   useEffect(() => {
@@ -627,13 +621,6 @@ function LvPrices() {
       {/* Bulk update from a spreadsheet — for a whole new supplier price list,
           where editing rows one at a time is not realistic. */}
       <div className="card mb-3 p-3">
-        <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-brand-dark">Update many items at once</h3>
-        <p className="mb-2 text-xs text-muted">
-          This is the catalogue the configurator quotes from. Upload a supplier price list and you see exactly
-          what would change before anything is saved. Items are matched on Item Code, then their price,
-          description, brand, type, family, rating, poles, copper weights and stock are all brought up to date.
-          A blank cell changes nothing, so your own edits are never overwritten silently.
-        </p>
         <LvExcelImport
           onApplied={() => {
             setPage(0);
@@ -646,16 +633,22 @@ function LvPrices() {
             // version behind — reload it or the configurator keeps the old text.
             void refreshCatalog(getToken());
           }}
+          extra={
+            kind === "components" ? (
+              <button className="btn-ghost" onClick={() => setAddOpen(true)}>+ Add a component</button>
+            ) : null
+          }
         />
       </div>
 
       {/* Add a component (components only — enclosures and cells are matched by
           name against generated cell tables, so a hand-added one would never be
           found by the calculator). */}
-      {kind === "components" && (
+      {kind === "components" && addOpen && (
         <AddLvComponent
           types={facets?.types ?? []}
           brands={facets?.brands ?? []}
+          onClose={() => setAddOpen(false)}
           onAdded={() => {
             setPage(0);
             setQ("");
