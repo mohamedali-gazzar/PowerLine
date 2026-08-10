@@ -574,20 +574,6 @@ function LvPrices() {
 
   useEffect(() => setPage(0), [kind, q, type, brand, fam, noPrice]);
 
-  const save = async (row: LvRow, eur: number, egp: number) => {
-    setBusy(row.id);
-    setErr("");
-    try {
-      const r = await api.pricing.lvSetPrice(row.id, kind, eur, egp);
-      setRows((rs) => (rs ? rs.map((x) => (x.id === row.id ? r.row : x)) : rs));
-      void refreshCatalog(getToken()); // the server published this edit — keep this session in step
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy("");
-    }
-  };
-
   const toggleRetire = async (row: LvRow) => {
     const removing = row.active !== false;
     if (
@@ -800,28 +786,9 @@ function LvPrices() {
                     </>
                   ) : (
                     <>
-                      <td className="px-4 py-2 text-right">
-                        <input
-                          type="number" min={0} step="0.01" defaultValue={r.eur} disabled={busy === r.id}
-                          className="input w-24 text-right"
-                          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                          onBlur={(e) => {
-                            const v = Number(e.target.value);
-                            if (v !== r.eur) save(r, v, v > 0 ? 0 : r.egp);
-                          }}
-                        />
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        <input
-                          type="number" min={0} step="0.01" defaultValue={r.egp} disabled={busy === r.id}
-                          className="input w-24 text-right"
-                          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                          onBlur={(e) => {
-                            const v = Number(e.target.value);
-                            if (v !== r.egp) save(r, v > 0 ? 0 : r.eur, v);
-                          }}
-                        />
-                      </td>
+                      {/* Enclosure prices are read-only too — set via the Excel upload. */}
+                      <td className="px-4 py-2 text-right font-medium text-ink">{r.eur ? r.eur.toFixed(2) : "—"}</td>
+                      <td className="px-4 py-2 text-right font-medium text-ink">{r.egp ? r.egp.toLocaleString() : "—"}</td>
                     </>
                   )}
                   {/* Remove / Restore stays in the UI (prices are still Excel-only). */}
@@ -846,7 +813,7 @@ function LvPrices() {
       <p className="mt-2 text-[11px] text-muted">
         {kind === "components"
           ? "Prices, poles and copper weights are read-only here — set them through the Excel upload above (matched on Item Code), then re-upload. Use Remove to stop offering an item."
-          : "Each item is priced in ONE currency — filling EUR clears EGP and vice versa, exactly as the calculator expects."}
+          : "Prices are read-only here — set them through the Excel upload above (matched on Item Code), then re-upload. Use Remove to stop offering an item."}
       </p>
     </div>
   );
