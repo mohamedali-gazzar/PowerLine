@@ -4372,7 +4372,7 @@ function StandardPanelsView({ p, u }: {
           </p>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-brand/40 bg-brand-tint/40 px-2.5 py-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-brand/40 bg-white px-2.5 py-1">
           <p className="text-xs font-bold text-ink">{std.name}</p>
           <button type="button" onClick={apply}
             className="shrink-0 rounded-md bg-brand px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-brand-dark">
