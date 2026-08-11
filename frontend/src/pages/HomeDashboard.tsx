@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
-  type HistoryItem, type QtnStatus, type QtnListItemDto, type MyAccess,
+  type HistoryItem, type QtnStatus, type QtnListItemDto, type MyAccess, type StalePricedQtns,
 } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import NewQtnPicker from "../components/NewQtnPicker";
+import RedPriceAlert from "../components/RedPriceAlert";
 import EstimatorEvaluation from "./EstimatorEvaluation";
 
 /** Post-login home: profile, weekly performance, QTN history, and quick actions
@@ -18,6 +19,7 @@ export default function HomeDashboard() {
   const [status, setStatus] = useState<QtnStatus | "ALL">("ALL");
   const [query, setQuery] = useState("");
   const [chooser, setChooser] = useState(false);
+  const [stale, setStale] = useState<StalePricedQtns | null>(null);
 
   useEffect(() => {
     // account.history() merges LV + RMU, but its LV rows only carry the old
@@ -29,6 +31,8 @@ export default function HomeDashboard() {
     ]).then(([lv, merged]) => setRows(myQtnRows(lv, merged)));
     // A failed probe must not hand out permissions — fall back to holding none.
     api.access.me().then(setAccess).catch(() => setAccess({ tier: "ENGINEER", perms: [], role: "USER" }));
+    // Open QTNs that froze their prices on a superseded price list (silent on failure).
+    api.account.stalePrices().then(setStale).catch(() => {});
   }, []);
 
   const can = (perm: string) => Boolean(access?.perms.includes(perm));
@@ -40,8 +44,25 @@ export default function HomeDashboard() {
       (!needle || `${r.number} ${r.projectName} ${r.customer}`.toLowerCase().includes(needle))
   );
 
+  const staleCount = stale?.items.length ?? 0;
+
   return (
     <div className="animate-fade-up">
+      {/* Stale-price warning: open QTNs priced on an older list, review before submitting */}
+      {staleCount > 0 && (
+        <div className="mb-4">
+          <RedPriceAlert
+            message={
+              staleCount === 1
+                ? "1 open quotation was priced on an older price list — review it before submitting."
+                : `${staleCount} open quotations were priced on an older price list — review them before submitting.`
+            }
+            actionLabel="Review QTNs"
+            onAction={() => navigate("/lv")}
+          />
+        </div>
+      )}
+
       {/* Greeting + quick actions */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">

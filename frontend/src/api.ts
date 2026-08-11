@@ -397,6 +397,13 @@ export interface EvalStats {
   rework: { weeks: number[]; youRate: number; teamMedian: number; percentileLabel: string };
   clean: { weeks: number[]; youAvg: number; teamMedian: number; deltaPts: number };
 }
+/** Open (unsubmitted) QTNs that froze their prices on a price list older than the
+ *  latest published one — the estimator should review them before submitting. */
+export interface StalePricedQtns {
+  publishedAt: string | null;
+  version: number;
+  items: { id: string; number: string; projectName: string; customer: string; updatedAt: string; link: string }[];
+}
 
 export const api = {
   // ── RMU offers ─────────────────────────────────────────────────────────────
@@ -619,6 +626,7 @@ export const api = {
     weekly: () => request<{ weeks: WeekStat[] }>("/stats/weekly"),
     evaluation: (period?: "month" | "quarter") =>
       request<EvalStats>(`/stats/evaluation${period ? `?period=${period}` : ""}`),
+    stalePrices: () => request<StalePricedQtns>("/stats/stale-prices"),
   },
 
   // ── In-app notifications ────────────────────────────────────────────────────

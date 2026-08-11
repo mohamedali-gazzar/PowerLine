@@ -114,6 +114,46 @@ export async function weeklyStats(req: Request, res: Response) {
   }
 }
 
+// GET /api/stats/stale-prices → the current user's OPEN (unsubmitted) LV quotations
+// last edited BEFORE the current price list was published. These froze their prices
+// on an older list, so the estimator should review them before submitting. Empty
+// while prices were never published from the DB (version 0) — there is nothing to be
+// stale against, only the bundled catalogue. Submitted quotations are never flagged:
+// they are intentionally frozen and already sent.
+export async function stalePricedQtns(req: Request, res: Response) {
+  try {
+    const ownerId = req.userId as string;
+    const book = await prisma.priceBook.findUnique({
+      where: { id: "singleton" },
+      select: { version: true, publishedAt: true },
+    });
+    if (!book || book.version < 1) {
+      res.json({ items: [], publishedAt: null, version: 0 });
+      return;
+    }
+    const stale = await prisma.lvQtn.findMany({
+      where: { ownerId, submitted: false, updatedAt: { lt: book.publishedAt } },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, number: true, projectName: true, customer: true, updatedAt: true },
+      take: 50,
+    });
+    res.json({
+      publishedAt: book.publishedAt,
+      version: book.version,
+      items: stale.map((q) => ({
+        id: q.id,
+        number: q.number,
+        projectName: q.projectName,
+        customer: q.customer,
+        updatedAt: q.updatedAt,
+        link: `/lv/qtn/${q.id}`,
+      })),
+    });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
 // GET /api/stats/evaluation?period=month|quarter → the estimator performance panel:
 // four "you vs team median" metrics over 4 buckets (weekly for month, ~3-weekly for
 // quarter): QTN submissions, panels quoted, rework returns (lower is better) and the

@@ -9,6 +9,7 @@ import {
   history,
   weeklyStats,
   estimatorEval,
+  stalePricedQtns,
 } from "./controllers/account.controller";
 import {
   getVersion,
@@ -124,6 +125,7 @@ export function createApp() {
   app.get("/api/account/history", requireAuth, history);
   app.get("/api/stats/weekly", requireAuth, weeklyStats);
   app.get("/api/stats/evaluation", requireAuth, estimatorEval);
+  app.get("/api/stats/stale-prices", requireAuth, stalePricedQtns);
 
   // ── Price list ─────────────────────────────────────────────────────────────
   // Prices come from the published snapshot in the database (see pricing-data.ts).
