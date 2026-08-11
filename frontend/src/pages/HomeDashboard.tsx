@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
-  type HistoryItem, type WeekStat, type QtnStatus, type QtnListItemDto, type MyAccess,
+  type HistoryItem, type QtnStatus, type QtnListItemDto, type MyAccess,
 } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import NewQtnPicker from "../components/NewQtnPicker";
+import EstimatorEvaluation from "./EstimatorEvaluation";
 
 /** Post-login home: profile, weekly performance, QTN history, and quick actions
  *  (New QTN → RMU/LV, plus the Kiosk tool). */
@@ -13,7 +14,6 @@ export default function HomeDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [rows, setRows] = useState<MyQtnRow[] | null>(null);
-  const [weeks, setWeeks] = useState<WeekStat[] | null>(null);
   const [access, setAccess] = useState<MyAccess | null>(null);
   const [status, setStatus] = useState<QtnStatus | "ALL">("ALL");
   const [query, setQuery] = useState("");
@@ -27,14 +27,11 @@ export default function HomeDashboard() {
       api.qtns.list().catch(() => [] as QtnListItemDto[]),
       api.account.history().then((r) => r.items).catch(() => [] as HistoryItem[]),
     ]).then(([lv, merged]) => setRows(myQtnRows(lv, merged)));
-    api.account.weekly().then((r) => setWeeks(r.weeks)).catch(() => setWeeks([]));
     // A failed probe must not hand out permissions — fall back to holding none.
     api.access.me().then(setAccess).catch(() => setAccess({ tier: "ENGINEER", perms: [], role: "USER" }));
   }, []);
 
   const can = (perm: string) => Boolean(access?.perms.includes(perm));
-  const totalSubs = weeks?.reduce((a, w) => a + w.total, 0) ?? 0;
-  const mySubs = weeks?.reduce((a, w) => a + w.mine, 0) ?? 0;
 
   const needle = query.trim().toLowerCase();
   const visible = (rows ?? []).filter(
@@ -66,23 +63,10 @@ export default function HomeDashboard() {
 
       {can("qtn.approve") && <ApprovalInbox />}
 
-      {/* Performance chart (RMU/LV history + Price list now live in the sidebar) */}
-      <div className="card p-5">
-        <div className="mb-1 flex items-end justify-between">
-          <div>
-            <h2 className="sec-head">Weekly submissions</h2>
-            <p className="text-xs text-muted">QTNs submitted across the team (last 8 weeks)</p>
-          </div>
-          <div className="text-right text-xs">
-            <div><b className="text-base text-ink">{totalSubs}</b> team</div>
-            <div className="text-brand-dark"><b className="text-base">{mySubs}</b> you</div>
-          </div>
-        </div>
-        {weeks ? <WeeklyChart weeks={weeks} /> : <div className="skeleton h-40" />}
-        <div className="mt-2 flex items-center gap-4 text-[11px] text-muted">
-          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-brand" /> You</span>
-          <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-brand-light" /> Others</span>
-        </div>
+      {/* Estimator performance — you vs team median */}
+      <div>
+        <h2 className="sec-head mb-3">Your performance</h2>
+        <EstimatorEvaluation />
       </div>
 
       {/* QTN history */}
@@ -270,39 +254,6 @@ function ApprovalInbox() {
         </table>
       )}
     </div>
-  );
-}
-
-// ── Weekly bar chart (lightweight inline SVG — no chart dependency) ────────────
-function WeeklyChart({ weeks }: { weeks: WeekStat[] }) {
-  const W = 560, H = 150, padX = 10, padTop = 16;
-  const max = Math.max(1, ...weeks.map((w) => w.total));
-  const slot = (W - padX * 2) / Math.max(1, weeks.length);
-  const barW = Math.min(36, slot * 0.6);
-  const baseY = H;
-  const scale = (v: number) => ((H - padTop) * v) / max;
-  return (
-    <svg viewBox={`0 0 ${W} ${H + 22}`} className="w-full" role="img" aria-label="Weekly submissions">
-      {[0, 0.5, 1].map((f) => {
-        const y = padTop + (H - padTop) * (1 - f);
-        return <line key={f} x1={padX} y1={y} x2={W - padX} y2={y} stroke="#eef0f2" strokeWidth={1} />;
-      })}
-      {weeks.map((w, i) => {
-        const cx = padX + slot * i + slot / 2;
-        const x = cx - barW / 2;
-        const totalH = scale(w.total);
-        const mineH = scale(w.mine);
-        const others = totalH - mineH;
-        return (
-          <g key={i}>
-            {others > 0 && <rect x={x} y={baseY - totalH} width={barW} height={others} rx={3} className="text-brand-light" fill="currentColor" />}
-            {mineH > 0 && <rect x={x} y={baseY - mineH} width={barW} height={mineH} rx={3} className="text-brand" fill="currentColor" />}
-            {w.total > 0 && <text x={cx} y={baseY - totalH - 4} textAnchor="middle" fontSize={10} fontWeight={700} fill="#475569">{w.total}</text>}
-            <text x={cx} y={baseY + 16} textAnchor="middle" fontSize={10} fill="#94a3b8">{w.label}</text>
-          </g>
-        );
-      })}
-    </svg>
   );
 }
 

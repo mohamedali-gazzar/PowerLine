@@ -389,6 +389,14 @@ export interface WeekStat {
   total: number;
   mine: number;
 }
+/** Estimator performance panel — four "you vs team median" metrics, 4 buckets each. */
+export interface EvalStats {
+  period: "month" | "quarter";
+  submissions: { weeks: number[]; youTotal: number; teamMedian: number; percentileLabel: string };
+  panels: { weeks: number[]; youTotal: number; teamMedian: number; percentileLabel: string };
+  rework: { weeks: number[]; youRate: number; teamMedian: number; percentileLabel: string };
+  clean: { weeks: number[]; youAvg: number; teamMedian: number; deltaPts: number };
+}
 
 export const api = {
   // ── RMU offers ─────────────────────────────────────────────────────────────
@@ -609,6 +617,8 @@ export const api = {
       request<{ user: AuthUser }>("/profile", { method: "PUT", body: JSON.stringify(data) }),
     history: () => request<{ items: HistoryItem[] }>("/account/history"),
     weekly: () => request<{ weeks: WeekStat[] }>("/stats/weekly"),
+    evaluation: (period?: "month" | "quarter") =>
+      request<EvalStats>(`/stats/evaluation${period ? `?period=${period}` : ""}`),
   },
 
   // ── In-app notifications ────────────────────────────────────────────────────

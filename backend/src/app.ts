@@ -8,6 +8,7 @@ import {
   updateProfile,
   history,
   weeklyStats,
+  estimatorEval,
 } from "./controllers/account.controller";
 import {
   getVersion,
@@ -122,6 +123,7 @@ export function createApp() {
   app.put("/api/profile", requireAuth, updateProfile);
   app.get("/api/account/history", requireAuth, history);
   app.get("/api/stats/weekly", requireAuth, weeklyStats);
+  app.get("/api/stats/evaluation", requireAuth, estimatorEval);
 
   // ── Price list ─────────────────────────────────────────────────────────────
   // Prices come from the published snapshot in the database (see pricing-data.ts).
