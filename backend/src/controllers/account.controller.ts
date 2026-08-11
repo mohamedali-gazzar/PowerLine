@@ -115,14 +115,14 @@ export async function weeklyStats(req: Request, res: Response) {
 }
 
 // GET /api/stats/stale-prices → the current user's OPEN (unsubmitted) LV quotations
-// that are actually TOUCHED BY THE LATEST PRICE UPDATE — i.e. they contain a
-// component whose price moved in the newest published version (read from the
-// PriceChange audit trail) and whose frozen line price is still the old one. A QTN
-// that holds none of the just-changed items is never flagged, even if other prices
-// in it drifted in older versions. changedCount = how many of its lines the update
-// moves. `applied` lists open QTNs explicitly re-priced to the current version
-// (their positive "prices updated" mark). Empty while prices were never published
-// from the DB (version 0). Submitted quotations are never scanned — they are frozen.
+// that need bringing in line with the catalogue: they contain a component whose PRICE
+// moved in the latest price update (read from the PriceChange audit trail) and whose
+// frozen line is still the old one, OR a component that was RETIRED from the list and
+// can no longer be quoted. A QTN holding none of these is never flagged, even if other
+// prices in it drifted in older versions. changedCount = how many of its lines need
+// updating. `applied` lists open QTNs explicitly re-priced to the current version
+// (their "prices updated" mark). Empty while prices were never published from the DB
+// (version 0). Submitted quotations are never scanned — they are frozen.
 type StatePeek = {
   panels?: Array<{ components?: Array<{ ref?: string; eur?: number; egp?: number; spacer?: boolean }> }>;
   pricesAppliedVersion?: number;
@@ -167,6 +167,12 @@ export async function stalePricedQtns(req: Request, res: Response) {
       });
       for (const c of changed) if (c.ref) changedPriceByRef.set(c.ref, { eur: c.eur, egp: c.egp });
     }
+    // Components retired from the price list (active === false). A quotation still
+    // holding one can't be quoted as-is, so it needs updating whenever that happens —
+    // independent of a price move.
+    const retired = await prisma.lvComponent.findMany({ where: { active: false }, select: { ref: true } });
+    const retiredRefs = new Set<string>();
+    for (const c of retired) if (c.ref) retiredRefs.add(c.ref);
 
     const rows = await prisma.lvQtn.findMany({
       where: { ownerId, submitted: false },
@@ -187,9 +193,9 @@ export async function stalePricedQtns(req: Request, res: Response) {
       for (const p of st.panels ?? []) {
         for (const c of p.components ?? []) {
           if (!c || c.spacer || !c.ref) continue;
+          if (retiredRefs.has(c.ref)) { changed += 1; continue; } // discontinued item still in the QTN
           const cur = changedPriceByRef.get(c.ref);
-          if (!cur) continue;
-          if (cur.eur !== c.eur || cur.egp !== c.egp) changed += 1;
+          if (cur && (cur.eur !== c.eur || cur.egp !== c.egp)) changed += 1;
         }
       }
       if (changed > 0) {

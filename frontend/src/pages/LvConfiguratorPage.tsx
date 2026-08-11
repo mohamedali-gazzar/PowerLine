@@ -393,12 +393,12 @@ export default function LvConfiguratorPage() {
   // "Apply changes" from the price-list changelog: re-price this quotation to the
   // current published catalogue (component + cell prices; the estimator's qty,
   // adjustments and notes are kept). Returns how many priced lines moved.
-  const applyCatalogPrices = (): number => {
-    const { next, changed } = repriceToCatalog(s);
+  const applyCatalogPrices = (): { changed: number; removed: number } => {
+    const { next, changed, removed } = repriceToCatalog(s);
     // Stamp the version even when nothing moved: the estimator reviewed it against
     // this list, so it earns the "prices updated" mark and drops off the stale count.
     apply(() => ({ ...next, pricesAppliedVersion: catalogVersion() }));
-    return changed;
+    return { changed, removed };
   };
   // ERP upload: download the QTN's panels as an ERPNext "Bulk Edit Items" CSV
   // (one row per panel — see lv/erpCsv.ts).
@@ -1431,7 +1431,7 @@ const numOrText = (v: string | null) => {
   return v && v.trim() ? v : "—";
 };
 
-function CatalogUpdateCheck({ onApply }: { onApply?: () => number }) {
+function CatalogUpdateCheck({ onApply }: { onApply?: () => { changed: number; removed: number } }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [warn, setWarn] = useState(false);
@@ -1499,8 +1499,8 @@ function CatalogUpdateCheck({ onApply }: { onApply?: () => number }) {
 }
 
 /** The changelog, as its own dismissible panel rather than a dropdown under the button. */
-function ChangeLogDialog({ changes, onApply, onClose }: { changes: CatalogChanges; onApply?: () => number; onClose: () => void }) {
-  const [applied, setApplied] = useState<number | null>(null);
+function ChangeLogDialog({ changes, onApply, onClose }: { changes: CatalogChanges; onApply?: () => { changed: number; removed: number }; onClose: () => void }) {
+  const [applied, setApplied] = useState<{ changed: number; removed: number } | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
@@ -1510,9 +1510,10 @@ function ChangeLogDialog({ changes, onApply, onClose }: { changes: CatalogChange
   const doApply = () => {
     if (!onApply) return;
     if (!window.confirm(
-      "Re-price this quotation to the current price list?\n\n" +
-      "Component and cell prices are updated to today's list. Your quantities, " +
-      "per-line adjustments and notes are kept. You can Undo this afterwards."
+      "Update this quotation to the current price list?\n\n" +
+      "Component and cell prices are brought up to today's list, and any item " +
+      "discontinued from the list is removed. Your quantities, per-line " +
+      "adjustments and notes are kept. You can Undo this afterwards."
     )) return;
     setApplied(onApply());
   };
@@ -1541,7 +1542,12 @@ function ChangeLogDialog({ changes, onApply, onClose }: { changes: CatalogChange
             )}
             {applied !== null && (
               <span className="rounded-full bg-green-100 px-3 py-1.5 text-xs font-semibold text-green-700 dark:bg-green-500/15 dark:text-green-300">
-                ✓ {applied === 0 ? "Already up to date" : `${applied} price${applied === 1 ? "" : "s"} updated`}
+                ✓ {applied.changed === 0 && applied.removed === 0
+                  ? "Already up to date"
+                  : [
+                      applied.changed > 0 ? `${applied.changed} price${applied.changed === 1 ? "" : "s"} updated` : "",
+                      applied.removed > 0 ? `${applied.removed} discontinued removed` : "",
+                    ].filter(Boolean).join(" · ")}
               </span>
             )}
             <button onClick={onClose} className="btn-ghost" title="Close (Esc)">✕ Close</button>

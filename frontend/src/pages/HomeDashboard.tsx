@@ -62,8 +62,8 @@ export default function HomeDashboard() {
           <RedPriceAlert
             message={
               staleCount === 1
-                ? "1 open quotation was priced on an older price list — review it before submitting."
-                : `${staleCount} open quotations were priced on an older price list — review them before submitting.`
+                ? "1 open quotation is out of date with the price list — review it before submitting."
+                : `${staleCount} open quotations are out of date with the price list — review them before submitting.`
             }
             actionLabel="Review QTNs"
             onAction={() => {
@@ -179,7 +179,7 @@ export default function HomeDashboard() {
                   <td className="px-5 py-2.5">
                     {r.kind === "LV" && outdatedBy.has(r.id) ? (
                       <span className="chip whitespace-nowrap bg-red-100 text-[11px] text-red-700 dark:bg-red-500/15 dark:text-red-300">
-                        ⚠ {outdatedBy.get(r.id)} price{outdatedBy.get(r.id) === 1 ? "" : "s"} outdated
+                        ⚠ {outdatedBy.get(r.id)} item{outdatedBy.get(r.id) === 1 ? "" : "s"} to update
                       </span>
                     ) : r.kind === "LV" && appliedIds.has(r.id) ? (
                       <span className="chip whitespace-nowrap bg-green-100 text-[11px] text-green-700 dark:bg-green-500/15 dark:text-green-300">
