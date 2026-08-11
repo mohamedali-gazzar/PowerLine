@@ -115,13 +115,14 @@ export async function weeklyStats(req: Request, res: Response) {
 }
 
 // GET /api/stats/stale-prices → the current user's OPEN (unsubmitted) LV quotations
-// that ACTUALLY contain a component whose frozen price differs from today's list —
-// i.e. only quotations the latest changes truly touch (a QTN with none of the
-// changed items is not flagged). For each, changedCount is how many of its lines
-// moved. `applied` lists open QTNs that were explicitly re-priced to the current
-// version (their positive "prices updated" mark). Empty while prices were never
-// published from the DB (version 0). Submitted quotations are never scanned — they
-// are intentionally frozen and already sent.
+// that are actually TOUCHED BY THE LATEST PRICE UPDATE — i.e. they contain a
+// component whose price moved in the newest published version (read from the
+// PriceChange audit trail) and whose frozen line price is still the old one. A QTN
+// that holds none of the just-changed items is never flagged, even if other prices
+// in it drifted in older versions. changedCount = how many of its lines the update
+// moves. `applied` lists open QTNs explicitly re-priced to the current version
+// (their positive "prices updated" mark). Empty while prices were never published
+// from the DB (version 0). Submitted quotations are never scanned — they are frozen.
 type StatePeek = {
   panels?: Array<{ components?: Array<{ ref?: string; eur?: number; egp?: number; spacer?: boolean }> }>;
   pricesAppliedVersion?: number;
@@ -137,15 +138,35 @@ export async function stalePricedQtns(req: Request, res: Response) {
       res.json({ version: 0, publishedAt: null, items: [], applied: [] });
       return;
     }
-    // Today's component prices, keyed by reference — the yardstick a quotation's
-    // FROZEN line prices are measured against. (Panel enclosures price live already,
-    // so they can never be stale; only component lines freeze a price.)
-    const comps = await prisma.lvComponent.findMany({
-      where: { active: true },
-      select: { ref: true, eur: true, egp: true },
+    // The components whose PRICE actually moved in the latest publish (the audit
+    // trail stamps each change with the version it went live in). Only quotations
+    // containing one of these are candidates — that is what makes "the change was
+    // Himel, so a QTN with no Himel isn't flagged" true. Keyed by reference, with
+    // today's price so an already-applied QTN (frozen == current) drops out.
+    // The most recent publish that actually MOVED component prices — not simply the
+    // newest version, so a later enclosure-only or item-retire publish can't blank
+    // the alert and hide quotations the last price update still affects.
+    const lastPriced = await prisma.priceChange.findFirst({
+      where: { domain: "LV", entity: "LvComponent", field: "price", version: { not: null } },
+      orderBy: { version: "desc" },
+      select: { version: true },
     });
-    const priceByRef = new Map<string, { eur: number; egp: number }>();
-    for (const c of comps) if (c.ref) priceByRef.set(c.ref, { eur: c.eur, egp: c.egp });
+    const changeVersion = lastPriced?.version ?? 0;
+    const changeRows = changeVersion
+      ? await prisma.priceChange.findMany({
+          where: { domain: "LV", version: changeVersion, entity: "LvComponent", field: "price" },
+          select: { entityId: true },
+        })
+      : [];
+    const changedIds = [...new Set(changeRows.map((r) => r.entityId))];
+    const changedPriceByRef = new Map<string, { eur: number; egp: number }>();
+    if (changedIds.length) {
+      const changed = await prisma.lvComponent.findMany({
+        where: { id: { in: changedIds } },
+        select: { ref: true, eur: true, egp: true },
+      });
+      for (const c of changed) if (c.ref) changedPriceByRef.set(c.ref, { eur: c.eur, egp: c.egp });
+    }
 
     const rows = await prisma.lvQtn.findMany({
       where: { ownerId, submitted: false },
@@ -166,7 +187,7 @@ export async function stalePricedQtns(req: Request, res: Response) {
       for (const p of st.panels ?? []) {
         for (const c of p.components ?? []) {
           if (!c || c.spacer || !c.ref) continue;
-          const cur = priceByRef.get(c.ref);
+          const cur = changedPriceByRef.get(c.ref);
           if (!cur) continue;
           if (cur.eur !== c.eur || cur.egp !== c.egp) changed += 1;
         }
