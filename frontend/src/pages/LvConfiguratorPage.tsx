@@ -5010,7 +5010,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
 
   return (
     <div ref={cardRef} className="card relative p-5">
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+      <div className="-mx-5 -mt-5 mb-0 flex flex-wrap items-center justify-between gap-3 rounded-t-xl2 bg-brand-tint px-5 pb-3 pt-5">
         <h2 className="sec-head !mb-0">{isEdmsPanel ? "Standard Panels" : "Components"}</h2>
         <button type="button" onClick={() => setReplaceOpen(true)}
           title="Find a component used in this quotation and replace it across all / selected panels"
@@ -5027,7 +5027,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
 
       {/* Sticky header: section tabs + search bar stay pinned below the tab bar while
           the component list scrolls; unpins automatically when this card ends. */}
-      <div className="sticky top-16 z-20 -mx-5 mb-3 border-b border-line/60 bg-white px-5 pb-3 pt-1 lg:top-0">
+      <div className="sticky top-16 z-20 -mx-5 mb-3 border-b border-line/60 bg-brand-tint px-5 pb-3 pt-1 lg:top-0">
       {/* sections */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         {p.sections.map((sec) => {
