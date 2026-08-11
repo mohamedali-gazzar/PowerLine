@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 
 export const GENERAL_KEY = "__general__";
@@ -36,7 +36,9 @@ export default function ReturnForRevisionModal({
   const [draft, setDraft] = useState("");
   const [comments, setComments] = useState<ReturnComment[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
   const selectWrapRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ sx: number; sy: number; bx: number; by: number } | null>(null);
 
   // Dropdown entries: "General" first, then "1-DB", "2-MDB", … from the quotation data.
   const options: { key: string; label: string }[] = [
@@ -59,7 +61,24 @@ export default function ReturnForRevisionModal({
       setDraft("");
       setComments([]);
       setMenuOpen(false);
+      setPos({ x: 0, y: 0 });
     }
+  }, [open]);
+
+  // Drag the dialog around by its header.
+  useEffect(() => {
+    if (!open) return;
+    const onMove = (e: globalThis.MouseEvent) => {
+      const d = dragRef.current;
+      if (d) setPos({ x: d.bx + (e.clientX - d.sx), y: d.by + (e.clientY - d.sy) });
+    };
+    const onUp = () => { dragRef.current = null; };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
   }, [open]);
 
   // Esc closes (menu first, then modal); clicking outside closes the menu.
@@ -103,10 +122,16 @@ export default function ReturnForRevisionModal({
     onReturn?.(all);
   };
 
+  const startDrag = (e: ReactMouseEvent) => {
+    if ((e.target as HTMLElement).closest(".rfr-x")) return; // let the close button click through
+    dragRef.current = { sx: e.clientX, sy: e.clientY, bx: pos.x, by: pos.y };
+    e.preventDefault();
+  };
+
   return createPortal(
     <div className="rfr-backdrop" role="dialog" aria-modal="true" aria-label="Return for revision">
-      <div className="rfr-card">
-        <div className="rfr-head">
+      <div className="rfr-card" style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}>
+        <div className="rfr-head" onMouseDown={startDrag}>
           <div>
             <h2 className="rfr-title">Return for revision</h2>
             {title ? <div className="rfr-sub">{title} · {panels.length} panels</div> : null}
@@ -218,46 +243,46 @@ export default function ReturnForRevisionModal({
 // follows light/dark; brand orange #F16722 is intentionally constant.
 const styles = `
 .rfr-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000;}
-.rfr-card{width:440px;max-width:calc(100vw - 32px);max-height:calc(100vh - 48px);overflow:auto;background:var(--c-card);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.35);padding:24px;color:rgb(var(--c-ink));}
-.rfr-head{display:flex;justify-content:space-between;align-items:flex-start;}
-.rfr-title{margin:0;font-size:19px;font-weight:700;}
-.rfr-sub{margin-top:4px;font-size:11.5px;color:rgb(var(--c-muted));}
-.rfr-x{border:0;background:none;color:rgb(var(--c-muted));font-size:16px;cursor:pointer;padding:2px 6px;line-height:1;border-radius:6px;}
+.rfr-card{width:480px;max-width:calc(100vw - 32px);max-height:calc(100vh - 48px);overflow:auto;background:var(--c-card);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.35);padding:24px;color:rgb(var(--c-ink));}
+.rfr-head{display:flex;justify-content:space-between;align-items:flex-start;cursor:move;user-select:none;}
+.rfr-title{margin:0;font-size:22px;font-weight:700;}
+.rfr-sub{margin-top:5px;font-size:13.5px;color:rgb(var(--c-muted));}
+.rfr-x{border:0;background:none;color:rgb(var(--c-muted));font-size:22px;cursor:pointer;padding:2px 8px;line-height:1;border-radius:6px;}
 .rfr-x:hover{color:rgb(var(--c-ink));background:rgb(var(--c-ink) / .06);}
-.rfr-divider{height:1px;background:rgb(var(--c-line));margin:14px 0;}
-.rfr-label{display:block;font-size:10px;font-weight:600;letter-spacing:1.1px;color:rgb(var(--c-muted));margin:2px 0 6px;}
+.rfr-divider{height:1px;background:rgb(var(--c-line));margin:16px 0;}
+.rfr-label{display:block;font-size:12.5px;font-weight:600;letter-spacing:1px;color:rgb(var(--c-muted));margin:2px 0 7px;}
 .rfr-req{color:#F16722;}
-.rfr-selectwrap{position:relative;margin-bottom:14px;}
-.rfr-select{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 14px;font-size:12.5px;font-family:inherit;color:rgb(var(--c-ink));background:var(--c-card);border:1px solid rgb(var(--c-line));border-radius:8px;cursor:pointer;text-align:left;}
+.rfr-selectwrap{position:relative;margin-bottom:16px;}
+.rfr-select{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;font-size:15px;font-family:inherit;color:rgb(var(--c-ink));background:var(--c-card);border:1px solid rgb(var(--c-line));border-radius:8px;cursor:pointer;text-align:left;}
 .rfr-select.is-open,.rfr-select:focus-visible{border-color:#F16722;box-shadow:0 0 0 1px rgba(241,103,34,.35);outline:none;}
 .rfr-placeholder{color:rgb(var(--c-muted) / .8);}
 .rfr-chev{color:rgb(var(--c-muted));transition:transform .15s;flex:none;}
 .rfr-chev.up{transform:rotate(180deg);}
-.rfr-menu{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--c-card);border:1px solid rgb(var(--c-line));border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,.3);padding:4px;max-height:262px;overflow:auto;z-index:10;}
-.rfr-option{display:block;width:100%;text-align:left;padding:10px 12px;font-size:12px;font-family:inherit;color:rgb(var(--c-ink));background:none;border:0;border-radius:7px;cursor:pointer;}
+.rfr-menu{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--c-card);border:1px solid rgb(var(--c-line));border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,.3);padding:4px;max-height:280px;overflow:auto;z-index:10;}
+.rfr-option{display:block;width:100%;text-align:left;padding:11px 12px;font-size:14.5px;font-family:inherit;color:rgb(var(--c-ink));background:none;border:0;border-radius:7px;cursor:pointer;}
 .rfr-option:hover{background:rgba(241,103,34,.08);}
 .rfr-option.is-selected{background:rgba(241,103,34,.12);color:#F16722;font-weight:600;}
 .rfr-option.is-general{font-weight:500;border-bottom:1px solid rgb(var(--c-line));border-bottom-left-radius:0;border-bottom-right-radius:0;margin-bottom:2px;}
-.rfr-textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:84px;padding:11px 14px;font-size:12.5px;font-family:inherit;color:rgb(var(--c-ink));background:var(--c-card);border:1px solid rgb(var(--c-line));border-radius:8px;}
+.rfr-textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:96px;padding:12px 14px;font-size:15px;font-family:inherit;color:rgb(var(--c-ink));background:var(--c-card);border:1px solid rgb(var(--c-line));border-radius:8px;}
 .rfr-textarea:focus-visible{border-color:#F16722;box-shadow:0 0 0 1px rgba(241,103,34,.35);outline:none;}
 .rfr-textarea::placeholder{color:rgb(var(--c-muted) / .8);}
-.rfr-add{margin-top:12px;padding:9px 16px;font-size:12px;font-weight:600;font-family:inherit;color:#F16722;background:var(--c-card);border:1.2px solid #F16722;border-radius:8px;cursor:pointer;}
+.rfr-add{margin-top:12px;padding:10px 18px;font-size:14px;font-weight:600;font-family:inherit;color:#F16722;background:var(--c-card);border:1.2px solid #F16722;border-radius:8px;cursor:pointer;}
 .rfr-add:hover:not(:disabled){background:rgba(241,103,34,.06);}
 .rfr-add:disabled{opacity:.4;cursor:not-allowed;}
-.rfr-listlabel{margin-bottom:8px;}
-.rfr-empty{font-size:11.5px;color:rgb(var(--c-muted));padding:6px 0 2px;}
+.rfr-listlabel{margin-bottom:9px;}
+.rfr-empty{font-size:13px;color:rgb(var(--c-muted));padding:6px 0 2px;}
 .rfr-list{display:flex;flex-direction:column;gap:8px;}
-.rfr-row{display:flex;align-items:flex-start;gap:8px;background:rgb(var(--c-ink) / .05);border-left:3.5px solid #F16722;border-radius:8px;padding:10px 12px;}
+.rfr-row{display:flex;align-items:flex-start;gap:8px;background:rgb(var(--c-ink) / .05);border-left:3.5px solid #F16722;border-radius:8px;padding:11px 13px;}
 .rfr-rowbody{flex:1;min-width:0;}
-.rfr-rowtitle{font-size:11.5px;font-weight:600;}
-.rfr-rowtext{font-size:11px;color:rgb(var(--c-muted));margin-top:2px;white-space:pre-wrap;word-break:break-word;}
-.rfr-rowx{font-size:13px;flex:none;}
+.rfr-rowtitle{font-size:14px;font-weight:600;}
+.rfr-rowtext{font-size:13.5px;color:rgb(var(--c-muted));margin-top:3px;white-space:pre-wrap;word-break:break-word;}
+.rfr-rowx{font-size:17px;flex:none;}
 .rfr-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;}
-.rfr-hint{font-size:10.5px;color:rgb(var(--c-muted));}
+.rfr-hint{font-size:12.5px;color:rgb(var(--c-muted));}
 .rfr-actions{display:flex;align-items:center;gap:14px;}
-.rfr-cancel{border:0;background:none;font-size:12.5px;font-family:inherit;color:rgb(var(--c-muted));cursor:pointer;}
+.rfr-cancel{border:0;background:none;font-size:14.5px;font-family:inherit;color:rgb(var(--c-muted));cursor:pointer;}
 .rfr-cancel:hover{color:rgb(var(--c-ink));}
-.rfr-return{padding:11px 22px;font-size:12.5px;font-weight:600;font-family:inherit;color:#fff;background:#F16722;border:0;border-radius:8px;cursor:pointer;}
+.rfr-return{padding:12px 24px;font-size:14.5px;font-weight:600;font-family:inherit;color:#fff;background:#F16722;border:0;border-radius:8px;cursor:pointer;}
 .rfr-return:hover:not(:disabled){background:rgba(241,103,34,.88);}
 .rfr-return:disabled{opacity:.4;cursor:not-allowed;}
 `;
