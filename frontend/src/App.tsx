@@ -100,6 +100,8 @@ export default function App() {
         <aside className={`flex h-full flex-col overflow-hidden bg-sidebar transition-[width] duration-200 ease-out ${asideW}`}>
           <a
             href="https://pl.powerline.com.eg/app/quotation"
+            target="_blank"
+            rel="noopener noreferrer"
             className={`flex items-center px-3 py-5 ${rowJustify}`}
             title="PowerLine — Quotation portal"
           >
