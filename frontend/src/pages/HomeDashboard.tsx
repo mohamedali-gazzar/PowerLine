@@ -22,6 +22,9 @@ export default function HomeDashboard() {
   const [stale, setStale] = useState<StalePricedQtns | null>(null);
   const [reviewFilter, setReviewFilter] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
+  // "Your performance" panel collapse — remembered across sessions.
+  const [perfOpen, setPerfOpen] = useState(() => localStorage.getItem("home-perf-open") !== "0");
+  const togglePerf = () => setPerfOpen((v) => { const n = !v; localStorage.setItem("home-perf-open", n ? "1" : "0"); return n; });
 
   useEffect(() => {
     // account.history() merges LV + RMU, but its LV rows only carry the old
@@ -97,10 +100,17 @@ export default function HomeDashboard() {
 
       {can("qtn.approve") && <ApprovalInbox />}
 
-      {/* Estimator performance — you vs team median */}
+      {/* Estimator performance — you vs team median (collapsible) */}
       <div>
-        <h2 className="sec-head mb-3">Your performance</h2>
-        <EstimatorEvaluation />
+        <button type="button" onClick={togglePerf} title={perfOpen ? "Minimize" : "Expand"}
+          className="mb-3 flex items-center gap-2 text-left">
+          <h2 className="sec-head !mb-0">Your performance</h2>
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden
+            className={`shrink-0 text-muted transition-transform ${perfOpen ? "" : "-rotate-90"}`}>
+            <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        {perfOpen && <EstimatorEvaluation />}
       </div>
 
       {/* QTN history */}
