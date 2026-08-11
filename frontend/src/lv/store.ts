@@ -177,6 +177,10 @@ export interface LvState {
   summaryNotes?: SummaryNote[];
   // Free-text "Record Results" box on the Pricing Settings tab.
   recordResults?: string;
+  /** The published price-list version this quotation's prices were last brought up
+   *  to via "Apply changes" (the changelog re-price). Drives the "Prices updated"
+   *  mark in the QTN history; absent until the estimator applies a price list. */
+  pricesAppliedVersion?: number;
   /** Currency the Commercial Offer is quoted in. Lives on the quotation rather than
    *  in the tab's own state so the ERP export can quote in the same currency the
    *  customer was — otherwise the offer said USD and the CSV said EGP. */

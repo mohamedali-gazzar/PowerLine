@@ -397,12 +397,14 @@ export interface EvalStats {
   rework: { weeks: number[]; youRate: number; teamMedian: number; percentileLabel: string };
   clean: { weeks: number[]; youAvg: number; teamMedian: number; deltaPts: number };
 }
-/** Open (unsubmitted) QTNs that froze their prices on a price list older than the
- *  latest published one — the estimator should review them before submitting. */
+/** Open (unsubmitted) QTNs that actually CONTAIN a component whose frozen price
+ *  differs from today's list (changedCount = how many lines moved). `applied` lists
+ *  open QTNs explicitly re-priced to the current version — their "updated" mark. */
 export interface StalePricedQtns {
-  publishedAt: string | null;
   version: number;
-  items: { id: string; number: string; projectName: string; customer: string; updatedAt: string; link: string }[];
+  publishedAt: string | null;
+  items: { id: string; number: string; projectName: string; customer: string; updatedAt: string; changedCount: number; link: string }[];
+  applied: string[];
 }
 
 export const api = {

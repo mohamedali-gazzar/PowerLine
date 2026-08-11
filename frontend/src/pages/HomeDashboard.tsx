@@ -20,6 +20,8 @@ export default function HomeDashboard() {
   const [query, setQuery] = useState("");
   const [chooser, setChooser] = useState(false);
   const [stale, setStale] = useState<StalePricedQtns | null>(null);
+  const [reviewFilter, setReviewFilter] = useState(false);
+  const historyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // account.history() merges LV + RMU, but its LV rows only carry the old
@@ -38,13 +40,19 @@ export default function HomeDashboard() {
   const can = (perm: string) => Boolean(access?.perms.includes(perm));
 
   const needle = query.trim().toLowerCase();
+  // Per-QTN price marks for the history rows: how many lines are outdated, and which
+  // were explicitly re-priced to the current list ("prices updated").
+  const outdatedBy = new Map((stale?.items ?? []).map((i) => [i.id, i.changedCount]));
+  const appliedIds = new Set(stale?.applied ?? []);
+  const staleCount = stale?.items.length ?? 0;
+
   const visible = (rows ?? []).filter(
     (r) =>
+      // "Review QTNs" narrows the history to only the quotations that need a price update.
+      (!reviewFilter || outdatedBy.has(r.id)) &&
       (status === "ALL" || r.status === status) &&
       (!needle || `${r.number} ${r.projectName} ${r.customer}`.toLowerCase().includes(needle))
   );
-
-  const staleCount = stale?.items.length ?? 0;
 
   return (
     <div className="animate-fade-up">
@@ -58,7 +66,12 @@ export default function HomeDashboard() {
                 : `${staleCount} open quotations were priced on an older price list — review them before submitting.`
             }
             actionLabel="Review QTNs"
-            onAction={() => navigate("/lv")}
+            onAction={() => {
+              setStatus("ALL");
+              setQuery("");
+              setReviewFilter(true);
+              historyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
           />
         </div>
       )}
@@ -91,9 +104,21 @@ export default function HomeDashboard() {
       </div>
 
       {/* QTN history */}
-      <div className="mt-5 card overflow-hidden">
+      <div ref={historyRef} className="mt-5 card overflow-hidden scroll-mt-4">
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-          <h2 className="sec-head mb-0">My QTN History</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="sec-head mb-0">My QTN History</h2>
+            {reviewFilter && (
+              <button
+                type="button"
+                onClick={() => setReviewFilter(false)}
+                title="Show all quotations again"
+                className="chip whitespace-nowrap bg-red-100 text-[11px] text-red-700 hover:bg-red-200 dark:bg-red-500/15 dark:text-red-300"
+              >
+                ⚠ Needs price update · Show all ✕
+              </button>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
               className="input w-60 py-1.5 text-xs"
@@ -133,6 +158,7 @@ export default function HomeDashboard() {
                 <th className="px-5 py-2.5">Project</th>
                 <th className="px-5 py-2.5">Customer</th>
                 <th className="px-5 py-2.5">Status</th>
+                <th className="px-5 py-2.5">Prices</th>
                 <th className="px-5 py-2.5">Updated</th>
               </tr>
             </thead>
@@ -150,6 +176,19 @@ export default function HomeDashboard() {
                   <td className="px-5 py-2.5">{r.projectName || <span className="text-muted">—</span>}</td>
                   <td className="px-5 py-2.5 text-muted">{r.customer || "—"}</td>
                   <td className="px-5 py-2.5"><StatusBadge status={r.status} /></td>
+                  <td className="px-5 py-2.5">
+                    {r.kind === "LV" && outdatedBy.has(r.id) ? (
+                      <span className="chip whitespace-nowrap bg-red-100 text-[11px] text-red-700 dark:bg-red-500/15 dark:text-red-300">
+                        ⚠ {outdatedBy.get(r.id)} price{outdatedBy.get(r.id) === 1 ? "" : "s"} outdated
+                      </span>
+                    ) : r.kind === "LV" && appliedIds.has(r.id) ? (
+                      <span className="chip whitespace-nowrap bg-green-100 text-[11px] text-green-700 dark:bg-green-500/15 dark:text-green-300">
+                        ✓ Prices updated
+                      </span>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
                   <td className="px-5 py-2.5 text-xs text-muted">{new Date(r.updatedAt).toLocaleDateString()}</td>
                 </tr>
               ))}

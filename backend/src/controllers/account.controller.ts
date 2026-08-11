@@ -115,11 +115,17 @@ export async function weeklyStats(req: Request, res: Response) {
 }
 
 // GET /api/stats/stale-prices → the current user's OPEN (unsubmitted) LV quotations
-// last edited BEFORE the current price list was published. These froze their prices
-// on an older list, so the estimator should review them before submitting. Empty
-// while prices were never published from the DB (version 0) — there is nothing to be
-// stale against, only the bundled catalogue. Submitted quotations are never flagged:
-// they are intentionally frozen and already sent.
+// that ACTUALLY contain a component whose frozen price differs from today's list —
+// i.e. only quotations the latest changes truly touch (a QTN with none of the
+// changed items is not flagged). For each, changedCount is how many of its lines
+// moved. `applied` lists open QTNs that were explicitly re-priced to the current
+// version (their positive "prices updated" mark). Empty while prices were never
+// published from the DB (version 0). Submitted quotations are never scanned — they
+// are intentionally frozen and already sent.
+type StatePeek = {
+  panels?: Array<{ components?: Array<{ ref?: string; eur?: number; egp?: number; spacer?: boolean }> }>;
+  pricesAppliedVersion?: number;
+};
 export async function stalePricedQtns(req: Request, res: Response) {
   try {
     const ownerId = req.userId as string;
@@ -128,27 +134,55 @@ export async function stalePricedQtns(req: Request, res: Response) {
       select: { version: true, publishedAt: true },
     });
     if (!book || book.version < 1) {
-      res.json({ items: [], publishedAt: null, version: 0 });
+      res.json({ version: 0, publishedAt: null, items: [], applied: [] });
       return;
     }
-    const stale = await prisma.lvQtn.findMany({
-      where: { ownerId, submitted: false, updatedAt: { lt: book.publishedAt } },
+    // Today's component prices, keyed by reference — the yardstick a quotation's
+    // FROZEN line prices are measured against. (Panel enclosures price live already,
+    // so they can never be stale; only component lines freeze a price.)
+    const comps = await prisma.lvComponent.findMany({
+      where: { active: true },
+      select: { ref: true, eur: true, egp: true },
+    });
+    const priceByRef = new Map<string, { eur: number; egp: number }>();
+    for (const c of comps) if (c.ref) priceByRef.set(c.ref, { eur: c.eur, egp: c.egp });
+
+    const rows = await prisma.lvQtn.findMany({
+      where: { ownerId, submitted: false },
       orderBy: { updatedAt: "desc" },
-      select: { id: true, number: true, projectName: true, customer: true, updatedAt: true },
-      take: 50,
+      select: { id: true, number: true, projectName: true, customer: true, updatedAt: true, state: true },
     });
-    res.json({
-      publishedAt: book.publishedAt,
-      version: book.version,
-      items: stale.map((q) => ({
-        id: q.id,
-        number: q.number,
-        projectName: q.projectName,
-        customer: q.customer,
-        updatedAt: q.updatedAt,
-        link: `/lv/qtn/${q.id}`,
-      })),
-    });
+
+    const items: Array<{
+      id: string; number: string; projectName: string; customer: string;
+      updatedAt: Date; changedCount: number; link: string;
+    }> = [];
+    const applied: string[] = [];
+
+    for (const r of rows) {
+      let st: StatePeek;
+      try { st = JSON.parse(r.state) as StatePeek; } catch { continue; }
+      let changed = 0;
+      for (const p of st.panels ?? []) {
+        for (const c of p.components ?? []) {
+          if (!c || c.spacer || !c.ref) continue;
+          const cur = priceByRef.get(c.ref);
+          if (!cur) continue;
+          if (cur.eur !== c.eur || cur.egp !== c.egp) changed += 1;
+        }
+      }
+      if (changed > 0) {
+        items.push({
+          id: r.id, number: r.number, projectName: r.projectName,
+          customer: r.customer, updatedAt: r.updatedAt, changedCount: changed,
+          link: `/lv/qtn/${r.id}`,
+        });
+      } else if (Number(st.pricesAppliedVersion) === book.version) {
+        applied.push(r.id);
+      }
+    }
+
+    res.json({ version: book.version, publishedAt: book.publishedAt, items, applied });
   } catch (e) {
     fail(res, e);
   }

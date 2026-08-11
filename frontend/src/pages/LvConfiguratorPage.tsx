@@ -39,6 +39,7 @@ import {
   type CatalogChanges, type CatalogChangeItem, type QtnAttachmentDto, type QtnStatus,
 } from "../api";
 import { checkCatalogUpdates, catalogVersion } from "../lv/catalogSource";
+import ReturnForRevisionModal, { type ReturnComment } from "../components/ReturnForRevisionModal";
 import wdFldImg from "../assets/wd-fld.png";
 import wdRhdImg from "../assets/wd-rhd.png";
 import wdRheImg from "../assets/wd-rhe.png";
@@ -274,6 +275,7 @@ export default function LvConfiguratorPage() {
   const [myPerms, setMyPerms] = useState<string[]>([]);
   const [wfError, setWfError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
   // Cancelled = this revision was superseded by a newer amendment (a higher revision of
   // the same base exists). Derived from the QTN list; makes the revision read-only.
   const [cancelled, setCancelled] = useState(false);
@@ -367,11 +369,14 @@ export default function LvConfiguratorPage() {
   const canReturn = canApprove || myPerms.includes("qtn.return");
   const canReopen = myPerms.includes("qtn.reopen");
 
-  const askReturn = () => {
-    const note = window.prompt("Why is this quotation being returned? (required)");
-    if (note === null) return;
-    if (!note.trim()) { setWfError("A reason is required when returning a quotation."); return; }
-    void doTransition("RETURNED", { note: note.trim() });
+  // Return for revision: a structured, per-panel comment modal (replaces the old
+  // single-line prompt). The collected comments are serialised into the return
+  // reason, which the estimator sees in the RETURNED banner (whitespace-pre-wrap).
+  const submitReturn = (items: ReturnComment[]) => {
+    setReturnOpen(false);
+    if (!items.length) return;
+    const note = items.map((c) => `• ${c.label}\n${c.comment}`).join("\n\n");
+    void doTransition("RETURNED", { note });
   };
 
   const apply = (updater: (old: LvState) => LvState) =>
@@ -390,7 +395,9 @@ export default function LvConfiguratorPage() {
   // adjustments and notes are kept). Returns how many priced lines moved.
   const applyCatalogPrices = (): number => {
     const { next, changed } = repriceToCatalog(s);
-    if (next !== s) apply(() => next);
+    // Stamp the version even when nothing moved: the estimator reviewed it against
+    // this list, so it earns the "prices updated" mark and drops off the stale count.
+    apply(() => ({ ...next, pricesAppliedVersion: catalogVersion() }));
     return changed;
   };
   // ERP upload: download the QTN's panels as an ERPNext "Bulk Edit Items" CSV
@@ -639,7 +646,7 @@ export default function LvConfiguratorPage() {
               </button>
             )}
             {!cancelled && status === "WAITING_APPROVAL" && canReturn && (
-              <button className="btn-ghost" disabled={submitting} onClick={askReturn}>
+              <button className="btn-ghost" disabled={submitting} onClick={() => setReturnOpen(true)}>
                 ↩ Return for revision
               </button>
             )}
@@ -693,6 +700,13 @@ export default function LvConfiguratorPage() {
           <p className="text-sm font-semibold text-red-800">⚠ {wfError}</p>
         </div>
       )}
+      <ReturnForRevisionModal
+        open={returnOpen}
+        title={`${qtnNum}${s.project?.name ? ` · ${s.project.name}` : ""}`}
+        panels={s.panels.map((p) => ({ id: p.id, name: p.name }))}
+        onCancel={() => setReturnOpen(false)}
+        onReturn={submitReturn}
+      />
       {status === "RETURNED" && wf.returnReason && (
         <div className="mb-4 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 no-print animate-fade-up">
           <p className="text-sm font-bold text-red-800">↩ Returned for revision</p>
