@@ -100,17 +100,18 @@ export default function HomeDashboard() {
 
       {can("qtn.approve") && <ApprovalInbox />}
 
-      {/* Estimator performance — you vs team median (collapsible) */}
-      <div>
+      {/* Estimator performance — you vs team median (collapsible). Card-styled to
+          match the Approval and History panels. */}
+      <div className="card mb-5 overflow-hidden">
         <button type="button" onClick={togglePerf} title={perfOpen ? "Minimize" : "Expand"}
-          className="mb-3 flex items-center gap-2 text-left">
+          className="flex w-full items-center justify-between gap-2 px-5 py-3 text-left">
           <h2 className="sec-head !mb-0">Your performance</h2>
-          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden
             className={`shrink-0 text-muted transition-transform ${perfOpen ? "" : "-rotate-90"}`}>
             <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        {perfOpen && <EstimatorEvaluation />}
+        {perfOpen && <div className="px-5 pb-5">{<EstimatorEvaluation />}</div>}
       </div>
 
       {/* QTN history */}
