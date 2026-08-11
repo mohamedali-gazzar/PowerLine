@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, type NotificationDto, type MyAccess } from "./api";
 import { useAuth } from "./auth/AuthContext";
 import { useTheme } from "./theme";
@@ -98,10 +98,14 @@ export default function App() {
       {/* Sidebar. The pin (bottom) cycles: auto-hide → locked-minimized → locked-open. */}
       <div className="group fixed inset-y-0 left-0 z-40">
         <aside className={`flex h-full flex-col overflow-hidden bg-sidebar transition-[width] duration-200 ease-out ${asideW}`}>
-          <Link to="/" className={`flex items-center px-3 py-5 ${rowJustify}`} title="PowerLine — Home">
+          <a
+            href="https://pl.powerline.com.eg/app/quotation"
+            className={`flex items-center px-3 py-5 ${rowJustify}`}
+            title="PowerLine — Quotation portal"
+          >
             <img src="/brand/mark-white.png" alt="PowerLine" className={`h-9 w-auto shrink-0 ${markCls}`} />
             <img src="/brand/logo-white.png" alt="PowerLine" className={`h-10 w-auto ${fullLogoCls}`} />
-          </Link>
+          </a>
 
           <nav className="mt-1 flex flex-1 flex-col gap-1 px-2.5">
             <NavLink
