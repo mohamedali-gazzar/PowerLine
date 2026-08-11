@@ -129,7 +129,7 @@ export default function ReturnForRevisionModal({
   };
 
   return createPortal(
-    <div className="rfr-backdrop" role="dialog" aria-modal="true" aria-label="Return for revision">
+    <div className="rfr-backdrop" role="dialog" aria-modal="false" aria-label="Return for revision">
       <div className="rfr-card" style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}>
         <div className="rfr-head" onMouseDown={startDrag}>
           <div>
@@ -242,8 +242,11 @@ export default function ReturnForRevisionModal({
 // Colours resolve through the app's theme variables (rgb(var(--c-*))) so the dialog
 // follows light/dark; brand orange #F16722 is intentionally constant.
 const styles = `
-.rfr-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000;}
-.rfr-card{width:480px;max-width:calc(100vw - 32px);max-height:calc(100vh - 48px);overflow:auto;background:var(--c-card);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.35);padding:24px;color:rgb(var(--c-ink));}
+/* Non-blocking: the backdrop lets clicks/scroll pass through to the page behind, so
+   the reviewer can pick another panel, scroll and read while taking notes; only the
+   card itself captures pointer events. */
+.rfr-backdrop{position:fixed;inset:0;background:none;pointer-events:none;display:flex;align-items:center;justify-content:center;z-index:1000;}
+.rfr-card{pointer-events:auto;width:480px;max-width:calc(100vw - 32px);max-height:calc(100vh - 48px);overflow:auto;background:var(--c-card);border:1px solid rgb(var(--c-line));border-radius:14px;box-shadow:0 18px 55px rgba(0,0,0,.4);padding:24px;color:rgb(var(--c-ink));}
 .rfr-head{display:flex;justify-content:space-between;align-items:flex-start;cursor:move;user-select:none;}
 .rfr-title{margin:0;font-size:22px;font-weight:700;}
 .rfr-sub{margin-top:5px;font-size:13.5px;color:rgb(var(--c-muted));}

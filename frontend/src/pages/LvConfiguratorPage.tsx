@@ -40,6 +40,8 @@ import {
 } from "../api";
 import { checkCatalogUpdates, catalogVersion } from "../lv/catalogSource";
 import ReturnForRevisionModal, { type ReturnComment } from "../components/ReturnForRevisionModal";
+import EdmsStandardWarningModal from "../components/EdmsStandardWarningModal";
+import { useAuth } from "../auth/AuthContext";
 import wdFldImg from "../assets/wd-fld.png";
 import wdRhdImg from "../assets/wd-rhd.png";
 import wdRheImg from "../assets/wd-rhe.png";
@@ -245,6 +247,15 @@ function SearchSelect({ value, placeholder, options, onPick, heightMatch }: {
 // ═════════════════════════════════════════════════════════════════════════════
 // The QTN workspace — one quotation holding project data, pricing settings,
 // panels and the generated Technical / Commercial offers + Material List.
+// Panel-field changes that do NOT raise the EDMS "recheck" warning: pure navigation,
+// identity/labels, and the standard-panel picker selections (choosing TR-kVA / P.F.C /
+// Outgoings and pressing "Build this panel" is how the panel is BUILT, not edited).
+// Every other change — components added/removed/changed, sizing, copper, … — warns.
+const EDMS_IGNORE_KEYS = new Set<string>([
+  "activeSection", "name", "fedFrom", "code",
+  "stdTrKva", "stdPfc", "stdOutgoings",
+]);
+
 export default function LvConfiguratorPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
@@ -276,6 +287,11 @@ export default function LvConfiguratorPage() {
   const [wfError, setWfError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
+  const { user } = useAuth();
+  // EDMS standard-panel warning: which panel tripped it + the snapshot to revert to.
+  // edmsWarnedRef remembers panels already warned this session (once per panel).
+  const [edmsWarn, setEdmsWarn] = useState<{ panelId: string; snapshot: LvPanel } | null>(null);
+  const edmsWarnedRef = useRef<Set<string>>(new Set());
   // Cancelled = this revision was superseded by a newer amendment (a higher revision of
   // the same base exists). Derived from the QTN list; makes the revision read-only.
   const [cancelled, setCancelled] = useState(false);
@@ -486,7 +502,28 @@ export default function LvConfiguratorPage() {
   };
   const upPanel = (id: string, patch: Partial<LvPanel>) => {
     if (readOnly && !isNavOnly(patch, "activeSection")) return;
+    // Standard EDMS panels are pre-approved. The first time this session a panel is
+    // *edited* — a component added/removed/changed, sizing, copper, anything but
+    // navigation/labels — snapshot it and warn. Building from the standard
+    // (applyStdPanel rewrites components + copper together) is NOT an edit, so it is
+    // excluded and never warns.
+    if (isEdmsQtn && !edmsWarnedRef.current.has(id)) {
+      const isBuild = "components" in patch && "copperTool" in patch;
+      const meaningful = Object.keys(patch).some((k) => !EDMS_IGNORE_KEYS.has(k));
+      if (!isBuild && meaningful) {
+        const cur = s.panels.find((p) => p.id === id);
+        if (cur) { edmsWarnedRef.current.add(id); setEdmsWarn({ panelId: id, snapshot: cur }); }
+      }
+    }
     apply((old) => ({ ...old, panels: old.panels.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
+  };
+  // "Revert changes" on the EDMS warning: restore the panel to the snapshot taken
+  // when the warning first fired (undoes every protected change made since).
+  const revertEdmsPanel = () => {
+    if (!edmsWarn) return;
+    const { panelId, snapshot } = edmsWarn;
+    apply((old) => ({ ...old, panels: old.panels.map((p) => (p.id === panelId ? snapshot : p)) }));
+    setEdmsWarn(null);
   };
 
   const addPanel = () => {
@@ -706,6 +743,12 @@ export default function LvConfiguratorPage() {
         panels={s.panels.map((p) => ({ id: p.id, name: p.name }))}
         onCancel={() => setReturnOpen(false)}
         onReturn={submitReturn}
+      />
+      <EdmsStandardWarningModal
+        open={!!edmsWarn}
+        userName={user?.name}
+        onRevert={revertEdmsPanel}
+        onAcknowledge={() => setEdmsWarn(null)}
       />
       {status === "RETURNED" && wf.returnReason && (
         <div className="mb-4 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 no-print animate-fade-up">
@@ -5074,8 +5117,14 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       {neutralPrompt && <NeutralPromptModal breaker={neutralPrompt.breaker} sensor={neutralPrompt.sensor} onAdd={confirmNeutral} onClose={() => setNeutralPrompt(null)} />}
 
       {/* Standard EDMS only. The picker sits ABOVE the component body — the sections,
-          search and editable list stay put, so a built panel can be adjusted straight away. */}
-      {isEdmsPanel && <StandardPanelsView p={p} u={u} />}
+          search and editable list stay put, so a built panel can be adjusted straight away.
+          Full-bleed tint so it joins the title row above and the tabs band below into one
+          continuous orange header rather than a white gap between them. */}
+      {isEdmsPanel && (
+        <div className="-mx-5 bg-brand-tint px-5 py-3">
+          <StandardPanelsView p={p} u={u} />
+        </div>
+      )}
 
       {/* Sticky header: section tabs + search bar stay pinned below the tab bar while
           the component list scrolls; unpins automatically when this card ends. */}
