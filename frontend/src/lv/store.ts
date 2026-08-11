@@ -16,6 +16,7 @@ import {
   enclosurePriceEgp,
   copperTypeFactor,
   findByName,
+  findCellEnclosure,
   type DbComponent,
   type DbEnclosure,
   type Factors,
@@ -776,6 +777,65 @@ export function toPanelComponent(c: DbComponent, section: string, qty = 1, group
     rating: c.r, eur: c.eur, egp: c.egp, poles: c.poles, cuP: c.cuP, cuC: c.cuC,
     stock: c.stock, qty, adj: "", comment: "", note: "", group,
   };
+}
+/** Bring an open quotation's FROZEN prices up to the current published catalogue.
+ *  Component prices and cell-row prices are stamped onto the quotation when added
+ *  (so a submitted quote never drifts) — this re-resolves every component by its
+ *  reference and every cell row by its description, overwriting the catalogue-owned
+ *  fields (price, brand, copper, poles, spec text) with today's values. The
+ *  estimator's own data is preserved: quantity, per-line adjustment, notes, and the
+ *  arrangement into sections/groups. Lines with no catalogue match (free-text combo
+ *  lines, spacers, references dropped from the list) are left exactly as they were.
+ *  Panel enclosures are already priced live from the catalogue, so they need no
+ *  stamping here. Returns the new state and how many priced lines actually moved. */
+export function repriceToCatalog(state: LvState): { next: LvState; changed: number } {
+  const byRef = new Map<string, DbComponent>();
+  for (const c of COMPONENTS) if (c.ref) byRef.set(c.ref, c);
+  let changed = 0;
+  let anyPanel = false;
+
+  const panels = state.panels.map((p) => {
+    let touched = false;
+
+    const components = (p.components ?? []).map((c) => {
+      if (c.spacer || !c.ref) return c;
+      const src = byRef.get(c.ref);
+      if (!src) return c;
+      const priceMoved = src.eur !== c.eur || src.egp !== c.egp;
+      const specMoved =
+        src.n !== c.name || src.d !== c.desc || src.t !== c.type || src.r !== c.rating ||
+        src.brand !== c.brand || src.poles !== c.poles || src.cuP !== c.cuP ||
+        src.cuC !== c.cuC || src.stock !== c.stock;
+      if (!priceMoved && !specMoved) return c;
+      if (priceMoved) changed += 1;
+      touched = true;
+      return {
+        ...c,
+        name: src.n, desc: src.d, type: src.t, rating: src.r, brand: src.brand,
+        eur: src.eur, egp: src.egp, poles: src.poles, cuP: src.cuP, cuC: src.cuC, stock: src.stock,
+      };
+    });
+
+    let cellConfig = p.cellConfig;
+    if (cellConfig && Array.isArray(cellConfig.rows)) {
+      const cfgType = cellConfig.type;
+      let cellTouched = false;
+      const rows = cellConfig.rows.map((r) => {
+        const e = findCellEnclosure(cfgType, r.desc);
+        if (!e || (e.eur === r.eur && e.egp === r.egp)) return r;
+        changed += 1;
+        cellTouched = true;
+        return { ...r, eur: e.eur, egp: e.egp };
+      });
+      if (cellTouched) { cellConfig = { ...cellConfig, rows }; touched = true; }
+    }
+
+    if (!touched) return p;
+    anyPanel = true;
+    return { ...p, components, cellConfig };
+  });
+
+  return { next: anyPanel ? { ...state, panels } : state, changed };
 }
 /** For combo lines whose description didn't resolve to a DB component. */
 export function freeComponent(desc: string, section: string, qty: number, group?: string): PanelComponent {

@@ -15,7 +15,7 @@ import {
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers,
+  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
   type SpecNote, type SpecSubNote, type ProjectSpecKey,
@@ -385,6 +385,14 @@ export default function LvConfiguratorPage() {
     setHist((h) => (!readOnly && h.future.length ? { past: [...h.past, h.present].slice(-60), present: h.future[0], future: h.future.slice(1) } : h));
   const canUndo = !readOnly && hist.past.length > 0;
   const canRedo = !readOnly && hist.future.length > 0;
+  // "Apply changes" from the price-list changelog: re-price this quotation to the
+  // current published catalogue (component + cell prices; the estimator's qty,
+  // adjustments and notes are kept). Returns how many priced lines moved.
+  const applyCatalogPrices = (): number => {
+    const { next, changed } = repriceToCatalog(s);
+    if (next !== s) apply(() => next);
+    return changed;
+  };
   // ERP upload: download the QTN's panels as an ERPNext "Bulk Edit Items" CSV
   // (one row per panel — see lv/erpCsv.ts).
   const erpCount = erpItemCount(s);
@@ -665,7 +673,7 @@ export default function LvConfiguratorPage() {
                 ⬇ ERP CSV
               </button>
             )}
-            <CatalogUpdateCheck />
+            <CatalogUpdateCheck onApply={readOnly ? undefined : applyCatalogPrices} />
           </div>
         </div>
       </div>
@@ -1409,7 +1417,7 @@ const numOrText = (v: string | null) => {
   return v && v.trim() ? v : "—";
 };
 
-function CatalogUpdateCheck() {
+function CatalogUpdateCheck({ onApply }: { onApply?: () => number }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [warn, setWarn] = useState(false);
@@ -1471,18 +1479,29 @@ function CatalogUpdateCheck() {
           )}
         </span>
       )}
-      {open && changes && <ChangeLogDialog changes={changes} onClose={() => setOpen(false)} />}
+      {open && changes && <ChangeLogDialog changes={changes} onApply={onApply} onClose={() => setOpen(false)} />}
     </div>
   );
 }
 
 /** The changelog, as its own dismissible panel rather than a dropdown under the button. */
-function ChangeLogDialog({ changes, onClose }: { changes: CatalogChanges; onClose: () => void }) {
+function ChangeLogDialog({ changes, onApply, onClose }: { changes: CatalogChanges; onApply?: () => number; onClose: () => void }) {
+  const [applied, setApplied] = useState<number | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  const doApply = () => {
+    if (!onApply) return;
+    if (!window.confirm(
+      "Re-price this quotation to the current price list?\n\n" +
+      "Component and cell prices are updated to today's list. Your quantities, " +
+      "per-line adjustments and notes are kept. You can Undo this afterwards."
+    )) return;
+    setApplied(onApply());
+  };
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print">
@@ -1499,7 +1518,20 @@ function ChangeLogDialog({ changes, onClose }: { changes: CatalogChanges; onClos
               {changes.note ? ` · ${changes.note}` : ""}
             </p>
           </div>
-          <button onClick={onClose} className="btn-ghost shrink-0" title="Close (Esc)">✕ Close</button>
+          <div className="flex shrink-0 items-center gap-2">
+            {onApply && applied === null && (
+              <button onClick={doApply} className="btn-primary"
+                title="Update this quotation's component & cell prices to the current list">
+                Apply changes
+              </button>
+            )}
+            {applied !== null && (
+              <span className="rounded-full bg-green-100 px-3 py-1.5 text-xs font-semibold text-green-700 dark:bg-green-500/15 dark:text-green-300">
+                ✓ {applied === 0 ? "Already up to date" : `${applied} price${applied === 1 ? "" : "s"} updated`}
+              </span>
+            )}
+            <button onClick={onClose} className="btn-ghost" title="Close (Esc)">✕ Close</button>
+          </div>
         </div>
 
         <div className="mt-3 flex-1 overflow-auto rounded-lg border border-line">
