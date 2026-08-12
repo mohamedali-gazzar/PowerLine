@@ -26,6 +26,13 @@ closed off.
 
 **Set up the team so nobody has to repeat the audit.**
 
+**For the new joiner — send them this one link:**
+<https://claude.ai/claude-code/onboard/RvSDm08AVKiv>
+It opens the onboarding guide inside Claude Code, so their Claude starts already knowing
+the project and the working rules. Two things still have to come from Mohamed by hand:
+GitHub collaborator access (repo → Settings → Collaborators) and the `HANDOFF.secrets.md`
+file, handed over on a USB stick or through a password manager — never by e-mail or chat.
+
 - Added this log file, and a `CLAUDE.md` that tells every Claude on this project how to
   work here — same rules for both of us, so we get the same behaviour and the same
   safety checks.

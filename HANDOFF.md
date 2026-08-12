@@ -34,8 +34,16 @@ see other people's quotations) and an **audit trail** of who did what.
 
 ## 2. Getting set up on a new computer
 
-You need three things installed: **Node.js** (version 20 or newer), **Git**, and
-**Claude Code**. Then open Claude Code and say:
+**The quickest way for someone new:** send them this link, which opens the full
+onboarding guide straight inside Claude Code —
+
+**<https://claude.ai/claude-code/onboard/RvSDm08AVKiv>**
+
+Their Claude then already knows what the project is, how it is run, and the rules we work
+by, before it has even seen the code.
+
+Otherwise, by hand: you need three things installed — **Node.js** (version 20 or newer),
+**Git**, and **Claude Code**. Then open Claude Code and say:
 
 > *"Clone https://github.com/mohamedali-gazzar/PowerLine, set it up, and start it."*
 
