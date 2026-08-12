@@ -860,7 +860,7 @@ export default function LvConfiguratorPage() {
                 🔓 Reopen
               </button>
             )}
-            {!cancelled && canReassign && (
+            {!cancelled && canReassign && status !== "SUBMITTED" && (
               <button className="btn-ghost" onClick={() => setReassignOpen(true)}
                 title="Hand this quotation over to another user so they can continue it">
                 ⇄ Hand over
