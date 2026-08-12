@@ -7,7 +7,7 @@ import type { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { fail } from "../lib/http";
 import {
-  accessOf, PERMS, PERM_LABEL, TIERS, type Perm, type Tier,
+  accessOf, PERMS, PERM_LABEL, TIERS, ROLE_PRESETS, inferRole, type Perm, type Tier,
 } from "../middleware/roles";
 
 /** GET /api/access/me — what the signed-in user may do. Drives UI gating.
@@ -27,6 +27,7 @@ export async function permCatalogue(_req: Request, res: Response) {
   res.json({
     tiers: TIERS,
     perms: PERMS.map((key) => ({ key, label: PERM_LABEL[key] })),
+    roles: ROLE_PRESETS.map((r) => ({ name: r.name, tier: r.tier, perms: r.perms })),
   });
 }
 
@@ -37,23 +38,27 @@ export async function listAccessUsers(_req: Request, res: Response) {
       orderBy: { createdAt: "asc" },
       select: {
         id: true, email: true, name: true, role: true, tier: true,
-        perms: true, notifyByEmail: true, createdAt: true,
+        perms: true, accessRole: true, notifyByEmail: true, createdAt: true,
       },
     });
     res.json({
       users: users.map((u) => {
         // Show what the user EFFECTIVELY has, not the raw column: an unmigrated
         // user's power comes from `role`, and showing an empty list would be a lie.
-        let perms: string[] = [];
+        let perms: Perm[] = [];
         try {
-          perms = JSON.parse(u.perms || "[]");
+          const arr = JSON.parse(u.perms || "[]");
+          perms = Array.isArray(arr) ? arr.filter((p): p is Perm => (PERMS as readonly string[]).includes(p)) : [];
         } catch {
           perms = [];
         }
+        const tier = (u.tier ?? (u.role === "OWNER" ? "ADMIN" : "ENGINEER")) as Tier;
         return {
           ...u,
-          perms: Array.isArray(perms) ? perms : [],
-          tier: u.tier ?? (u.role === "OWNER" ? "ADMIN" : "ENGINEER"),
+          perms,
+          tier,
+          // The single stored role, or a best guess for not-yet-set rows.
+          accessRole: u.accessRole || inferRole(tier, perms),
           migrated: Boolean(u.tier),
         };
       }),
@@ -63,27 +68,43 @@ export async function listAccessUsers(_req: Request, res: Response) {
   }
 }
 
-/** POST /api/access/users/:id  { tier?, perms? } */
+/** POST /api/access/users/:id  { role?, perms?, notifyByEmail? } — role-first: a known
+ *  role sets tier + perms; "Custom" (or bare perms) keeps hand-picked perms as an
+ *  engineer. tier + perms remain what accessOf actually reads. */
 export async function setAccess(req: Request, res: Response) {
   try {
     const actorId = req.userId as string;
     const actorEmail = req.userEmail ?? "";
     const target = await prisma.user.findUnique({
       where: { id: req.params.id },
-      select: { id: true, email: true, role: true, tier: true, perms: true, notifyByEmail: true },
+      select: { id: true, email: true, role: true, tier: true, perms: true, accessRole: true, notifyByEmail: true },
     });
     if (!target) return res.status(404).json({ error: "User not found." });
 
-    const nextTier = req.body?.tier as Tier | undefined;
+    const roleName = typeof req.body?.role === "string" ? req.body.role.trim() : undefined;
+    const preset = ROLE_PRESETS.find((r) => r.name === roleName);
     const nextPermsRaw = req.body?.perms as string[] | undefined;
-    // Turning e-mail off does NOT stop notifications — the in-app inbox still
-    // fills. It only decides whether a copy is also posted out.
+    // Turning e-mail off does NOT stop notifications — the in-app inbox still fills.
     const nextNotify =
       typeof req.body?.notifyByEmail === "boolean" ? (req.body.notifyByEmail as boolean) : undefined;
 
-    if (nextTier && !(TIERS as readonly string[]).includes(nextTier)) {
-      return res.status(400).json({ error: "Unknown access level." });
+    // Resolve the resulting tier + perms + stored role from what was sent.
+    let nextTier: Tier | undefined;
+    let nextPerms: Perm[] | undefined;
+    let nextRole: string | undefined;
+    if (preset) {
+      nextTier = preset.tier;
+      nextPerms = preset.perms;
+      nextRole = preset.name;
+    } else if (roleName !== undefined || nextPermsRaw !== undefined) {
+      // Custom (hand-picked) — always an engineer.
+      nextTier = "ENGINEER";
+      nextPerms = Array.isArray(nextPermsRaw)
+        ? nextPermsRaw.filter((p): p is Perm => (PERMS as readonly string[]).includes(p))
+        : [];
+      nextRole = "";
     }
+
     // Locking yourself out is the one mistake with no in-app recovery.
     if (target.id === actorId && nextTier && nextTier !== "ADMIN") {
       return res.status(400).json({
@@ -91,21 +112,31 @@ export async function setAccess(req: Request, res: Response) {
       });
     }
 
-    const nextPerms = Array.isArray(nextPermsRaw)
-      ? nextPermsRaw.filter((p): p is Perm => (PERMS as readonly string[]).includes(p))
-      : undefined;
+    const parsePerms = (raw: string): Perm[] => {
+      try {
+        const a = JSON.parse(raw || "[]");
+        return Array.isArray(a) ? a.filter((p): p is Perm => (PERMS as readonly string[]).includes(p)) : [];
+      } catch {
+        return [];
+      }
+    };
+    const prevTier = (target.tier ?? (target.role === "OWNER" ? "ADMIN" : "ENGINEER")) as Tier;
+    const prevRole = target.accessRole || inferRole(prevTier, parsePerms(target.perms));
 
-    const data: { tier?: string; perms?: string; notifyByEmail?: boolean } = {};
+    const data: { tier?: string; perms?: string; accessRole?: string; notifyByEmail?: boolean } = {};
     if (nextTier) data.tier = nextTier;
     if (nextPerms) data.perms = JSON.stringify(nextPerms);
+    if (nextRole !== undefined) data.accessRole = nextRole;
     if (nextNotify !== undefined) data.notifyByEmail = nextNotify;
     if (!Object.keys(data).length) return res.json({ ok: true });
 
-    const prevTier = target.tier ?? (target.role === "OWNER" ? "ADMIN" : "ENGINEER");
     await prisma.user.update({ where: { id: target.id }, data });
 
-    // One audit row per changed field, matching how role changes are already logged.
+    // One audit row per changed field.
     const changes: { field: string; oldValue: string; newValue: string }[] = [];
+    if (data.accessRole !== undefined && (data.accessRole || "Custom") !== (prevRole || "Custom")) {
+      changes.push({ field: "role", oldValue: prevRole || "Custom", newValue: data.accessRole || "Custom" });
+    }
     if (data.tier && data.tier !== prevTier) {
       changes.push({ field: "tier", oldValue: prevTier, newValue: data.tier });
     }
@@ -143,7 +174,8 @@ export async function setAccess(req: Request, res: Response) {
           details: changes.map(
             (c) =>
               [
-                c.field === "tier" ? "Access level"
+                c.field === "role" ? "Role"
+                : c.field === "tier" ? "Access level"
                 : c.field === "notifyByEmail" ? "E-mail notifications"
                 : "Permissions",
                 c.newValue,

@@ -149,6 +149,10 @@ model User {
   /// SQLite has no array type and Prisma's Json isn't supported there, so this
   /// follows the same string-holds-JSON precedent as LvQtn.state.
   perms         String   @default("[]")
+  /// Named access role (Admin | Section Head | Team Leader | Tendering | Powerline).
+  /// The single source the Access Center manages; it drives `tier` + `perms` on save.
+  /// "" = not set yet → inferred from tier/perms for display.
+  accessRole    String   @default("")
   /// Opt out of workflow e-mail; in-app notifications still fire.
   notifyByEmail Boolean  @default(true)
   createdAt     DateTime @default(now())

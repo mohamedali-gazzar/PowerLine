@@ -182,9 +182,17 @@ export interface AccessUser {
   role: string;
   tier: "ADMIN" | "ENGINEER";
   perms: string[];
+  /** The single stored access role (Admin | Section Head | … | Custom). */
+  accessRole: string;
   migrated: boolean;
   notifyByEmail: boolean;
   createdAt: string;
+}
+
+export interface RolePreset {
+  name: string;
+  tier: "ADMIN" | "ENGINEER";
+  perms: string[];
 }
 /** A file attached to a quotation on the Specs tab. Metadata only — the bytes are
  *  fetched separately via attachmentLink(), so listing stays cheap. */
@@ -651,9 +659,9 @@ export const api = {
     /** What the signed-in user may do. Every gate in the UI reads this. */
     me: () => request<MyAccess>("/access/me"),
     catalogue: () =>
-      request<{ tiers: string[]; perms: { key: string; label: string }[] }>("/access/catalogue"),
+      request<{ tiers: string[]; perms: { key: string; label: string }[]; roles: RolePreset[] }>("/access/catalogue"),
     users: () => request<{ users: AccessUser[] }>("/access/users"),
-    setAccess: (id: string, data: { tier?: string; perms?: string[]; notifyByEmail?: boolean }) =>
+    setAccess: (id: string, data: { role?: string; perms?: string[]; notifyByEmail?: boolean }) =>
       request<{ ok: true }>(`/access/users/${id}`, { method: "POST", body: JSON.stringify(data) }),
     history: () => request<{ items: PriceChangeRow[] }>("/access/history"),
   },

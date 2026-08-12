@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type AccessUser, type MyAccess, type PriceChangeRow } from "../api";
+import { api, type AccessUser, type MyAccess, type PriceChangeRow, type RolePreset } from "../api";
 import { useAuth } from "../auth/AuthContext";
 
 // Access Center — who is an admin, and what each engineer is allowed to do.
@@ -10,14 +10,12 @@ import { useAuth } from "../auth/AuthContext";
 // The single exception is approving your own quotations — deliberately NOT
 // implied by admin, so it stays a real tick at every tier.
 
-const TIER_LABEL: Record<string, string> = { ADMIN: "Admin", ENGINEER: "Engineer" };
 const ADMIN_EXCEPTION = "qtn.approveOwn";
+const CUSTOM_ROLE = "Custom";
 
-// Named role presets — picking one fills in the tier + exact permission ticks (which
-// the admin then reviews and saves). Admin & Section Head hold everything (Admin tier);
-// the rest are engineers with a specific set. Self-approval (qtn.approveOwn) is left a
-// separate opt-in even for admins, matching the app's existing safety design.
-const ROLE_PRESETS: { name: string; tier: string; perms: string[] }[] = [
+// Fallback role presets used until the server catalogue loads. The backend
+// (middleware/roles.ts) is the source of truth; these keep the UI usable meanwhile.
+const DEFAULT_ROLES: RolePreset[] = [
   { name: "Admin", tier: "ADMIN", perms: [] },
   { name: "Section Head", tier: "ADMIN", perms: [] },
   { name: "Team Leader", tier: "ENGINEER", perms: ["prices.view", "qtn.viewAll", "qtn.reassign", "qtn.approve", "qtn.return", "qtn.amendOwn", "qtn.amendAll"] },
@@ -25,7 +23,7 @@ const ROLE_PRESETS: { name: string; tier: string; perms: string[] }[] = [
   { name: "Powerline", tier: "ENGINEER", perms: ["qtn.viewAll"] },
 ];
 
-type Draft = { tier: string; perms: string[]; notifyByEmail: boolean };
+type Draft = { role: string; perms: string[]; notifyByEmail: boolean };
 type RowNote = { ok: boolean; text: string };
 
 export default function AccessCenterPage() {
@@ -35,7 +33,7 @@ export default function AccessCenterPage() {
   const [users, setUsers] = useState<AccessUser[] | null>(null);
   const [usersError, setUsersError] = useState("");
   const [permList, setPermList] = useState<{ key: string; label: string }[]>([]);
-  const [tiers, setTiers] = useState<string[]>(["ADMIN", "ENGINEER"]);
+  const [roles, setRoles] = useState<RolePreset[]>(DEFAULT_ROLES);
   const [history, setHistory] = useState<PriceChangeRow[] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [notes, setNotes] = useState<Record<string, RowNote>>({});
@@ -61,7 +59,7 @@ export default function AccessCenterPage() {
           .catalogue()
           .then((c) => {
             setPermList(c.perms);
-            if (c.tiers.length) setTiers(c.tiers);
+            if (c.roles?.length) setRoles(c.roles);
           })
           .catch(() => {});
         api.access
@@ -72,7 +70,7 @@ export default function AccessCenterPage() {
       .catch((e) => setGateError((e as Error).message));
   }, []);
 
-  const draftFor = (u: AccessUser): Draft => drafts[u.id] ?? { tier: u.tier, perms: u.perms, notifyByEmail: u.notifyByEmail };
+  const draftFor = (u: AccessUser): Draft => drafts[u.id] ?? { role: u.accessRole, perms: u.perms, notifyByEmail: u.notifyByEmail };
 
   const clearNote = (id: string) =>
     setNotes((n) => {
@@ -98,7 +96,7 @@ export default function AccessCenterPage() {
     const d = drafts[u.id];
     if (!d) return false;
     return (
-      d.tier !== u.tier ||
+      d.role !== u.accessRole ||
       d.notifyByEmail !== u.notifyByEmail ||
       d.perms.length !== u.perms.length ||
       d.perms.some((p) => !u.perms.includes(p))
@@ -111,7 +109,7 @@ export default function AccessCenterPage() {
     setBusy(u.id);
     clearNote(u.id);
     try {
-      await api.access.setAccess(u.id, { tier: d.tier, perms: d.perms, notifyByEmail: d.notifyByEmail });
+      await api.access.setAccess(u.id, { role: d.role, perms: d.perms, notifyByEmail: d.notifyByEmail });
       // Re-read rather than patch locally: changing tier can rewrite the stored
       // permissions, so only the server knows what this user now holds.
       const r = await api.access.users();
@@ -170,8 +168,8 @@ export default function AccessCenterPage() {
       <div className="mb-5">
         <h1 className="text-2xl font-extrabold tracking-tight">Access Center</h1>
         <p className="text-sm text-muted">
-          Set who is an admin and, for engineers, exactly what they may do. Changes take effect on
-          the person's next click.
+          Give each person a role — it sets what they can do. Pick “Custom” to hand-tick
+          permissions instead. Changes take effect on their next click.
         </p>
       </div>
 
@@ -208,7 +206,7 @@ export default function AccessCenterPage() {
               user={u}
               draft={draftFor(u)}
               perms={permList}
-              tiers={tiers}
+              roles={roles}
               dirty={isDirty(u)}
               busy={busy === u.id}
               note={notes[u.id]}
@@ -274,7 +272,7 @@ function UserCard({
   user,
   draft,
   perms,
-  tiers,
+  roles,
   dirty,
   busy,
   note,
@@ -286,7 +284,7 @@ function UserCard({
   user: AccessUser;
   draft: Draft;
   perms: { key: string; label: string }[];
-  tiers: string[];
+  roles: RolePreset[];
   dirty: boolean;
   busy: boolean;
   note?: RowNote;
@@ -295,10 +293,25 @@ function UserCard({
   onSave: () => void;
   onDiscard: () => void;
 }) {
-  const isAdmin = draft.tier === "ADMIN";
+  const preset = roles.find((r) => r.name === draft.role);
+  const isAdminRole = preset?.tier === "ADMIN";
+  const isCustom = !preset; // "Custom" (or unknown) → ticks are editable
 
   const toggle = (key: string, on: boolean) =>
     onEdit({ perms: on ? [...draft.perms, key] : draft.perms.filter((p) => p !== key) });
+
+  // How each permission tick appears for the current role.
+  const tick = (key: string): { checked: boolean; disabled: boolean } => {
+    if (isAdminRole) return { checked: key !== ADMIN_EXCEPTION, disabled: true }; // admin holds all
+    if (preset) return { checked: preset.perms.includes(key), disabled: true };   // fixed engineer role
+    return { checked: draft.perms.includes(key), disabled: busy };                // Custom → editable
+  };
+
+  const pickRole = (name: string) => {
+    const p = roles.find((r) => r.name === name);
+    // A preset fills in its permissions; Custom keeps the current ones to fine-tune.
+    onEdit(p ? { role: p.name, perms: [...p.perms] } : { role: CUSTOM_ROLE });
+  };
 
   return (
     <div className="card p-4">
@@ -331,36 +344,15 @@ function UserCard({
           </label>
           <select
             id={`role-${user.id}`}
-            className="input mb-3 w-44"
-            value=""
+            className="input w-52"
+            value={draft.role || CUSTOM_ROLE}
             disabled={busy}
-            title="Fill in the tier and permissions for a role — then review and Save"
-            onChange={(e) => {
-              const r = ROLE_PRESETS.find((x) => x.name === e.target.value);
-              if (r) onEdit({ tier: r.tier, perms: [...r.perms] });
-            }}
+            onChange={(e) => pickRole(e.target.value)}
           >
-            <option value="">Apply a role…</option>
-            {ROLE_PRESETS.map((r) => (
+            {roles.map((r) => (
               <option key={r.name} value={r.name}>{r.name}</option>
             ))}
-          </select>
-
-          <label className="label" htmlFor={`tier-${user.id}`}>
-            Tier
-          </label>
-          <select
-            id={`tier-${user.id}`}
-            className="input w-44"
-            value={draft.tier}
-            disabled={busy}
-            onChange={(e) => onEdit({ tier: e.target.value })}
-          >
-            {tiers.map((t) => (
-              <option key={t} value={t}>
-                {TIER_LABEL[t] ?? t}
-              </option>
-            ))}
+            <option value={CUSTOM_ROLE}>Custom…</option>
           </select>
 
           {/* Turning this off does not silence the person � the in-app bell still
@@ -386,31 +378,32 @@ function UserCard({
       </div>
 
       <div className="mt-3 border-t border-line pt-3">
-        {isAdmin && (
-          <p className="mb-2 text-xs text-muted">
-            Admins hold every permission, so these are fixed. Approving your own quotations is the
-            one exception — it stays a separate tick.
-          </p>
-        )}
+        <p className="mb-2 text-xs text-muted">
+          {isAdminRole
+            ? "This role holds every permission — approving your own quotations stays a separate opt-in."
+            : isCustom
+            ? "Custom — tick exactly what this person may do."
+            : "Permissions this role grants. Switch to “Custom” to hand-pick."}
+        </p>
         {perms.length === 0 ? (
           <p className="text-xs text-muted">
-            The permission list could not be loaded. Tier can still be changed.
+            The permission list could not be loaded. The role can still be changed.
           </p>
         ) : (
           <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
             {perms.map((p) => {
-              const implied = isAdmin && p.key !== ADMIN_EXCEPTION;
+              const t = tick(p.key);
               return (
                 <label
                   key={p.key}
-                  className={`flex items-center gap-2 text-sm ${implied ? "text-muted" : "text-ink"}`}
+                  className={`flex items-center gap-2 text-sm ${t.disabled ? "text-muted" : "text-ink"}`}
                   title={p.key}
                 >
                   <input
                     type="checkbox"
                     className="shrink-0"
-                    checked={implied || draft.perms.includes(p.key)}
-                    disabled={implied || busy}
+                    checked={t.checked}
+                    disabled={t.disabled}
                     onChange={(e) => toggle(p.key, e.target.checked)}
                   />
                   <span className="truncate">{p.label}</span>
@@ -435,7 +428,7 @@ function UserCard({
             {note.text}
           </p>
         )}
-        {isSelf && draft.tier === "ADMIN" && !note && (
+        {isSelf && isAdminRole && !note && (
           <p className="text-xs text-muted">You cannot remove your own admin access.</p>
         )}
       </div>

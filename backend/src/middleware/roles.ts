@@ -59,6 +59,30 @@ const DERIVED: Record<Role, Perm[]> = {
   USER: [],
 };
 
+/** Named access roles managed in the Access Center — the single setting an admin
+ *  picks; it drives tier + perms on save. Admin & Section Head hold everything (Admin
+ *  tier); the rest are engineers with a fixed set. */
+export const ROLE_PRESETS: { name: string; tier: Tier; perms: Perm[] }[] = [
+  { name: "Admin", tier: "ADMIN", perms: [] },
+  { name: "Section Head", tier: "ADMIN", perms: [] },
+  { name: "Team Leader", tier: "ENGINEER", perms: ["prices.view", "qtn.viewAll", "qtn.reassign", "qtn.approve", "qtn.return", "qtn.amendOwn", "qtn.amendAll"] },
+  { name: "Tendering", tier: "ENGINEER", perms: ["prices.view", "qtn.viewAll", "qtn.editWaiting", "qtn.amendOwn", "qtn.amendAll"] },
+  { name: "Powerline", tier: "ENGINEER", perms: ["qtn.viewAll"] },
+];
+export const ROLE_NAMES = ROLE_PRESETS.map((r) => r.name);
+
+/** Best-guess role for a user with tier/perms but no stored accessRole yet (legacy
+ *  rows) so the UI shows a sensible role rather than blank. */
+export function inferRole(tier: Tier, perms: Perm[]): string {
+  if (tier === "ADMIN") return "Admin";
+  const set = new Set(perms);
+  for (const r of ROLE_PRESETS) {
+    if (r.tier !== "ENGINEER") continue;
+    if (r.perms.length === perms.length && r.perms.every((p) => set.has(p))) return r.name;
+  }
+  return "Custom";
+}
+
 function safeParsePerms(raw: string): Perm[] {
   try {
     const arr = JSON.parse(raw || "[]");
