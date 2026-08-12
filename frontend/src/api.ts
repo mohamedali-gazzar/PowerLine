@@ -128,6 +128,9 @@ export interface QtnWorkflow {
   ownerId: string;
   ownerEmail: string;
   ownerName: string;
+  coOwnerId?: string;
+  coOwnerEmail?: string;
+  coOwnerName?: string;
 }
 
 export interface QtnListItemDto extends QtnWorkflow {
@@ -510,6 +513,12 @@ export const api = {
       request<{ ok: true; ownerId: string; ownerEmail: string; ownerName: string }>(`/qtns/${id}/reassign`, {
         method: "POST",
         body: JSON.stringify({ toUserId, ...(note ? { note } : {}) }),
+      }),
+    /** Co-Work: set (or clear with null) the second sales-support on a quotation. */
+    cowork: (id: string, coOwnerId: string | null, note?: string) =>
+      request<{ ok: true; coOwnerId: string; coOwnerEmail: string; coOwnerName: string }>(`/qtns/${id}/cowork`, {
+        method: "POST",
+        body: JSON.stringify({ coOwnerId, ...(note ? { note } : {}) }),
       }),
     submit: (id: string) => request<{ ok: true }>(`/qtns/${id}/submit`, { method: "POST" }),
     unsubmit: (id: string) => request<{ ok: true }>(`/qtns/${id}/unsubmit`, { method: "POST" }),

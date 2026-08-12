@@ -32,6 +32,9 @@ export interface QtnRecord {
   ownerId: string;
   ownerEmail: string;
   ownerName: string;
+  coOwnerId: string;
+  coOwnerEmail: string;
+  coOwnerName: string;
   state: LvState;
 }
 
@@ -48,6 +51,7 @@ export interface QtnListItem {
   locked: boolean;
   ownerEmail: string;
   ownerName: string;
+  coOwnerEmail?: string;
   approverEmail: string;
 }
 
@@ -175,6 +179,9 @@ const toRecord = (r: QtnRecordDto): QtnRecord => ({
   ownerId: r.ownerId ?? "",
   ownerEmail: r.ownerEmail ?? "",
   ownerName: r.ownerName ?? "",
+  coOwnerId: r.coOwnerId ?? "",
+  coOwnerEmail: r.coOwnerEmail ?? "",
+  coOwnerName: r.coOwnerName ?? "",
   state: normalize(r.state as LvState),
 });
 
@@ -211,6 +218,11 @@ export async function listAssignees() {
 /** Hand a quotation to another user (transfer ownership). Throws the server's message. */
 export async function reassignQtn(id: string, toUserId: string, note?: string) {
   return api.qtns.reassign(id, toUserId, note);
+}
+
+/** Co-Work: set a second sales-support (or clear with null). Throws the server's message. */
+export async function setCoWorker(id: string, coOwnerId: string | null, note?: string) {
+  return api.qtns.cowork(id, coOwnerId, note);
 }
 
 export async function getQtn(id: string): Promise<QtnRecord | null> {

@@ -18,6 +18,7 @@ import {
   events,
   assignees,
   reassign,
+  cowork,
   listAttachments,
   uploadAttachment,
   downloadAttachment,
@@ -45,6 +46,7 @@ router.post("/:id/duplicate", duplicate);
 // mid-rollout keeps working.
 router.post("/:id/transition", transition);
 router.post("/:id/reassign", reassign);
+router.post("/:id/cowork", cowork);
 router.post("/:id/submit", submit);
 router.post("/:id/unsubmit", unsubmit);
 router.get("/:id/events", events);

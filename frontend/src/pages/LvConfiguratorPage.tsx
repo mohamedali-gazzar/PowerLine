@@ -1,8 +1,9 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
+import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorker, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
 import ReassignQtnModal from "../components/ReassignQtnModal";
+import CoWorkModal from "../components/CoWorkModal";
 import { useStaff, SALES_MANAGER } from "../staff";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
@@ -289,6 +290,7 @@ export default function LvConfiguratorPage() {
   const [submitting, setSubmitting] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
+  const [coWorkOpen, setCoWorkOpen] = useState(false);
   const { user } = useAuth();
   // EDMS standard-panel warning: which panel tripped it + the snapshot to revert to.
   // edmsWarnedRef remembers panels already warned this session (once per panel).
@@ -511,12 +513,22 @@ export default function LvConfiguratorPage() {
   const canReturn = canApprove || myPerms.includes("qtn.return");
   const canReopen = myPerms.includes("qtn.reopen");
   // Hand-over: a manager (qtn.reassign) can move anyone's; the owner can hand off their own.
-  const canReassign = myPerms.includes("qtn.reassign") || isOwner;
+  // A co-owner is neither — hide it from them (the server would 403 anyway).
+  const isCoOwnerHere = !!rec?.coOwnerId && user?.id === rec?.coOwnerId;
+  const canReassign = (myPerms.includes("qtn.reassign") || isOwner) && !isCoOwnerHere;
   const doReassign = async (toUserId: string, note: string) => {
     if (!rec) return;
     await reassignQtn(rec.id, toUserId, note); // throws → the modal shows the message
     setReassignOpen(false);
     navigate("/lv"); // ownership moved — the ex-owner leaves the (now read-only-to-them) QTN
+  };
+  // Co-Work: only the primary owner (or a manager) may add/change/remove a co-owner.
+  const canCoWork = user?.id === rec?.ownerId || myPerms.includes("qtn.reassign");
+  const doSetCoWorker = async (coOwnerId: string | null, note: string) => {
+    if (!rec) return;
+    const res = await setCoWorker(rec.id, coOwnerId, note); // throws → the modal shows the message
+    setRec({ ...rec, coOwnerId: res.coOwnerId, coOwnerEmail: res.coOwnerEmail, coOwnerName: res.coOwnerName });
+    setCoWorkOpen(false);
   };
 
   // Return for revision: a structured, per-panel comment modal (replaces the old
@@ -606,6 +618,34 @@ export default function LvConfiguratorPage() {
   const totals = useMemo(() => grandTotals(s), [s]);
   const sel = s.panels.find((p) => p.id === s.selectedId) ?? null;
   const isSpareQtn = s.kind === "spare";
+  // ── Co-Work ────────────────────────────────────────────────────────────────
+  // Two sales-support share one QTN, split BY PANEL: each edits only the panels
+  // they own, and the shared tabs (Project / Pricing / Terms) belong to the
+  // primary owner alone. `coWork` is on only once a second owner is set; ownership
+  // then splits. A panel with no ownerId (legacy / pre-co-work) counts as the
+  // primary's. The server merge is the real guard — this only shapes the UI so a
+  // user's edits to someone else's panel don't silently vanish on the next save.
+  const coWork = !!rec?.coOwnerId;
+  const isPrimary = !coWork || user?.id === rec?.ownerId;
+  const panelOwnerOf = (p?: LvPanel | null) => p?.ownerId || rec?.ownerId || "";
+  const canEditPanel = (p?: LvPanel | null) => !coWork || panelOwnerOf(p) === user?.id;
+  // The shared tabs are read-only for a co-owner (the primary owns them). Panel
+  // edits are gated per-panel in `upPanel`; reorder is gated in `up`.
+  const sharedReadOnly = readOnly || (coWork && !isPrimary);
+  // Resolve a panel-owner id to a display name / initials for the co-work badges.
+  const ownerNameById = (id?: string | null) => {
+    if (!id) return "";
+    if (id === rec?.ownerId) return rec?.ownerName || rec?.ownerEmail || "Primary owner";
+    if (id === rec?.coOwnerId) return rec?.coOwnerName || rec?.coOwnerEmail || "Co-owner";
+    return "";
+  };
+  const initialsOf = (name: string) =>
+    name.trim().split(/[\s@._-]+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
+  const panelBadge = coWork
+    ? (p: LvPanel) => { const id = panelOwnerOf(p); const name = ownerNameById(id); return { text: initialsOf(name), title: name, mine: id === user?.id }; }
+    : undefined;
+  const coOwnerLabel = rec?.coOwnerName || rec?.coOwnerEmail || "";
+  const selPanelOwnerName = coWork && sel ? ownerNameById(panelOwnerOf(sel)) : "";
   // Standard EDMS quotations quote panels only — no Spare Parts / LCP / KWHM cells,
   // so the "Auxiliary Panels" menu is not offered on them.
   const isEdmsQtn = s.kind === "edms";
@@ -636,10 +676,19 @@ export default function LvConfiguratorPage() {
   // immutable update helpers
   const up = (patch: Partial<LvState>) => {
     if (readOnly && !isNavOnly(patch, "selectedId")) return;
+    // Co-Work: the shared tabs (Project / Pricing / Terms) and panel reorder belong
+    // to the primary owner; a co-owner may still navigate between panels.
+    if (coWork && !isPrimary && !isNavOnly(patch, "selectedId")) return;
     apply((old) => ({ ...old, ...patch }));
   };
   const upPanel = (id: string, patch: Partial<LvPanel>) => {
     if (readOnly && !isNavOnly(patch, "activeSection")) return;
+    // Co-Work: you may edit only the panels you own (opening a panel's section is
+    // navigation, always allowed). Guards the UI; the server merge is the backstop.
+    if (coWork && !isNavOnly(patch, "activeSection")) {
+      const cur = s.panels.find((p) => p.id === id);
+      if (panelOwnerOf(cur) !== user?.id) return;
+    }
     // Standard EDMS panels are pre-approved. The first time this session a panel is
     // *edited* — a component added/removed/changed, sizing, copper, anything but
     // navigation/labels — snapshot it and warn. Building from the standard
@@ -669,6 +718,7 @@ export default function LvConfiguratorPage() {
     // A new panel starts from whatever was chosen on the Specs tab, so the
     // project-wide fields don't have to be re-picked for every panel.
     const p = withProjectSpecs(newPanel(s.panels.length + 1), s.projectSpecs);
+    if (coWork && user?.id) p.ownerId = user.id; // co-work: a new panel belongs to its creator
     apply((old) => ({ ...old, panels: [...old.panels, p], selectedId: p.id }));
     setTab("panels");
   };
@@ -678,11 +728,14 @@ export default function LvConfiguratorPage() {
   const addSpareCell = (kind = "spare") => {
     if (readOnly) return;
     const c = newSparePanel(kind);
+    if (coWork && user?.id) c.ownerId = user.id; // co-work: a new cell belongs to its creator
     apply((old) => ({ ...old, panels: [...old.panels, c], selectedId: c.id }));
     setTab(isSpareQtn ? "spare" : "panels");
   };
   const removePanel = (id: string) => {
     if (readOnly) return;
+    // Co-Work: you can delete only your own panels.
+    if (coWork && panelOwnerOf(s.panels.find((p) => p.id === id)) !== user?.id) return;
     apply((old) => {
       const panels = old.panels.filter((p) => p.id !== id);
       return { ...old, panels, selectedId: panels[0]?.id ?? null };
@@ -690,10 +743,13 @@ export default function LvConfiguratorPage() {
   };
   const clonePanel = (id: string) => {
     if (readOnly) return;
+    // Co-Work: you can duplicate only your own panels; the copy is yours too.
+    if (coWork && panelOwnerOf(s.panels.find((p) => p.id === id)) !== user?.id) return;
     apply((old) => {
       const src = old.panels.find((p) => p.id === id);
       if (!src) return old;
       const copy = duplicatePanel(src, nextDuplicateName(src.name, old.panels));
+      if (coWork && user?.id) copy.ownerId = user.id;
       const i = old.panels.findIndex((p) => p.id === id);
       const panels = [...old.panels];
       panels.splice(i + 1, 0, copy);
@@ -866,6 +922,12 @@ export default function LvConfiguratorPage() {
                 ⇄ Hand over
               </button>
             )}
+            {!cancelled && canCoWork && status !== "SUBMITTED" && (
+              <button className={`btn-ghost ${coWork ? "text-brand-dark" : ""}`} onClick={() => setCoWorkOpen(true)}
+                title="Let a second sales-support build this quotation with you, split by panel">
+                👥 Co-Work{coWork ? " ✓" : ""}
+              </button>
+            )}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {erpCount > 0 && (
@@ -914,6 +976,14 @@ export default function LvConfiguratorPage() {
         onCancel={() => setReassignOpen(false)}
         onReassign={doReassign}
       />
+      <CoWorkModal
+        open={coWorkOpen}
+        qtnNumber={qtnNum}
+        currentCoOwnerId={rec?.coOwnerId || undefined}
+        currentCoOwnerLabel={coOwnerLabel || undefined}
+        onCancel={() => setCoWorkOpen(false)}
+        onSet={doSetCoWorker}
+      />
       {status === "RETURNED" && wf.returnReason && (
         <div className="mb-4 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 no-print animate-fade-up">
           <p className="text-sm font-bold text-red-800">↩ Returned for revision</p>
@@ -957,17 +1027,38 @@ export default function LvConfiguratorPage() {
         ))}
       </div>
 
+      {coWork && (
+        <div className="mb-4 rounded-xl border border-brand/30 bg-brand-tint/60 px-4 py-3 text-sm no-print">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-white">Co-Work</span>
+            <span className="font-semibold text-ink">
+              {isPrimary ? `You + ${coOwnerLabel}` : `${rec?.ownerName || rec?.ownerEmail || "Primary owner"} + you`}
+            </span>
+            <span className="text-muted">
+              {isPrimary
+                ? "You edit the shared tabs and your own panels — each panel is tagged with its owner."
+                : "You edit only your own panels; the shared tabs (Project, Pricing, Specs, Terms) belong to the primary owner."}
+            </span>
+          </div>
+          {sel && !canEditPanel(sel) && !readOnly && (activeTab === "panels" || activeTab === "spare") && (
+            <div className="mt-1.5 font-medium text-brand-dark">
+              The selected panel belongs to {selPanelOwnerName || "the other owner"} — read-only for you.
+            </div>
+          )}
+        </div>
+      )}
+
       <div ref={navRef} onKeyDown={onFieldArrowNav}>
         {activeTab === "project" && <ProjectTab s={s} up={up} qtnNum={qtnNum} onRenameQtn={renameQtnNumber} />}
         {activeTab === "pricing" && <PricingTab s={s} up={up} />}
-        {activeTab === "specs" && <SpecsTab s={s} up={up} qtnId={rec?.id ?? ""} readOnly={readOnly} />}
+        {activeTab === "specs" && <SpecsTab s={s} up={up} qtnId={rec?.id ?? ""} readOnly={sharedReadOnly} />}
         {activeTab === "panels" && (
-          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
+          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} panelBadge={panelBadge}
             onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
             onAddSpare={isEdmsQtn ? undefined : addSpareCell} />
         )}
         {activeTab === "spare" && (
-          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel}
+          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} panelBadge={panelBadge}
             onAdd={() => addSpareCell("spare")} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
             addLabel="+ Add cell" emptyLabel="No spare cells yet." emptyAddLabel="+ Add your first cell" />
         )}
@@ -3997,13 +4088,15 @@ function AddSpareMenu({ onAddSpare, trigger, wrap = "" }: { onAddSpare: (kind: s
   );
 }
 
-function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
+function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, panelBadge, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
   s: LvState; sel: LvPanel | null;
   up: (p: Partial<LvState>) => void;
   upPanel: (id: string, p: Partial<LvPanel>) => void;
   onAdd: () => void; onDel: (id: string) => void; onClone: (id: string) => void;
   onOpenInOffer: (id: string) => void;
   onAddSpare?: (kind: string) => void;
+  /** Co-Work: owner tag for a panel row (initials + whether it's the current user's). */
+  panelBadge?: (p: LvPanel) => { text: string; title: string; mine: boolean };
   addLabel?: string; emptyLabel?: string; emptyAddLabel?: string;
 }) {
   // Drag-and-drop reorder state (hooks must precede the early return).
@@ -4072,6 +4165,12 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
                     </svg>
                   </span>
                   <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{i + 1}</span>
+                  {panelBadge && (() => { const b = panelBadge(p); return (
+                    <span title={`Owner: ${b.title}${b.mine ? " (you)" : ""}`}
+                      className={`grid h-5 min-w-[1.25rem] shrink-0 place-items-center rounded-full px-1 text-[10px] font-bold ${b.mine ? "bg-emerald-500 text-white" : "bg-amber-400 text-amber-950"}`}>
+                      {b.text}
+                    </span>
+                  ); })()}
                   <button onClick={() => up({ selectedId: p.id })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
                     <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{p.name.trim() || "(unnamed panel)"}</div>
                   </button>

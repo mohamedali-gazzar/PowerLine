@@ -24,6 +24,12 @@ export const reassignSchema = z.object({
   note: z.string().max(2000).optional(),
 });
 
+// Co-Work: set (or clear, with null/"") the second sales-support on a quotation.
+export const coworkSchema = z.object({
+  coOwnerId: z.string().trim().nullable().optional(),
+  note: z.string().max(2000).optional(),
+});
+
 // ── Specs-tab attachments ───────────────────────────────────────────────────
 // Files travel as base64 inside the JSON body. The cap is set by the PRODUCTION
 // host, not by us: Vercel rejects a serverless request body over 4.5 MB, and

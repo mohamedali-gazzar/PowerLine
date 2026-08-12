@@ -158,7 +158,8 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  lvQtns        LvQtn[]
+  lvQtns        LvQtn[]        @relation("OwnedQtns")
+  coOwnedQtns   LvQtn[]        @relation("CoOwnedQtns")
   offers        Offer[]
   notifications Notification[]
 }
@@ -183,8 +184,13 @@ model EmailCode {
 model LvQtn {
   id          String    @id @default(cuid())
   number      String
-  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner       User      @relation("OwnedQtns", fields: [ownerId], references: [id], onDelete: Cascade)
   ownerId     String
+  /// Co-Work: an optional second sales-support who owns some of this QTN's panels.
+  /// Each panel carries its own ownerId (in the state JSON); the save endpoint merges
+  /// per-panel so the two never overwrite each other.
+  coOwner     User?     @relation("CoOwnedQtns", fields: [coOwnerId], references: [id], onDelete: SetNull)
+  coOwnerId   String?
   state       String // JSON-serialized LvState
   // client-computed summary (avoids duplicating pricing logic on the server)
   projectName String    @default("")

@@ -6,6 +6,7 @@ import {
   updateQtnSchema,
   numberSchema,
   reassignSchema,
+  coworkSchema,
   attachmentSchema,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_QTN,
@@ -42,6 +43,8 @@ type QtnRow = {
   submittedForApprovalAt?: Date | null;
   ownerId?: string;
   owner?: { email: string; name: string } | null;
+  coOwnerId?: string | null;
+  coOwner?: { email: string; name: string } | null;
   projectName: string;
   customer: string;
   panelsCount: number;
@@ -76,6 +79,9 @@ const record = (q: QtnRow) => {
     ownerId: q.ownerId ?? "",
     ownerEmail: q.owner?.email ?? "",
     ownerName: q.owner?.name ?? "",
+    coOwnerId: q.coOwnerId ?? "",
+    coOwnerEmail: q.coOwner?.email ?? "",
+    coOwnerName: q.coOwner?.name ?? "",
     state,
   };
 };
@@ -93,6 +99,9 @@ const listItem = (q: QtnRow) => ({
   ownerId: q.ownerId ?? "",
   ownerEmail: q.owner?.email ?? "",
   ownerName: q.owner?.name ?? "",
+  coOwnerId: q.coOwnerId ?? "",
+  coOwnerEmail: q.coOwner?.email ?? "",
+  coOwnerName: q.coOwner?.name ?? "",
 });
 
 // ── Visibility ───────────────────────────────────────────────────────────────
@@ -100,21 +109,27 @@ const listItem = (q: QtnRow) => ({
 // literally could not open the quotation they were being asked to approve. Reads
 // widen for qtn.viewAll; WRITES stay owner-only — approvers review, they don't edit.
 
-const ownerSelect = { owner: { select: { email: true, name: true } } } as const;
+const ownerSelect = {
+  owner: { select: { email: true, name: true } },
+  coOwner: { select: { email: true, name: true } },
+} as const;
 
-/** The QTN if the caller may SEE it. */
+/** The QTN if the caller may SEE it — its owner, its co-owner, or a qtn.viewAll holder. */
 async function visibleQtn(req: Request) {
   const acc = await accessOf(req.userId);
+  const uid = req.userId as string;
   const where = acc.perms.has("qtn.viewAll")
     ? { id: req.params.id }
-    : { id: req.params.id, ownerId: req.userId as string };
+    : { id: req.params.id, OR: [{ ownerId: uid }, { coOwnerId: uid }] };
   return prisma.lvQtn.findFirst({ where, include: ownerSelect });
 }
 
-/** The QTN if the caller may WRITE its content (ownership only). */
+/** The QTN if the caller may WRITE it — its owner OR its co-owner. What a co-owner can
+ *  actually change is enforced by the per-panel merge in update(), not here. */
 async function writableQtn(req: Request) {
+  const uid = req.userId as string;
   return prisma.lvQtn.findFirst({
-    where: { id: req.params.id, ownerId: req.userId as string },
+    where: { id: req.params.id, OR: [{ ownerId: uid }, { coOwnerId: uid }] },
     include: ownerSelect,
   });
 }
@@ -180,11 +195,15 @@ async function nextNumber(ownerId: string): Promise<string> {
   return `QTN-${yy()}-${String(max + 1).padStart(4, "0")}`;
 }
 
-// GET /api/qtns
+// GET /api/qtns — my quotations: ones I own OR co-own.
 export async function list(req: Request, res: Response) {
   try {
-    const ownerId = req.userId as string;
-    const rows = await prisma.lvQtn.findMany({ where: { ownerId }, orderBy: { updatedAt: "desc" } });
+    const uid = req.userId as string;
+    const rows = await prisma.lvQtn.findMany({
+      where: { OR: [{ ownerId: uid }, { coOwnerId: uid }] },
+      orderBy: { updatedAt: "desc" },
+      include: ownerSelect,
+    });
     res.json(rows.map(listItem));
   } catch (e) {
     fail(res, e);
@@ -241,6 +260,40 @@ export async function create(req: Request, res: Response) {
   }
 }
 
+// ── Co-Work merge ────────────────────────────────────────────────────────────
+// When a QTN has a co-owner, a save writes ONLY the saver's own panels; a co-owner's
+// save also leaves the shared fields (project/pricing/terms/…) untouched — so the two
+// work at once and never overwrite each other. Panel ownership comes from the STORED
+// state (a saver can't reassign or edit the other's panel), unassigned panels belong to
+// the primary owner, and a brand-new panel is stamped to the saver.
+type PanelLike = { id?: string; ownerId?: string; [k: string]: unknown };
+type StateLike = { panels?: PanelLike[]; [k: string]: unknown };
+function mergeCoWork(stored: StateLike, incoming: StateLike, primaryId: string, coOwnerId: string, saverId: string): StateLike {
+  const other = saverId === primaryId ? coOwnerId : primaryId;
+  const storedPanels = Array.isArray(stored?.panels) ? stored.panels : [];
+  const incomingPanels = Array.isArray(incoming?.panels) ? incoming.panels : [];
+  const storedById = new Map(storedPanels.filter((p) => p?.id).map((p) => [p.id as string, p]));
+  const ownerOf = (p: PanelLike) => p?.ownerId || primaryId;
+
+  const merged: PanelLike[] = [];
+  const seen = new Set<string>();
+  for (const p of incomingPanels) {
+    if (!p?.id) { merged.push(p); continue; }
+    seen.add(p.id);
+    const sp = storedById.get(p.id);
+    if (!sp) { merged.push({ ...p, ownerId: saverId }); continue; } // new panel → saver owns it
+    if (ownerOf(sp) === other) merged.push(sp);                     // the other's panel — authoritative
+    else merged.push({ ...p, ownerId: ownerOf(sp) });              // saver's own edit (owner from stored)
+  }
+  // Never drop the other's panels, even if the saver's client didn't send them back.
+  for (const sp of storedPanels) {
+    if (sp?.id && !seen.has(sp.id) && ownerOf(sp) === other) merged.push(sp);
+  }
+
+  const base = saverId === primaryId ? incoming : stored; // co-owner keeps stored shared fields
+  return { ...base, panels: merged };
+}
+
 // PUT /api/qtns/:id  { state, summary }  — debounced live-save from the configurator
 export async function update(req: Request, res: Response) {
   try {
@@ -257,9 +310,16 @@ export async function update(req: Request, res: Response) {
         return lockedResponse(res, s);
       }
     }
+    // With a co-owner, merge per-panel so the two never overwrite each other.
+    let toStore: unknown = state ?? {};
+    if (q.coOwnerId) {
+      let stored: StateLike = {};
+      try { stored = JSON.parse(q.state) as StateLike; } catch { /* corrupt → treat as empty */ }
+      toStore = mergeCoWork(stored, (state ?? {}) as StateLike, q.ownerId, q.coOwnerId, req.userId as string);
+    }
     await prisma.lvQtn.update({
       where: { id: q.id },
-      data: { state: JSON.stringify(state ?? {}), ...summaryData(summary) },
+      data: { state: JSON.stringify(toStore), ...summaryData(summary) },
     });
     res.json({ ok: true });
   } catch (e) {
@@ -640,6 +700,58 @@ export async function reassign(req: Request, res: Response) {
     });
 
     res.json({ ok: true, ownerId: toUserId, ownerEmail: target.email, ownerName: target.name });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+// POST /api/qtns/:id/cowork { coOwnerId | null, note? } — Co-Work: set (or clear) the
+// second sales-support on a quotation so they can work its panels alongside the owner.
+// Allowed for the primary owner or a qtn.reassign holder. Each panel keeps its own
+// ownerId (in the state) and the save endpoint merges per-panel.
+export async function cowork(req: Request, res: Response) {
+  try {
+    const { coOwnerId, note } = coworkSchema.parse(req.body);
+    const q = await visibleQtn(req);
+    if (!q) return res.status(404).json({ error: "Quotation not found." });
+
+    const acc = await accessOf(req.userId);
+    if (!acc.perms.has("qtn.reassign") && q.ownerId !== req.userId) {
+      return res.status(403).json({ error: "You don't have permission to set a co-worker." });
+    }
+    const targetId = coOwnerId?.trim() || null;
+    if (targetId && targetId === q.ownerId) {
+      return res.status(400).json({ error: "The owner can't also be the co-worker." });
+    }
+    let target: { id: string; name: string; email: string } | null = null;
+    if (targetId) {
+      target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true, name: true, email: true } });
+      if (!target) return res.status(404).json({ error: "The chosen user was not found." });
+    }
+
+    const trimmedNote = note?.trim() || "";
+    const status = qtnStatus(q);
+    await prisma.$transaction([
+      prisma.lvQtn.update({ where: { id: q.id }, data: { coOwnerId: targetId } }),
+      prisma.qtnEvent.create({
+        data: {
+          qtnId: q.id, qtnNumber: q.number, ownerId: q.ownerId, ownerEmail: q.owner?.email ?? "",
+          action: "COWORK", fromStatus: status, toStatus: status,
+          note: targetId ? `co-worker → ${target?.email}${trimmedNote ? ` · ${trimmedNote}` : ""}` : "co-worker removed",
+          actorId: req.userId ?? null, actorEmail: req.userEmail ?? "",
+        },
+      }),
+    ]);
+
+    if (targetId && target) {
+      await notify({
+        userId: targetId, kind: "QTN_COWORK",
+        title: `You're now co-working QTN ${q.number}`,
+        body: `${req.userEmail || "A colleague"} added you as a co-worker on quotation ${q.number}${trimmedNote ? ` — "${trimmedNote}"` : ""}. You can edit the panels assigned to you.`,
+        link: `/lv/qtn/${q.id}`, qtnId: q.id, note: trimmedNote || undefined, origin: originOf(req),
+      });
+    }
+    res.json({ ok: true, coOwnerId: targetId ?? "", coOwnerEmail: target?.email ?? "", coOwnerName: target?.name ?? "" });
   } catch (e) {
     fail(res, e);
   }

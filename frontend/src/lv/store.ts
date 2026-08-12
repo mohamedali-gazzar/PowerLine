@@ -80,6 +80,9 @@ export interface PanelTypeItem {
 
 export interface LvPanel {
   id: string;
+  /** Co-Work: which user owns/edits this panel (the QTN owner or its co-owner). Absent
+   *  on non-co-work QTNs and legacy panels — treated as the primary owner. */
+  ownerId?: string;
   name: string;
   code: string;
   fedFrom: string;   // RPT-01: next to panel name
