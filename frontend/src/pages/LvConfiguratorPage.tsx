@@ -292,6 +292,7 @@ export default function LvConfiguratorPage() {
   // edmsWarnedRef remembers panels already warned this session (once per panel).
   const [edmsWarn, setEdmsWarn] = useState<{ panelId: string; snapshot: LvPanel } | null>(null);
   const edmsWarnedRef = useRef<Set<string>>(new Set());
+  const [sendingOffers, setSendingOffers] = useState(false);
   // Cancelled = this revision was superseded by a newer amendment (a higher revision of
   // the same base exists). Derived from the QTN list; makes the revision read-only.
   const [cancelled, setCancelled] = useState(false);
@@ -398,18 +399,76 @@ export default function LvConfiguratorPage() {
   // sales person, cites the selling factor, and signs off with the sales-support name.
   // A mailto can't carry attachments, so the Technical & Commercial PDFs are attached
   // by hand after Outlook opens.
-  const salesMailtoHref = () => {
-    const to = s.project.salesEmail.trim();
-    const subject = `${qtnNum} (${s.project.name.trim()})`;
-    const body = [
-      `Dear ${s.project.salesPerson.trim() || "Sales"},`,
-      "Please find attached the Technical and Commercial offers",
-      `on factor "${s.factors.factor}"`,
-      "",
-      "Best regards,",
-      s.project.supportEngineer.trim() || user?.name || "",
-    ].join("\r\n");
-    return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const salesMailSubject = () => `${qtnNum} (${s.project.name.trim()})`;
+  const salesMailBody = () => [
+    `Dear ${s.project.salesPerson.trim() || "Sales"},`,
+    "Please find attached the Technical and Commercial offers",
+    `on factor "${s.factors.factor}"`,
+    "",
+    "Best regards,",
+    s.project.supportEngineer.trim() || user?.name || "",
+  ].join("\r\n");
+  const salesMailtoHref = () =>
+    `mailto:${s.project.salesEmail.trim()}?subject=${encodeURIComponent(salesMailSubject())}&body=${encodeURIComponent(salesMailBody())}`;
+  const downloadBlob = (blob: Blob, name: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  };
+  // Send-to-sales. Each offer only renders on its own tab, so flip there, capture the
+  // PDF, then restore the tab. When Outlook (Microsoft 365) is configured, build a
+  // DRAFT with both PDFs ATTACHED and open it to send. Otherwise fall back: download
+  // the two PDFs and open a prefilled mailto (a mailto can't carry attachments).
+  const sendToSales = async () => {
+    if (sendingOffers) return;
+    const waitFor = (sel: string, ms = 5000) => new Promise<HTMLElement | null>((resolve) => {
+      const start = Date.now();
+      const tick = () => {
+        const el = document.querySelector<HTMLElement>(sel);
+        if (el) resolve(el);
+        else if (Date.now() - start > ms) resolve(null);
+        else requestAnimationFrame(tick);
+      };
+      tick();
+    });
+    const original = tab;
+    const rev = s.project.revisionNo;
+    const toName = `${offerTitle("TO", qtnNum, rev)}.pdf`;
+    const coName = `${offerTitle("CO", qtnNum, rev)}.pdf`;
+    setSendingOffers(true);
+    try {
+      const { exportTechnicalPdf, exportSheetsPdf } = await import("../lv/technicalPdf");
+      const { graphConfigured, createOutlookDraft } = await import("../lv/outlookGraph");
+      setTab("technical");
+      const tArea = await waitFor("[data-pdf-root]");
+      const toBlob = (tArea ? await exportTechnicalPdf({ printArea: tArea, filename: toName, asBlob: true }) : null) || null;
+      setTab("commercial");
+      const cArea = await waitFor("[data-co-root]");
+      const coBlob = (cArea ? await exportSheetsPdf({ printArea: cArea, filename: coName, asBlob: true }) : null) || null;
+      setTab(original);
+
+      if (graphConfigured()) {
+        const attachments = [
+          toBlob ? { name: toName, blob: toBlob } : null,
+          coBlob ? { name: coName, blob: coBlob } : null,
+        ].filter(Boolean) as { name: string; blob: Blob }[];
+        const link = await createOutlookDraft({
+          to: s.project.salesEmail.trim(), subject: salesMailSubject(), body: salesMailBody(), attachments,
+        });
+        if (link) window.open(link, "_blank", "noopener");
+        return;
+      }
+      // No Outlook integration → download the PDFs and open a prefilled mailto.
+      if (toBlob) downloadBlob(toBlob, toName);
+      if (coBlob) downloadBlob(coBlob, coName);
+      window.location.href = salesMailtoHref();
+    } catch (e) {
+      setTab(original);
+      setWfError(`Couldn't build the offer e-mail — ${(e as Error).message || "please try again"}.`);
+    } finally {
+      setSendingOffers(false);
+    }
   };
   const isOwner = !wf.ownerId || wf.ownerId === rec?.ownerId;
   const canApprove = myPerms.includes("qtn.approve");
@@ -735,14 +794,14 @@ export default function LvConfiguratorPage() {
               </button>
             )}
             {status === "SUBMITTED" && (
-              <a href={salesMailtoHref()}
-                title="Open Outlook to e-mail the offers to the sales person — then attach the exported Technical & Commercial PDFs"
-                className="btn-primary inline-flex items-center gap-1.5 no-underline">
+              <button type="button" onClick={sendToSales} disabled={sendingOffers}
+                title="Download the Technical & Commercial offer PDFs and open Outlook to the sales person — then attach the two PDFs"
+                className="btn-primary inline-flex items-center gap-1.5 disabled:opacity-60">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7z" />
                 </svg>
-                Send to {s.project.salesPerson.trim().split(/\s+/)[0] || "Sales"}
-              </a>
+                {sendingOffers ? "Preparing offers…" : `Send to ${s.project.salesPerson.trim().split(/\s+/)[0] || "Sales"}`}
+              </button>
             )}
             {status === "SUBMITTED" && canReopen && (
               <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
@@ -2527,10 +2586,16 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
   const m = (egp: number) => fmtEgp(egp / rate);
   const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
   const qtnRef = revNum > 0 ? `${qtnNo}-${revNum}` : qtnNo;
+  const exportPdf = async () => {
+    const printArea = document.querySelector<HTMLElement>("[data-co-root]");
+    if (!printArea) return;
+    const { exportSheetsPdf } = await import("../lv/technicalPdf");
+    await exportSheetsPdf({ printArea, filename: offerTitle("CO", qtnNo, s.project.revisionNo) });
+  };
   return (
     <div className="animate-fade-up">
       <PrintBar label="Prices follow the Pricing Settings tab (rates, ABB discount, factor) live."
-        docTitle={offerTitle("CO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} />
+        docTitle={offerTitle("CO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} exportFn={exportPdf} />
       <div className="mb-3 flex items-center gap-2 no-print">
         <span className="text-xs font-semibold text-muted">Currency</span>
         <div className="inline-flex rounded-lg border border-line bg-white p-0.5">
@@ -2541,7 +2606,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
         </div>
       </div>
       <div className="offer-workspace">
-      <div className="print-area space-y-6">
+      <div data-co-root className="print-area space-y-6">
         {/* Cover page — same branded cover as the Technical Offer */}
         <OfferCover s={s} qtnNo={qtnNo} kind="Commercial" />
         <section className="a4-sheet flex flex-col space-y-5 px-10 pb-10 pt-12">

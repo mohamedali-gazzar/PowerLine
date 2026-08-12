@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.18.0",
     "@fontsource-variable/montserrat": "^5.2.8",
     "@fontsource/poppins": "^5.2.7",
     "fuse.js": "^7.4.2",

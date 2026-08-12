@@ -27,7 +27,7 @@ import * as htmlToImage from "html-to-image";
 const PW = 210; // A4 width (mm)
 const PH = 297; // A4 height (mm)
 
-type ExportOpts = { printArea: HTMLElement; filename: string };
+type ExportOpts = { printArea: HTMLElement; filename: string; asBlob?: boolean };
 
 // Strip editor-only chrome + any lingering animation transform from a clone.
 function neutralize(el: HTMLElement) {
@@ -232,7 +232,70 @@ function addPageLinks(pdf: jsPDF, page: HTMLElement): void {
   }
 }
 
-export async function exportTechnicalPdf(opts: ExportOpts): Promise<void> {
+// Generic "one .a4-sheet → one (or more) A4 pages" export, for offers whose pages are
+// already laid out as fixed A4 sheets (e.g. the Commercial Offer: cover + priced
+// summary + EN/AR terms). Each top-level .a4-sheet is cloned, its live input/textarea
+// values baked in, captured, and drawn to page-width; a sheet taller than A4 is sliced
+// across pages (drawing the same image at successive negative offsets). No per-row
+// pagination — the on-screen sheets already are the page layout.
+export async function exportSheetsPdf(opts: ExportOpts): Promise<Blob | void> {
+  const { printArea, filename } = opts;
+  const sheets = Array.from(printArea.querySelectorAll<HTMLElement>(":scope > .a4-sheet"));
+  if (!sheets.length) return;
+
+  const host = document.createElement("div");
+  host.style.cssText = "position:fixed;left:-10000px;top:0;z-index:-1;background:#fff;";
+  document.body.appendChild(host);
+  try {
+    const clones = sheets.map((sheet) => {
+      const c = sheet.cloneNode(true) as HTMLElement;
+      neutralize(c);
+      inlineInputs(sheet, c);
+      // Controlled <textarea>s (e.g. terms editor) lose their value on cloneNode — bake it.
+      const ot = Array.from(sheet.querySelectorAll("textarea"));
+      const ct = Array.from(c.querySelectorAll("textarea"));
+      ct.forEach((cta, i) => {
+        const d = document.createElement("div");
+        d.textContent = ot[i]?.value || "";
+        d.className = cta.className;
+        d.style.whiteSpace = "pre-wrap";
+        cta.replaceWith(d);
+      });
+      c.style.width = "210mm";
+      c.style.margin = "0";
+      c.style.boxShadow = "none";
+      for (const el of c.querySelectorAll<HTMLElement>(".no-print")) el.remove();
+      host.appendChild(c);
+      return c;
+    });
+
+    await new Promise((r) => setTimeout(r, 40));
+    await document.fonts.ready;
+
+    const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
+    let fontEmbedCSS: string | undefined;
+    try { fontEmbedCSS = await htmlToImage.getFontEmbedCSS(host); } catch { /* per-call embedding */ }
+
+    let firstPage = true;
+    for (const c of clones) {
+      const rect = c.getBoundingClientRect();
+      const imgHmm = rect.width ? (PW * rect.height) / rect.width : PH; // height at page width
+      const img = await htmlToImage.toJpeg(c, { quality: 0.92, backgroundColor: "#ffffff", pixelRatio: 2, fontEmbedCSS });
+      const nPages = Math.max(1, Math.ceil((imgHmm - 0.5) / PH));
+      for (let i = 0; i < nPages; i++) {
+        if (!firstPage) pdf.addPage();
+        firstPage = false;
+        pdf.addImage(img, "JPEG", 0, -i * PH, PW, imgHmm); // page bounds clip to this slice
+      }
+    }
+    if (opts.asBlob) return pdf.output("blob");
+    pdf.save(filename.toLowerCase().endsWith(".pdf") ? filename : `${filename}.pdf`);
+  } finally {
+    document.body.removeChild(host);
+  }
+}
+
+export async function exportTechnicalPdf(opts: ExportOpts): Promise<Blob | void> {
   const { printArea, filename } = opts;
   const cover = printArea.querySelector<HTMLElement>("[data-pdf-cover]");
   const header = printArea.querySelector<HTMLElement>("[data-pdf-header]");
@@ -281,6 +344,7 @@ export async function exportTechnicalPdf(opts: ExportOpts): Promise<void> {
       pdf.addImage(img, "JPEG", 0, 0, PW, PH);
       addPageLinks(pdf, pages[i]);
     }
+    if (opts.asBlob) return pdf.output("blob");
     pdf.save(filename.toLowerCase().endsWith(".pdf") ? filename : `${filename}.pdf`);
   } finally {
     document.body.removeChild(host);
