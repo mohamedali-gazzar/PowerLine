@@ -18,6 +18,12 @@ export const createQtnSchema = z.object({ number, state: z.unknown(), summary })
 export const updateQtnSchema = z.object({ state: z.unknown(), summary });
 export const numberSchema = z.object({ number });
 
+// Hand a quotation over to another user (transfer ownership).
+export const reassignSchema = z.object({
+  toUserId: z.string().trim().min(1, "Pick a user to hand it to."),
+  note: z.string().max(2000).optional(),
+});
+
 // ── Specs-tab attachments ───────────────────────────────────────────────────
 // Files travel as base64 inside the JSON body. The cap is set by the PRODUCTION
 // host, not by us: Vercel rejects a serverless request body over 4.5 MB, and

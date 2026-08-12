@@ -495,6 +495,14 @@ export const api = {
         body: JSON.stringify({ to, ...(note ? { note } : {}) }),
       }),
     events: (id: string) => request<QtnEventDto[]>(`/qtns/${id}/events`),
+    /** Colleagues a quotation can be handed over to. */
+    assignees: () => request<{ users: { id: string; name: string; email: string }[] }>("/qtns/assignees"),
+    /** Hand a quotation to another user (transfer ownership so they can continue it). */
+    reassign: (id: string, toUserId: string, note?: string) =>
+      request<{ ok: true; ownerId: string; ownerEmail: string; ownerName: string }>(`/qtns/${id}/reassign`, {
+        method: "POST",
+        body: JSON.stringify({ toUserId, ...(note ? { note } : {}) }),
+      }),
     submit: (id: string) => request<{ ok: true }>(`/qtns/${id}/submit`, { method: "POST" }),
     unsubmit: (id: string) => request<{ ok: true }>(`/qtns/${id}/unsubmit`, { method: "POST" }),
 

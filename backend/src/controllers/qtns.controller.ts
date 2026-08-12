@@ -5,6 +5,7 @@ import {
   createQtnSchema,
   updateQtnSchema,
   numberSchema,
+  reassignSchema,
   attachmentSchema,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_QTN,
@@ -567,6 +568,78 @@ export async function events(req: Request, res: Response) {
       orderBy: { createdAt: "asc" },
     });
     res.json(rows);
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+// GET /api/qtns/assignees — colleagues a quotation can be handed over to. Any signed-in
+// user may read the picker list (names/e-mails of coworkers); the reassign endpoint
+// itself enforces who is allowed to actually move a quotation.
+export async function assignees(req: Request, res: Response) {
+  try {
+    const users = await prisma.user.findMany({
+      where: { id: { not: req.userId as string } },
+      select: { id: true, name: true, email: true },
+      orderBy: [{ name: "asc" }, { email: "asc" }],
+    });
+    res.json({ users });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+// POST /api/qtns/:id/reassign { toUserId, note? } — hand a quotation to another user by
+// transferring ownership, so they can continue it. Allowed for a qtn.reassign holder
+// (any quotation, e.g. a manager covering for someone who's out) or the current owner
+// (their own). Records a REASSIGN audit row and notifies the new owner. Works at any
+// status — it changes the owner, not the content.
+export async function reassign(req: Request, res: Response) {
+  try {
+    const { toUserId, note } = reassignSchema.parse(req.body);
+    const q = await visibleQtn(req);
+    if (!q) return res.status(404).json({ error: "Quotation not found." });
+
+    const acc = await accessOf(req.userId);
+    const isOwner = q.ownerId === req.userId;
+    if (!acc.perms.has("qtn.reassign") && !isOwner) {
+      return res.status(403).json({ error: "You don't have permission to hand this quotation over." });
+    }
+    if (toUserId === q.ownerId) {
+      return res.status(400).json({ error: "That user already owns this quotation." });
+    }
+    const target = await prisma.user.findUnique({ where: { id: toUserId }, select: { id: true, name: true, email: true } });
+    if (!target) return res.status(404).json({ error: "The chosen user was not found." });
+
+    // ownerId + number is unique — the target must not already own a QTN of this number.
+    const clash = await prisma.lvQtn.findFirst({ where: { ownerId: toUserId, number: q.number }, select: { id: true } });
+    if (clash) {
+      return res.status(409).json({ error: `${target.name || target.email} already has a quotation numbered ${q.number}.` });
+    }
+
+    const status = qtnStatus(q);
+    const trimmedNote = note?.trim() || "";
+    const auditNote = `${q.owner?.email || "owner"} → ${target.email}${trimmedNote ? ` · ${trimmedNote}` : ""}`;
+    await prisma.$transaction([
+      prisma.lvQtn.update({ where: { id: q.id }, data: { ownerId: toUserId } }),
+      prisma.qtnEvent.create({
+        data: {
+          qtnId: q.id, qtnNumber: q.number, ownerId: toUserId, ownerEmail: target.email,
+          action: "REASSIGN", fromStatus: status, toStatus: status, note: auditNote,
+          actorId: req.userId ?? null, actorEmail: req.userEmail ?? "",
+        },
+      }),
+    ]);
+
+    // Best-effort (a mail hiccup must not undo the handover).
+    await notify({
+      userId: toUserId, kind: "QTN_REASSIGNED",
+      title: `QTN ${q.number} was handed over to you`,
+      body: `${req.userEmail || "A colleague"} handed quotation ${q.number} to you${trimmedNote ? ` — "${trimmedNote}"` : ""}. You can continue it now.`,
+      link: `/lv/qtn/${q.id}`, qtnId: q.id, note: trimmedNote || undefined, origin: originOf(req),
+    });
+
+    res.json({ ok: true, ownerId: toUserId, ownerEmail: target.email, ownerName: target.name });
   } catch (e) {
     fail(res, e);
   }

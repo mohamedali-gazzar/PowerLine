@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getQtn, saveQtn, renameQtn, transitionQtn, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
+import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
+import ReassignQtnModal from "../components/ReassignQtnModal";
 import { useStaff, SALES_MANAGER } from "../staff";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
@@ -287,6 +288,7 @@ export default function LvConfiguratorPage() {
   const [wfError, setWfError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
+  const [reassignOpen, setReassignOpen] = useState(false);
   const { user } = useAuth();
   // EDMS standard-panel warning: which panel tripped it + the snapshot to revert to.
   // edmsWarnedRef remembers panels already warned this session (once per panel).
@@ -508,6 +510,14 @@ export default function LvConfiguratorPage() {
   const canApprove = myPerms.includes("qtn.approve");
   const canReturn = canApprove || myPerms.includes("qtn.return");
   const canReopen = myPerms.includes("qtn.reopen");
+  // Hand-over: a manager (qtn.reassign) can move anyone's; the owner can hand off their own.
+  const canReassign = myPerms.includes("qtn.reassign") || isOwner;
+  const doReassign = async (toUserId: string, note: string) => {
+    if (!rec) return;
+    await reassignQtn(rec.id, toUserId, note); // throws → the modal shows the message
+    setReassignOpen(false);
+    navigate("/lv"); // ownership moved — the ex-owner leaves the (now read-only-to-them) QTN
+  };
 
   // Return for revision: a structured, per-panel comment modal (replaces the old
   // single-line prompt). The collected comments are serialised into the return
@@ -850,6 +860,12 @@ export default function LvConfiguratorPage() {
                 🔓 Reopen
               </button>
             )}
+            {!cancelled && canReassign && (
+              <button className="btn-ghost" onClick={() => setReassignOpen(true)}
+                title="Hand this quotation over to another user so they can continue it">
+                ⇄ Hand over
+              </button>
+            )}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {erpCount > 0 && (
@@ -891,6 +907,12 @@ export default function LvConfiguratorPage() {
         userName={user?.name}
         onRevert={revertEdmsPanel}
         onAcknowledge={() => setEdmsWarn(null)}
+      />
+      <ReassignQtnModal
+        open={reassignOpen}
+        qtnNumber={qtnNum}
+        onCancel={() => setReassignOpen(false)}
+        onReassign={doReassign}
       />
       {status === "RETURNED" && wf.returnReason && (
         <div className="mb-4 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 no-print animate-fade-up">

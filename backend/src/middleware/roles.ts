@@ -22,6 +22,7 @@ export const PERMS = [
   "qtn.editWaiting",
   "qtn.submitApproved",
   "qtn.reopen",
+  "qtn.reassign",
   "qtn.audit",
   "qtn.approveOwn",
 ] as const;
@@ -37,6 +38,7 @@ export const PERM_LABEL: Record<Perm, string> = {
   "qtn.editWaiting": "Edit QTNs waiting for approval",
   "qtn.submitApproved": "Submit approved QTNs",
   "qtn.reopen": "Reopen submitted QTNs",
+  "qtn.reassign": "Hand over / reassign QTNs to another user",
   "qtn.audit": "View audit trail",
   "qtn.approveOwn": "Approve their own QTNs",
 };

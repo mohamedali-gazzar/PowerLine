@@ -203,6 +203,16 @@ export async function qtnEvents(id: string) {
   return api.qtns.events(id);
 }
 
+/** Users a quotation can be handed over to (excludes the current user). */
+export async function listAssignees() {
+  return (await api.qtns.assignees()).users;
+}
+
+/** Hand a quotation to another user (transfer ownership). Throws the server's message. */
+export async function reassignQtn(id: string, toUserId: string, note?: string) {
+  return api.qtns.reassign(id, toUserId, note);
+}
+
 export async function getQtn(id: string): Promise<QtnRecord | null> {
   try {
     return toRecord(await api.qtns.get(id));
