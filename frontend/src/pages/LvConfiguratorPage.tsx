@@ -380,6 +380,18 @@ export default function LvConfiguratorPage() {
     }
   };
 
+  // Sales support engineer is mandatory — it prints on the offer. Block sending for
+  // approval until it's picked, surfacing why and jumping to the Project tab.
+  const sendForApproval = () => {
+    if (!s.project.supportEngineer.trim()) {
+      setWfError("Select a Sales support engineer on the Project tab before sending for approval.");
+      setTab("project");
+      return;
+    }
+    void doTransition("WAITING_APPROVAL", {
+      confirm: "Send this quotation for approval? You won't be able to edit it while it's under review.",
+    });
+  };
   const isOwner = !wf.ownerId || wf.ownerId === rec?.ownerId;
   const canApprove = myPerms.includes("qtn.approve");
   const canReturn = canApprove || myPerms.includes("qtn.return");
@@ -486,10 +498,14 @@ export default function LvConfiguratorPage() {
   // Selectivity and later turned into an EDMS one, or a kind whose tab set
   // changed). Fall back rather than render a blank page.
   const activeTab: Tab = tabs.some(([t]) => t === tab) ? tab : "project";
-  // RPT-1: block every offer/output tab until each panel has its mandatory fields.
-  // Spare cells carry no rating/enclosure, so they're exempt from the panel checks.
-  const offerIssues = s.panels.flatMap((p, i) =>
-    p.spare ? [] : panelInvalid(p).map((msg) => `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}: ${msg}`));
+  // RPT-1: block every offer/output tab until each panel has its mandatory fields,
+  // plus the mandatory project-level fields (the Sales support engineer prints on the
+  // offer). Spare cells carry no rating/enclosure, so they're exempt from the panel checks.
+  const offerIssues = [
+    ...(s.project.supportEngineer.trim() ? [] : ["Sales support engineer is required — pick one on the Project tab."]),
+    ...s.panels.flatMap((p, i) =>
+      p.spare ? [] : panelInvalid(p).map((msg) => `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}: ${msg}`)),
+  ];
 
   // Once submitted the QTN is read-only. Content edits are frozen, but pure navigation
   // is still allowed so a submitted offer can be reviewed: selecting a panel (selectedId)
@@ -669,9 +685,7 @@ export default function LvConfiguratorPage() {
             </span>
             {/* Only the moves this user may actually make. */}
             {!cancelled && (status === "DRAFT" || status === "RETURNED") && (
-              <button className="btn-primary" disabled={submitting} onClick={() => doTransition("WAITING_APPROVAL", {
-                confirm: "Send this quotation for approval? You won't be able to edit it while it's under review.",
-              })}>
+              <button className="btn-primary" disabled={submitting} onClick={sendForApproval}>
                 {submitting ? "Sending…" : "Send for approval"}
               </button>
             )}
@@ -834,7 +848,7 @@ function panelInvalid(p: LvPanel): string[] {
 function OfferBlocked({ issues }: { issues: string[] }) {
   return (
     <div className="card border-amber-300 bg-amber-50 p-6 animate-fade-up">
-      <p className="font-bold text-amber-800">⚠ Complete the required panel fields before generating any offer.</p>
+      <p className="font-bold text-amber-800">⚠ Complete the required fields before generating any offer.</p>
       <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-amber-700">
         {issues.map((m, i) => <li key={i}>{m}</li>)}
       </ul>
@@ -2641,8 +2655,8 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
           {/* Row 2 right: OPTY No. */}
           <div><L>OPTY No.</L><input className="input" value={pr.optyNo} onChange={(e) => upPr({ optyNo: e.target.value })} /></div>
           <div>
-            <L>Sales support engineer</L>
-            <select className="input cursor-pointer" value={pr.supportEngineer} onChange={(e) => upPr({ supportEngineer: e.target.value })}>
+            <L>Sales support engineer <span className="text-red-500">*</span></L>
+            <select className={`input cursor-pointer ${pr.supportEngineer ? "" : "ring-1 ring-red-400"}`} value={pr.supportEngineer} onChange={(e) => upPr({ supportEngineer: e.target.value })}>
               <option value="">— select —</option>
               {staff.supportEngineers.map((p) => <option key={p.name}>{p.name}</option>)}
             </select>
