@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { listAssignees } from "../lv/qtns";
 
@@ -30,14 +30,25 @@ export default function CoWorkModal({
   const [busy, setBusy] = useState<null | "set" | "remove">(null);
   const [err, setErr] = useState("");
 
+  // Seed the form ONCE per opening. This must not depend on `onCancel` (the parent
+  // passes a fresh arrow every render) or on `currentCoOwnerId`: re-running it on a
+  // parent re-render used to snap the dropdown back to the current co-worker and wipe
+  // the error message mid-edit, so changing the co-worker looked impossible.
+  const seedRef = useRef(currentCoOwnerId);
+  seedRef.current = currentCoOwnerId;
   useEffect(() => {
     if (!open) return;
-    setCoOwnerId(currentCoOwnerId ?? ""); setNote(""); setErr(""); setUsers(null);
+    setCoOwnerId(seedRef.current ?? ""); setNote(""); setErr(""); setBusy(null); setUsers(null);
     listAssignees().then(setUsers).catch(() => setUsers([]));
+  }, [open]);
+
+  // Escape closes. Separate effect: re-subscribing on every parent render is harmless.
+  useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onCancel, currentCoOwnerId]);
+  }, [open, onCancel]);
 
   if (!open) return null;
 
@@ -48,6 +59,9 @@ export default function CoWorkModal({
       await onSet(id, note.trim());
     } catch (e) {
       setErr((e as Error).message || "Couldn't update co-work. Please try again.");
+    } finally {
+      // Always clear, even when onSet resolves without closing the modal — otherwise
+      // the button sticks on "Saving…" forever with no way back.
       setBusy(null);
     }
   };

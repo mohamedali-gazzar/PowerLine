@@ -37,6 +37,12 @@ const transporter = emailConfigured
       // needs BOTH SMTP_PORT=465 and SMTP_SECURE=true.
       secure: process.env.SMTP_SECURE === "true",
       auth: { user, pass },
+      // Bounded waits. Actions that notify (hand-over, co-work, approvals) await the
+      // mail before replying, so an unreachable SMTP server would otherwise freeze the
+      // request behind nodemailer's multi-minute defaults and look like a hung UI.
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
     })
   : null;
 

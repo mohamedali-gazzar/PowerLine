@@ -24,10 +24,18 @@ export default function ReassignQtnModal({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
+  // Seed ONCE per opening. `onCancel` is a fresh arrow on every parent render, so
+  // keeping it in these deps re-ran the reset mid-edit — clearing the picked user and
+  // any error message. Keep the reset keyed on `open` alone.
   useEffect(() => {
     if (!open) return;
-    setToUserId(""); setNote(""); setErr(""); setUsers(null);
+    setToUserId(""); setNote(""); setErr(""); setBusy(false); setUsers(null);
     listAssignees().then(setUsers).catch(() => setUsers([]));
+  }, [open]);
+
+  // Escape closes. Separate effect: re-subscribing on every parent render is harmless.
+  useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -42,7 +50,8 @@ export default function ReassignQtnModal({
       await onReassign(toUserId, note.trim());
     } catch (e) {
       setErr((e as Error).message || "Couldn't hand it over. Please try again.");
-      setBusy(false);
+    } finally {
+      setBusy(false); // never leave the button stuck on "Handing over…"
     }
   };
 
