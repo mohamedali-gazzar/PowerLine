@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorker, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
+import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorkers, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
 import ReassignQtnModal from "../components/ReassignQtnModal";
 import CoWorkModal from "../components/CoWorkModal";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
@@ -515,7 +515,7 @@ export default function LvConfiguratorPage() {
   const canReopen = myPerms.includes("qtn.reopen");
   // Hand-over: a manager (qtn.reassign) can move anyone's; the owner can hand off their own.
   // A co-owner is neither — hide it from them (the server would 403 anyway).
-  const isCoOwnerHere = !!rec?.coOwnerId && user?.id === rec?.coOwnerId;
+  const isCoOwnerHere = !!rec?.coOwners?.some((c) => c.id === user?.id);
   const canReassign = (myPerms.includes("qtn.reassign") || isOwner) && !isCoOwnerHere;
   const doReassign = async (toUserId: string, note: string) => {
     if (!rec) return;
@@ -525,10 +525,10 @@ export default function LvConfiguratorPage() {
   };
   // Co-Work: only the primary owner (or a manager) may add/change/remove a co-owner.
   const canCoWork = user?.id === rec?.ownerId || myPerms.includes("qtn.reassign");
-  const doSetCoWorker = async (coOwnerId: string | null, note: string) => {
+  const doSetCoWorkers = async (coOwnerIds: string[], note: string) => {
     if (!rec) return;
-    const res = await setCoWorker(rec.id, coOwnerId, note); // throws → the modal shows the message
-    setRec({ ...rec, coOwnerId: res.coOwnerId, coOwnerEmail: res.coOwnerEmail, coOwnerName: res.coOwnerName });
+    const res = await setCoWorkers(rec.id, coOwnerIds, note); // throws → the modal shows the message
+    setRec({ ...rec, coOwners: res.coOwners });
     setCoWorkOpen(false);
   };
 
@@ -620,32 +620,39 @@ export default function LvConfiguratorPage() {
   const sel = s.panels.find((p) => p.id === s.selectedId) ?? null;
   const isSpareQtn = s.kind === "spare";
   // ── Co-Work ────────────────────────────────────────────────────────────────
-  // Two sales-support share one QTN, split BY PANEL: each edits only the panels
-  // they own, and the shared tabs (Project / Pricing / Terms) belong to the
-  // primary owner alone. `coWork` is on only once a second owner is set; ownership
-  // then splits. A panel with no ownerId (legacy / pre-co-work) counts as the
-  // primary's. The server merge is the real guard — this only shapes the UI so a
-  // user's edits to someone else's panel don't silently vanish on the next save.
-  const coWork = !!rec?.coOwnerId;
+  // Any number of sales-support share one QTN, split BY PANEL: each edits only the
+  // panels they own, and the shared tabs (Project / Pricing / Terms) belong to the
+  // owner alone. `coWork` is on once at least one co-worker is set; ownership then
+  // splits. A panel with no ownerId (legacy / pre-co-work) counts as the owner's.
+  // The server merge is the real guard — this only shapes the UI so edits to someone
+  // else's panel don't silently vanish on the next save.
+  const coOwners = useMemo(() => rec?.coOwners ?? [], [rec]);
+  const coWork = coOwners.length > 0;
   const isPrimary = !coWork || user?.id === rec?.ownerId;
   const panelOwnerOf = (p?: LvPanel | null) => p?.ownerId || rec?.ownerId || "";
   const canEditPanel = (p?: LvPanel | null) => !coWork || panelOwnerOf(p) === user?.id;
-  // The shared tabs are read-only for a co-owner (the primary owns them). Panel
+  // The shared tabs are read-only for a co-worker (the owner owns them). Panel
   // edits are gated per-panel in `upPanel`; reorder is gated in `up`.
   const sharedReadOnly = readOnly || (coWork && !isPrimary);
   // Resolve a panel-owner id to a display name / initials for the co-work badges.
   const ownerNameById = (id?: string | null) => {
     if (!id) return "";
-    if (id === rec?.ownerId) return rec?.ownerName || rec?.ownerEmail || "Primary owner";
-    if (id === rec?.coOwnerId) return rec?.coOwnerName || rec?.coOwnerEmail || "Co-owner";
-    return "";
+    if (id === rec?.ownerId) return rec?.ownerName || rec?.ownerEmail || "Owner";
+    const c = coOwners.find((x) => x.id === id);
+    return c ? c.name || c.email : "";
   };
   const initialsOf = (name: string) =>
     name.trim().split(/[\s@._-]+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
   const panelBadge = coWork
     ? (p: LvPanel) => { const id = panelOwnerOf(p); const name = ownerNameById(id); return { text: initialsOf(name), title: name, mine: id === user?.id }; }
     : undefined;
-  const coOwnerLabel = rec?.coOwnerName || rec?.coOwnerEmail || "";
+  // "You + Alaa + Sara" / "Mohamed + Alaa + you" — the whole team, you last if you're
+  // not the owner, so the banner reads the same way for everybody.
+  const nameOrYou = (id: string, name: string) => (id === user?.id ? "you" : name);
+  const teamLabel = [
+    nameOrYou(rec?.ownerId ?? "", rec?.ownerName || rec?.ownerEmail || "Owner"),
+    ...coOwners.map((c) => nameOrYou(c.id, c.name || c.email)),
+  ].join(" + ");
   const selPanelOwnerName = coWork && sel ? ownerNameById(panelOwnerOf(sel)) : "";
 
   // ── Live sync ──────────────────────────────────────────────────────────────
@@ -667,16 +674,16 @@ export default function LvConfiguratorPage() {
     if (!r) return;
 
     if (r.status !== status) setStatus(r.status);
+    const teamSig = (x: { coOwners?: { id: string }[] }) => (x.coOwners ?? []).map((c) => c.id).sort().join(",");
     setRec((old) =>
-      !old || (old.coOwnerId === r.coOwnerId && old.status === r.status && old.returnReason === r.returnReason)
+      !old || (teamSig(old) === teamSig(r) && old.status === r.status && old.returnReason === r.returnReason)
         ? old
         : { ...old, status: r.status, locked: r.locked, returnReason: r.returnReason,
-            approverEmail: r.approverEmail, coOwnerId: r.coOwnerId,
-            coOwnerEmail: r.coOwnerEmail, coOwnerName: r.coOwnerName },
+            approverEmail: r.approverEmail, coOwners: r.coOwners },
     );
 
     const mine = user?.id;
-    if (!r.coOwnerId || !mine) { theirsRef.current = null; return; } // not co-worked
+    if (!r.coOwners.length || !mine) { theirsRef.current = null; return; } // not co-worked
     const ownerOnServer = (p: LvPanel) => p.ownerId || r.ownerId;
     const theirs = r.state.panels.filter((p) => ownerOnServer(p) !== mine);
 
@@ -1050,10 +1057,9 @@ export default function LvConfiguratorPage() {
       <CoWorkModal
         open={coWorkOpen}
         qtnNumber={qtnNum}
-        currentCoOwnerId={rec?.coOwnerId || undefined}
-        currentCoOwnerLabel={coOwnerLabel || undefined}
+        current={coOwners}
         onCancel={() => setCoWorkOpen(false)}
-        onSet={doSetCoWorker}
+        onSet={doSetCoWorkers}
       />
       {status === "RETURNED" && wf.returnReason && (
         <div className="mb-4 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 no-print animate-fade-up">
@@ -1102,18 +1108,16 @@ export default function LvConfiguratorPage() {
         <div className="mb-4 rounded-xl border border-brand/30 bg-brand-tint/60 px-4 py-3 text-sm no-print">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-white">Co-Work</span>
-            <span className="font-semibold text-ink">
-              {isPrimary ? `You + ${coOwnerLabel}` : `${rec?.ownerName || rec?.ownerEmail || "Primary owner"} + you`}
-            </span>
+            <span className="font-semibold text-ink">{teamLabel}</span>
             <span className="text-muted">
               {isPrimary
                 ? "You edit the shared tabs and your own panels — each panel is tagged with its owner."
-                : "You edit only your own panels; the shared tabs (Project, Pricing, Specs, Terms) belong to the primary owner."}
+                : "You edit only your own panels; the shared tabs (Project, Pricing, Specs, Terms) belong to the owner."}
             </span>
           </div>
           {sel && !canEditPanel(sel) && !readOnly && (activeTab === "panels" || activeTab === "spare") && (
             <div className="mt-1.5 font-medium text-brand-dark">
-              The selected panel belongs to {selPanelOwnerName || "the other owner"} — read-only for you.
+              The selected panel belongs to {selPanelOwnerName || "someone else"} — read-only for you.
             </div>
           )}
         </div>

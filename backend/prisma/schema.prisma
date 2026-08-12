@@ -159,7 +159,8 @@ model User {
   updatedAt     DateTime @updatedAt
 
   lvQtns        LvQtn[]        @relation("OwnedQtns")
-  coOwnedQtns   LvQtn[]        @relation("CoOwnedQtns")
+  coOwnedQtns   LvQtn[]        @relation("CoOwnedQtns") // legacy single-slot co-work
+  coWorkOn      LvQtnCoOwner[]
   offers        Offer[]
   notifications Notification[]
 }
@@ -186,11 +187,17 @@ model LvQtn {
   number      String
   owner       User      @relation("OwnedQtns", fields: [ownerId], references: [id], onDelete: Cascade)
   ownerId     String
-  /// Co-Work: an optional second sales-support who owns some of this QTN's panels.
-  /// Each panel carries its own ownerId (in the state JSON); the save endpoint merges
-  /// per-panel so the two never overwrite each other.
+  /// LEGACY Co-Work slot — the original single co-owner. Superseded by `coOwners`,
+  /// which holds any number of them. Deliberately NOT dropped: deploys run
+  /// `prisma db push --accept-data-loss` with no data step, so removing it would
+  /// silently delete the co-work links on quotations that are live right now.
+  /// Read it through coOwnerIdsOf(), which unions it with the join table.
   coOwner     User?     @relation("CoOwnedQtns", fields: [coOwnerId], references: [id], onDelete: SetNull)
   coOwnerId   String?
+  /// Co-Work: the sales-support sharing this quotation with the owner. Each panel
+  /// carries its own ownerId (in the state JSON) and the save endpoint merges
+  /// per-panel, so no two people can overwrite each other's work.
+  coOwners    LvQtnCoOwner[]
   state       String // JSON-serialized LvState
   // client-computed summary (avoids duplicating pricing logic on the server)
   projectName String    @default("")
@@ -230,6 +237,20 @@ model LvQtn {
   @@index([ownerId])
   @@index([status])
   @@index([status, updatedAt])
+}
+
+/// Co-Work membership: one row per person sharing a quotation with its owner.
+/// A join table rather than more columns, so a quotation can be shared with any
+/// number of colleagues. The owner is never listed here — they are LvQtn.ownerId.
+model LvQtnCoOwner {
+  qtn     LvQtn    @relation(fields: [qtnId], references: [id], onDelete: Cascade)
+  qtnId   String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId  String
+  addedAt DateTime @default(now())
+
+  @@id([qtnId, userId])
+  @@index([userId])
 }
 
 /// A file attached to a quotation (Specs tab) — client specifications, drawings,

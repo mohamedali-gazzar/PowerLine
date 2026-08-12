@@ -24,8 +24,11 @@ export const reassignSchema = z.object({
   note: z.string().max(2000).optional(),
 });
 
-// Co-Work: set (or clear, with null/"") the second sales-support on a quotation.
+// Co-Work: replace the set of people sharing a quotation with its owner. An empty
+// list ends co-work. `coOwnerId` is the old single-slot field, still accepted so a
+// client running a cached bundle mid-rollout keeps working.
 export const coworkSchema = z.object({
+  coOwnerIds: z.array(z.string().trim()).max(20).optional(),
   coOwnerId: z.string().trim().nullable().optional(),
   note: z.string().max(2000).optional(),
 });

@@ -32,9 +32,8 @@ export interface QtnRecord {
   ownerId: string;
   ownerEmail: string;
   ownerName: string;
-  coOwnerId: string;
-  coOwnerEmail: string;
-  coOwnerName: string;
+  /** Co-Work: everyone sharing this quotation with the owner (any number). */
+  coOwners: { id: string; email: string; name: string }[];
   state: LvState;
 }
 
@@ -51,7 +50,7 @@ export interface QtnListItem {
   locked: boolean;
   ownerEmail: string;
   ownerName: string;
-  coOwnerEmail?: string;
+  coOwners?: { id: string; email: string; name: string }[];
   approverEmail: string;
 }
 
@@ -185,9 +184,7 @@ const toRecord = (r: QtnRecordDto): QtnRecord => ({
   ownerId: r.ownerId ?? "",
   ownerEmail: r.ownerEmail ?? "",
   ownerName: r.ownerName ?? "",
-  coOwnerId: r.coOwnerId ?? "",
-  coOwnerEmail: r.coOwnerEmail ?? "",
-  coOwnerName: r.coOwnerName ?? "",
+  coOwners: r.coOwners ?? [],
   state: normalize(r.state as LvState),
 });
 
@@ -226,9 +223,10 @@ export async function reassignQtn(id: string, toUserId: string, note?: string) {
   return api.qtns.reassign(id, toUserId, note);
 }
 
-/** Co-Work: set a second sales-support (or clear with null). Throws the server's message. */
-export async function setCoWorker(id: string, coOwnerId: string | null, note?: string) {
-  return api.qtns.cowork(id, coOwnerId, note);
+/** Co-Work: replace who shares this quotation with its owner (empty list ends
+ *  co-work). Throws the server's message. */
+export async function setCoWorkers(id: string, coOwnerIds: string[], note?: string) {
+  return api.qtns.cowork(id, coOwnerIds, note);
 }
 
 export async function getQtn(id: string): Promise<QtnRecord | null> {

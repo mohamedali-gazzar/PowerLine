@@ -128,9 +128,8 @@ export interface QtnWorkflow {
   ownerId: string;
   ownerEmail: string;
   ownerName: string;
-  coOwnerId?: string;
-  coOwnerEmail?: string;
-  coOwnerName?: string;
+  /** Co-Work: everyone sharing this quotation with the owner (any number). */
+  coOwners?: { id: string; email: string; name: string }[];
 }
 
 export interface QtnListItemDto extends QtnWorkflow {
@@ -514,11 +513,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ toUserId, ...(note ? { note } : {}) }),
       }),
-    /** Co-Work: set (or clear with null) the second sales-support on a quotation. */
-    cowork: (id: string, coOwnerId: string | null, note?: string) =>
-      request<{ ok: true; coOwnerId: string; coOwnerEmail: string; coOwnerName: string }>(`/qtns/${id}/cowork`, {
+    /** Co-Work: replace who shares this quotation with its owner. Empty list ends co-work. */
+    cowork: (id: string, coOwnerIds: string[], note?: string) =>
+      request<{ ok: true; coOwners: { id: string; email: string; name: string }[] }>(`/qtns/${id}/cowork`, {
         method: "POST",
-        body: JSON.stringify({ coOwnerId, ...(note ? { note } : {}) }),
+        body: JSON.stringify({ coOwnerIds, ...(note ? { note } : {}) }),
       }),
     submit: (id: string) => request<{ ok: true }>(`/qtns/${id}/submit`, { method: "POST" }),
     unsubmit: (id: string) => request<{ ok: true }>(`/qtns/${id}/unsubmit`, { method: "POST" }),

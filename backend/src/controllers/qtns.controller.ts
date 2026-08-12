@@ -43,13 +43,39 @@ type QtnRow = {
   submittedForApprovalAt?: Date | null;
   ownerId?: string;
   owner?: { email: string; name: string } | null;
-  coOwnerId?: string | null;
+  coOwnerId?: string | null; // legacy single slot
   coOwner?: { email: string; name: string } | null;
+  coOwners?: { userId: string; user: { email: string; name: string } }[];
   projectName: string;
   customer: string;
   panelsCount: number;
   totalEgp: number;
 };
+
+// ── Co-Work membership ───────────────────────────────────────────────────────
+// Co-workers live in the LvQtnCoOwner join table, but quotations shared before
+// that table existed still carry the single legacy `coOwnerId`. Both are read
+// through these helpers, so an old share keeps working until it is next edited
+// (at which point it is written to the join table and the legacy slot cleared).
+
+/** Everyone sharing this quotation with its owner — join table ∪ legacy slot. */
+const coOwnersOf = (q: QtnRow): { id: string; email: string; name: string }[] => {
+  const out = new Map<string, { id: string; email: string; name: string }>();
+  (q.coOwners ?? []).forEach((c) =>
+    out.set(c.userId, { id: c.userId, email: c.user?.email ?? "", name: c.user?.name ?? "" }),
+  );
+  if (q.coOwnerId && !out.has(q.coOwnerId)) {
+    out.set(q.coOwnerId, { id: q.coOwnerId, email: q.coOwner?.email ?? "", name: q.coOwner?.name ?? "" });
+  }
+  return [...out.values()];
+};
+
+/** Prisma `where` matching a quotation the user owns OR co-works on (either storage). */
+const sharedWith = (uid: string) => [
+  { ownerId: uid },
+  { coOwnerId: uid }, // legacy
+  { coOwners: { some: { userId: uid } } },
+];
 
 /** The workflow fields every QTN response carries, so the client never derives status. */
 const workflowOf = (q: QtnRow) => ({
@@ -79,9 +105,7 @@ const record = (q: QtnRow) => {
     ownerId: q.ownerId ?? "",
     ownerEmail: q.owner?.email ?? "",
     ownerName: q.owner?.name ?? "",
-    coOwnerId: q.coOwnerId ?? "",
-    coOwnerEmail: q.coOwner?.email ?? "",
-    coOwnerName: q.coOwner?.name ?? "",
+    coOwners: coOwnersOf(q),
     state,
   };
 };
@@ -99,9 +123,7 @@ const listItem = (q: QtnRow) => ({
   ownerId: q.ownerId ?? "",
   ownerEmail: q.owner?.email ?? "",
   ownerName: q.owner?.name ?? "",
-  coOwnerId: q.coOwnerId ?? "",
-  coOwnerEmail: q.coOwner?.email ?? "",
-  coOwnerName: q.coOwner?.name ?? "",
+  coOwners: coOwnersOf(q),
 });
 
 // ── Visibility ───────────────────────────────────────────────────────────────
@@ -111,7 +133,8 @@ const listItem = (q: QtnRow) => ({
 
 const ownerSelect = {
   owner: { select: { email: true, name: true } },
-  coOwner: { select: { email: true, name: true } },
+  coOwner: { select: { email: true, name: true } }, // legacy slot
+  coOwners: { select: { userId: true, user: { select: { email: true, name: true } } } },
 } as const;
 
 /** The QTN if the caller may SEE it — its owner, its co-owner, or a qtn.viewAll holder. */
@@ -120,7 +143,7 @@ async function visibleQtn(req: Request) {
   const uid = req.userId as string;
   const where = acc.perms.has("qtn.viewAll")
     ? { id: req.params.id }
-    : { id: req.params.id, OR: [{ ownerId: uid }, { coOwnerId: uid }] };
+    : { id: req.params.id, OR: sharedWith(uid) };
   return prisma.lvQtn.findFirst({ where, include: ownerSelect });
 }
 
@@ -129,7 +152,7 @@ async function visibleQtn(req: Request) {
 async function writableQtn(req: Request) {
   const uid = req.userId as string;
   return prisma.lvQtn.findFirst({
-    where: { id: req.params.id, OR: [{ ownerId: uid }, { coOwnerId: uid }] },
+    where: { id: req.params.id, OR: sharedWith(uid) },
     include: ownerSelect,
   });
 }
@@ -200,7 +223,7 @@ export async function list(req: Request, res: Response) {
   try {
     const uid = req.userId as string;
     const rows = await prisma.lvQtn.findMany({
-      where: { OR: [{ ownerId: uid }, { coOwnerId: uid }] },
+      where: { OR: sharedWith(uid) },
       orderBy: { updatedAt: "desc" },
       include: ownerSelect,
     });
@@ -261,15 +284,16 @@ export async function create(req: Request, res: Response) {
 }
 
 // ── Co-Work merge ────────────────────────────────────────────────────────────
-// When a QTN has a co-owner, a save writes ONLY the saver's own panels; a co-owner's
-// save also leaves the shared fields (project/pricing/terms/…) untouched — so the two
-// work at once and never overwrite each other. Panel ownership comes from the STORED
-// state (a saver can't reassign or edit the other's panel), unassigned panels belong to
-// the primary owner, and a brand-new panel is stamped to the saver.
+// While a QTN is shared, a save writes ONLY the saver's own panels; everyone else's
+// come straight from the stored state. A co-worker's save also leaves the shared
+// fields (project/pricing/terms/…) untouched, since those belong to the owner. So any
+// number of people can work at once and none of them can overwrite another's work.
+// Panel ownership is read from the STORED state — a saver cannot reassign or edit
+// someone else's panel — unassigned panels belong to the owner, and a brand-new panel
+// is stamped to whoever saved it.
 type PanelLike = { id?: string; ownerId?: string; [k: string]: unknown };
 type StateLike = { panels?: PanelLike[]; [k: string]: unknown };
-function mergeCoWork(stored: StateLike, incoming: StateLike, primaryId: string, coOwnerId: string, saverId: string): StateLike {
-  const other = saverId === primaryId ? coOwnerId : primaryId;
+function mergeCoWork(stored: StateLike, incoming: StateLike, primaryId: string, saverId: string): StateLike {
   const storedPanels = Array.isArray(stored?.panels) ? stored.panels : [];
   const incomingPanels = Array.isArray(incoming?.panels) ? incoming.panels : [];
   const storedById = new Map(storedPanels.filter((p) => p?.id).map((p) => [p.id as string, p]));
@@ -282,15 +306,15 @@ function mergeCoWork(stored: StateLike, incoming: StateLike, primaryId: string, 
     seen.add(p.id);
     const sp = storedById.get(p.id);
     if (!sp) { merged.push({ ...p, ownerId: saverId }); continue; } // new panel → saver owns it
-    if (ownerOf(sp) === other) merged.push(sp);                     // the other's panel — authoritative
-    else merged.push({ ...p, ownerId: ownerOf(sp) });              // saver's own edit (owner from stored)
+    if (ownerOf(sp) !== saverId) merged.push(sp);                   // someone else's — authoritative
+    else merged.push({ ...p, ownerId: saverId });                   // the saver's own edit
   }
-  // Never drop the other's panels, even if the saver's client didn't send them back.
+  // Never drop anyone else's panels, even if the saver's client didn't send them back.
   for (const sp of storedPanels) {
-    if (sp?.id && !seen.has(sp.id) && ownerOf(sp) === other) merged.push(sp);
+    if (sp?.id && !seen.has(sp.id) && ownerOf(sp) !== saverId) merged.push(sp);
   }
 
-  const base = saverId === primaryId ? incoming : stored; // co-owner keeps stored shared fields
+  const base = saverId === primaryId ? incoming : stored; // co-workers keep stored shared fields
   return { ...base, panels: merged };
 }
 
@@ -310,12 +334,12 @@ export async function update(req: Request, res: Response) {
         return lockedResponse(res, s);
       }
     }
-    // With a co-owner, merge per-panel so the two never overwrite each other.
+    // While the quotation is shared, merge per-panel so no one overwrites anyone else.
     let toStore: unknown = state ?? {};
-    if (q.coOwnerId) {
+    if (coOwnersOf(q).length) {
       let stored: StateLike = {};
       try { stored = JSON.parse(q.state) as StateLike; } catch { /* corrupt → treat as empty */ }
-      toStore = mergeCoWork(stored, (state ?? {}) as StateLike, q.ownerId, q.coOwnerId, req.userId as string);
+      toStore = mergeCoWork(stored, (state ?? {}) as StateLike, q.ownerId, req.userId as string);
     }
     await prisma.lvQtn.update({
       where: { id: q.id },
@@ -705,13 +729,14 @@ export async function reassign(req: Request, res: Response) {
   }
 }
 
-// POST /api/qtns/:id/cowork { coOwnerId | null, note? } — Co-Work: set (or clear) the
-// second sales-support on a quotation so they can work its panels alongside the owner.
-// Allowed for the primary owner or a qtn.reassign holder. Each panel keeps its own
-// ownerId (in the state) and the save endpoint merges per-panel.
+// POST /api/qtns/:id/cowork { coOwnerIds: string[], note? } — Co-Work: set who shares
+// this quotation with its owner, so they can work its panels alongside them. The list
+// REPLACES the current one; an empty list ends co-work. Allowed for the owner or a
+// qtn.reassign holder. Each panel keeps its own ownerId (in the state) and the save
+// endpoint merges per-panel, so any number of people can work at once.
 export async function cowork(req: Request, res: Response) {
   try {
-    const { coOwnerId, note } = coworkSchema.parse(req.body);
+    const { coOwnerIds, coOwnerId, note } = coworkSchema.parse(req.body);
     const q = await visibleQtn(req);
     if (!q) return res.status(404).json({ error: "Quotation not found." });
 
@@ -719,39 +744,56 @@ export async function cowork(req: Request, res: Response) {
     if (!acc.perms.has("qtn.reassign") && q.ownerId !== req.userId) {
       return res.status(403).json({ error: "You don't have permission to set a co-worker." });
     }
-    const targetId = coOwnerId?.trim() || null;
-    if (targetId && targetId === q.ownerId) {
-      return res.status(400).json({ error: "The owner can't also be the co-worker." });
+    // `coOwnerId` is the old single-slot field — still accepted so a client mid-rollout
+    // (or a cached bundle) keeps working.
+    const wanted = [...new Set(
+      (coOwnerIds ?? (coOwnerId ? [coOwnerId] : [])).map((x) => x.trim()).filter(Boolean),
+    )];
+    if (wanted.includes(q.ownerId)) {
+      return res.status(400).json({ error: "The owner is already on this quotation — pick someone else." });
     }
-    let target: { id: string; name: string; email: string } | null = null;
-    if (targetId) {
-      target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true, name: true, email: true } });
-      if (!target) return res.status(404).json({ error: "The chosen user was not found." });
+    const targets = wanted.length
+      ? await prisma.user.findMany({ where: { id: { in: wanted } }, select: { id: true, name: true, email: true } })
+      : [];
+    if (targets.length !== wanted.length) {
+      return res.status(404).json({ error: "One of the chosen users was not found." });
     }
 
+    const before = new Set(coOwnersOf(q).map((c) => c.id));
+    const added = targets.filter((t) => !before.has(t.id));
     const trimmedNote = note?.trim() || "";
     const status = qtnStatus(q);
+    const label = targets.length ? targets.map((t) => t.email).join(", ") : "no one";
     await prisma.$transaction([
-      prisma.lvQtn.update({ where: { id: q.id }, data: { coOwnerId: targetId } }),
+      // Replace the membership wholesale, and retire the legacy single slot so the
+      // two storages can never disagree.
+      prisma.lvQtnCoOwner.deleteMany({ where: { qtnId: q.id } }),
+      ...targets.map((t) =>
+        prisma.lvQtnCoOwner.create({ data: { qtnId: q.id, userId: t.id } })),
+      prisma.lvQtn.update({ where: { id: q.id }, data: { coOwnerId: null } }),
       prisma.qtnEvent.create({
         data: {
           qtnId: q.id, qtnNumber: q.number, ownerId: q.ownerId, ownerEmail: q.owner?.email ?? "",
           action: "COWORK", fromStatus: status, toStatus: status,
-          note: targetId ? `co-worker → ${target?.email}${trimmedNote ? ` · ${trimmedNote}` : ""}` : "co-worker removed",
+          note: targets.length
+            ? `co-workers → ${label}${trimmedNote ? ` · ${trimmedNote}` : ""}`
+            : "co-work ended",
           actorId: req.userId ?? null, actorEmail: req.userEmail ?? "",
         },
       }),
     ]);
 
-    if (targetId && target) {
+    // Only tell the people who are newly on it — re-saving the list shouldn't
+    // re-notify everyone who was already there.
+    for (const t of added) {
       await notify({
-        userId: targetId, kind: "QTN_COWORK",
+        userId: t.id, kind: "QTN_COWORK",
         title: `You're now co-working QTN ${q.number}`,
         body: `${req.userEmail || "A colleague"} added you as a co-worker on quotation ${q.number}${trimmedNote ? ` — "${trimmedNote}"` : ""}. You can edit the panels assigned to you.`,
         link: `/lv/qtn/${q.id}`, qtnId: q.id, note: trimmedNote || undefined, origin: originOf(req),
       });
     }
-    res.json({ ok: true, coOwnerId: targetId ?? "", coOwnerEmail: target?.email ?? "", coOwnerName: target?.name ?? "" });
+    res.json({ ok: true, coOwners: targets.map((t) => ({ id: t.id, email: t.email, name: t.name })) });
   } catch (e) {
     fail(res, e);
   }
