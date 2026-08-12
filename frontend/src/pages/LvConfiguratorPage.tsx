@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorker, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
 import ReassignQtnModal from "../components/ReassignQtnModal";
 import CoWorkModal from "../components/CoWorkModal";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { useStaff, SALES_MANAGER } from "../staff";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
@@ -646,6 +647,76 @@ export default function LvConfiguratorPage() {
     : undefined;
   const coOwnerLabel = rec?.coOwnerName || rec?.coOwnerEmail || "";
   const selPanelOwnerName = coWork && sel ? ownerNameById(panelOwnerOf(sel)) : "";
+
+  // ── Live sync ──────────────────────────────────────────────────────────────
+  // Nothing can push from the server (the API runs as serverless functions), so
+  // poll. Two things arrive this way: the workflow status — so an approval or a
+  // return you didn't make is reflected without a reload — and, when co-working,
+  // the OTHER owner's panels.
+  //
+  // The merge is deliberately one-sided: your own panels are never read from the
+  // server, so nothing you are typing can be overwritten. Only panels that belong
+  // to the other person are replaced, added or dropped. A co-owner additionally
+  // takes the shared tabs from the server, since the primary owner owns those and
+  // the co-owner cannot edit them anyway.
+  const [freshPanels, setFreshPanels] = useState<Set<string>>(new Set());
+  const theirsRef = useRef<string | null>(null); // their panels as last seen on the server
+  const syncFromServer = async () => {
+    if (!rec || loading) return;
+    const r = await getQtn(rec.id);
+    if (!r) return;
+
+    if (r.status !== status) setStatus(r.status);
+    setRec((old) =>
+      !old || (old.coOwnerId === r.coOwnerId && old.status === r.status && old.returnReason === r.returnReason)
+        ? old
+        : { ...old, status: r.status, locked: r.locked, returnReason: r.returnReason,
+            approverEmail: r.approverEmail, coOwnerId: r.coOwnerId,
+            coOwnerEmail: r.coOwnerEmail, coOwnerName: r.coOwnerName },
+    );
+
+    const mine = user?.id;
+    if (!r.coOwnerId || !mine) { theirsRef.current = null; return; } // not co-worked
+    const ownerOnServer = (p: LvPanel) => p.ownerId || r.ownerId;
+    const theirs = r.state.panels.filter((p) => ownerOnServer(p) !== mine);
+
+    // What moved on THEIR side since the last poll, so your own edits never count as
+    // "arrived". Before the first poll the baseline is whatever is already on screen —
+    // seeding it empty would let the first batch slip in without a marker.
+    const sig = JSON.stringify(theirs);
+    if (sig !== theirsRef.current) {
+      const baseline: LvPanel[] = theirsRef.current !== null
+        ? (JSON.parse(theirsRef.current) as LvPanel[])
+        : s.panels.filter((p) => ownerOnServer(p) !== mine);
+      const before = new Map(baseline.map((p) => [p.id, JSON.stringify(p)]));
+      const moved = theirs.filter((p) => before.get(p.id) !== JSON.stringify(p)).map((p) => p.id);
+      if (moved.length) {
+        setFreshPanels((old) => new Set([...old, ...moved]));
+        setTimeout(() => setFreshPanels((old) => {
+          const kept = new Set(old); moved.forEach((k) => kept.delete(k)); return kept;
+        }), 6000);
+      }
+      theirsRef.current = sig;
+    }
+
+    const theirIds = new Set(theirs.map((p) => p.id));
+    const iAmPrimary = mine === r.ownerId;
+    setHist((h) => {
+      const cur = h.present;
+      // Keep all of mine untouched; keep theirs only while it still exists remotely.
+      const merged = cur.panels
+        .filter((p) => ownerOnServer(p) === mine || theirIds.has(p.id))
+        .map((p) => (ownerOnServer(p) === mine ? p : theirs.find((x) => x.id === p.id) ?? p));
+      const have = new Set(merged.map((p) => p.id));
+      theirs.forEach((p) => { if (!have.has(p.id)) merged.push(p); }); // panels they added
+      const base = iAmPrimary ? cur : { ...r.state, selectedId: cur.selectedId };
+      const next = { ...base, panels: merged };
+      if (JSON.stringify(next) === JSON.stringify(cur)) return h;
+      // Someone else's edit isn't yours to undo — swap the present, leave history be.
+      return { ...h, present: next };
+    });
+  };
+  useAutoRefresh(() => syncFromServer(), 15_000);
   // Standard EDMS quotations quote panels only — no Spare Parts / LCP / KWHM cells,
   // so the "Auxiliary Panels" menu is not offered on them.
   const isEdmsQtn = s.kind === "edms";
@@ -1053,12 +1124,12 @@ export default function LvConfiguratorPage() {
         {activeTab === "pricing" && <PricingTab s={s} up={up} />}
         {activeTab === "specs" && <SpecsTab s={s} up={up} qtnId={rec?.id ?? ""} readOnly={sharedReadOnly} />}
         {activeTab === "panels" && (
-          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} panelBadge={panelBadge}
+          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} panelBadge={panelBadge} freshIds={freshPanels}
             onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
             onAddSpare={isEdmsQtn ? undefined : addSpareCell} />
         )}
         {activeTab === "spare" && (
-          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} panelBadge={panelBadge}
+          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} panelBadge={panelBadge} freshIds={freshPanels}
             onAdd={() => addSpareCell("spare")} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
             addLabel="+ Add cell" emptyLabel="No spare cells yet." emptyAddLabel="+ Add your first cell" />
         )}
@@ -4088,7 +4159,7 @@ function AddSpareMenu({ onAddSpare, trigger, wrap = "" }: { onAddSpare: (kind: s
   );
 }
 
-function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, panelBadge, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
+function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, panelBadge, freshIds, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
   s: LvState; sel: LvPanel | null;
   up: (p: Partial<LvState>) => void;
   upPanel: (id: string, p: Partial<LvPanel>) => void;
@@ -4097,6 +4168,8 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
   onAddSpare?: (kind: string) => void;
   /** Co-Work: owner tag for a panel row (initials + whether it's the current user's). */
   panelBadge?: (p: LvPanel) => { text: string; title: string; mine: boolean };
+  /** Co-Work: panels that just arrived/changed from the other owner — flashed briefly. */
+  freshIds?: Set<string>;
   addLabel?: string; emptyLabel?: string; emptyAddLabel?: string;
 }) {
   // Drag-and-drop reorder state (hooks must precede the early return).
@@ -4146,7 +4219,9 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
                 p.highlight
                   ? `bg-yellow-200 hover:bg-yellow-300 ${active ? "border-brand" : "border-yellow-400"}`
                   : active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
-              } ${dragId === p.id ? "scale-[0.98] opacity-40" : ""} ${overId === p.id ? "border-t-2 border-t-brand bg-brand-tint" : ""}`}>
+              } ${dragId === p.id ? "scale-[0.98] opacity-40" : ""} ${overId === p.id ? "border-t-2 border-t-brand bg-brand-tint" : ""} ${
+                freshIds?.has(p.id) ? "animate-flash-new" : ""
+              }`}>
               {/* Icons sit inline after a short name; a long name pushes them to wrap onto a
                   second line, right-aligned (flex-wrap + ml-auto). */}
               <div className="flex flex-wrap items-center gap-x-1 gap-y-1">

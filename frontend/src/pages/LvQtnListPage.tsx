@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { listQtns, listAllQtns, deleteQtn, duplicateQtn, amendQtn, supersededNumbers, type QtnListItem } from "../lv/qtns";
 import { api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE, type QtnStatus } from "../api";
 import { useAuth } from "../auth/AuthContext";
+import { useAutoRefresh, useChangedKeys } from "../hooks/useAutoRefresh";
 import { fmtEgp, DEFAULT_FACTORS } from "../lv/catalog";
 import NewQtnPicker from "../components/NewQtnPicker";
 
@@ -66,6 +67,12 @@ export default function LvQtnListPage() {
   useEffect(() => {
     reload();
   }, []);
+  // Quotations added or edited by other people appear on their own — and right away
+  // when you come back to the tab. Rows that changed flash briefly (see `justChanged`).
+  useAutoRefresh(() => reload(), 30_000);
+
+  // Which rows arrived/changed since the last refresh — flashed briefly in the table.
+  const justChanged = useChangedKeys(qtns, (q) => q.id, (q) => `${q.updatedAt}|${q.status}`);
 
   const rows = qtns ?? [];
   // A quotation saved before the workflow shipped carries no status; read it as a
@@ -277,8 +284,10 @@ export default function LvQtnListPage() {
                     const dead = cancelledIds.has(x.id);
                     return (
                       <tr key={x.id}
-                        className="cursor-pointer border-t border-line transition-colors hover:bg-brand-tint animate-fade-up"
-                        style={{ animationDelay: `${i * 0.04}s` }}
+                        className={`cursor-pointer border-t border-line transition-colors hover:bg-brand-tint ${
+                          justChanged.has(x.id) ? "animate-flash-new" : "animate-fade-up"
+                        }`}
+                        style={justChanged.has(x.id) ? undefined : { animationDelay: `${i * 0.04}s` }}
                         onClick={() => navigate(`/lv/qtn/${x.id}`)}>
                         <td className="px-4 py-3 font-bold text-ink">
                           <span className={`rounded-md px-2 py-0.5 font-mono text-xs font-bold ${dead ? "bg-surface text-muted line-through" : "bg-brand-light text-brand-dark"}`}>{x.number}</span>

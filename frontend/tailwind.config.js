@@ -78,6 +78,13 @@ export default {
           "0%, 49%": { opacity: "1" },
           "50%, 100%": { opacity: "0" },
         },
+        // Auto-refresh marker: something arrived from someone else. Warm tint that
+        // fades out on its own, so nothing has to be clicked away.
+        "flash-new": {
+          "0%": { backgroundColor: "rgb(var(--c-brand-tint))" },
+          "70%": { backgroundColor: "rgb(var(--c-brand-tint))" },
+          "100%": { backgroundColor: "transparent" },
+        },
       },
       animation: {
         "fade-up": "fade-up .45s cubic-bezier(.2,.7,.3,1) both",
@@ -87,6 +94,7 @@ export default {
         "bar-grow": "bar-grow .5s ease both",
         shimmer: "shimmer 1.4s linear infinite",
         blink: "blink 1.1s linear infinite",
+        "flash-new": "flash-new 6s ease-out both",
       },
     },
   },

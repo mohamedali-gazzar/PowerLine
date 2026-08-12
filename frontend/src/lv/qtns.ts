@@ -58,11 +58,17 @@ export interface QtnListItem {
 /** Client-computed summary stored next to the JSON state (so listing/stats need
  *  no pricing logic on the server). */
 function summaryOf(state: LvState): QtnSummaryInput {
+  // One malformed panel is enough to turn the pricing chain into NaN, which
+  // JSON.stringify writes as null — and the server rejects the whole request
+  // ("Expected number, received null"). Since the save is fire-and-forget, that
+  // silently stops every autosave and the estimator loses work with no warning.
+  // The summary is only a listing convenience, so never let it fail the save.
+  const total = grandTotals(state).incl;
   return {
     projectName: state.project.name,
     customer: state.project.customer,
     panelsCount: state.panels.length,
-    totalEgp: grandTotals(state).incl,
+    totalEgp: Number.isFinite(total) ? total : 0,
   };
 }
 

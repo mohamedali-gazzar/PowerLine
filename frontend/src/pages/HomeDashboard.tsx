@@ -5,6 +5,7 @@ import {
   type HistoryItem, type QtnStatus, type QtnListItemDto, type MyAccess, type StalePricedQtns,
 } from "../api";
 import { useAuth } from "../auth/AuthContext";
+import { useAutoRefresh, useChangedKeys } from "../hooks/useAutoRefresh";
 import NewQtnPicker from "../components/NewQtnPicker";
 import RedPriceAlert from "../components/RedPriceAlert";
 import EstimatorEvaluation from "./EstimatorEvaluation";
@@ -26,19 +27,27 @@ export default function HomeDashboard() {
   const [perfOpen, setPerfOpen] = useState(() => localStorage.getItem("home-perf-open") !== "0");
   const togglePerf = () => setPerfOpen((v) => { const n = !v; localStorage.setItem("home-perf-open", n ? "1" : "0"); return n; });
 
-  useEffect(() => {
-    // account.history() merges LV + RMU, but its LV rows only carry the old
-    // submitted flag — the workflow status lives on /qtns. So the LV half comes
-    // from qtns.list() and only the RMU rows are kept from the merged history.
-    Promise.all([
+  // account.history() merges LV + RMU, but its LV rows only carry the old
+  // submitted flag — the workflow status lives on /qtns. So the LV half comes
+  // from qtns.list() and only the RMU rows are kept from the merged history.
+  const loadDashboard = async () => {
+    const [lv, merged] = await Promise.all([
       api.qtns.list().catch(() => [] as QtnListItemDto[]),
       api.account.history().then((r) => r.items).catch(() => [] as HistoryItem[]),
-    ]).then(([lv, merged]) => setRows(myQtnRows(lv, merged)));
+    ]);
+    setRows(myQtnRows(lv, merged));
     // A failed probe must not hand out permissions — fall back to holding none.
-    api.access.me().then(setAccess).catch(() => setAccess({ tier: "ENGINEER", perms: [], role: "USER" }));
+    await api.access.me().then(setAccess).catch(() => setAccess({ tier: "ENGINEER", perms: [], role: "USER" }));
     // Open QTNs that froze their prices on a superseded price list (silent on failure).
-    api.account.stalePrices().then(setStale).catch(() => {});
+    await api.account.stalePrices().then(setStale).catch(() => {});
+  };
+  useEffect(() => {
+    void loadDashboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Quotations handed to you, co-work invites and approvals land here without a
+  // manual reload — and immediately when you return to the tab.
+  useAutoRefresh(() => loadDashboard(), 30_000);
 
   const can = (perm: string) => Boolean(access?.perms.includes(perm));
 
@@ -283,6 +292,9 @@ function ApprovalInbox() {
   useEffect(() => {
     api.qtns.queue().then(setQueue).catch(() => setQueue([]));
   }, []);
+  // New approval requests show up on their own — this is the list people wait on.
+  useAutoRefresh(() => api.qtns.queue().then(setQueue).catch(() => {}), 30_000);
+  const queueChanged = useChangedKeys(queue, (q) => q.id, (q) => q.updatedAt);
 
   return (
     <div className="card mb-5 overflow-hidden">
@@ -309,7 +321,9 @@ function ApprovalInbox() {
           <tbody>
             {queue.map((q) => (
               <tr key={q.id}
-                className="cursor-pointer border-t border-line transition-colors hover:bg-brand-tint"
+                className={`cursor-pointer border-t border-line transition-colors hover:bg-brand-tint ${
+                  queueChanged.has(q.id) ? "animate-flash-new" : ""
+                }`}
                 onClick={() => navigate(`/lv/qtn/${q.id}`)}>
                 <td className="px-5 py-2.5 font-bold">
                   <span className="rounded-md bg-brand-light px-2 py-0.5 font-mono text-xs text-brand-dark">{q.number}</span>
