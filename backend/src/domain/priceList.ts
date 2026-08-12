@@ -1,6 +1,6 @@
-// RMU price lookups. All actual prices live in the pricing master
-// (src/data/rmu-pricing.json, edited via pricing/RMU-Pricing.xlsx) and are read
-// through the pricing-data provider — no prices are hardcoded here.
+// RMU price lookups. Live prices come from the database price book and are read
+// through the pricing-data provider — no prices are hardcoded here. Editing happens
+// on the /pricing screen; src/data/rmu-pricing.json is only the cold-start fallback.
 // "Minimum unit price" — the floor; the selling price is set per offer.
 
 import {

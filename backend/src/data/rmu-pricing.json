@@ -1,5 +1,5 @@
 {
-  "_note": "RMU pricing master. Edit pricing/RMU-Pricing.xlsx and run `node tools/pricing-import.cjs rmu` — do NOT hand-edit this file.",
+  "_note": "RMU pricing FALLBACK only. Live prices come from the database price book (see backend/src/domain/pricing-data.ts); this file is served just on a cold start or when PriceBook.source is flipped to 'json'. Prices are edited on the /pricing screen — the Excel masters were retired 2026-08-12. Keep this in step with the published price book, or a kill-switch flip serves stale prices.",
   "currency": "USD",
   "vatPct": 14,
   "panels": {
