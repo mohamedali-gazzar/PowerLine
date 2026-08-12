@@ -392,6 +392,25 @@ export default function LvConfiguratorPage() {
       confirm: "Send this quotation for approval? You won't be able to edit it while it's under review.",
     });
   };
+  // "Send to <sales person>" — compose the offer e-mail in Outlook via a mailto link.
+  // Recipient is the sales person's e-mail from the Project tab (empty To when none is
+  // chosen, so the user picks it). Subject is "<QTN> (<Project>)"; the body greets the
+  // sales person, cites the selling factor, and signs off with the sales-support name.
+  // A mailto can't carry attachments, so the Technical & Commercial PDFs are attached
+  // by hand after Outlook opens.
+  const salesMailtoHref = () => {
+    const to = s.project.salesEmail.trim();
+    const subject = `${qtnNum} (${s.project.name.trim()})`;
+    const body = [
+      `Dear ${s.project.salesPerson.trim() || "Sales"},`,
+      "Please find attached the Technical and Commercial offers",
+      `on factor "${s.factors.factor}"`,
+      "",
+      "Best regards,",
+      s.project.supportEngineer.trim() || user?.name || "",
+    ].join("\r\n");
+    return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  };
   const isOwner = !wf.ownerId || wf.ownerId === rec?.ownerId;
   const canApprove = myPerms.includes("qtn.approve");
   const canReturn = canApprove || myPerms.includes("qtn.return");
@@ -714,6 +733,16 @@ export default function LvConfiguratorPage() {
               })}>
                 {submitting ? "Submitting…" : "✓ Submit"}
               </button>
+            )}
+            {status === "SUBMITTED" && (
+              <a href={salesMailtoHref()}
+                title="Open Outlook to e-mail the offers to the sales person — then attach the exported Technical & Commercial PDFs"
+                className="btn-primary inline-flex items-center gap-1.5 no-underline">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7z" />
+                </svg>
+                Send to {s.project.salesPerson.trim().split(/\s+/)[0] || "Sales"}
+              </a>
             )}
             {status === "SUBMITTED" && canReopen && (
               <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
