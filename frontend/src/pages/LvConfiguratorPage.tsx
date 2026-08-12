@@ -471,7 +471,14 @@ export default function LvConfiguratorPage() {
         coBlob ? new File([coBlob], coName, { type: "application/pdf" }) : null,
       ].filter(Boolean) as File[];
       if (files.length && typeof navigator.canShare === "function" && navigator.canShare({ files })) {
-        setShareReady(files);
+        try {
+          // One tap: share straight away while the click is still "active".
+          await navigator.share({ files, title: salesMailSubject(), text: salesMailBody() });
+        } catch (err) {
+          // AbortError = the user closed the share sheet (fine). Otherwise the click's
+          // activation lapsed during PDF generation → fall back to a manual second tap.
+          if ((err as Error).name !== "AbortError") setShareReady(files);
+        }
         return;
       }
       // Nothing can attach here → download the PDFs and open a prefilled mailto.
