@@ -20,8 +20,8 @@ const ADMIN_EXCEPTION = "qtn.approveOwn";
 const ROLE_PRESETS: { name: string; tier: string; perms: string[] }[] = [
   { name: "Admin", tier: "ADMIN", perms: [] },
   { name: "Section Head", tier: "ADMIN", perms: [] },
-  { name: "Team Leader", tier: "ENGINEER", perms: ["prices.view", "qtn.viewAll", "qtn.reassign", "qtn.approve", "qtn.return"] },
-  { name: "Tendering", tier: "ENGINEER", perms: ["prices.view", "qtn.viewAll", "qtn.editWaiting"] },
+  { name: "Team Leader", tier: "ENGINEER", perms: ["prices.view", "qtn.viewAll", "qtn.reassign", "qtn.approve", "qtn.return", "qtn.amendOwn", "qtn.amendAll"] },
+  { name: "Tendering", tier: "ENGINEER", perms: ["prices.view", "qtn.viewAll", "qtn.editWaiting", "qtn.amendOwn", "qtn.amendAll"] },
   { name: "Powerline", tier: "ENGINEER", perms: ["qtn.viewAll"] },
 ];
 

@@ -18,6 +18,7 @@ export default function LvQtnListPage() {
   const [qtns, setQtns] = useState<QtnListItem[] | null>(null); // null = first load in flight
   /** True when the list holds every user's quotations, not just the signed-in one's. */
   const [scopeAll, setScopeAll] = useState(false);
+  const [myPerms, setMyPerms] = useState<string[]>([]);
   const [loadErr, setLoadErr] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [picker, setPicker] = useState(false);
@@ -33,7 +34,9 @@ export default function LvQtnListPage() {
     // /qtns/all 403s for everyone without qtn.viewAll and would blank the page.
     let all = false;
     try {
-      all = (await api.access.me()).perms.includes("qtn.viewAll");
+      const acc = await api.access.me();
+      all = acc.perms.includes("qtn.viewAll");
+      setMyPerms(acc.perms);
     } catch {
       /* unreadable access record — fall back to the personal list */
     }
@@ -299,7 +302,9 @@ export default function LvQtnListPage() {
                         <td className="px-4 py-3 text-xs text-muted">{new Date(x.updatedAt).toLocaleDateString()}</td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-3" onClick={(e) => e.stopPropagation()}>
-                            {!dead && (
+                            {!dead && ((!scopeAll || x.ownerEmail === user?.email)
+                              ? (myPerms.includes("qtn.amendOwn") || myPerms.includes("qtn.amendAll"))
+                              : myPerms.includes("qtn.amendAll")) && (
                               <button onClick={(e) => onAmend(e, x.id, x.number)} className="font-semibold text-brand-dark hover:underline" title="Open a new revision — cancels this one">Amend</button>
                             )}
                             <button onClick={(e) => onDuplicate(e, x.id)} className="font-semibold text-brand hover:underline">Duplicate</button>
