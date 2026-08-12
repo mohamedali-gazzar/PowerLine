@@ -13,6 +13,18 @@ import { useAuth } from "../auth/AuthContext";
 const TIER_LABEL: Record<string, string> = { ADMIN: "Admin", ENGINEER: "Engineer" };
 const ADMIN_EXCEPTION = "qtn.approveOwn";
 
+// Named role presets — picking one fills in the tier + exact permission ticks (which
+// the admin then reviews and saves). Admin & Section Head hold everything (Admin tier);
+// the rest are engineers with a specific set. Self-approval (qtn.approveOwn) is left a
+// separate opt-in even for admins, matching the app's existing safety design.
+const ROLE_PRESETS: { name: string; tier: string; perms: string[] }[] = [
+  { name: "Admin", tier: "ADMIN", perms: [] },
+  { name: "Section Head", tier: "ADMIN", perms: [] },
+  { name: "Team Leader", tier: "ENGINEER", perms: ["prices.view", "qtn.viewAll", "qtn.reassign", "qtn.approve", "qtn.return"] },
+  { name: "Tendering", tier: "ENGINEER", perms: ["prices.view", "qtn.viewAll", "qtn.editWaiting"] },
+  { name: "Powerline", tier: "ENGINEER", perms: ["qtn.viewAll"] },
+];
+
 type Draft = { tier: string; perms: string[]; notifyByEmail: boolean };
 type RowNote = { ok: boolean; text: string };
 
@@ -314,6 +326,26 @@ function UserCard({
           )}
         </div>
         <div className="shrink-0">
+          <label className="label" htmlFor={`role-${user.id}`}>
+            Role
+          </label>
+          <select
+            id={`role-${user.id}`}
+            className="input mb-3 w-44"
+            value=""
+            disabled={busy}
+            title="Fill in the tier and permissions for a role — then review and Save"
+            onChange={(e) => {
+              const r = ROLE_PRESETS.find((x) => x.name === e.target.value);
+              if (r) onEdit({ tier: r.tier, perms: [...r.perms] });
+            }}
+          >
+            <option value="">Apply a role…</option>
+            {ROLE_PRESETS.map((r) => (
+              <option key={r.name} value={r.name}>{r.name}</option>
+            ))}
+          </select>
+
           <label className="label" htmlFor={`tier-${user.id}`}>
             Tier
           </label>
