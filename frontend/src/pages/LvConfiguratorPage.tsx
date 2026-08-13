@@ -950,7 +950,8 @@ export default function LvConfiguratorPage() {
           </p>
           {/* Workflow stage, under the price — it belongs with the quotation's own
               details rather than among the buttons that act on it. */}
-          <span className={`mt-2 inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-bold ${QTN_STATUS_STYLE[status]}`}
+          {/* text-sm (14px) rather than text-xs (12px) — the 2px the owner asked for. */}
+          <span className={`mt-2 inline-flex items-center rounded-lg px-2.5 py-1 text-sm font-bold ${QTN_STATUS_STYLE[status]}`}
             title={`Workflow stage: ${QTN_STATUS_LABEL[status]}`}>
             {QTN_STATUS_LABEL[status]}
           </span>
@@ -1031,17 +1032,24 @@ export default function LvConfiguratorPage() {
                 🔓 Reopen
               </button>
             )}
-            {!cancelled && canReassign && status !== "SUBMITTED" && (
-              <button className="btn-ghost" onClick={() => setReassignOpen(true)}
-                title="Hand this quotation over to another user so they can continue it">
-                ⇄ Hand over
-              </button>
-            )}
-            {!cancelled && canCoWork && status !== "SUBMITTED" && (
-              <button className={`btn-ghost ${coWork ? "text-brand-dark" : ""}`} onClick={() => setCoWorkOpen(true)}
-                title="Let a second sales-support build this quotation with you, split by panel">
-                👥 Co-Work{coWork ? " ✓" : ""}
-              </button>
+            {/* Hand over and Co-Work both answer "give this to someone else", so they
+                share one dropdown. It stays on its placeholder — picking an entry opens
+                that dialog rather than setting a value. Only the options the user is
+                allowed to use are listed, so the permissions behave exactly as before. */}
+            {!cancelled && (canReassign || canCoWork) && status !== "SUBMITTED" && (
+              <select
+                className={`btn-ghost cursor-pointer ${coWork ? "text-brand-dark" : ""}`}
+                value=""
+                title="Hand this quotation to someone else, or build it together"
+                onChange={(e) => {
+                  if (e.target.value === "handover") setReassignOpen(true);
+                  if (e.target.value === "cowork") setCoWorkOpen(true);
+                }}
+              >
+                <option value="">{coWork ? "👥 Shared ✓" : "👥 Share…"}</option>
+                {canReassign && <option value="handover">⇄ Hand over — give it to someone else</option>}
+                {canCoWork && <option value="cowork">👥 Co-Work{coWork ? " ✓" : ""} — build it together, split by panel</option>}
+              </select>
             )}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
