@@ -24,6 +24,33 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**Pole counts can now be typed straight into the Price list.**
+
+Click the number in the **POLES** column, type, press Enter. It saves and goes live
+immediately, the same as any other price change, and it is recorded in History with who
+changed it and from what.
+
+Any item that has copper weights but **no** pole count is now **tinted amber**, so the
+broken ones can be found by scrolling instead of hunted for. Those are the items being
+quoted with no copper cost at all.
+
+Why this was needed on top of the spreadsheet route: an item added straight to the live
+site — like `MCCB XT6N 800A-36kA 800 AF TMA 3P` (`1SDA100718R1`), which Mohamed spotted —
+is **not in our catalogue file at all**, so no sheet generated from our copy would ever
+have reached it. There are likely more of those, and the amber tint will show them.
+
+Prices and copper weights are still read-only here and still come from the Excel upload.
+Only the pole count is editable, because it is the one that silently zeroes a cost.
+
+Checked end to end: an item was set back to no-poles on purpose, showed amber with an
+explanation, was corrected in the table, and came out saved, recorded in History and
+published. Existing saved quotations are untouched — a component keeps the pole count it
+was added with.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **The copper-connection under-costing can now be fixed from the Price list screen.**
 
 Connection copper is costed as *copper per pole × number of poles*, so an item recorded

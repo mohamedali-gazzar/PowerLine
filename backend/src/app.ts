@@ -35,6 +35,7 @@ import {
   listLvPrices,
   getLvFacets,
   updateLvPrice,
+  updateLvPoles,
   createLvComponent,
   retireLvItem,
   getLvCatalog,
@@ -160,6 +161,9 @@ export function createApp() {
   app.get("/api/pricing/lv", requireAuth, requirePriceViewer, listLvPrices);
   app.get("/api/pricing/lv/facets", requireAuth, requirePriceViewer, getLvFacets);
   app.patch("/api/pricing/lv/:id", requireAuth, requirePriceAdmin, updateLvPrice);
+  // Pole count drives the connection-copper cost, so it is edited, audited and
+  // published exactly like a price. Same permission for the same reason.
+  app.patch("/api/pricing/lv/:id/poles", requireAuth, requirePriceAdmin, updateLvPoles);
   app.post("/api/pricing/lv", requireAuth, requirePriceAdmin, createLvComponent);
   app.post("/api/pricing/lv/:id/retire", requireAuth, requirePriceAdmin, retireLvItem);
   app.post("/api/pricing/lv/seed-chunk", requireAuth, requirePriceAdmin, postLvSeedChunk);

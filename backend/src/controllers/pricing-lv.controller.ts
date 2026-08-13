@@ -252,6 +252,49 @@ export async function updateLvPrice(req: Request, res: Response) {
   }
 }
 
+/**
+ * PATCH /api/pricing/lv/:id/poles — set a component's pole count.
+ *
+ * Connection copper is costed as (copper per pole × poles), so an item recorded
+ * with zero poles contributes NO copper cost at all — it is quoted for less than
+ * it costs. The spreadsheet round trip can set this in bulk, but items that exist
+ * only on the live site (added there, never in our catalogue file) could not be
+ * corrected at all without one, which is why this is editable in the table.
+ *
+ * Components only: enclosures have no poles.
+ */
+export async function updateLvPoles(req: Request, res: Response) {
+  try {
+    const raw = req.body?.poles;
+    const poles = Math.trunc(Number(raw));
+    if (!Number.isFinite(poles) || poles < 0 || poles > 12) {
+      return res.status(400).json({ error: "Enter a whole number of poles between 0 and 12." });
+    }
+    const row = await prisma.lvComponent.findUnique({ where: { id: req.params.id } });
+    if (!row) return res.status(404).json({ error: "Item not found." });
+    if (row.poles === poles) return res.json({ ok: true, row });
+
+    const by = req.userEmail ?? "";
+    const updated = await prisma.lvComponent.update({
+      where: { id: row.id },
+      data: { poles, updatedBy: by },
+    });
+    await prisma.priceChange.create({
+      data: {
+        domain: "LV", entity: "LvComponent", entityId: row.id,
+        label: row.d || row.n || row.ref, field: "poles",
+        oldValue: String(row.poles), newValue: String(poles),
+        actorId: req.userId ?? null, actorEmail: by,
+      },
+    });
+    // Publishes like any other price edit — the copper cost changes immediately.
+    await publishCurrentPrices(by, `Poles: ${row.d || row.ref}`);
+    res.json({ ok: true, row: updated });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
 const newComponentSchema = z.object({
   t: z.string().trim().min(1, "Choose or type the Type."),
   f: z.string().trim().min(1, "Enter the Family."),

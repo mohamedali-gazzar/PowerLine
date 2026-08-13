@@ -532,6 +532,81 @@ function AddLvComponent({
 /** LV price list — 2,121 components and 253 enclosures, with Excel-style
  *  filtering. Filtering and paging happen on the SERVER (50 rows at a time), so
  *  the screen stays fast no matter how big the catalogue gets. */
+/**
+ * The pole count, editable in place.
+ *
+ * Connection copper is costed as (copper per pole × poles), so an item recorded
+ * with no poles has its copper priced at zero and is quoted for less than it
+ * costs. Everything else on this table is set through the Excel upload, but that
+ * only reaches items in a downloaded sheet — an item added straight to the live
+ * site had no way to be corrected at all. A cell with copper weight but no pole
+ * count is tinted amber, so the broken ones can be spotted by scrolling.
+ */
+function PolesCell({
+  row,
+  onSaved,
+  onError,
+}: {
+  row: LvRow;
+  onSaved: (row: LvRow) => void;
+  onError: (msg: string) => void;
+}) {
+  const [text, setText] = useState(row.poles ? String(row.poles) : "");
+  const [busy, setBusy] = useState(false);
+  // Re-sync when the row is replaced underneath us (filter change, page change).
+  useEffect(() => setText(row.poles ? String(row.poles) : ""), [row.id, row.poles]);
+
+  const current = row.poles ?? 0;
+  const missing = !current && !!((row.cuP ?? 0) > 0 || (row.cuC ?? 0) > 0);
+
+  const save = async () => {
+    const n = Math.trunc(Number(text));
+    if (text.trim() === "" || !Number.isFinite(n) || n < 0 || n > 12) {
+      setText(current ? String(current) : ""); // reject silently, put it back
+      return;
+    }
+    if (n === current) return;
+    setBusy(true);
+    try {
+      const r = await api.pricing.lvUpdatePoles(row.id, n);
+      onSaved(r.row);
+      void refreshCatalog(getToken()); // the edit publishes — reload this session's catalogue
+    } catch (e) {
+      onError((e as Error).message);
+      setText(current ? String(current) : "");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <input
+      type="number"
+      min={0}
+      max={12}
+      step={1}
+      value={text}
+      disabled={busy}
+      placeholder="—"
+      title={missing ? "No pole count — this item's connection copper is being costed at zero" : "Poles"}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") {
+          setText(current ? String(current) : "");
+          e.currentTarget.blur();
+        }
+      }}
+      className={`w-14 rounded border px-1.5 py-0.5 text-right text-xs tabular-nums outline-none transition focus:border-brand ${
+        missing
+          ? "border-amber-400 bg-amber-50 text-amber-900 dark:bg-amber-400/10 dark:text-amber-200"
+          : "border-transparent bg-transparent text-ink hover:border-line"
+      } disabled:opacity-50`}
+    />
+  );
+}
+
 function LvPrices() {
   const [kind, setKind] = useState<"components" | "enclosures" | "combos">("components");
   // Combinations are owner-only (access.manage) — a stricter gate than the rest of
@@ -798,7 +873,13 @@ function LvPrices() {
                       {/* Prices are read-only here — they are managed through the Excel upload. */}
                       <td className="px-4 py-2 text-right font-medium text-ink">{r.eur ? r.eur.toFixed(2) : "—"}</td>
                       <td className="px-4 py-2 text-right font-medium text-ink">{r.egp ? r.egp.toLocaleString() : "—"}</td>
-                      <td className="px-4 py-2 text-right text-xs text-ink">{r.poles ? r.poles : "—"}</td>
+                      <td className="px-4 py-2 text-right text-xs text-ink">
+                        <PolesCell
+                          row={r}
+                          onSaved={(u) => setRows((rs) => (rs ? rs.map((x) => (x.id === u.id ? u : x)) : rs))}
+                          onError={setErr}
+                        />
+                      </td>
                       <td className="px-4 py-2 text-right text-xs text-ink">{r.cuP ? r.cuP : "—"}</td>
                       <td className="px-4 py-2 text-right text-xs text-ink">{r.cuC ? r.cuC : "—"}</td>
                     </>
@@ -830,7 +911,7 @@ function LvPrices() {
       )}
       <p className="mt-2 text-[11px] text-muted">
         {kind === "components"
-          ? "Prices, poles and copper weights are read-only here — set them through the Excel upload above (matched on Item Code), then re-upload. Use Remove to stop offering an item."
+          ? "Poles can be edited here — click the number, type, press Enter. It goes live straight away, because connection copper is costed as copper-per-pole × poles, so an item with no poles is quoted with no copper cost at all (those are tinted amber). Prices and copper weights are still read-only — set them through the Excel upload above (matched on Item Code), then re-upload. Use Remove to stop offering an item."
           : "Prices are read-only here — set them through the Excel upload above (matched on Item Code), then re-upload. Use Remove to stop offering an item."}
       </p>
     </div>

@@ -604,6 +604,12 @@ export const api = {
     },
     lvAdd: (draft: Record<string, unknown>) =>
       request<{ ok: true; row: LvRow }>("/pricing/lv", { method: "POST", body: JSON.stringify(draft) }),
+    /** Pole count — multiplies the copper weights, so it moves the quoted price. */
+    lvUpdatePoles: (id: string, poles: number) =>
+      request<{ ok: true; row: LvRow }>(`/pricing/lv/${id}/poles`, {
+        method: "PATCH",
+        body: JSON.stringify({ poles }),
+      }),
     lvRetire: (id: string, kind: "components" | "enclosures", active: boolean) =>
       request<{ ok: true; row: LvRow }>(`/pricing/lv/${id}/retire?kind=${kind}`, {
         method: "POST",
