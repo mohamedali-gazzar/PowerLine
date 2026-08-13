@@ -1,8 +1,8 @@
 {
  "factor": 0.7,
- "euro": 57.5,
- "usd": 50,
- "safetyFactor": 0,
+ "euro": 59,
+ "usd": 51,
+ "safetyFactor": 0.02,
  "copper": 770,
  "sheetMetal": 115,
  "operations": 0.05,

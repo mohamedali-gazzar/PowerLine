@@ -408,6 +408,27 @@ export async function getPending(_req: Request, res: Response) {
 /** POST /api/pricing/publish — "Update price list & database".
  *  Validates, writes an immutable snapshot and bumps the live version, so every
  *  request from now on serves the new prices. No deploy involved. */
+/**
+ * The next price-book version, never one that already exists.
+ *
+ * LV and RMU share a single PriceBook.version counter but write their own
+ * PriceSnapshot rows, keyed unique on (domain, version). If one domain's snapshot
+ * ever gets ahead of the counter - a publish that wrote the snapshot but did not
+ * bump the book - then book.version + 1 collides with it, and EVERY publish after
+ * that fails with a unique-constraint error and a bare 'Server error'. Seen on
+ * 13 Aug 2026 with RMU at 13 and the book at 12: nothing could be published at all.
+ *
+ * Taking the highest version actually in use steps over the gap instead of
+ * jamming against it.
+ */
+async function nextPriceVersion(): Promise<number> {
+  const [book, highest] = await Promise.all([
+    prisma.priceBook.findUnique({ where: { id: "singleton" } }),
+    prisma.priceSnapshot.findFirst({ orderBy: { version: "desc" }, select: { version: true } }),
+  ]);
+  return Math.max(book?.version ?? 0, highest?.version ?? 0) + 1;
+}
+
 export async function postPublish(req: Request, res: Response) {
   try {
     const built = await buildRmuPayload();
@@ -422,7 +443,7 @@ export async function postPublish(req: Request, res: Response) {
 
     const user = req.userId ? await prisma.user.findUnique({ where: { id: req.userId } }) : null;
     const book = await prisma.priceBook.findUnique({ where: { id: "singleton" } });
-    const version = (book?.version ?? 0) + 1;
+    const version = await nextPriceVersion();
     const note = typeof req.body?.note === "string" ? req.body.note.slice(0, 200) : "";
 
     await prisma.priceSnapshot.create({
@@ -518,7 +539,7 @@ export async function publishCurrentPricesDetailed(
     if (bad.length) return blocked(bad);
 
     const book = await prisma.priceBook.findUnique({ where: { id: "singleton" } });
-    const version = (book?.version ?? 0) + 1;
+    const version = await nextPriceVersion();
 
     await prisma.priceSnapshot.create({
       data: {

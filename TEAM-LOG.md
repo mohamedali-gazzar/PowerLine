@@ -24,6 +24,31 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**New defaults for new quotations: Safety Factor 2%, USD 51, EUR 59.**
+
+Quotations already saved keep the rates they were built with — these apply to work started
+from now on.
+
+⚠️ **A real fault turned up while doing it, and it is worth knowing about.** Pressing
+**Update price list & database** had stopped working completely — it failed every time
+with a bare "Server error".
+
+The cause: LV and RMU share one version number for the price list, but each writes its own
+copy. RMU had got one step ahead (13 against 12), so every publish tried to write a version
+that already existed and was refused. Once in that state it could never recover on its
+own — no price change, anywhere, could be made live again.
+
+It now steps over a number already in use instead of jamming against it. Publishing works
+again, and the new defaults went live as version 14.
+
+📌 **The live site may well be stuck the same way.** The fix ships with this update, so
+just press **Update price list & database** there once. If it reports success, it was
+either fine already or is now unjammed — either way you are covered.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **ATS corrected against the reference sheet. MCC already agreed.**
 
 Checked both reference workbooks against what the app builds, comparing the actual parts
