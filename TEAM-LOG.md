@@ -24,6 +24,46 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**ATS corrected against the reference sheet. MCC already agreed.**
+
+Checked both reference workbooks against what the app builds, comparing the actual parts
+rather than the wording.
+
+**MCC — nothing to do.** All **110 starters** match the sheet exactly. Only the wording
+differs, which is deliberate: the app carries short names for the printed offer and
+translates them to the price-list names behind the scenes.
+
+**ATS — three corrections, two applied:**
+
+| | Was | Now |
+| --- | --- | --- |
+| 2-out-of-3, every frame — monitoring relay | 2 | **3** |
+| 2-out-of-3, every frame — green pilot light | 7 | **8** |
+| 1-out-of-2, E2.2/E4.2/E6.2 — interlock support | 2 × Type **C** | **1 × Type A,B,D** |
+
+Three monitoring relays for three sources, as the sheet says. The support part was the
+wrong type as well as the wrong quantity — the price list carries both, at €224.21 each.
+
+❓ **QUESTION FOR MOHAMED — one I could not apply.** The sheet adds **1 × "Mecanical
+Interlock"** to the 2-out-of-3 E-frames (E2.2, E4.2, E6.2). That wording matches nothing
+in the price list, and the list holds **nine** different interlocks at different prices —
+lever ones around €71–75, cable ones at €89.73. Adding it as written would put a row on
+the offer with **no price at all**, so I left it out. Tell me which one it should be and
+it takes a minute:
+
+- `Lever interlock E2.2` / `E4.2` / `E6.2 3p` — €74.73 / €74.73 / €71.50
+- `Cable interlock B, C, D - HR E2.2...E6.2` — €89.73
+- `Cable interlock A - HR E1.2..E6.2-XT7/M` — €89.73
+
+⚠️ Also fixed: the warning under the Combinations tab was reporting **27** ATS parts as
+missing when every one of them was fine — it did not know about the app's translation
+table, nor that "C.B (1)" is a placeholder for the breaker you pick. It now reports none
+across all four sections, so if it ever does warn, it means something.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **CORRECTION — the MCC starters were never mispriced. I was wrong, and I have put it back.**
 
 The entry below says `SK1-11` and `CAL4-11` were being charged at zero in all 110 starters,

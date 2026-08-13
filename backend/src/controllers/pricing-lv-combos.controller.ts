@@ -140,6 +140,38 @@ async function unresolved(descs: string[]): Promise<string[]> {
     "SK1-11 Signal contact": "SK1-11 Signaling Contact",
     "CAL4-11 (1 N.O+1 N.C) - Side": "CAL4-11 Auxiliary Contact Block - Side (AF09..96)",
   };
+  // ATS does the same thing through ATS_ACCESSORY_ALIAS: the templates carry the
+  // engineers' verbose wording and it is translated to the catalogue name for the
+  // lookup. Keyed on the flattened text, exactly as combos.ts keys it.
+  const ATS_ALIAS_KEYS = new Set(
+    [
+      "UVR - Under Voltage Release Uncabled 220-240Vac-220-250Vdc- XT1..XT4 F/P",
+      "MOD - Motor Operator with Direct Action 220...250V ac/dc- XT1-XT3",
+      "MIR-H - Frame unit horizontal interlock- XT1..XT4",
+      "MIR-P - Mechanical Interlock plate for- XT1 Fixed",
+      "MOE - Stored energy motor operator 220…250Vac/dc- XT2-XT4 F/P/W*",
+      "MIR-P - Mechanical Interlock plate- XT2 Fixed",
+      "MIR-P - Mechanical Interlock plate for- XT3 Fixed",
+      "Plate for mechanical interlock of XT4 F",
+      "YU (Under Voltage Release Uncabled) 220-240Vac -220-250Vdc-XT5-XT6 F/P",
+      "MOE (Stored Energy Motor Operator) 220-250Vac/dc-XT5",
+      "MIR-H XT5 Chassis for interlocking between XT4-XT5 & XT5-XT5",
+      "Plate for mechanical interlock of XT5 F with XT5 F",
+      "MOE (Stored Energy Motor Operator) 220-250Vac/dc-XT6",
+      "MIR-H XT6 Chassis for interlocking between XT5-XT6 & XT6-XT6",
+      "YU (Under Voltage Release Uncabled) 220-240Vac/Vdc-XT7-XT7M-E1.2…E6.2",
+      "YC - Shunt Closing release Uncabled 220-240 Vac/dc- XT7-XT7M-E1.2..E6.2",
+      "AUX 4Q (Aux. Contact Uncabled) 400Vac-4 Op/Cls C/O-XT7-XT7M-E1.2 F/W",
+      "M (Spring Charging Motor Operator) 220-250 Vac/dc-XT7M",
+      "Cables for mechanical interlock Type A horizontal- XT7-E1.2...E6.2 [Group 1]",
+      "Sup. fixed Type A E1.2-XT7/M floor mount",
+      "M - Motor operator 220-250 Vac/dc- E1.2",
+      "M - Motor operator 220-250 Vac/dc- E2.2...E6.2",
+      "Lever for mechanical interlock of fixed circuit-breaker or mobile part- E2.2 3P[Group 2]*",
+      "Lever for mechanical interlock of fixed circuit-breaker or mobile part- E4.2 3P [Group 2]*",
+    ].map(norm),
+  );
+
   const alias = (raw: string) => {
     const d = raw.trim();
     if (MCC_ALIAS[d]) return MCC_ALIAS[d];
@@ -147,6 +179,12 @@ async function unresolved(descs: string[]): Promise<string[]> {
     // before the lookup. Harmless on other sections, which never use it.
     return (/^contactor#\s*(.+)$/i.exec(d)?.[1] ?? d).trim();
   };
+
+  /** Descriptions the builders never look up, so they cannot be "missing":
+   *  "C.B (1..3)" are placeholders replaced by the breakers the user picks
+   *  (buildAts), and anything in the ATS alias table is translated first. */
+  const handledElsewhere = (raw: string) =>
+    /^C\.B\s*\(\d\)$/i.test(raw.trim()) || ATS_ALIAS_KEYS.has(norm(raw));
 
   const resolves = (raw: string): boolean => {
     const want = norm(alias(raw));
@@ -158,7 +196,7 @@ async function unresolved(descs: string[]): Promise<string[]> {
     return names.some((n) => n.startsWith(head));
   };
 
-  return descs.filter((d) => !resolves(d));
+  return descs.filter((d) => !handledElsewhere(d) && !resolves(d));
 }
 
 /** Seed any missing section from the bundled file. Idempotent. */
