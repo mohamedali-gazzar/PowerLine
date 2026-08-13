@@ -24,6 +24,44 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**"Configurator Price list 13-8-2026" is now the default catalogue.**
+
+It is **not** a price change — 2,323 items are priced exactly as before and one item moved
+down. What it really carries is **pole counts**.
+
+Applied: **189 items updated, 2 added**, published. Prices, the catalogue file and the
+database all now match it.
+
+**Why this mattered more than it looked.** The master price list calls its column
+**"No.poles"**, and the upload only ever recognised the word **"Poles"** — so *every*
+import since the beginning silently threw pole counts away. That is the real reason 22
+items ended up costing no connection copper. Both spellings are now accepted, and the
+downloaded sheet uses the master's own wording.
+
+**Corrections that went in:** 69 change-over switches moved 3P→4 and 4P→6 (a change-over
+has two sets of connections, so it carries more copper than its pole count suggests), plus
+the two 6300 A ACBs. These make those items slightly **more expensive** to quote, correctly.
+
+**Held back on your instruction:** 32 breakers in the S203M / S204M "UC" range are written
+in the sheet as **1 pole** while their own names say 3P and 4P. They keep 3 and 4. Worth
+correcting in the master when you get a chance, or they will come back on the next upload.
+
+⚠️ Two smaller oddities I did **not** hold back, because you did not rule on them —
+7 items say 3P but are recorded as 2, and 3 say 2P but are recorded as 3. Tell me if those
+are wrong too and I will put them back.
+
+Items missing from the new sheet (58 components, 1 enclosure) were **left offered**, as
+agreed — an upload never deletes anything.
+
+📌 **This is the local copy and the app's built-in list. The live site still has its own.**
+To bring it across, upload **"Configurator Price list 13-8-2026 (corrected).xlsx"** (next
+to the project folder — it is the master with those 32 pole counts held back) on
+Price list → LV prices → **Update from Excel**. It will report about 189 changes.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **Pole counts can now be typed straight into the Price list.**
 
 Click the number in the **POLES** column, type, press Enter. It saves and goes live

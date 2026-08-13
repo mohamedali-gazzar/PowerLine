@@ -29,11 +29,12 @@ export const EMPTY_TEMPLATE_COLUMNS = [
   "RAL",
   "Cross Section",
   // Connection copper is costed as (kg per pole × POLES), so a missing pole count
-  // makes an item's copper free. The parser and the server have always accepted a
-  // Poles column, but it was in neither the export nor this list, so a
-  // download → edit → upload round trip silently dropped it and pole counts could
-  // not be corrected from this screen at all. Added 13 Aug 2026.
-  "Poles",
+  // makes an item's copper free. This column was in neither the export nor the
+  // parser's header list, so a download → edit → upload round trip silently
+  // dropped it and pole counts could not be corrected from this screen at all.
+  // Spelled the master price list's way so a downloaded sheet matches it exactly.
+  // Added 13 Aug 2026.
+  "No.poles",
   "Weight/Panel/Pole",
   "Weight/Cell/Pole",
   " Brand ",
@@ -58,7 +59,17 @@ const HEADER_ALIASES: Record<string, string> = {
   "price egp": "egp",
   "egp": "egp",
   "brand": "brand",
+  // The master "Configurator Price list" calls this column "No.poles", which was
+  // recognised by nothing — so every import from the master silently dropped pole
+  // counts, which is how 22 items ended up costing no connection copper at all.
+  // Both spellings are accepted; the export writes the master's.
   "poles": "poles",
+  "no.poles": "poles",
+  "no. poles": "poles",
+  "no poles": "poles",
+  "no.of poles": "poles",
+  "no. of poles": "poles",
+  "number of poles": "poles",
   // These two ship in the template and were parsed by nobody until now.
   "weight/panel/pole": "cuP",
   "weight/cell/pole": "cuC",
