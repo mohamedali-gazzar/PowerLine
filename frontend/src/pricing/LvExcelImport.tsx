@@ -9,11 +9,13 @@ import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { api, type LvImportPreview, type LvImportRow, type LvRow } from "../api";
 
-/** The current-catalogue export uses the master "Configurator Price list" layout
- *  exactly: same columns, order and (quirky) spacing, so it lines up with the sheet
- *  the catalogue is maintained in. On upload the import reads Type, Description, Item
- *  Code, the two prices, the two weights and Brand; IP / Mounting / RAL / Cross
- *  Section / ABB Discount ride along for reference and are not applied.
+/** The current-catalogue export follows the master "Configurator Price list" layout:
+ *  same columns, order and (quirky) spacing, so it lines up with the sheet the
+ *  catalogue was maintained in — plus a Poles column the master never had (see below).
+ *  On upload the import reads Type, Description, Item Code, the two prices, Poles, the
+ *  two weights and Brand; IP / Mounting / RAL / Cross Section / ABB Discount ride along
+ *  for reference and are not applied. Column ORDER does not matter on the way in — the
+ *  parser matches on the header text — so an older sheet without Poles still imports.
  *  (The blank-template download was removed on 13 Aug 2026; these columns are still
  *  the export header, so the name is kept to avoid churn across the parser.) */
 export const EMPTY_TEMPLATE_COLUMNS = [
@@ -26,6 +28,12 @@ export const EMPTY_TEMPLATE_COLUMNS = [
   "Mounting",
   "RAL",
   "Cross Section",
+  // Connection copper is costed as (kg per pole × POLES), so a missing pole count
+  // makes an item's copper free. The parser and the server have always accepted a
+  // Poles column, but it was in neither the export nor this list, so a
+  // download → edit → upload round trip silently dropped it and pole counts could
+  // not be corrected from this screen at all. Added 13 Aug 2026.
+  "Poles",
   "Weight/Panel/Pole",
   "Weight/Cell/Pole",
   " Brand ",
@@ -161,6 +169,7 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
         r.eur ?? 0,                                           // ABB Price list in EURO
         r.egp ?? 0,                                           // Market Price in EGP
         "", "", "", "",                                       // IP · Mounting · RAL · Cross Section (components carry none)
+        r.poles ?? 0,                                         // Poles — multiplies the copper columns below
         r.cuP ?? 0,                                           // Weight/Panel/Pole
         r.cuC ?? 0,                                           // Weight/Cell/Pole
         r.brand ?? "",                                        // Brand
@@ -176,6 +185,7 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
         r.mount ?? "", // Mounting
         r.ral ?? "",   // RAL
         "",            // Cross Section
+        "",            // Poles (enclosures have none)
         "",            // Weight/Panel/Pole
         "",            // Weight/Cell/Pole
         "",            // Brand (enclosures store none)

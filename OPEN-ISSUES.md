@@ -26,13 +26,26 @@ zero poles means the copper costs nothing at all.
 Fixed in `components.json` and in the local database (published as price book v28).
 **Not fixed on the live site**, which serves its own published copy.
 
-Deploying does NOT fix this, and it cannot be fixed from the Price List screen —
-that screen only edits prices, not pole counts.
+Deploying does NOT fix this — the live site serves its own published price book.
 
-**To fix:** run a targeted update against the production database and publish, or
-add a `poles` field to the price editor. Existing saved quotations keep their old
-values (a component stores its pole count when it is added), so only newly added
-components pick up the correction.
+**This is now fixable from the Price List screen** (13 Aug 2026). The importer and
+its parser always accepted a **Poles** column and wrote it to the database, but that
+column was in neither the export nor the template, so a *Download Current Excel →
+edit → Update from Excel* round trip silently dropped pole counts and there was no
+way to correct them. `Poles` has been added to both, so the round trip now carries it.
+
+**To fix:** upload a sheet with `Item Code` + `Poles`. Leave the price cells blank —
+a blank price means "no new information, never make it free"
+(`pricing-lv-import.controller.ts:176`), and the same rule covers data columns, so a
+zero or blank can only ever be ignored, never applied. The preview lists every pole
+count it would change before anything is written.
+
+A ready-made sheet covering all 1,100 copper-bearing components was generated on
+13 Aug 2026 and handed to Mohamed. Checked against the corrected local catalogue it
+reports **0 changes**, so it only moves values that are actually wrong.
+
+Existing saved quotations keep their old values (a component stores its pole count
+when it is added), so only newly added components pick up the correction.
 
 ---
 

@@ -24,6 +24,37 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**The copper-connection under-costing can now be fixed from the Price list screen.**
+
+Connection copper is costed as *copper per pole × number of poles*, so an item recorded
+with **zero poles** costs nothing in copper. 22 items are in that state on the live site
+(switch fuses, several T4–T7 breakers, the 3200 A change-over). It was corrected in our
+own copy weeks ago but the live site keeps its own published price list.
+
+The reason it had been stuck: the spreadsheet upload **always** knew how to set pole
+counts, but the **Poles** column was missing from *Download Current Excel* and from the
+template — so downloading the list, editing it and uploading it again quietly threw pole
+counts away. There was no way to correct them at all.
+
+**Poles is now a column in both**, so the download → edit → upload round trip carries it.
+
+I have also generated a ready-to-upload sheet — **"PowerLine LV - pole counts fix.xlsx"**,
+sitting next to the project folder. To apply it:
+
+1. Price list → LV prices → **Update from Excel**
+2. Pick that file
+3. It shows what it would change — expect around 22 pole counts — press **Apply**
+
+It is safe: every price cell is blank, and a blank cell means "no new information",
+never "make it free". Checked against our own already-correct list it reports **zero**
+changes, so it can only move the values that are genuinely wrong. Offers already sent are
+untouched, and so are saved quotations — a component keeps the pole count it was added
+with. Only newly added components pick up the correction.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **New Combinations tab on the Price list — owner only.**
 
 Price list → LV prices → **Combinations**. It holds the templates that decide what goes
