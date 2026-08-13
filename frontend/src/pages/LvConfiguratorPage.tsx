@@ -957,10 +957,14 @@ export default function LvConfiguratorPage() {
           </span>
         </div>
         <div className="flex flex-col items-end gap-2">
-          {/* Every control in this row is forced to one width (w-44) so the buttons and
-              the Share dropdown below them line up in a column, whatever the workflow
-              stage puts here — the set changes with status, so a fixed grid would not do. */}
-          <div className="flex flex-wrap items-center justify-end gap-2 [&>*]:w-48 [&>*]:whitespace-nowrap">
+          {/* The action buttons and the Share dropdown form their own group, sized by
+              `w-max` to the buttons' natural width — so the dropdown below spans exactly
+              their combined width. It has to be a separate group: the ERP / Check-for-
+              updates row underneath is wider, and would otherwise stretch the dropdown
+              past the buttons. Widths are not fixed per button because the set changes
+              with the workflow stage. */}
+          <div className="flex w-max flex-col items-stretch gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <button className="btn-ghost" disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)">↶ Undo</button>
             <button className="btn-ghost" disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
             {/* Only the moves this user may actually make. */}
@@ -1043,7 +1047,7 @@ export default function LvConfiguratorPage() {
               to use are listed, so the permissions behave exactly as before. */}
           {!cancelled && (canReassign || canCoWork) && status !== "SUBMITTED" && (
             <select
-              className={`btn-ghost w-48 cursor-pointer ${coWork ? "text-brand-dark" : ""}`}
+              className={`btn-ghost w-0 min-w-full cursor-pointer ${coWork ? "text-brand-dark" : ""}`}
               value=""
               title="Hand this quotation to someone else, or build it together"
               onChange={(e) => {
@@ -1056,6 +1060,7 @@ export default function LvConfiguratorPage() {
               {canCoWork && <option value="cowork">👥 Co-Work{coWork ? " ✓" : ""} — build it together, split by panel</option>}
             </select>
           )}
+          </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {erpCount > 0 && (
               <button onClick={exportErpCsv}
