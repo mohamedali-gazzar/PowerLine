@@ -4,6 +4,7 @@ import { api } from "../api";
 import { label } from "../options";
 import type { Offer } from "../types";
 import NewQtnPicker from "../components/NewQtnPicker";
+import { useDialogs } from "../components/ConfirmModal";
 
 const statusColors: Record<string, string> = {
   DRAFT: "bg-line text-muted",
@@ -14,6 +15,7 @@ const statusColors: Record<string, string> = {
 
 export default function OffersListPage() {
   const navigate = useNavigate();
+  const { confirm, dialogs } = useDialogs();
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,13 +40,22 @@ export default function OffersListPage() {
 
   async function remove(e: React.MouseEvent, id: string) {
     e.stopPropagation();
-    if (!confirm("Delete this offer?")) return;
+    if (
+      !(await confirm({
+        title: "Delete this offer",
+        message: "It is removed for good — this one cannot be undone.",
+        confirmLabel: "Delete offer",
+        tone: "danger",
+      }))
+    )
+      return;
     await api.deleteOffer(id);
     load();
   }
 
   return (
     <div>
+      {dialogs}
       <div className="mb-5 flex items-center justify-between animate-fade-up">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">RMU — Technical Offers</h1>

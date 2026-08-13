@@ -24,6 +24,32 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**Every browser pop-up in the app is now PowerLine's own.**
+
+Following on from the approval dialogs, the remaining **21** have been converted across
+the LV configurator, the quotation list, the price list, the RMU offers list and the
+P-CSS selector. There is no longer a single grey *"powerline-chi.vercel.app says"* box
+anywhere in the app.
+
+That covers three kinds of pop-up, not just one:
+
+- **Questions** — remove a file, delete selected rows, reset the Terms & Conditions,
+  build a panel from a standard, retire an item, amend a quotation, and so on.
+- **Messages** — "the PDF could not be generated", "that is the last section".
+- **Ones that ask for something** — the two file-name boxes for the ERP items CSV and the
+  Material List Excel now open a proper field with the suggested name already filled in.
+
+Each one names its action on the button — **Remove**, **Retire it**, **Export**,
+**Build it** — rather than **OK**, and anything that cannot be undone is marked in red.
+The Arabic Terms & Conditions reset asks in Arabic, buttons included.
+
+Checked in the running app on two different screens, with the browser's own dialogs
+disabled to prove they are no longer reached at all.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **The workflow pop-ups are PowerLine's own now, not the browser's.**
 
 The grey box that said *"powerline-chi.vercel.app says…"* with **OK** and **Cancel** has

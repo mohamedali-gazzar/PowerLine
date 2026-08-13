@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { useDialogs } from "../components/ConfirmModal";
 import {
   EEHC_ITEMS,
   LV_CONFIGS,
@@ -208,6 +209,7 @@ function SubHead({ children }: { children: ReactNode }) {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PcssSelectorPage() {
+  const { confirm, dialogs } = useDialogs();
   const [staff] = useStaff();
   const [sel, setSel] = useState<Selection>(() => ({ ...emptySelection(), projectDate: today(), salesManager: SALES_MANAGER }));
   const [qtys, setQtys] = useState(emptyQtys);
@@ -351,8 +353,15 @@ export default function PcssSelectorPage() {
     setSwitchFuseItems([]);
   };
 
-  const resetAll = () => {
-    if (!window.confirm("Clear the whole configuration? Project and sales details are kept.")) return;
+  const resetAll = async () => {
+    if (
+      !(await confirm({
+        title: "Clear the configuration",
+        message: "Everything you have selected is cleared. The project and sales details are kept.",
+        confirmLabel: "Clear it",
+      }))
+    )
+      return;
     setSel((s) => ({
       ...emptySelection(),
       projectName: s.projectName,
@@ -388,6 +397,7 @@ export default function PcssSelectorPage() {
 
   return (
     <div>
+      {dialogs}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3 animate-fade-up">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">P-CSS Engineering Selector</h1>

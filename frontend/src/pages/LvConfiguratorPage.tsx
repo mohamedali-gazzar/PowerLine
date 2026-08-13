@@ -44,7 +44,7 @@ import {
 import { checkCatalogUpdates, catalogVersion } from "../lv/catalogSource";
 import ReturnForRevisionModal, { type ReturnComment } from "../components/ReturnForRevisionModal";
 import EdmsStandardWarningModal from "../components/EdmsStandardWarningModal";
-import { useConfirm, type ConfirmOptions } from "../components/ConfirmModal";
+import { useDialogs, type ConfirmOptions } from "../components/ConfirmModal";
 import { useAuth } from "../auth/AuthContext";
 import wdFldImg from "../assets/wd-fld.png";
 import wdRhdImg from "../assets/wd-rhd.png";
@@ -263,9 +263,9 @@ const EDMS_IGNORE_KEYS = new Set<string>([
 export default function LvConfiguratorPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
-  // Themed stand-in for window.confirm(). `confirmModal` is rendered once, near the
-  // bottom of this component; it portals itself to document.body.
-  const [askConfirm, confirmModal] = useConfirm();
+  // Themed stand-ins for window.confirm / alert / prompt. `confirmModal` is
+  // rendered once, near the bottom of this component; it portals to document.body.
+  const { confirm: askConfirm, prompt: askFor, dialogs: confirmModal } = useDialogs();
   // Async-loaded from the backend (per signed-in user). `rec` is null until loaded.
   const [rec, setRec] = useState<QtnRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -580,9 +580,14 @@ export default function LvConfiguratorPage() {
   // ERP upload: download the QTN's panels as an ERPNext "Bulk Edit Items" CSV
   // (one row per panel — see lv/erpCsv.ts).
   const erpCount = erpItemCount(s);
-  const exportErpCsv = () => {
+  const exportErpCsv = async () => {
     const def = `Items-${(qtnNum || "export").replace(/\s+/g, "")}`;
-    const name = window.prompt("ERP items CSV file name:", def);
+    const name = await askFor({
+      title: "Export ERP items",
+      message: "Name the CSV file.",
+      defaultValue: def,
+      confirmLabel: "Export",
+    });
     if (name === null) return; // cancelled
     const trimmed = name.trim() || def;
     const blob = new Blob([buildErpItemsCsv(s)], { type: "text/csv;charset=utf-8;" });
@@ -1347,6 +1352,7 @@ function SpecNoteList({ heading, hint, addLabel, headerPlaceholder, notes, onCha
  *  QTN state, which is re-saved on every keystroke), so they are fetched and
  *  uploaded separately from everything else on this tab. */
 function AttachmentsCard({ qtnId, readOnly }: { qtnId: string; readOnly: boolean }) {
+  const { confirm, dialogs } = useDialogs();
   const [files, setFiles] = useState<QtnAttachmentDto[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -1388,7 +1394,15 @@ function AttachmentsCard({ qtnId, readOnly }: { qtnId: string; readOnly: boolean
   };
 
   const remove = async (f: QtnAttachmentDto) => {
-    if (!confirm(`Remove "${f.name}" from this QTN?`)) return;
+    if (
+      !(await confirm({
+        title: "Remove this file",
+        message: `"${f.name}" is removed from this quotation.`,
+        confirmLabel: "Remove",
+        tone: "danger",
+      }))
+    )
+      return;
     try {
       await api.qtns.attachments.remove(qtnId, f.id);
       setFiles((prev) => (prev ?? []).filter((x) => x.id !== f.id));
@@ -1399,6 +1413,7 @@ function AttachmentsCard({ qtnId, readOnly }: { qtnId: string; readOnly: boolean
 
   return (
     <div className="card p-5">
+      {dialogs}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="sec-head mb-0">Attachments</h2>
@@ -1584,6 +1599,7 @@ function offerTitle(kind: "TO" | "CO" | "ML", qtnNo: string, rev: string): strin
 }
 
 function PrintBar({ label, docTitle, blockers, exportFn }: { label: string; docTitle?: string; blockers?: ExportCheck[]; exportFn?: () => Promise<void> | void }) {
+  const { notify, dialogs } = useDialogs();
   // Set the document title right before printing so the saved PDF / print job is
   // named after the offer; restore it once the dialog closes (afterprint).
   const [modal, setModal] = useState(false);
@@ -1596,7 +1612,7 @@ function PrintBar({ label, docTitle, blockers, exportFn }: { label: string; docT
     if (exportFn) {
       setBusy(true);
       try { await exportFn(); }
-      catch (e) { console.error("PDF export failed", e); alert("Sorry — generating the PDF failed. Please try again."); }
+      catch (e) { console.error("PDF export failed", e); void notify({ title: "The PDF could not be generated", message: "Sorry — something went wrong making that file. Please try again." }); }
       finally { setBusy(false); }
       return;
     }
@@ -1612,6 +1628,7 @@ function PrintBar({ label, docTitle, blockers, exportFn }: { label: string; docT
   const proceed = () => { setAcked(true); setModal(false); void doPrint(); };
   return (
     <>
+      {dialogs}
       <div className="mb-3 flex items-center justify-between gap-2 no-print">
         <p className="text-xs text-muted">{label}</p>
         <div className="flex items-center gap-2">
@@ -1704,6 +1721,7 @@ function NeutralPromptModal({ breaker, sensor, onAdd, onClose }: { breaker: stri
  *  DocumentID → signed library PDF). If ABB can't be reached the row falls back to
  *  opening the product page (English → Print to PDF). */
 function DataSheetsModal({ rows, onClose }: { rows: { code: string; name: string }[]; onClose: () => void }) {
+  const { confirm, dialogs } = useDialogs();
   const [busy, setBusy] = useState<Set<string>>(() => new Set());
   const [done, setDone] = useState<Set<string>>(() => new Set());
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
@@ -1732,7 +1750,15 @@ function DataSheetsModal({ rows, onClose }: { rows: { code: string; name: string
     } finally { setIn(setBusy, code, false); }
   };
   const downloadAll = async () => {
-    if (rows.length > 8 && !confirm(`Download ${rows.length} data sheets one by one? Each is fetched from ABB.`)) return;
+    if (
+      rows.length > 8 &&
+      !(await confirm({
+        title: `Download ${rows.length} data sheets`,
+        message: "They are fetched from ABB one by one, so this takes a little while.",
+        confirmLabel: "Download them",
+      }))
+    )
+      return;
     setAll(true);
     for (const r of rows) await download(r.code, r.name);
     setAll(false);
@@ -1740,6 +1766,7 @@ function DataSheetsModal({ rows, onClose }: { rows: { code: string; name: string
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
+      {dialogs}
       <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
       <div role="dialog" aria-modal="true" aria-label="Download data sheets"
         className="relative flex max-h-[85vh] w-full max-w-xl flex-col rounded-xl2 border border-line bg-white p-6 shadow-lift animate-pop">
@@ -1906,6 +1933,7 @@ function CatalogUpdateCheck({ onApply }: { onApply?: () => { changed: number; re
 
 /** The changelog, as its own dismissible panel rather than a dropdown under the button. */
 function ChangeLogDialog({ changes, onApply, onClose }: { changes: CatalogChanges; onApply?: () => { changed: number; removed: number }; onClose: () => void }) {
+  const { confirm, dialogs } = useDialogs();
   const [applied, setApplied] = useState<{ changed: number; removed: number } | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -1913,20 +1941,25 @@ function ChangeLogDialog({ changes, onApply, onClose }: { changes: CatalogChange
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const doApply = () => {
+  const doApply = async () => {
     if (!onApply) return;
-    if (!window.confirm(
-      "Update this quotation to the current price list?\n\n" +
-      "Component and cell prices are brought up to today's list, and any item " +
-      "discontinued from the list is removed. Your quantities, per-line " +
-      "adjustments and notes are kept. You can Undo this afterwards."
-    )) return;
+    if (
+      !(await confirm({
+        title: "Update to the current price list",
+        message:
+          "Component and cell prices are brought up to today's list, and any item discontinued from the list is removed.\n" +
+          "Your quantities, per-line adjustments and notes are kept, and you can Undo this afterwards.",
+        confirmLabel: "Update prices",
+      }))
+    )
+      return;
     setApplied(onApply());
   };
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print">
       <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
+      {dialogs}
       <div role="dialog" aria-modal="true"
         className="relative flex max-h-[86vh] w-full max-w-3xl flex-col rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
         <div className="flex items-start justify-between gap-4">
@@ -2832,6 +2865,7 @@ function TermsEditor({ value, onSave, rtl }: { value: TermsSection[]; onSave: (v
 }
 
 function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void }) {
+  const { confirm, dialogs } = useDialogs();
   // RPT-1: selling currency — default USD; EGP-based prices convert via the Pricing rate.
   // Stored on the quotation, not in this tab, so the ERP export quotes in the same
   // currency the customer was quoted in.
@@ -2855,6 +2889,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
   };
   return (
     <div className="animate-fade-up">
+      {dialogs}
       <PrintBar label="Prices follow the Pricing Settings tab (rates, ABB discount, factor) live."
         docTitle={offerTitle("CO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} exportFn={exportPdf} />
       <div className="mb-3 flex items-center gap-2 no-print">
@@ -2915,7 +2950,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
                 <div className="mb-3 flex items-center justify-between gap-4">
                   <h2 className="font-display text-xl font-bold" style={{ color: TRED }}>General Terms &amp; Conditions</h2>
                   <button type="button" title="Reset to the default terms"
-                    onClick={() => { if (confirm("Reset General Terms & Conditions to the default? Your edits will be lost.")) up({ commercialTerms: DEFAULT_COMMERCIAL_TERMS.map((t) => ({ ...t })) }); }}
+                    onClick={async () => { if (await confirm({ title: "Reset the Terms & Conditions", message: "They go back to the standard wording, and your edits are lost.", confirmLabel: "Reset them", tone: "danger" })) up({ commercialTerms: DEFAULT_COMMERCIAL_TERMS.map((t) => ({ ...t })) }); }}
                     className="no-print shrink-0 rounded-lg border border-line px-3 py-1 text-xs font-semibold text-muted transition-colors hover:border-brand/40 hover:bg-brand-tint hover:text-brand">
                     ↺ Reset to default
                   </button>
@@ -2940,7 +2975,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
                 <div className="mb-3 flex items-center justify-between gap-4" dir="rtl">
                   <h2 className="font-display text-xl font-bold" style={{ color: TRED }}>الشروط والأحكام العامة</h2>
                   <button type="button" title="إعادة التعيين إلى الافتراضي"
-                    onClick={() => { if (confirm("إعادة تعيين الشروط والأحكام إلى الافتراضي؟ ستفقد تعديلاتك.")) up({ commercialTermsAr: DEFAULT_COMMERCIAL_TERMS_AR.map((t) => ({ ...t })) }); }}
+                    onClick={async () => { if (await confirm({ title: "إعادة تعيين الشروط والأحكام", message: "ستعود إلى الصيغة الافتراضية وستفقد تعديلاتك.", confirmLabel: "إعادة التعيين", cancelLabel: "إلغاء", tone: "danger" })) up({ commercialTermsAr: DEFAULT_COMMERCIAL_TERMS_AR.map((t) => ({ ...t })) }); }}
                     className="no-print shrink-0 rounded-lg border border-line px-3 py-1 text-xs font-semibold text-muted transition-colors hover:border-brand/40 hover:bg-brand-tint hover:text-brand">
                     ↺ إعادة التعيين
                   </button>
@@ -4472,6 +4507,7 @@ function PanelEditor({ s, p, up, upPanel }: {
   up: (patch: Partial<LvState>) => void;
   upPanel: (id: string, patch: Partial<LvPanel>) => void;
 }) {
+  const { confirm, dialogs } = useDialogs();
   const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
   // Replace every catalogue instance (matched by reference + name) with `nc`, across the
   // given panels — keeps each instance's qty / adjustments / group / section and swaps only
@@ -4525,6 +4561,7 @@ function PanelEditor({ s, p, up, upPanel }: {
 
   return (
     <div className="space-y-4">
+      {dialogs}
       {/* Panel details (left) + live cost (right) — one compact row.
           Details is a touch wider, cost a touch narrower, and both stretch to
           the same height so their bottoms line up. */}
@@ -4611,8 +4648,17 @@ function PanelEditor({ s, p, up, upPanel }: {
             const isAutoFamily = autoRaw !== null;
             const overridden = !!p.mainBusbarOverride;
             const area = busbarAreaMm2(p);
-            const startOverride = () => {
-              if (!confirm("Override the auto-calculated Main Busbar weight?\nIt will stop updating from the rating / height — you'll enter the KG manually. You can revert to auto anytime.")) return;
+            const startOverride = async () => {
+              if (
+                !(await confirm({
+                  title: "Enter the busbar weight yourself",
+                  message:
+                    "It stops updating from the rating and height — you enter the KG by hand.\n" +
+                    "You can switch back to automatic at any time.",
+                  confirmLabel: "Enter it manually",
+                }))
+              )
+                return;
               u({ mainBusbarOverride: true, mainBusbarKg: parseFloat((autoRaw ?? 0).toFixed(2)) });
             };
             return (
@@ -4711,19 +4757,28 @@ function copperEnterNav(e: { key: string; preventDefault: () => void; currentTar
 function StandardPanelsView({ p, u }: {
   p: LvPanel; u: (patch: Partial<LvPanel>) => void;
 }) {
+  const { confirm, dialogs } = useDialogs();
   const kva = p.stdTrKva ?? STD_TR_KVA_DEFAULT;
   const pfc = p.stdPfc ?? "No";
   const out = p.stdOutgoings ?? STD_OUTGOINGS[0];
   const std = stdPanel(kva, pfc, out);
-  const apply = () => {
+  const apply = async () => {
     if (!std) return;
-    if (p.components.length && !confirm(
-      `Build "${std.name}" from the standard? This replaces this panel's components, cells and copper.`
-    )) return;
+    if (
+      p.components.length &&
+      !(await confirm({
+        title: `Build "${std.name}" from the standard`,
+        message: "This panel's components, cells and copper are all replaced by the standard ones.",
+        confirmLabel: "Build it",
+        tone: "danger",
+      }))
+    )
+      return;
     u(applyStdPanel(p, std));
   };
   return (
     <div className="space-y-2">
+      {dialogs}
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
           <L>TR: KVA</L>
@@ -4767,6 +4822,7 @@ function StandardPanelsView({ p, u }: {
 
 // ── Components card ──────────────────────────────────────────────────────────
 function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void; replaceComponent: (matchRef: string, matchName: string, nc: DbComponent, panelIds: Set<string>) => void; comboKind: ComboKind | null; setComboKind: (k: ComboKind | null) => void }) {
+  const { confirm, notify, dialogs } = useDialogs();
   const [q, setQ] = useState("");
   const [pasteMsg, setPasteMsg] = useState(""); // summary after a multi-item paste
   const [pastePreview, setPastePreview] = useState<null | { rows: { name: string; qty: number; match: DbComponent | null }[] }>(null);
@@ -5113,9 +5169,18 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     u({ components: out });
     setSelected(newIds); setLastPickId(null); // the duplicates become the new selection
   };
-  const deleteSel = () => {
+  const deleteSel = async () => {
     if (!selected.size) return;
-    if (selected.size > 3 && !window.confirm(`Delete ${selected.size} selected rows?`)) return;
+    if (
+      selected.size > 3 &&
+      !(await confirm({
+        title: `Delete ${selected.size} rows`,
+        message: "The selected rows are removed from this panel. You can undo it afterwards.",
+        confirmLabel: `Delete ${selected.size} rows`,
+        tone: "danger",
+      }))
+    )
+      return;
     u({ components: p.components.filter((c) => !selected.has(c.id)) });
     clearSel();
   };
@@ -5248,15 +5313,26 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       activeSection: p.activeSection === oldName ? nn : p.activeSection,
     });
   };
-  const removeSection = (sec: string) => {
+  const removeSection = async (sec: string) => {
     if (isFixed(sec) || !p.sections.includes(sec)) return;
     // A panel must always keep at least one section to hold its components.
     if (p.sections.length <= 1) {
-      alert("A panel needs at least one section — add another before removing this one.");
+      void notify({
+        title: "That is the last section",
+        message: "A panel needs at least one section — add another before removing this one.",
+      });
       return;
     }
     const hasComps = p.components.some((c) => c.section === sec);
-    if (hasComps && !confirm(`Remove section “${sec}”? Its components move to another section.`)) return;
+    if (
+      hasComps &&
+      !(await confirm({
+        title: `Remove section "${sec}"`,
+        message: "Its components are not lost — they move into another section of this panel.",
+        confirmLabel: "Remove the section",
+      }))
+    )
+      return;
     const sections = p.sections.filter((x) => x !== sec);
     // Prefer a remaining default as the new home; otherwise the first section left.
     const fallback = sections.find((x) => DEFAULT_SECTIONS.includes(x)) ?? sections[0];
@@ -5486,6 +5562,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
 
   return (
     <div ref={cardRef} className="card relative p-5">
+      {dialogs}
       <div className="-mx-5 -mt-5 mb-0 flex flex-wrap items-center justify-between gap-3 rounded-t-xl2 bg-brand-tint px-5 pb-3 pt-5">
         <h2 className="sec-head !mb-0">{isEdmsPanel ? "Standard Panels" : "Components"}</h2>
         <button type="button" onClick={() => setReplaceOpen(true)}
@@ -7470,6 +7547,7 @@ function MatTable({ title, rows, withSupplier, note, abbDisc }: { title: string;
 }
 
 function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo: string; abbOnly: boolean; setAbbOnly: (v: boolean) => void; up: (patch: Partial<LvState>) => void }) {
+  const { confirm, prompt: askFor, dialogs } = useDialogs();
   const ml = useMemo(() => buildMaterialList(s), [s]);
   const empty = !s.panels.length || (!ml.abb.length && !ml.other.length && !ml.abbEnclosures.length && !ml.proE.length && !ml.is2.length && !ml.plpCells.length);
   // "Download Data Sheets" — unique ABB order codes (from ABB products + enclosures),
@@ -7509,9 +7587,16 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   const overrideCount = Object.keys(s.abbItemDiscounts).length;
   // "Default Discount" — drop every per-item override so all items follow the
   // Pricing-Settings ABB discount again.
-  const resetAbbDiscounts = () => {
+  const resetAbbDiscounts = async () => {
     if (!overrideCount) return;
-    if (!confirm(`Reset the ABB discount on ${overrideCount} item${overrideCount > 1 ? "s" : ""} back to the Pricing-Settings default (${globalPct}%)?`)) return;
+    if (
+      !(await confirm({
+        title: "Reset the ABB discount",
+        message: `${overrideCount} item${overrideCount > 1 ? "s go" : " goes"} back to the Pricing-Settings default of ${globalPct}%.`,
+        confirmLabel: "Reset them",
+      }))
+    )
+      return;
     up({ abbItemDiscounts: {} });
   };
   // RPT-1: number report tables sequentially by display order, skipping any
@@ -7535,9 +7620,14 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   // Export the current Material List (same rows/columns as the tables) to a real
   // .xlsx via SheetJS. Filename defaults to "ML-<qtn> Rev NN" (same qtn/rev as the
   // TO/CO PDF export) and is editable; cancelling the prompt skips the export.
-  const exportExcel = () => {
+  const exportExcel = async () => {
     const def = offerTitle("ML", qtnNo, s.project.revisionNo);
-    const name = window.prompt("Excel file name:", def);
+    const name = await askFor({
+      title: "Export the Material List",
+      message: "Name the Excel file.",
+      defaultValue: def,
+      confirmLabel: "Export",
+    });
     if (name === null) return; // cancelled
     const exportBlocks = visible.map((b) =>
       b.kind === "table"
@@ -7551,6 +7641,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   };
   return (
     <div className="space-y-4 animate-fade-up">
+      {dialogs}
       <div className="flex flex-wrap items-center gap-2">
         {([["ABB M.L", true], ["Full M.L", false]] as [string, boolean][]).map(([label, v]) => (
           <button key={label} onClick={() => setAbbOnly(v)}

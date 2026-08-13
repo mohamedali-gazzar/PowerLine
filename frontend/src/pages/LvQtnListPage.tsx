@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listQtns, listAllQtns, deleteQtn, restoreQtn, duplicateQtn, amendQtn, supersededNumbers, type QtnListItem } from "../lv/qtns";
+import { useDialogs } from "../components/ConfirmModal";
 import { api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE, type QtnStatus } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useAutoRefresh, useChangedKeys } from "../hooks/useAutoRefresh";
@@ -16,6 +17,7 @@ const DELETABLE = new Set<QtnStatus>(["DRAFT", "RETURNED"]);
 export default function LvQtnListPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { confirm, dialogs } = useDialogs();
   const [qtns, setQtns] = useState<QtnListItem[] | null>(null); // null = first load in flight
   /** True when the list holds every user's quotations, not just the signed-in one's. */
   const [scopeAll, setScopeAll] = useState(false);
@@ -159,11 +161,13 @@ export default function LvQtnListPage() {
   const onDelete = async (e: React.MouseEvent, x: QtnListItem) => {
     e.stopPropagation();
     if (
-      !confirm(
-        `Remove ${x.number} from the lists?\n\n` +
-          `It is kept, not deleted — its number stays reserved, and you can bring it ` +
-          `back with "Show removed".`,
-      )
+      !(await confirm({
+        title: `Remove ${x.number}`,
+        message:
+          "It is hidden from the lists, not deleted. Its number stays reserved, and " +
+          'you can bring it back at any time with "Show removed".',
+        confirmLabel: "Remove",
+      }))
     )
       return;
     setActionErr("");
@@ -194,7 +198,14 @@ export default function LvQtnListPage() {
   // Amend = open a new revision (QTN-…-N+1); the current revision is thereby cancelled.
   const onAmend = async (e: React.MouseEvent, id: string, number: string) => {
     e.stopPropagation();
-    if (!confirm(`Amend ${number}?\nThis opens a new revision and cancels ${number}.`)) return;
+    if (
+      !(await confirm({
+        title: `Amend ${number}`,
+        message: `This opens a new revision to work on, and cancels ${number}.`,
+        confirmLabel: "Open a revision",
+      }))
+    )
+      return;
     setActionErr("");
     const rec = await amendQtn(id, number);
     if (rec) navigate(`/lv/qtn/${rec.id}`);
@@ -207,6 +218,7 @@ export default function LvQtnListPage() {
 
   return (
     <div>
+      {dialogs}
       <div className="mb-5 flex items-start justify-between gap-4 animate-fade-up">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">LV — Offers History</h1>

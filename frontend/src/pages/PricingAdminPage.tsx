@@ -4,6 +4,7 @@ import { COMPONENTS, ENCLOSURES, DEFAULT_FACTORS } from "../lv/catalog";
 import { refreshCatalog } from "../lv/catalogSource";
 import LvExcelImport from "../pricing/LvExcelImport";
 import LvCombosPanel from "../pricing/LvCombosPanel";
+import { useDialogs } from "../components/ConfirmModal";
 
 // Price list — the owner-facing screen.
 //
@@ -20,6 +21,7 @@ const GROUPS: { kind: RmuPriceRow["kind"]; title: string; hint: string }[] = [
 ];
 
 export default function PricingAdminPage() {
+  const { confirm, dialogs } = useDialogs();
   const [status, setStatus] = useState<PricingStatus | null>(null);
   const [rows, setRows] = useState<RmuPriceRow[] | null>(null);
   const [pending, setPending] = useState<PriceChangeRow[]>([]);
@@ -125,10 +127,13 @@ export default function PricingAdminPage() {
   const toggleRetire = async (row: RmuPriceRow) => {
     if (
       row.active &&
-      !window.confirm(
-        `Retire "${row.label || row.key}"?\n\nIt stops being offered from the next publish. ` +
-          `Quotations already saved keep this product and its price, and are not affected.`
-      )
+      !(await confirm({
+        title: `Retire "${row.label || row.key}"`,
+        message:
+          "It stops being offered from the next publish.\n" +
+          "Quotations already saved keep this product and its price, and are not affected.",
+        confirmLabel: "Retire it",
+      }))
     )
       return;
     setBusy(row.id);
@@ -200,6 +205,7 @@ export default function PricingAdminPage() {
 
   return (
     <div className="animate-fade-up">
+      {dialogs}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">Price list</h1>
@@ -608,6 +614,7 @@ function PolesCell({
 }
 
 function LvPrices() {
+  const { confirm, dialogs } = useDialogs();
   const [kind, setKind] = useState<"components" | "enclosures" | "combos">("components");
   // Combinations are owner-only (access.manage) — a stricter gate than the rest of
   // the price list, because editing a template changes what a combination charges
@@ -660,11 +667,13 @@ function LvPrices() {
     const removing = row.active !== false;
     if (
       removing &&
-      !window.confirm(
-        `Remove "${row.d || row.name || row.ref}" from the price list?\n\n` +
-          `It stops being offered for new work from the next publish. Quotations already saved keep ` +
-          `this item and its price. You can restore it at any time.`
-      )
+      !(await confirm({
+        title: `Remove "${row.d || row.name || row.ref}"`,
+        message:
+          "It stops being offered for new work from the next publish.\n" +
+          "Quotations already saved keep this item and its price, and you can restore it at any time.",
+        confirmLabel: "Remove from the list",
+      }))
     )
       return;
     setBusy(row.id);
@@ -716,6 +725,7 @@ function LvPrices() {
 
   return (
     <div>
+      {dialogs}
       {tabRow}
 
       {/* Bulk update from a spreadsheet — for a whole new supplier price list,
@@ -921,6 +931,7 @@ function LvPrices() {
 /** History of every price change, with one-click undo. Undo is applied as a NEW
  *  change (never by rewriting the record), so the trail stays complete. */
 function History({ onChanged }: { onChanged: () => void }) {
+  const { notify, dialogs } = useDialogs();
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<PriceChangeRow[] | null>(null);
   const [busy, setBusy] = useState("");
@@ -937,7 +948,7 @@ function History({ onChanged }: { onChanged: () => void }) {
       await load();
       onChanged();
     } catch (e) {
-      alert((e as Error).message);
+      await notify({ title: "That undo was refused", message: (e as Error).message });
     } finally {
       setBusy("");
     }
@@ -962,6 +973,7 @@ function History({ onChanged }: { onChanged: () => void }) {
 
   return (
     <div className="card mb-4 p-4">
+      {dialogs}
       <div className="mb-2 flex items-center justify-between">
         <h2 className="sec-head mb-0">History</h2>
         <button className="btn-ghost" onClick={() => setOpen(false)}>Close</button>
