@@ -24,6 +24,23 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**The quotation header can now be pinned.**
+
+There is a small **📌 Pin** next to "← All QTNs" at the top of a quotation. Press it and the
+number, project, price, status and the action buttons stay put at the top of the screen
+while you scroll a long list of panels. Press it again to unpin.
+
+Each browser remembers the choice, so it stays how you leave it. It is **off** by default —
+pinned, that bar takes up about 90px on every screen, and not everyone will want that.
+
+The tab strip (Project · Pricing Settings · Panels …) was already pinned. While the header
+is pinned the strip lets go of its own pin, so you never get two bars stacked on top of
+each other.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **New defaults for new quotations: Safety Factor 2%, USD 51, EUR 59.**
 
 Quotations already saved keep the rates they were built with — these apply to work started

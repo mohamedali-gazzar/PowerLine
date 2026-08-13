@@ -263,6 +263,22 @@ const EDMS_IGNORE_KEYS = new Set<string>([
 export default function LvConfiguratorPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  /**
+   * Pin the quotation header (number, price, status, actions) to the top so it
+   * stays visible while scrolling a long panel list. Remembered per browser, the
+   * same way the sidebar pin is. Off by default — pinned, it costs ~90px of
+   * height on every screen, which not everyone wants.
+   *
+   * The tab strip below is sticky already; while the header is pinned it gives up
+   * its own stickiness so the two cannot stack on top of each other.
+   */
+  const [headerPinned, setHeaderPinned] = useState(() => {
+    try { return localStorage.getItem("pl.qtnHeaderPin") === "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("pl.qtnHeaderPin", headerPinned ? "1" : "0"); } catch { /* ignore */ }
+  }, [headerPinned]);
+
   // Themed stand-ins for window.confirm / alert / prompt. `confirmModal` is
   // rendered once, near the bottom of this component; it portals to document.body.
   const { confirm: askConfirm, prompt: askFor, dialogs: confirmModal } = useDialogs();
@@ -937,9 +953,24 @@ export default function LvConfiguratorPage() {
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3 animate-fade-up no-print">
+      <div className={`mb-5 flex flex-wrap items-end justify-between gap-3 animate-fade-up no-print ${
+        headerPinned ? "sticky top-0 z-40 -mx-4 border-b border-line/60 bg-surface px-4 py-3 sm:-mx-6 sm:px-6" : ""
+      }`}>
         <div>
-          <Link to="/lv" className="text-xs font-semibold text-brand hover:underline">← All QTNs</Link>
+          <div className="flex items-center gap-3">
+            <Link to="/lv" className="text-xs font-semibold text-brand hover:underline">← All QTNs</Link>
+            <button
+              type="button"
+              onClick={() => setHeaderPinned((v) => !v)}
+              aria-pressed={headerPinned}
+              title={headerPinned
+                ? "Unpin — let this bar scroll away with the page"
+                : "Pin — keep the number, price and buttons visible while you scroll"}
+              className={`text-xs font-semibold hover:underline ${headerPinned ? "text-brand" : "text-muted"}`}
+            >
+              {headerPinned ? "📌 Pinned" : "📌 Pin"}
+            </button>
+          </div>
           <h1 className="flex items-center gap-3 text-2xl font-extrabold tracking-tight">
             <span className="code-chip">{qtnNum}</span>
             {s.project.name || "LV Quotation"}
@@ -1149,7 +1180,11 @@ export default function LvConfiguratorPage() {
       {/* Tabs — sticky header so sections are reachable without scrolling up.
           Negative margins let the bg band span the full content width; py keeps a
           solid band so content scrolls cleanly underneath. */}
-      <div className="sticky top-0 z-30 -mx-4 mb-4 flex flex-wrap gap-1.5 border-b border-line/60 bg-surface px-4 py-2.5 no-print sm:-mx-6 sm:px-6">
+      {/* Sticky on its own, but not while the header above is pinned — two sticky
+          bars at top-0 would sit on top of each other. */}
+      <div className={`-mx-4 mb-4 flex flex-wrap gap-1.5 border-b border-line/60 bg-surface px-4 py-2.5 no-print sm:-mx-6 sm:px-6 ${
+        headerPinned ? "" : "sticky top-0 z-30"
+      }`}>
         {tabs.map(([t, label]) => (
           <button key={t} onClick={() => goToTab(t)}
             className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
