@@ -519,6 +519,30 @@ model PriceImportBatch {
   @@index([status, expiresAt])
 }
 
+/// The circuit-combination templates (ATS / photocell / MCC / WD / motorized) that
+/// combos.ts builds its line items from. One row per top-level section of the old
+/// bundled `combos.json`, holding that section's JSON verbatim.
+///
+/// A JSON string rather than modelled columns because the five sections have five
+/// genuinely different shapes — ats is type→frame→group→items, wd is a flat table,
+/// motorized is frame→string[] — and the same string-holds-JSON precedent already
+/// carries LvQtn.state and PriceSnapshot.payload.
+///
+/// These ride the price book: edits are DRAFT until "Update price list & database"
+/// publishes them into the LV snapshot, exactly like component prices. The bundled
+/// JSON stays in the frontend as the cold-start fallback, so an unseeded database
+/// (or `source = "json"`) still gives a complete, working set of combinations.
+model LvCombo {
+  id      String @id @default(cuid())
+  /// "ats" | "photocell" | "mcc" | "wd" | "motorized"
+  section String @unique
+  payload String // JSON for the whole section
+  /// Display order in the Combinations tab; matches the bundled file's key order.
+  sortIndex Int      @default(0)
+  updatedAt DateTime @updatedAt
+  updatedBy String   @default("")
+}
+
 /// Regression guard for the LV combination builders (ATS / MCC / photocell),
 /// which find their parts by DESCRIPTION. One row per distinct description, with
 /// the part it resolves to today. Publishing is refused if any of them stops

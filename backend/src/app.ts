@@ -46,6 +46,11 @@ import {
   postLvImportApply,
   postLvImportCancel,
 } from "./controllers/pricing-lv-import.controller";
+import {
+  listCombos,
+  putCombo,
+  resetCombos,
+} from "./controllers/pricing-lv-combos.controller";
 import { withPriceBook } from "./middleware/priceBook";
 import { requirePriceAdmin, requireOwner, requirePriceViewer } from "./middleware/roles";
 import {
@@ -159,6 +164,13 @@ export function createApp() {
   app.post("/api/pricing/lv/:id/retire", requireAuth, requirePriceAdmin, retireLvItem);
   app.post("/api/pricing/lv/seed-chunk", requireAuth, requirePriceAdmin, postLvSeedChunk);
   app.post("/api/pricing/lv/settings", requireAuth, requirePriceAdmin, postLvSettings);
+  // Circuit-combination templates (ATS / photocell / MCC / WD / motorized).
+  // OWNER ONLY (access.manage): these decide what goes into a quoted combination,
+  // so a bad edit re-prices work rather than just mislabelling it — a stricter
+  // gate than the rest of the price list, which price admins may edit.
+  app.get("/api/pricing/lv/combos", requireAuth, requireOwner, listCombos);
+  app.post("/api/pricing/lv/combos/reset", requireAuth, requireOwner, resetCombos);
+  app.put("/api/pricing/lv/combos/:section", requireAuth, requireOwner, putCombo);
   // Bulk update from a spreadsheet: preview first, apply only on confirmation.
   app.post("/api/pricing/lv/import/preview", requireAuth, requirePriceAdmin, postLvImportPreview);
   app.post("/api/pricing/lv/import/:id/apply", requireAuth, requirePriceAdmin, postLvImportApply);

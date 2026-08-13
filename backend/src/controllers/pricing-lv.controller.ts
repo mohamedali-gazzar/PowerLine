@@ -10,6 +10,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { fail } from "../lib/http";
 import { publishCurrentPrices } from "./pricing.controller";
+import { combosForPayload } from "./pricing-lv-combos.controller";
 
 const componentSchema = z.object({
   sortIndex: z.number().int().min(0),
@@ -363,10 +364,11 @@ export async function retireLvItem(req: Request, res: Response) {
  *  frontend catalogue expects, in sortIndex order (the order is load-bearing:
  *  the combination builders take the FIRST description match). */
 export async function buildLvPayload() {
-  const [components, enclosures, settings] = await Promise.all([
+  const [components, enclosures, settings, combos] = await Promise.all([
     prisma.lvComponent.findMany({ orderBy: { sortIndex: "asc" } }),
     prisma.lvEnclosure.findMany({ orderBy: { sortIndex: "asc" } }),
     prisma.priceSetting.findMany({ where: { scope: "LV" } }),
+    combosForPayload(),
   ]);
 
   const factors: Record<string, number | Record<string, number>> = {};
@@ -392,6 +394,9 @@ export async function buildLvPayload() {
       ip: e.ip, H: e.H, W: e.W, D: e.D, mount: e.mount, ral: e.ral, active: e.active,
     })),
     factors,
+    // Omitted entirely when the table has not been seeded, so the client keeps
+    // its bundled copy rather than being handed a half-empty set.
+    ...(combos ? { combos } : {}),
   };
 }
 

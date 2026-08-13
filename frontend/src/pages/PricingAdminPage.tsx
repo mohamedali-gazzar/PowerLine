@@ -3,6 +3,7 @@ import { api, getToken, type PricingStatus, type RmuPriceRow, type PriceChangeRo
 import { COMPONENTS, ENCLOSURES, DEFAULT_FACTORS } from "../lv/catalog";
 import { refreshCatalog } from "../lv/catalogSource";
 import LvExcelImport from "../pricing/LvExcelImport";
+import LvCombosPanel from "../pricing/LvCombosPanel";
 
 // Price list — the owner-facing screen.
 //
@@ -532,7 +533,17 @@ function AddLvComponent({
  *  filtering. Filtering and paging happen on the SERVER (50 rows at a time), so
  *  the screen stays fast no matter how big the catalogue gets. */
 function LvPrices() {
-  const [kind, setKind] = useState<"components" | "enclosures">("components");
+  const [kind, setKind] = useState<"components" | "enclosures" | "combos">("components");
+  // Combinations are owner-only (access.manage) — a stricter gate than the rest of
+  // the price list, because editing a template changes what a combination charges
+  // for, not just what it is called. Asked once; the server enforces it regardless.
+  const [mayEditCombos, setMayEditCombos] = useState(false);
+  useEffect(() => {
+    api.access
+      .me()
+      .then((m) => setMayEditCombos(m.perms.includes("access.manage")))
+      .catch(() => setMayEditCombos(false));
+  }, []);
   const [rows, setRows] = useState<LvRow[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -553,6 +564,7 @@ function LvPrices() {
 
   // Debounced so typing in the search box doesn't fire a request per keystroke.
   useEffect(() => {
+    if (kind === "combos") return; // templates, not priced rows — nothing to list
     const t = setTimeout(() => {
       setRows(null);
       api.pricing
@@ -569,6 +581,7 @@ function LvPrices() {
   useEffect(() => setPage(0), [kind, q, type, brand, fam, noPrice]);
 
   const toggleRetire = async (row: LvRow) => {
+    if (kind === "combos") return; // unreachable — the row table isn't rendered for combinations
     const removing = row.active !== false;
     if (
       removing &&
@@ -602,10 +615,11 @@ function LvPrices() {
   const filtersOn = !!(q || type || brand || fam || noPrice);
   const pages = Math.ceil(total / take);
 
-  return (
-    <div>
-      <div className="mb-3 flex gap-1">
-        {(["components", "enclosures"] as const).map((k) => (
+  const tabRow = (
+    <div className="mb-3 flex gap-1">
+      {(["components", "enclosures", "combos"] as const)
+        .filter((k) => k !== "combos" || mayEditCombos)
+        .map((k) => (
           <button
             key={k}
             onClick={() => setKind(k)}
@@ -613,10 +627,21 @@ function LvPrices() {
               kind === k ? "bg-brand text-white" : "bg-brand-tint/60 text-brand-dark hover:bg-brand-tint"
             }`}
           >
-            {k === "components" ? "Components" : "Enclosures & cells"}
+            {k === "components" ? "Components" : k === "enclosures" ? "Enclosures & cells" : "Combinations"}
           </button>
         ))}
-      </div>
+    </div>
+  );
+
+  // Combinations are templates, not priced rows — no search, filters or paging
+  // apply — so they replace the table view rather than sharing it.
+  if (kind === "combos") {
+    return <div>{tabRow}<LvCombosPanel /></div>;
+  }
+
+  return (
+    <div>
+      {tabRow}
 
       {/* Bulk update from a spreadsheet — for a whole new supplier price list,
           where editing rows one at a time is not realistic. */}

@@ -192,7 +192,13 @@ export function buildSync(units: SyncUnit[]): ComboLine[] {
 }
 
 // ── Photocell ────────────────────────────────────────────────────────────────
-export const PHOTOCELL_RATINGS = COMBOS.photocell.ratings.map((r) => r.a);
+// DERIVED AT LOAD, REBUILT ON SWAP. COMBOS is replaced in place when a published
+// catalogue arrives, so anything computed from it here goes stale — and these four
+// feed live dropdowns in the configurator (starter kind, WD kit, motorized frame).
+// `let` + reassignment rather than `const`: ES module bindings are live, so every
+// importer sees the new value without touching a single call site.
+// Keep this list in step with recomputeCombosDerived() at the bottom of the file.
+export let PHOTOCELL_RATINGS = COMBOS.photocell.ratings.map((r) => r.a);
 
 /** Breakers selectable as the photocell circuit breaker (any MCB / MCCB / ACB). */
 export function breakerPool(): DbComponent[] {
@@ -221,7 +227,7 @@ export function buildPhotocell(ratingA: number, cb?: DbComponent): ComboLine[] {
 }
 
 // ── MCC ──────────────────────────────────────────────────────────────────────
-export const MCC_KINDS = [...new Set(COMBOS.mcc.combos.map((m) => m.kind))];
+export let MCC_KINDS = [...new Set(COMBOS.mcc.combos.map((m) => m.kind))];
 export const mccKws = (kind: string) =>
   [...new Set(COMBOS.mcc.combos.filter((m) => m.kind === kind).map((m) => m.kw))];
 export const mccTypes = (kind: string, kw: string) =>
@@ -355,11 +361,13 @@ export function buildPfc(i: PfcInput, cb?: DbComponent): ComboLine[] {
 }
 
 // ── WD (withdrawable kits) ───────────────────────────────────────────────────
-export const WD_OPTIONS = COMBOS.wd.map((w) => ({
-  key: `${w.frame}-${w.poles}`,
-  label: `${w.frame} · ${w.poles === "3P-Air" ? "Air 3P" : w.poles}`,
-  ...w,
-}));
+const wdOptions = () =>
+  COMBOS.wd.map((w) => ({
+    key: `${w.frame}-${w.poles}`,
+    label: `${w.frame} · ${w.poles === "3P-Air" ? "Air 3P" : w.poles}`,
+    ...w,
+  }));
+export let WD_OPTIONS = wdOptions();
 
 /** Map a breaker to its WD option key: frame (+ rating band for XT5) + poles from
  *  the name. E1.2 has a single air option; frames without a WD kit return "". */
@@ -421,7 +429,19 @@ export function buildWd(key: string, cb?: DbComponent, accessory?: string): Comb
 // Motor operator + control gear (push buttons, pilots, selector) to motorize a
 // breaker, keyed by frame family. NOTE: on XT7 the breaker must be the XT7M
 // (motorizable) variant — the XT7 recipe uses the "M XT7M …" motor accordingly.
-export const MOTORIZED_FRAMES = Object.keys((COMBOS as any).motorized as Record<string, string[]>);
+export let MOTORIZED_FRAMES = Object.keys(COMBOS.motorized ?? {});
+
+/**
+ * Rebuild everything derived from COMBOS at module load. Called by installCombos'
+ * caller after a published catalogue replaces the templates; without it a new
+ * starter kind or WD kit is priced correctly but never appears in its dropdown.
+ */
+export function recomputeCombosDerived(): void {
+  PHOTOCELL_RATINGS = COMBOS.photocell.ratings.map((r) => r.a);
+  MCC_KINDS = [...new Set(COMBOS.mcc.combos.map((m) => m.kind))];
+  WD_OPTIONS = wdOptions();
+  MOTORIZED_FRAMES = Object.keys(COMBOS.motorized ?? {});
+}
 /** Map a single ABB frame (from frameOf) to the Motorized recipe's frame-family key. */
 export function motorizedFrameKey(frame: string | null): string {
   if (!frame) return "";

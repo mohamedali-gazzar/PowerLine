@@ -24,6 +24,46 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**New Combinations tab on the Price list — owner only.**
+
+Price list → LV prices → **Combinations**. It holds the templates that decide what goes
+*inside* a combination when someone adds one to a panel: ATS, Photocell, MCC starters,
+Withdrawable kits and Motorized breaker. Editable as tables, and it takes effect the
+moment you save — no waiting for a new version of the app. You can also load a file into
+a section, download the whole thing as `combos.json`, and reset everything back to the
+version shipped with the app.
+
+Only people with **Manage access** can see or use it — a tighter rule than the rest of
+the price list, because these change what a combination *charges for*, not just what it
+is called. Quotations already saved keep the parts they were built with.
+
+Until someone opens the tab, nothing changes: the app carries on using its built-in copy.
+
+⚠️ **HEADS-UP — money, and it affects every MCC starter ever quoted.**
+
+The new tab checks each part against the price list, and it found two that have never
+matched anything, in **all 110 starters**:
+
+| The template asks for | The price list actually has |
+| --- | --- |
+| `SK1-11 Signal contact` | `SK1-11 Signaling Contact` — €12.64 |
+| `CAL4-11 (1 N.O+1 N.C) - Side` | `CAL4-11 Auxiliary Contact Block - Side (AF09..96)` — €6.63 |
+
+Because the wording does not match, both come out as rows **with no price**, so every MCC
+starter has been quoted for less than it costs:
+
+- **DOL (1 or 3 phase)** — about **€19** short per starter
+- **Star-Delta** — about **€33** short per starter (it carries three CAL blocks)
+
+❓ **QUESTION FOR MOHAMED:** correcting the two lines in the Combinations tab is a
+two-minute job and fixes it from then on — but it does make MCC starters more expensive
+to quote, so it is your call, not mine. Say the word and it is done. Offers already sent
+are not touched either way.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **Removed the "Empty template" button from the Price list screen.**
 
 It is gone from both the **Components** and the **Enclosures & cells** tabs. The two

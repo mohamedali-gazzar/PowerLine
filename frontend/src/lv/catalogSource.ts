@@ -19,13 +19,20 @@ import {
   rebuildDerived,
   type DbComponent,
   type DbEnclosure,
+  COMBOS,
+  installCombos,
   type Factors,
+  type CombosData,
 } from "./catalog";
+import { recomputeCombosDerived } from "./combos";
 
 export interface CatalogPayload {
   components: DbComponent[];
   enclosures: DbEnclosure[];
   factors: Partial<Factors>;
+  /** Optional: absent from an older server, or when the combinations table has
+   *  not been seeded. Either way the bundled templates stay in use. */
+  combos?: Partial<CombosData>;
 }
 
 const LS_KEY = "powerline-catalog"; // one key, overwritten — never version-suffixed
@@ -66,6 +73,10 @@ function notify(): void {
 const BUNDLED_COMPONENTS: DbComponent[] = [...COMPONENTS];
 const BUNDLED_ENCLOSURES: DbEnclosure[] = [...ENCLOSURES];
 const BUNDLED_FACTORS: Factors = JSON.parse(JSON.stringify(DEFAULT_FACTORS));
+// Same reasoning for the combination templates, which installCombos() also
+// replaces in place. Deep-copied: the nested ATS/MCC arrays would otherwise be
+// shared with COMBOS and mutated along with it.
+const BUNDLED_COMBOS: CombosData = JSON.parse(JSON.stringify(COMBOS));
 
 /**
  * The catalogue shipped in this build, whatever is loaded right now.
@@ -78,6 +89,7 @@ const BUNDLED_FACTORS: Factors = JSON.parse(JSON.stringify(DEFAULT_FACTORS));
 export const bundledCatalog = () => ({
   components: BUNDLED_COMPONENTS,
   enclosures: BUNDLED_ENCLOSURES,
+  combos: BUNDLED_COMBOS,
 });
 
 /** Put the catalogue shipped in this build back in place. */
@@ -89,6 +101,10 @@ function restoreBundled(): void {
   const { forms, ...flat } = BUNDLED_FACTORS;
   Object.assign(DEFAULT_FACTORS, flat);
   Object.assign(DEFAULT_FACTORS.forms, forms);
+  // Deep-copied on the way back out too, so the pristine copy cannot be mutated
+  // through COMBOS by a later install.
+  installCombos(JSON.parse(JSON.stringify(BUNDLED_COMBOS)));
+  recomputeCombosDerived();
   rebuildDerived();
   loadedVersion = 0;
   notify();
@@ -126,6 +142,14 @@ export function installCatalog(p: CatalogPayload, version: number): void {
     const { forms, ...flat } = p.factors as Factors;
     Object.assign(DEFAULT_FACTORS, flat);
     if (forms) Object.assign(DEFAULT_FACTORS.forms, forms);
+  }
+
+  // Combination templates are owner-editable and published with the catalogue.
+  // Guarded on all five sections being present: a partial set would leave the
+  // configurator with, say, MCC starters but no ATS templates at all.
+  if (p.combos && p.combos.ats && p.combos.photocell && p.combos.mcc && p.combos.wd && p.combos.motorized) {
+    installCombos(p.combos);
+    recomputeCombosDerived();
   }
 
   // The picker's Type/Family lists and the cell price index are derived at load —

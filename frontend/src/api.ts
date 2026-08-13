@@ -270,6 +270,18 @@ export interface LvRow {
   mount?: string;
   ral?: string;
 }
+/** One section of the circuit-combination templates (ATS / MCC / photocell / …).
+ *  `value` is that section's JSON verbatim — the five sections have five different
+ *  shapes, so the editor works from it structurally rather than by a fixed type. */
+export interface LvComboSection {
+  section: string;
+  label: string;
+  summary: string;
+  updatedAt: string;
+  updatedBy: string;
+  value: unknown;
+}
+
 /** One spreadsheet line, already parsed out of the workbook. */
 export interface LvImportRow {
   type: string;
@@ -613,6 +625,16 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ factors }),
       }),
+    // Circuit-combination templates — owner only (access.manage).
+    lvCombos: () => request<{ sections: LvComboSection[] }>("/pricing/lv/combos"),
+    lvComboSave: (section: string, value: unknown) =>
+      request<{ ok: true; section: string; summary: string; warnings: string[] }>(
+        `/pricing/lv/combos/${section}`,
+        { method: "PUT", body: JSON.stringify({ value }) },
+      ),
+    lvCombosReset: () =>
+      request<{ ok: true }>("/pricing/lv/combos/reset", { method: "POST" }),
+
     lvImportPreview: (rows: LvImportRow[]) =>
       request<LvImportPreview>("/pricing/lv/import/preview", {
         method: "POST",

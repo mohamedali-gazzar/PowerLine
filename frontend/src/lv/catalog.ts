@@ -64,12 +64,29 @@ export interface Factors {
 }
 export const DEFAULT_FACTORS = factorsJson as Factors;
 
-export const COMBOS = combosJson as {
+export interface CombosData {
   ats: Record<"1oo2" | "2oo3", Record<string, { group: string; items: { qty: number; desc: string }[] }[]>>;
   photocell: { ratings: { a: number; contactor: string; aux: string }[]; fixed: { qty: number; desc: string }[] };
   mcc: { combos: { kind: string; kw: string; type: number; parts: string[] }[]; control: { qty: number; desc: string }[] };
   wd: { frame: string; poles: string; fp: string; mp: string }[];
-};
+  motorized: Record<string, string[]>;
+}
+
+/// The combination templates. Owner-editable on the Price list screen and served
+/// with the published catalogue, so this object is REPLACED IN PLACE by
+/// installCombos() — never reassigned, exactly like COMPONENTS/ENCLOSURES, so
+/// every `import { COMBOS }` binding keeps working. The bundled JSON below is the
+/// cold-start value and the fallback when the database has no combinations.
+export const COMBOS = combosJson as unknown as CombosData;
+
+/** Swap the live combination templates in place. Callers must then rebuild
+ *  anything derived from them — see recomputeCombosDerived() in combos.ts. */
+export function installCombos(next: Partial<CombosData>): void {
+  const target = COMBOS as unknown as Record<string, unknown>;
+  const src = next as unknown as Record<string, unknown>;
+  for (const k of Object.keys(target)) delete target[k];
+  for (const k of Object.keys(src)) target[k] = src[k];
+}
 
 // ── RPT-01 option lists ──────────────────────────────────────────────────────
 export const AMB_TEMPS = ["35°C", "40°C", "45°C", "50°C", "55°C"] as const;
