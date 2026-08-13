@@ -9,12 +9,13 @@ import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { api, type LvImportPreview, type LvImportRow, type LvRow } from "../api";
 
-/** Both downloads — the blank template and the current-catalogue export — use the
- *  master "Configurator Price list" layout exactly: same columns, order and (quirky)
- *  spacing, so they line up with the sheet the catalogue is maintained in. On upload
- *  the import reads Type, Description, Item Code, the two prices, the two weights and
- *  Brand; IP / Mounting / RAL / Cross Section / ABB Discount ride along for reference
- *  and are not applied. */
+/** The current-catalogue export uses the master "Configurator Price list" layout
+ *  exactly: same columns, order and (quirky) spacing, so it lines up with the sheet
+ *  the catalogue is maintained in. On upload the import reads Type, Description, Item
+ *  Code, the two prices, the two weights and Brand; IP / Mounting / RAL / Cross
+ *  Section / ABB Discount ride along for reference and are not applied.
+ *  (The blank-template download was removed on 13 Aug 2026; these columns are still
+ *  the export header, so the name is kept to avoid churn across the parser.) */
 export const EMPTY_TEMPLATE_COLUMNS = [
   "Type",
   "Description",
@@ -105,15 +106,6 @@ export function parseWorkbook(buf: ArrayBuffer): { rows: LvImportRow[]; missing:
   if (!seenKeys.has("code")) missing.push("Item Code");
   if (!seenKeys.has("eur") && !seenKeys.has("egp")) missing.push("ABB Price list in EURO / Market Price in EGP");
   return { rows, missing };
-}
-
-/** Download an empty workbook with the expected columns. */
-export function downloadTemplate() {
-  const ws = XLSX.utils.aoa_to_sheet([EMPTY_TEMPLATE_COLUMNS as unknown as string[]]);
-  ws["!cols"] = EMPTY_TEMPLATE_COLUMNS.map((c) => ({ wch: Math.max(12, Math.min(38, c.length + 6)) }));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Price list");
-  XLSX.writeFile(wb, "PowerLine LV price list template.xlsx");
 }
 
 const pct = (v: number | null | undefined) => (typeof v === "number" ? `${v >= 0 ? "+" : ""}${v.toFixed(1)}%` : "—");
@@ -279,9 +271,6 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
         </button>
         <button className="btn-ghost" onClick={downloadCurrent} disabled={!!busy || !!dl}>
           {dl || "⬇ Download Current Excel"}
-        </button>
-        <button className="btn-ghost" onClick={downloadTemplate} disabled={!!busy || !!dl}>
-          ⬇ Empty template
         </button>
         <input
           ref={fileRef}

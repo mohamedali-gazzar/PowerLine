@@ -24,6 +24,20 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**Removed the "Empty template" button from the Price list screen.**
+
+It is gone from both the **Components** and the **Enclosures & cells** tabs. The two
+remaining buttons — *Update from Excel* and *Download Current Excel* — are unchanged and
+still work. Checked in the running app, both tabs, no errors.
+
+⚠️ HEADS-UP: that button was the only way to get a **blank** spreadsheet with the correct
+column headings for the *Update from Excel* upload. Anyone who needs a starting sheet now
+has to press **Download Current Excel** and delete the rows they do not want — the columns
+are identical, so the upload still accepts it. Say so if you would rather have the button
+back; putting it back is a two-line change.
+
+---
+
 **Set up the team so nobody has to repeat the audit.**
 
 **For the new joiner — send them this one link:**
