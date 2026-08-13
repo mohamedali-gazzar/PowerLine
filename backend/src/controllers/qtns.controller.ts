@@ -34,6 +34,9 @@ type QtnRow = {
   updatedAt: Date;
   state: string;
   submitted: boolean;
+  /// Set when the quotation has been hidden from the lists (never erased).
+  removedAt?: Date | null;
+  removedBy?: string;
   status?: string | null;
   statusAt?: Date | null;
   approverEmail?: string;
@@ -124,6 +127,9 @@ const listItem = (q: QtnRow) => ({
   ownerEmail: q.owner?.email ?? "",
   ownerName: q.owner?.name ?? "",
   coOwners: coOwnersOf(q),
+  // Null unless the row is hidden — only ever non-null in an includeRemoved list.
+  removedAt: q.removedAt ?? null,
+  removedBy: q.removedBy ?? "",
 });
 
 // ── Visibility ───────────────────────────────────────────────────────────────
@@ -219,11 +225,23 @@ async function nextNumber(ownerId: string): Promise<string> {
 }
 
 // GET /api/qtns — my quotations: ones I own OR co-own.
+/** Removed quotations are hidden from every list. `?includeRemoved=1` brings them
+ *  back, but only for access.manage — the same people who can remove one. */
+async function showRemoved(req: Request): Promise<boolean> {
+  if (req.query.includeRemoved !== "1") return false;
+  return (await accessOf(req.userId)).perms.has("access.manage" as Perm);
+}
+
 export async function list(req: Request, res: Response) {
   try {
     const uid = req.userId as string;
     const rows = await prisma.lvQtn.findMany({
-      where: { OR: sharedWith(uid) },
+      where: {
+        AND: [
+          { OR: sharedWith(uid) },
+          ...((await showRemoved(req)) ? [] : [{ removedAt: null }]),
+        ],
+      },
       orderBy: { updatedAt: "desc" },
       include: ownerSelect,
     });
@@ -381,17 +399,70 @@ export async function rename(req: Request, res: Response) {
 }
 
 // DELETE /api/qtns/:id
+/**
+ * DELETE /api/qtns/:id — remove a quotation from the lists.
+ *
+ * It is HIDDEN, never erased. The live database has no backup, and `number` is
+ * unique per owner, so a real delete would free that number to be reused — two
+ * different offers could end up sharing a QTN number in customers' hands. The row
+ * stays, `removedAt`/`removedBy` are stamped, and the owner can restore it.
+ *
+ * Only DRAFT and RETURNED can go: once a quotation is approved or submitted it is
+ * the record of an offer that went to a customer.
+ *
+ * Who: the person who owns it (unchanged — engineers have always been able to
+ * clear their own drafts), or anyone with access.manage, who can remove any
+ * draft/returned quotation from the shared History.
+ */
 export async function remove(req: Request, res: Response) {
   try {
-    const ownerId = req.userId as string;
-    // deleteMany used to return 204 whatever happened, so deleting a submitted
-    // quotation looked like it worked. Only drafts and returned drafts can go.
-    const q = await prisma.lvQtn.findFirst({ where: { id: req.params.id, ownerId } });
+    const userId = req.userId as string;
+    const mayManage = (await accessOf(userId)).perms.has("access.manage" as Perm);
+    const q = mayManage
+      ? await prisma.lvQtn.findUnique({ where: { id: req.params.id }, include: ownerSelect })
+      : await prisma.lvQtn.findFirst({ where: { id: req.params.id, ownerId: userId }, include: ownerSelect });
     if (!q) return res.status(404).json({ error: "Quotation not found." });
+    if (q.removedAt) return res.status(204).end(); // already removed — nothing to do
     const s = qtnStatus(q);
     if (s !== "DRAFT" && s !== "RETURNED") return lockedResponse(res, s);
-    await prisma.lvQtn.deleteMany({ where: { id: q.id, ownerId } });
+
+    await prisma.lvQtn.update({
+      where: { id: q.id },
+      data: { removedAt: new Date(), removedBy: req.userEmail ?? "" },
+    });
+    await logEvent({
+      qtn: q, action: "REMOVE", from: s, to: s,
+      note: "Removed from the lists (kept, and restorable)",
+      actorId: userId, actorEmail: req.userEmail ?? "",
+    });
     res.status(204).end();
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+/**
+ * POST /api/qtns/:id/restore — put a removed quotation back. Owner only
+ * (access.manage), so the person who can hide one from everybody is the person
+ * who can bring it back.
+ */
+export async function restore(req: Request, res: Response) {
+  try {
+    const userId = req.userId as string;
+    const q = await prisma.lvQtn.findUnique({ where: { id: req.params.id }, include: ownerSelect });
+    if (!q) return res.status(404).json({ error: "Quotation not found." });
+    if (!q.removedAt) return res.json({ ok: true }); // already visible
+
+    await prisma.lvQtn.update({
+      where: { id: q.id },
+      data: { removedAt: null, removedBy: "" },
+    });
+    await logEvent({
+      qtn: q, action: "RESTORE", from: qtnStatus(q), to: qtnStatus(q),
+      note: "Restored to the lists",
+      actorId: userId, actorEmail: req.userEmail ?? "",
+    });
+    res.json({ ok: true });
   } catch (e) {
     fail(res, e);
   }
@@ -624,9 +695,14 @@ export async function listAll(req: Request, res: Response) {
       // Legacy rows have status NULL; those with submitted = true are Submitted and
       // belong here, the rest are drafts and must never appear.
       where: {
-        OR: [
-          { status: { in: ["WAITING_APPROVAL", "RETURNED", "APPROVED", "SUBMITTED"] } },
-          { AND: [{ status: null }, { submitted: true }] },
+        AND: [
+          {
+            OR: [
+              { status: { in: ["WAITING_APPROVAL", "RETURNED", "APPROVED", "SUBMITTED"] } },
+              { AND: [{ status: null }, { submitted: true }] },
+            ],
+          },
+          ...((await showRemoved(req)) ? [] : [{ removedAt: null }]),
         ],
       },
       orderBy: { updatedAt: "desc" },

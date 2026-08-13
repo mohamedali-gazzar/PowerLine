@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listQtns, listAllQtns, deleteQtn, duplicateQtn, amendQtn, supersededNumbers, type QtnListItem } from "../lv/qtns";
+import { listQtns, listAllQtns, deleteQtn, restoreQtn, duplicateQtn, amendQtn, supersededNumbers, type QtnListItem } from "../lv/qtns";
 import { api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE, type QtnStatus } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useAutoRefresh, useChangedKeys } from "../hooks/useAutoRefresh";
@@ -20,6 +20,9 @@ export default function LvQtnListPage() {
   /** True when the list holds every user's quotations, not just the signed-in one's. */
   const [scopeAll, setScopeAll] = useState(false);
   const [myPerms, setMyPerms] = useState<string[]>([]);
+  /** Owner-only: also list the quotations that have been removed, so they can be
+   *  reviewed and restored. Off by default — removed means out of the way. */
+  const [showRemoved, setShowRemoved] = useState(false);
   const [loadErr, setLoadErr] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [picker, setPicker] = useState(false);
@@ -42,7 +45,9 @@ export default function LvQtnListPage() {
       /* unreadable access record — fall back to the personal list */
     }
     try {
-      const rows = all ? await listAllQtns() : await listQtns();
+      // Hidden quotations are only fetched when the owner asks for them; the
+      // server ignores the flag for everyone else, so this cannot leak anything.
+      const rows = all ? await listAllQtns(showRemoved) : await listQtns();
       setScopeAll(all);
       setQtns(rows);
       setLoadErr("");
@@ -66,7 +71,10 @@ export default function LvQtnListPage() {
   };
   useEffect(() => {
     reload();
-  }, []);
+    // Re-fetches when the owner toggles "Show removed" — the hidden rows come from
+    // the server, not from filtering what is already on screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showRemoved]);
   // Quotations added or edited by other people appear on their own — and right away
   // when you come back to the tab. Rows that changed flash briefly (see `justChanged`).
   useAutoRefresh(() => reload(), 30_000);
@@ -132,19 +140,43 @@ export default function LvQtnListPage() {
   }, [qtns]);
 
   const myEmail = (user?.email || "").toLowerCase();
+  const mayManage = myPerms.includes("access.manage");
+  // Removing HIDES a quotation — it is kept and can be restored, so this is not a
+  // destructive action. Still only drafts and returned ones: anything approved or
+  // submitted is the record of an offer that went to a customer.
+  // Owners may remove anyone's; everyone else only their own, as before.
   const canDelete = (x: QtnListItem) =>
-    DELETABLE.has(statusOf(x)) && (!scopeAll || (x.ownerEmail || "").toLowerCase() === myEmail);
+    !x.removedAt &&
+    DELETABLE.has(statusOf(x)) &&
+    (mayManage || !scopeAll || (x.ownerEmail || "").toLowerCase() === myEmail);
 
   const onNew = () => setPicker(true);
   const onDelete = async (e: React.MouseEvent, x: QtnListItem) => {
     e.stopPropagation();
-    if (!confirm(`Delete ${x.number}?`)) return;
+    if (
+      !confirm(
+        `Remove ${x.number} from the lists?\n\n` +
+          `It is kept, not deleted — its number stays reserved, and you can bring it ` +
+          `back with "Show removed".`,
+      )
+    )
+      return;
     setActionErr("");
     try {
       await deleteQtn(x.id);
       await reload();
     } catch (e2) {
-      setActionErr((e2 as Error).message || `Could not delete ${x.number}.`);
+      setActionErr((e2 as Error).message || `Could not remove ${x.number}.`);
+    }
+  };
+  const onRestore = async (e: React.MouseEvent, x: QtnListItem) => {
+    e.stopPropagation();
+    setActionErr("");
+    try {
+      await restoreQtn(x.id);
+      await reload();
+    } catch (e2) {
+      setActionErr((e2 as Error).message || `Could not restore ${x.number}.`);
     }
   };
   const onDuplicate = async (e: React.MouseEvent, id: string) => {
@@ -218,6 +250,15 @@ export default function LvQtnListPage() {
               <input id="qtn-search" className="input" placeholder="QTN number, project or customer…"
                 value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
+            {/* Owner-only. Removed quotations are kept, so this is how they are
+                reviewed and brought back. */}
+            {mayManage && scopeAll && (
+              <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm" title="Removed quotations are kept, never deleted">
+                <input type="checkbox" className="h-4 w-4 cursor-pointer accent-brand"
+                  checked={showRemoved} onChange={(e) => setShowRemoved(e.target.checked)} />
+                Show removed
+              </label>
+            )}
             <div>
               <label className="label" htmlFor="qtn-status">Status</label>
               <select id="qtn-status" className="input w-56" value={status}
@@ -318,7 +359,10 @@ export default function LvQtnListPage() {
                             )}
                             <button onClick={(e) => onDuplicate(e, x.id)} className="font-semibold text-brand hover:underline">Duplicate</button>
                             {canDelete(x) && (
-                              <button onClick={(e) => onDelete(e, x)} className="text-red-500 hover:underline">Delete</button>
+                              <button onClick={(e) => onDelete(e, x)} className="text-red-500 hover:underline" title="Hide it from the lists — it is kept and can be brought back">Remove</button>
+                            )}
+                            {x.removedAt && mayManage && (
+                              <button onClick={(e) => onRestore(e, x)} className="font-semibold text-green-700 hover:underline" title={`Removed ${new Date(x.removedAt).toLocaleDateString()}${x.removedBy ? ` by ${x.removedBy}` : ""}`}>Restore</button>
                             )}
                           </div>
                         </td>

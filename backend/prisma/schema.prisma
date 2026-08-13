@@ -228,6 +228,13 @@ model LvQtn {
   approvedAt    DateTime?
   /// Why it was sent back. Mandatory on a RETURN transition.
   returnReason  String    @default("")
+  /// Removed from the lists but KEPT. A quotation is never erased: the live
+  /// database has no backup, and `number` is unique per owner, so deleting one
+  /// frees its number to be handed to a different customer's offer later.
+  /// NULL = visible. Set = hidden everywhere except the owner's "Show removed".
+  removedAt   DateTime?
+  removedBy   String    @default("")
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 

@@ -24,6 +24,34 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**Quotations can be removed from the lists — and brought back.**
+
+The old **Delete** button erased a quotation for good. It is now **Remove**, and it
+*hides* the quotation instead: everything is kept, and a **Show removed** tick box (owner
+only) lists the hidden ones with a **Restore** button next to each.
+
+Nothing is ever erased, for two reasons: the live database has no backup of any kind, and
+a QTN number is only unique per person — so genuinely deleting one would free that number
+to be given to a different customer's offer later.
+
+Still only **drafts** and **returned** quotations, as before. Anything approved or
+submitted is the record of an offer that went to a customer and cannot be removed. Owners
+can now remove anyone's; everyone else only their own, exactly as they always could.
+Every removal and restore is written to the quotation's history with who and when.
+
+⚠️ **HEADS-UP — you will not see the button very often, and here is why.** The LV Offers
+History list deliberately never shows drafts. So in History the button can only ever
+appear on a **returned** quotation, and there are none at the moment. Your own drafts are
+removable, but they are not on that screen at all for anyone who can see everybody's work.
+
+❓ **QUESTION FOR MOHAMED:** shall I add a "Show drafts" tick box to the History list, so
+your own drafts appear there and can be tidied up in the same place? It is a small change
+and it would make Remove actually usable day to day.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **"Configurator Price list 13-8-2026" is now the default catalogue.**
 
 It is **not** a price change — 2,323 items are priced exactly as before and one item moved

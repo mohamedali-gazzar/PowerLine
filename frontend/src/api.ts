@@ -141,6 +141,9 @@ export interface QtnListItemDto extends QtnWorkflow {
   panels: number;
   totalEgp: number;
   submitted: boolean;
+  /** Set only on hidden quotations, which appear only in an includeRemoved list. */
+  removedAt?: string | null;
+  removedBy?: string;
 }
 export interface QtnRecordDto extends QtnWorkflow {
   id: string;
@@ -503,11 +506,17 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify({ number }),
       }),
+    /** Hides the quotation — it is kept and can be restored. Drafts/returned only. */
     remove: (id: string) => request<void>(`/qtns/${id}`, { method: "DELETE" }),
+    /** Un-hide one. Owner only (access.manage). */
+    restore: (id: string) => request<{ ok: true }>(`/qtns/${id}/restore`, { method: "POST" }),
     duplicate: (id: string) =>
       request<QtnRecordDto>(`/qtns/${id}/duplicate`, { method: "POST" }),
-    /** Every non-draft quotation, all users — the LV Offers History list. */
-    listAll: () => request<QtnListItemDto[]>("/qtns/all"),
+    /** Every non-draft quotation, all users — the LV Offers History list.
+     *  `includeRemoved` also returns hidden ones; the server ignores it without
+     *  access.manage, so it can never widen what someone is allowed to see. */
+    listAll: (includeRemoved = false) =>
+      request<QtnListItemDto[]>(`/qtns/all${includeRemoved ? "?includeRemoved=1" : ""}`),
     /** Quotations waiting for approval (needs qtn.approve). */
     queue: () => request<QtnListItemDto[]>("/qtns/queue"),
     /** Move a quotation through the workflow. `note` is required when returning. */

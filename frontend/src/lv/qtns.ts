@@ -52,6 +52,9 @@ export interface QtnListItem {
   ownerName: string;
   coOwners?: { id: string; email: string; name: string }[];
   approverEmail: string;
+  /** Set only on hidden quotations — they appear only when the owner asks to see them. */
+  removedAt?: string | null;
+  removedBy?: string;
 }
 
 /** Client-computed summary stored next to the JSON state (so listing/stats need
@@ -193,9 +196,16 @@ export async function listQtns(): Promise<QtnListItem[]> {
   return api.qtns.list();
 }
 
-/** Every non-draft quotation across all users (LV Offers History). */
-export async function listAllQtns(): Promise<QtnListItem[]> {
-  return api.qtns.listAll();
+/** Every non-draft quotation across all users (LV Offers History).
+ *  `includeRemoved` also brings back the hidden ones — the server only honours it
+ *  for access.manage, so asking for them is never enough to see them. */
+export async function listAllQtns(includeRemoved = false): Promise<QtnListItem[]> {
+  return api.qtns.listAll(includeRemoved);
+}
+
+/** Put a hidden quotation back on the lists. Owner only. */
+export async function restoreQtn(id: string): Promise<void> {
+  await api.qtns.restore(id);
 }
 
 /** Quotations waiting for approval — only for users who may approve. */
