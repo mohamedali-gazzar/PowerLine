@@ -24,6 +24,52 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**MCC starters were missing two parts from their price. Fixed.**
+
+Answering the question left open earlier — Mohamed said to correct them.
+
+**What was wrong.** A combination does not store part numbers. It stores the part's
+*description*, and the app looks that text up in the price list when it builds the
+starter. Two of the 54 parts an MCC starter names were spelled differently from the price
+list, so the app found nothing and charged **zero** for them:
+
+| The starter asked for | The price list actually calls it |
+| --- | --- |
+| `SK1-11 Signal contact` | `SK1-11 Signaling Contact` — €12.64 |
+| `CAL4-11 (1 N.O+1 N.C) - Side` | `CAL4-11 Auxiliary Contact Block - Side (AF09..96)` — €6.63 |
+
+Both parts are in **every one of the 110 starters**, so every MCC starter ever quoted was
+short by the cost of a signal contact and one auxiliary block per contactor.
+
+**What changed.** The two descriptions in the starter templates now match the price list
+exactly. Nothing about the parts themselves changed, and no price was edited — the app can
+simply find them now.
+
+**What it is worth, per starter, parts only:**
+
+| Starter | Was | Now | Recovered |
+| --- | --- | --- | --- |
+| DOL, 3-phase | €49.42 | €68.68 | **€19.27** |
+| Star-Delta (3 contactors) | €94.59 | €127.12 | **€32.53** |
+
+Across all 110 starters that is an average of **€24.81** each, before the panel's own
+margin and factors. Every part an MCC starter names now resolves — the checker reports
+none missing.
+
+⚠️ **HEADS-UP — one thing to check on the live site after this update.** If nobody has
+opened Price list → **Combinations** on the live site yet, this fix arrives on its own and
+there is nothing to do. If someone *has* opened it, the site kept its own copy of the old
+wording — open that tab and press **"Reset all to the app's version"** once, and it will
+pick this up. Saving the MCC section tells you either way: it reports how many parts it
+cannot find, and it should say none.
+
+Quotations already saved keep the parts and prices they were built with. Only starters
+added from now on are priced correctly.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **Every browser pop-up in the app is now PowerLine's own.**
 
 Following on from the approval dialogs, the remaining **21** have been converted across
