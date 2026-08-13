@@ -23,6 +23,9 @@ export default function LvQtnListPage() {
   /** Owner-only: also list the quotations that have been removed, so they can be
    *  reviewed and restored. Off by default — removed means out of the way. */
   const [showRemoved, setShowRemoved] = useState(false);
+  /** History leaves out work in progress. This brings drafts in, which is what
+   *  makes them reachable for tidying up. Off by default. */
+  const [showDrafts, setShowDrafts] = useState(false);
   const [loadErr, setLoadErr] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [picker, setPicker] = useState(false);
@@ -47,7 +50,9 @@ export default function LvQtnListPage() {
     try {
       // Hidden quotations are only fetched when the owner asks for them; the
       // server ignores the flag for everyone else, so this cannot leak anything.
-      const rows = all ? await listAllQtns(showRemoved) : await listQtns();
+      const rows = all
+        ? await listAllQtns({ includeRemoved: showRemoved, includeDrafts: showDrafts })
+        : await listQtns();
       setScopeAll(all);
       setQtns(rows);
       setLoadErr("");
@@ -71,10 +76,10 @@ export default function LvQtnListPage() {
   };
   useEffect(() => {
     reload();
-    // Re-fetches when the owner toggles "Show removed" — the hidden rows come from
-    // the server, not from filtering what is already on screen.
+    // Re-fetches when either toggle changes — the extra rows come from the server,
+    // not from filtering what is already on screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showRemoved]);
+  }, [showRemoved, showDrafts]);
   // Quotations added or edited by other people appear on their own — and right away
   // when you come back to the tab. Rows that changed flash briefly (see `justChanged`).
   useAutoRefresh(() => reload(), 30_000);
@@ -250,6 +255,16 @@ export default function LvQtnListPage() {
               <input id="qtn-search" className="input" placeholder="QTN number, project or customer…"
                 value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
+            {/* History leaves drafts out by default — it is the record of work that
+                has gone somewhere. Ticking this brings work in progress in, which is
+                what makes a draft reachable to tidy up. */}
+            {scopeAll && (
+              <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm" title="Work in progress is normally left out of History">
+                <input type="checkbox" className="h-4 w-4 cursor-pointer accent-brand"
+                  checked={showDrafts} onChange={(e) => setShowDrafts(e.target.checked)} />
+                Show drafts
+              </label>
+            )}
             {/* Owner-only. Removed quotations are kept, so this is how they are
                 reviewed and brought back. */}
             {mayManage && scopeAll && (

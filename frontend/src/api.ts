@@ -515,8 +515,13 @@ export const api = {
     /** Every non-draft quotation, all users — the LV Offers History list.
      *  `includeRemoved` also returns hidden ones; the server ignores it without
      *  access.manage, so it can never widen what someone is allowed to see. */
-    listAll: (includeRemoved = false) =>
-      request<QtnListItemDto[]>(`/qtns/all${includeRemoved ? "?includeRemoved=1" : ""}`),
+    listAll: (opts: { includeRemoved?: boolean; includeDrafts?: boolean } = {}) => {
+      const qs = new URLSearchParams();
+      if (opts.includeRemoved) qs.set("includeRemoved", "1");
+      if (opts.includeDrafts) qs.set("includeDrafts", "1");
+      const s = qs.toString();
+      return request<QtnListItemDto[]>(`/qtns/all${s ? `?${s}` : ""}`);
+    },
     /** Quotations waiting for approval (needs qtn.approve). */
     queue: () => request<QtnListItemDto[]>("/qtns/queue"),
     /** Move a quotation through the workflow. `note` is required when returning. */

@@ -693,15 +693,23 @@ export async function listAll(req: Request, res: Response) {
   try {
     const rows = await prisma.lvQtn.findMany({
       // Legacy rows have status NULL; those with submitted = true are Submitted and
-      // belong here, the rest are drafts and must never appear.
+      // belong here, the rest are drafts and are left out by default — History is
+      // the record of work that has gone somewhere, not everyone's unfinished
+      // sketches. `?includeDrafts=1` opts into them, which is what makes a draft
+      // reachable for tidying up; the route already requires qtn.viewAll, whose
+      // own meaning is "View all QTNs".
       where: {
         AND: [
-          {
-            OR: [
-              { status: { in: ["WAITING_APPROVAL", "RETURNED", "APPROVED", "SUBMITTED"] } },
-              { AND: [{ status: null }, { submitted: true }] },
-            ],
-          },
+          ...(req.query.includeDrafts === "1"
+            ? []
+            : [
+                {
+                  OR: [
+                    { status: { in: ["WAITING_APPROVAL", "RETURNED", "APPROVED", "SUBMITTED"] } },
+                    { AND: [{ status: null }, { submitted: true }] },
+                  ],
+                },
+              ]),
           ...((await showRemoved(req)) ? [] : [{ removedAt: null }]),
         ],
       },

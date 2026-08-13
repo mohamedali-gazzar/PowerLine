@@ -24,6 +24,27 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**"Show drafts" added to the LV Offers History list** — answering the question in the
+entry below, which Mohamed said yes to.
+
+History still opens the way it always has: finished work only, no drafts. Tick **Show
+drafts** and work in progress appears alongside it, each row with a **Remove** button.
+That is what makes Remove usable — drafts were previously invisible on that screen to
+anyone who can see everybody's work.
+
+Checked the whole round trip on the real screen: ticking it took the list from 30 rows to
+52, 22 of them removable; removing one asked "Remove df from the lists?", the row went;
+**Show removed** brought it back with a **Restore** button; restoring put it back where it
+was. The database still holds all 52 quotations — nothing was ever erased — and every step
+is in the quotation's history.
+
+The tick box is off by default and appears only for people who can already see all
+quotations, so nobody sees anything they could not see before.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **Quotations can be removed from the lists — and brought back.**
 
 The old **Delete** button erased a quotation for good. It is now **Remove**, and it

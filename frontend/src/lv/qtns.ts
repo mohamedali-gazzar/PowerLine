@@ -198,9 +198,12 @@ export async function listQtns(): Promise<QtnListItem[]> {
 
 /** Every non-draft quotation across all users (LV Offers History).
  *  `includeRemoved` also brings back the hidden ones — the server only honours it
- *  for access.manage, so asking for them is never enough to see them. */
-export async function listAllQtns(includeRemoved = false): Promise<QtnListItem[]> {
-  return api.qtns.listAll(includeRemoved);
+ *  for access.manage, so asking for them is never enough to see them.
+ *  `includeDrafts` adds work still in progress, which History leaves out by default. */
+export async function listAllQtns(
+  opts: { includeRemoved?: boolean; includeDrafts?: boolean } = {},
+): Promise<QtnListItem[]> {
+  return api.qtns.listAll(opts);
 }
 
 /** Put a hidden quotation back on the lists. Owner only. */
