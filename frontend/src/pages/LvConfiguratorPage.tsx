@@ -948,16 +948,17 @@ export default function LvConfiguratorPage() {
             {fmtEgp(totals.sell)} EGP excl. VAT
             {totals.sell > 0 && <> · <strong className="text-ink">{fmtEgp(totals.incl)}</strong> incl. {Math.round(s.factors.vat * 100)}% VAT</>}
           </p>
+          {/* Workflow stage, under the price — it belongs with the quotation's own
+              details rather than among the buttons that act on it. */}
+          <span className={`mt-2 inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-bold ${QTN_STATUS_STYLE[status]}`}
+            title={`Workflow stage: ${QTN_STATUS_LABEL[status]}`}>
+            {QTN_STATUS_LABEL[status]}
+          </span>
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-2">
             <button className="btn-ghost" disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)">↶ Undo</button>
             <button className="btn-ghost" disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
-            {/* Current stage, always visible. */}
-            <span className={`inline-flex items-center rounded-lg px-3 py-2 text-sm font-bold ${QTN_STATUS_STYLE[status]}`}
-              title={`Workflow stage: ${QTN_STATUS_LABEL[status]}`}>
-              {QTN_STATUS_LABEL[status]}
-            </span>
             {/* Only the moves this user may actually make. */}
             {!cancelled && (status === "DRAFT" || status === "RETURNED") && (
               <button className="btn-primary" disabled={submitting} onClick={sendForApproval}>
