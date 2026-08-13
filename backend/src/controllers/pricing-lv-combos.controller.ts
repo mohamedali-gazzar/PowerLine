@@ -128,10 +128,25 @@ async function unresolved(descs: string[]): Promise<string[]> {
   const names = rows.map((r) => norm(r.n));
   const descriptions = rows.map((r) => norm(r.d));
 
-  // mccAlias() in combos.ts: "Contactor# AF09-30-10-13" is a template marker, and
-  // the prefix is stripped before the lookup. Applied to every section — no other
-  // one uses the prefix, so it is a no-op there.
-  const alias = (d: string) => (/^contactor#\s*(.+)$/i.exec(d.trim())?.[1] ?? d).trim();
+  // Must mirror mccAlias() in combos.ts IN FULL, both branches.
+  //
+  // MCC_ALIAS comes first there: a handful of template descriptions deliberately
+  // differ from the catalogue names, and are translated for the price lookup only
+  // so the offer can keep the clean wording. Omitting this map made the checker
+  // report those parts as missing when they price perfectly well — a false alarm
+  // that led to the template text being "corrected" on customer-facing documents
+  // for no reason. Keep this table in step with combos.ts.
+  const MCC_ALIAS: Record<string, string> = {
+    "SK1-11 Signal contact": "SK1-11 Signaling Contact",
+    "CAL4-11 (1 N.O+1 N.C) - Side": "CAL4-11 Auxiliary Contact Block - Side (AF09..96)",
+  };
+  const alias = (raw: string) => {
+    const d = raw.trim();
+    if (MCC_ALIAS[d]) return MCC_ALIAS[d];
+    // "Contactor# AF09-30-10-13" is a template marker; the prefix is stripped
+    // before the lookup. Harmless on other sections, which never use it.
+    return (/^contactor#\s*(.+)$/i.exec(d)?.[1] ?? d).trim();
+  };
 
   const resolves = (raw: string): boolean => {
     const want = norm(alias(raw));

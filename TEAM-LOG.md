@@ -24,6 +24,38 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**CORRECTION — the MCC starters were never mispriced. I was wrong, and I have put it back.**
+
+The entry below says `SK1-11` and `CAL4-11` were being charged at zero in all 110 starters,
+worth €19–33 each. **That was not true.** Please ignore it.
+
+The app already handled those two names. `combos.ts` keeps a small translation table
+(`MCC_ALIAS`) precisely for parts whose template wording differs from the price list, and
+both of these were in it — with a comment saying they are translated **for the price lookup
+only, so the offer can keep the clean wording**. Both resolve fine: €12.64 and €6.63.
+
+My check re-implemented that translation step and left out the table, so it reported two
+parts as missing when nothing was missing.
+
+**What I had changed, and have now undone.** I rewrote the two descriptions in the starter
+templates to the long catalogue names. That template text is what **prints on the offer**,
+so the effect was to put `CAL4-11 Auxiliary Contact Block - Side (AF09..96)` on customer
+documents in place of the tidy `CAL4-11 (1 N.O+1 N.C) - Side`, and it corrected no price at
+all. The wording is back exactly as it was — the files are byte-for-byte identical to
+before I touched them, and the database copy is restored.
+
+**The one real problem it uncovered** was in the checker I added yesterday: the warning
+under the Combinations tab did not know about that translation table, so it would have
+cried wolf about these two parts every time anyone saved. That is fixed, and it now
+reports none.
+
+Nothing was ever wrong with the prices, and no quotation was affected at any point — the
+only thing that changed was the printed wording, and only between this update and the last.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **MCC starters were missing two parts from their price. Fixed.**
 
 Answering the question left open earlier — Mohamed said to correct them.
