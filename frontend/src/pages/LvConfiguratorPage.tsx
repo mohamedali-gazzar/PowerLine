@@ -44,6 +44,7 @@ import {
 import { checkCatalogUpdates, catalogVersion } from "../lv/catalogSource";
 import ReturnForRevisionModal, { type ReturnComment } from "../components/ReturnForRevisionModal";
 import EdmsStandardWarningModal from "../components/EdmsStandardWarningModal";
+import { useConfirm, type ConfirmOptions } from "../components/ConfirmModal";
 import { useAuth } from "../auth/AuthContext";
 import wdFldImg from "../assets/wd-fld.png";
 import wdRhdImg from "../assets/wd-rhd.png";
@@ -262,6 +263,9 @@ const EDMS_IGNORE_KEYS = new Set<string>([
 export default function LvConfiguratorPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  // Themed stand-in for window.confirm(). `confirmModal` is rendered once, near the
+  // bottom of this component; it portals itself to document.body.
+  const [askConfirm, confirmModal] = useConfirm();
   // Async-loaded from the backend (per signed-in user). `rec` is null until loaded.
   const [rec, setRec] = useState<QtnRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -372,9 +376,15 @@ export default function LvConfiguratorPage() {
   /** Move the quotation through the workflow. Surfaces the server's reason on
    *  refusal — the old submit/reopen handlers swallowed every error, so a rejected
    *  action looked like nothing happened at all. */
-  const doTransition = async (to: QtnStatus, opts?: { confirm?: string; note?: string }) => {
+  const doTransition = async (
+    to: QtnStatus,
+    opts?: { confirm?: ConfirmOptions; note?: string },
+  ) => {
     if (!rec) return;
-    if (opts?.confirm && !confirm(opts.confirm)) return;
+    // Themed dialog rather than window.confirm — the browser's own says
+    // "powerline-chi.vercel.app says", cannot be styled, and reads like a warning
+    // from something other than the app.
+    if (opts?.confirm && !(await askConfirm(opts.confirm))) return;
     setSubmitting(true);
     setWfError("");
     try {
@@ -398,7 +408,11 @@ export default function LvConfiguratorPage() {
       return;
     }
     void doTransition("WAITING_APPROVAL", {
-      confirm: "Send this quotation for approval? You won't be able to edit it while it's under review.",
+      confirm: {
+        title: "Send for approval",
+        message: "You won't be able to edit this quotation while it is under review.",
+        confirmLabel: "Send for approval",
+      },
     });
   };
   // "Send to <sales person>" — compose the offer e-mail in Outlook via a mailto link.
@@ -947,7 +961,11 @@ export default function LvConfiguratorPage() {
             )}
             {!cancelled && status === "WAITING_APPROVAL" && canApprove && (
               <button className="btn-primary" disabled={submitting} onClick={() => doTransition("APPROVED", {
-                confirm: "Approve this quotation? The creator will be notified that it's ready to submit.",
+                confirm: {
+                  title: "Approve this quotation",
+                  message: "The creator will be notified that it is ready to submit.",
+                  confirmLabel: "Approve",
+                },
               })}>
                 ✓ Approve
               </button>
@@ -959,14 +977,23 @@ export default function LvConfiguratorPage() {
             )}
             {!cancelled && status === "WAITING_APPROVAL" && isOwner && (
               <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
-                confirm: "Withdraw this quotation from approval and return it to draft?",
+                confirm: {
+                  title: "Withdraw from approval",
+                  message: "It goes back to draft and you can edit it again. Whoever was reviewing it will no longer see it in their queue.",
+                  confirmLabel: "Withdraw",
+                },
               })}>
                 Withdraw
               </button>
             )}
             {!cancelled && status === "APPROVED" && (
               <button className="btn-primary" disabled={submitting} onClick={() => doTransition("SUBMITTED", {
-                confirm: "Submit this quotation? This is final — it becomes read-only.",
+                confirm: {
+                  title: "Submit this quotation",
+                  message: "This is final. The quotation becomes read-only and can only be changed by reopening it.",
+                  confirmLabel: "Submit",
+                  tone: "danger",
+                },
               })}>
                 {submitting ? "Submitting…" : "✓ Submit"}
               </button>
@@ -989,7 +1016,11 @@ export default function LvConfiguratorPage() {
             ))}
             {status === "SUBMITTED" && canReopen && (
               <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
-                confirm: "Reopen this submitted quotation for editing?",
+                confirm: {
+                  title: "Reopen for editing",
+                  message: "This submitted quotation goes back to draft so it can be changed. The offer already sent to the customer is not affected.",
+                  confirmLabel: "Reopen",
+                },
               })}>
                 🔓 Reopen
               </button>
@@ -1035,6 +1066,8 @@ export default function LvConfiguratorPage() {
           <p className="text-sm font-semibold text-red-800">⚠ {wfError}</p>
         </div>
       )}
+      {/* Themed replacement for window.confirm — renders only while one is open. */}
+      {confirmModal}
       <ReturnForRevisionModal
         open={returnOpen}
         title={`${qtnNum}${s.project?.name ? ` · ${s.project.name}` : ""}`}

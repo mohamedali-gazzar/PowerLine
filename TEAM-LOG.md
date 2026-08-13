@@ -24,6 +24,37 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**The workflow pop-ups are PowerLine's own now, not the browser's.**
+
+The grey box that said *"powerline-chi.vercel.app says…"* with **OK** and **Cancel** has
+been replaced by a proper dialog in the app's colours, with the orange bar across the top
+and buttons that say what they do.
+
+All five workflow steps went through the same piece of code, so all five changed together
+and now read properly:
+
+| Step | Now says |
+| --- | --- |
+| Send for approval | **Send for approval** — "You won't be able to edit this quotation while it is under review." |
+| Approve | **Approve this quotation** — "The creator will be notified that it is ready to submit." |
+| Withdraw | **Withdraw from approval** — explains it goes back to draft |
+| Submit | **Submit this quotation** — red bar, because it is final |
+| Reopen | **Reopen for editing** — notes the offer already sent is not affected |
+
+The **Submit** one is deliberately red: it is the only one that cannot simply be undone.
+
+It follows light and dark mode, closes on Escape or by clicking outside, and Enter only
+works while the action button itself is highlighted — so a stray key press cannot approve
+a quotation by accident.
+
+Checked on a real quotation waiting for approval: the browser's own dialog is no longer
+used at all, the new one shows the right wording and buttons, and Cancel, Escape and
+clicking outside all leave the quotation exactly as it was.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **"Show drafts" added to the LV Offers History list** — answering the question in the
 entry below, which Mohamed said yes to.
 
