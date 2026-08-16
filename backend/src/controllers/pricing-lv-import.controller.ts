@@ -18,12 +18,25 @@
 // An ENCLOSURE's `name` is the one thing still never rewritten: cell matching
 // parses it for dimensions and [fam, name] is unique, so a rename there is a
 // structural change, not a relabel. Enclosure rows update their price only.
+//
+// A name that is already in use is refused ROW BY ROW, never by failing the
+// upload: a spreadsheet is hundreds of correct rows and one wrong one, and
+// losing the whole price update over a naming clash costs more than it saves.
+// An add that would repeat a name is dropped; a RENAME that would repeat one is
+// dropped on its own and the row's price still applies. Both say which existing
+// item they collide with, in the preview, before anything is written.
 
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { fail } from "../lib/http";
 import { publishCurrentPricesDetailed } from "./pricing.controller";
+import {
+  LvNameIndex,
+  lvAddNameClashWarning,
+  lvRenameClashWarning,
+  type LvNamedItem,
+} from "../domain/lvNames";
 
 /** How long a previewed batch stays applicable. */
 const BATCH_TTL_MS = 60 * 60 * 1000;
@@ -138,6 +151,9 @@ export async function postLvImportPreview(req: Request, res: Response) {
           // EVERY column an import may rewrite must be selected — a field left out here
           // reads as undefined, compares as 0/"", and reports a change on every row.
           t: true, f: true, r: true, brand: true, poles: true, cuP: true, cuC: true, stock: true,
+          // Needed by the name rule: `active` because a removed item keeps its
+          // name, `sortIndex` because it decides which of two rows would win.
+          active: true, sortIndex: true,
         },
       }),
       prisma.lvEnclosure.findMany({ select: { id: true, ref: true, name: true, eur: true, egp: true } }),
@@ -156,6 +172,16 @@ export async function postLvImportPreview(req: Request, res: Response) {
       }
     }
 
+    // Every name in the catalogue, compared the way the app matches names. It is
+    // kept up to date as the file is read, so two rows of ONE spreadsheet cannot
+    // both take a name that was free when the upload started.
+    const names = LvNameIndex.fromRows(components);
+    /** A name taken by a row of this file that has not been written yet. */
+    const pendingItem = (label: string, code: string): LvNamedItem => ({
+      id: `sheet:${code || label}`, ref: code, d: label, n: label,
+      active: true, sortIndex: Number.MAX_SAFE_INTEGER, eur: 0, egp: 0, pending: true,
+    });
+
     const diff: DiffEntry[] = [];
     const warnings: string[] = [];
     let unchanged = 0;
@@ -164,6 +190,7 @@ export async function postLvImportPreview(req: Request, res: Response) {
     let unpriced = 0;
     const seen = new Set<string>();
     let duplicates = 0;
+    let nameClashes = 0;
 
     type Comp = (typeof components)[number];
     type Encl = (typeof enclosures)[number];
@@ -204,8 +231,31 @@ export async function postLvImportPreview(req: Request, res: Response) {
           }
         }
         // A rename moves the key the combination builders resolve parts by.
-        if (fields.some((f) => f.field === "d")) {
-          warnings.push(`${shown}: description renamed — any combination template that names the old text will stop finding this part.`);
+        const rename = fields.find((f) => f.field === "d");
+        if (rename) {
+          const taken = names.owner(rename.to, comp.id);
+          if (taken) {
+            // Drop the RENAME, keep the row. The price and every other column
+            // still apply — the same treatment an enclosure row already gets
+            // when its name differs, and for the same reason: the name is
+            // identity, the price is not.
+            fields.splice(fields.indexOf(rename), 1);
+            // Worded only once the splice has happened, because a row whose
+            // ONLY change was the refused rename now has nothing left to apply
+            // and must not be told its price went through. Future tense: this
+            // is the preview, above the Apply button — nothing is written yet.
+            warnings.push(
+              lvRenameClashWarning(shown, rename.to, taken, priceMoved || fields.length > 0 ? "will-apply" : "will-apply-nothing"),
+            );
+            nameClashes++;
+          } else {
+            warnings.push(`${shown}: description renamed — any combination template that names the old text will stop finding this part.`);
+            // The old name is free again and the new one is taken, so a later row
+            // of this same file is judged against the catalogue as it WILL be.
+            names.release(comp.d, comp);
+            names.release(comp.n, comp);
+            names.claim(rename.to, comp);
+          }
         }
       } else if (encl && row.description.trim() && row.description.trim() !== encl.name.trim()) {
         // An enclosure's name is parsed for dimensions and is half its unique key.
@@ -264,10 +314,18 @@ export async function postLvImportPreview(req: Request, res: Response) {
           warnings.push(`“${row.description.trim()}”: no item code and no price — it would quote as free, so it is not offered.`);
           continue;
         }
+        const labelN = row.description.trim();
+        const takenN = names.owner(labelN);
+        if (takenN) {
+          warnings.push(lvAddNameClashWarning(labelN, "", takenN));
+          nameClashes++;
+          continue;
+        }
         diff.push({
-          kind: "add", entity: "LvComponent", code: "", label: row.description.trim(),
+          kind: "add", entity: "LvComponent", code: "", label: labelN,
           eur: useEurN, egp: useEgpN, row, noCode: true,
         });
+        names.claim(labelN, pendingItem(labelN, ""));
         continue;
       }
       if (seen.has(code)) {
@@ -305,15 +363,26 @@ export async function postLvImportPreview(req: Request, res: Response) {
         warnings.push(`${row.code}: new item with no description — not added.`);
         continue;
       }
+      // A NEW item code with an EXISTING item's description is exactly how the
+      // catalogue collected its duplicates: two real ABB order codes, one name,
+      // and from then on the app can only guess which one a quotation meant.
+      const label = row.description.trim();
+      const taken = names.owner(label);
+      if (taken) {
+        warnings.push(lvAddNameClashWarning(label, row.code.trim(), taken));
+        nameClashes++;
+        continue;
+      }
       diff.push({
         kind: "add",
         entity: "LvComponent",
         code: row.code.trim(),
-        label: row.description.trim(),
+        label,
         eur: useEur,
         egp: useEgp,
         row,
       });
+      names.claim(label, pendingItem(label, row.code.trim()));
     }
 
     // Code-less rows are held apart: they are shown for review and applied only if
@@ -336,6 +405,9 @@ export async function postLvImportPreview(req: Request, res: Response) {
       noCode,
       unpriced,
       duplicates,
+      // Rows refused (an add) or partly refused (a rename) because the name is
+      // already an item's. Each one is named in `warnings`.
+      nameClashes,
       // An update row can move the price, the data columns, or both.
       priceUpdates: updates.filter((u) => u.priceMoved).length,
       dataUpdates: updates.filter((u) => (u.fields?.length ?? 0) > 0).length,
@@ -401,6 +473,14 @@ export async function postLvImportApply(req: Request, res: Response) {
     let updated = 0;
     let added = 0;
     let skipped = 0;
+    /** Rows the name rule refused here, in words, for the person who pressed Apply. */
+    const nameClashes: string[] = [];
+
+    // The rule is re-checked against the catalogue as it is NOW. The preview can
+    // be up to an hour old, and nothing stops a second import — or the "+ Add a
+    // component" form — taking a name in between. The stored diff is replayed
+    // data, not a decision: the same reason the field whitelist is re-applied.
+    const names = await LvNameIndex.load();
 
     // Append-only: the catalogue ORDER is load-bearing, so new items go after
     // everything that already exists.
@@ -423,18 +503,48 @@ export async function postLvImportApply(req: Request, res: Response) {
 
           // Post-update values, needed for the `search` column below.
           const next = { t: cur.t, f: cur.f, r: cur.r, d: cur.d, brand: cur.brand };
+          // What was actually written, so the audit trail below never records a
+          // change that the name rule refused.
+          const applied: FieldChange[] = [];
+          // Held back until the row is finished: the wording depends on whether
+          // anything else on it survived, which is not known inside the loop.
+          let refusedRename: { to: string; taken: LvNamedItem } | null = null;
           for (const fc of d.fields ?? []) {
             if (!(fc.field in APPLIABLE_FIELDS)) continue; // whitelist — replayed JSON is not trusted
+            if (fc.field === "d") {
+              const taken = names.owner(fc.to, cur.id);
+              if (taken) {
+                // Refuse the rename alone. The price on this row is still written
+                // below — an uploader must never lose a price update to a name.
+                refusedRename = { to: String(fc.to), taken };
+                continue;
+              }
+              names.release(cur.d, cur);
+              names.release(cur.n, cur);
+              names.claim(fc.to, cur);
+            }
             if (NUMERIC_FIELDS.has(fc.field)) {
               data[fc.field] = fc.field === "poles" ? Math.trunc(Number(fc.to) || 0) : Number(fc.to) || 0;
+              applied.push(fc);
               continue;
             }
             data[fc.field] = fc.to;
             if (fc.field === "d") data.n = fc.to; // d and n are both combination lookup keys — never let them drift
             if (fc.field in next) (next as Record<string, string>)[fc.field] = fc.to;
+            applied.push(fc);
           }
           // Keep the one lowercase column the price-list search reads (schema: "t f r d ref brand").
-          if ((d.fields?.length ?? 0) > 0) data.search = searchText(next.t, next.f, next.r, next.d, cur.ref, next.brand);
+          if (applied.length > 0) data.search = searchText(next.t, next.f, next.r, next.d, cur.ref, next.brand);
+
+          // Nothing survived — a row whose only change was a rename the name rule
+          // refused. Counting it as "updated" would report work that did not happen.
+          const survived = writePrice || applied.length > 0;
+          if (refusedRename) {
+            nameClashes.push(
+              lvRenameClashWarning(cur.ref || cur.d, refusedRename.to, refusedRename.taken, survived ? "applied" : "applied-nothing"),
+            );
+          }
+          if (!survived) { skipped++; continue; }
 
           await prisma.lvComponent.update({ where: { id: cur.id }, data });
 
@@ -449,8 +559,7 @@ export async function postLvImportApply(req: Request, res: Response) {
             });
           }
           // One audit row per data column, so the history reads field by field.
-          for (const fc of d.fields ?? []) {
-            if (!(fc.field in APPLIABLE_FIELDS)) continue;
+          for (const fc of applied) {
             await prisma.priceChange.create({
               data: {
                 domain: "LV", entity: "LvComponent", entityId: cur.id,
@@ -482,13 +591,19 @@ export async function postLvImportApply(req: Request, res: Response) {
 
       if (d.kind === "add") {
         // Guard against the same part being added twice by two overlapping imports.
-        // A code-less row has no reference to match on — an empty `ref` would collide
-        // with every other code-less row in the catalogue — so it is matched on its
-        // description, which is the only handle it has.
-        const clash = d.code
-          ? await prisma.lvComponent.findFirst({ where: { ref: d.code } })
-          : await prisma.lvComponent.findFirst({ where: { OR: [{ d: d.label }, { n: d.label }] } });
-        if (clash) { skipped++; continue; }
+        if (d.code && (await prisma.lvComponent.findFirst({ where: { ref: d.code } }))) {
+          skipped++;
+          continue;
+        }
+        // And against a second item under an existing item's name. This used to
+        // apply to code-less rows only, matching the raw text: a coded row could
+        // walk straight past it, and "MCCB  XT1B" with two spaces past it twice.
+        const taken = names.owner(d.label);
+        if (taken) {
+          nameClashes.push(lvAddNameClashWarning(d.label, d.code, taken));
+          skipped++;
+          continue;
+        }
         const r = d.row;
         const row = await prisma.lvComponent.create({
           data: {
@@ -512,6 +627,7 @@ export async function postLvImportApply(req: Request, res: Response) {
             updatedBy: by,
           },
         });
+        names.claim(row.d, row); // so two adds in one batch cannot share a name
         await prisma.priceChange.create({
           data: {
             domain: "LV", entity: "LvComponent", entityId: row.id,
@@ -532,6 +648,8 @@ export async function postLvImportApply(req: Request, res: Response) {
     const pub = await publishCurrentPricesDetailed(by, `Spreadsheet import: ${updated} updated, ${added} added`);
     res.json({
       ok: true, updated, added, skipped,
+      // Named one by one: "N were skipped" is not something anyone can act on.
+      nameClashes: nameClashes.slice(0, 50),
       published: pub.version !== null, version: pub.version, blockers: pub.blockers,
     });
   } catch (e) {

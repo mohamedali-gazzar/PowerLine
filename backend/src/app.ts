@@ -40,6 +40,7 @@ import {
   retireLvItem,
   getLvCatalog,
   getLvCatalogChanges,
+  getLvDuplicateNames,
 } from "./controllers/pricing-lv.controller";
 import { getAbbDatasheet } from "./controllers/abb.controller";
 import {
@@ -160,6 +161,10 @@ export function createApp() {
   app.get("/api/abb/datasheet", requireAuth, getAbbDatasheet);
   app.get("/api/pricing/lv", requireAuth, requirePriceViewer, listLvPrices);
   app.get("/api/pricing/lv/facets", requireAuth, requirePriceViewer, getLvFacets);
+  // Items that already share a name — read-only, and viewable by anyone who can
+  // see prices: an estimator picking between two identical labels is the person
+  // most affected by it.
+  app.get("/api/pricing/lv/duplicates", requireAuth, requirePriceViewer, getLvDuplicateNames);
   app.patch("/api/pricing/lv/:id", requireAuth, requirePriceAdmin, updateLvPrice);
   // Pole count drives the connection-copper cost, so it is edited, audited and
   // published exactly like a price. Same permission for the same reason.

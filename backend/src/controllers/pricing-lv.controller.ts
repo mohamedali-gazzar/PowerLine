@@ -11,6 +11,7 @@ import { prisma } from "../lib/prisma";
 import { fail } from "../lib/http";
 import { publishCurrentPrices } from "./pricing.controller";
 import { combosForPayload } from "./pricing-lv-combos.controller";
+import { LvNameIndex, lvNameTakenMessage, isUniqueViolation } from "../domain/lvNames";
 
 const componentSchema = z.object({
   sortIndex: z.number().int().min(0),
@@ -59,6 +60,10 @@ export async function postLvSeedChunk(req: Request, res: Response) {
     const { stage, offset, rows } = chunkSchema.parse(req.body);
     const by = req.userEmail ?? "";
 
+    // Names shared by more than one item, counted after this chunk lands.
+    let duplicateNames = 0;
+    let duplicateExamples: string[] = [];
+
     if (stage === "LV_COMPONENTS") {
       const parsed = rows.map((r) => componentSchema.parse(r));
       // Replace this slice wholesale so a re-post can never duplicate rows.
@@ -75,20 +80,45 @@ export async function postLvSeedChunk(req: Request, res: Response) {
           })),
         }),
       ]);
+
+      // The seed is the ONE name route that is counted instead of refused. It
+      // replays a fixed file (the catalogue bundled with the app) into a fixed
+      // slice of the catalogue, so refusing a chunk would leave the price list
+      // half-imported and break first-time setup — and the bundled file is
+      // exactly where today's duplicates come from. Reporting the count is how
+      // the owner learns they are there; the price screen lists them in full.
+      const dupes = (await LvNameIndex.load()).duplicates();
+      duplicateNames = dupes.length;
+      duplicateExamples = dupes.slice(0, 5).map((g) => g.name);
     } else {
       const parsed = rows.map((r) => enclosureSchema.parse(r));
-      await prisma.$transaction([
-        prisma.lvEnclosure.deleteMany({
-          where: { sortIndex: { gte: offset, lt: offset + parsed.length } },
-        }),
-        prisma.lvEnclosure.createMany({
-          data: parsed.map((e) => ({
-            ...e,
-            search: searchText(e.fam, e.name, e.ref, e.abb, e.ip, e.mount),
-            updatedBy: by,
-          })),
-        }),
-      ]);
+      try {
+        await prisma.$transaction([
+          prisma.lvEnclosure.deleteMany({
+            where: { sortIndex: { gte: offset, lt: offset + parsed.length } },
+          }),
+          prisma.lvEnclosure.createMany({
+            data: parsed.map((e) => ({
+              ...e,
+              search: searchText(e.fam, e.name, e.ref, e.abb, e.ip, e.mount),
+              updatedBy: by,
+            })),
+          }),
+        ]);
+      } catch (e) {
+        // Enclosure names ARE unique in the database ([fam, name]) and that rule
+        // is holding, so it is left alone. It surfaced as a bare "Server error."
+        // with the whole chunk silently rolled back; say what happened instead.
+        if (isUniqueViolation(e)) {
+          return res.status(409).json({
+            error:
+              "Two enclosures in this batch have the same family and name. Enclosure names have to stay unique — " +
+              "the cell prices are matched by that name, so a repeated one would price the wrong cell. " +
+              "Nothing from this batch was saved.",
+          });
+        }
+        throw e;
+      }
     }
 
     await prisma.priceBook.update({
@@ -100,7 +130,7 @@ export async function postLvSeedChunk(req: Request, res: Response) {
       prisma.lvComponent.count(),
       prisma.lvEnclosure.count(),
     ]);
-    res.json({ ok: true, imported: rows.length, components, enclosures });
+    res.json({ ok: true, imported: rows.length, components, enclosures, duplicateNames, duplicateExamples });
   } catch (e) {
     fail(res, e);
   }
@@ -327,6 +357,16 @@ export async function createLvComponent(req: Request, res: Response) {
       return res.status(409).json({ error: `Reference "${v.ref}" already exists — edit that item instead.` });
     }
 
+    // …and the same rule for the NAME. The reference check above never caught
+    // this: every duplicated description in the catalogue today carries two
+    // different ABB order codes, so the two rows are two genuinely different
+    // products that were given one name. `d` and `n` are both written from this
+    // one typed value, so one check covers both lookup keys.
+    const taken = (await LvNameIndex.load()).owner(v.d);
+    if (taken) {
+      return res.status(409).json({ error: lvNameTakenMessage(v.d, taken) });
+    }
+
     // Append after the current catalogue: the ORDER is load-bearing (the
     // combination builders take the first description match), so a new item must
     // never be inserted in front of an existing one.
@@ -398,6 +438,36 @@ export async function retireLvItem(req: Request, res: Response) {
     });
     await publishCurrentPrices(by, `${active ? "Restored" : "Removed"}: ${row.name || row.ref}`);
     res.json({ ok: true, row: updated });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+/**
+ * GET /api/pricing/lv/duplicates — every name shared by more than one component.
+ *
+ * REPORTED, NEVER REPAIRED. Which of a pair is the right one is a business
+ * decision, not a technical one: they are two different ABB order codes, often
+ * at two different prices, and the app cannot know which one the estimator means
+ * to sell. Renaming or retiring one automatically would change what existing
+ * quotations and combination templates resolve to — silently, and for money. So
+ * this lists them and leaves the decision with the owner.
+ *
+ * Enclosures are not listed: [fam, name] is unique in the database for them, so
+ * the case cannot arise.
+ */
+export async function getLvDuplicateNames(_req: Request, res: Response) {
+  try {
+    const groups = (await LvNameIndex.load()).duplicates();
+    res.json({
+      total: groups.length,
+      groups: groups.slice(0, 200).map((g) => ({
+        name: g.name,
+        items: g.items.map((i) => ({
+          id: i.id, ref: i.ref, d: i.d, eur: i.eur, egp: i.egp, active: i.active, sortIndex: i.sortIndex,
+        })),
+      })),
+    });
   } catch (e) {
     fail(res, e);
   }

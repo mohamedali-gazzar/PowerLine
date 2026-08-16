@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, getToken, type PricingStatus, type RmuPriceRow, type PriceChangeRow, type LvRow } from "../api";
+import {
+  api,
+  getToken,
+  type PricingStatus,
+  type RmuPriceRow,
+  type PriceChangeRow,
+  type LvRow,
+  type LvDuplicateNames,
+} from "../api";
 import { COMPONENTS, ENCLOSURES, DEFAULT_FACTORS } from "../lv/catalog";
 import { refreshCatalog } from "../lv/catalogSource";
 import LvExcelImport from "../pricing/LvExcelImport";
@@ -12,6 +20,19 @@ import { useDialogs } from "../components/ConfirmModal";
 // old prices until "Update price list & database" is pressed, which publishes
 // them and makes them live on the very next click — no deploy, no waiting.
 // That gap is deliberate: it gives a review step before a typo reaches a quote.
+
+/** What the first-time import found already repeated in the catalogue file. */
+interface SeedNames {
+  duplicateNames: number;
+  examples: string[];
+}
+/** Said once, at the end of the import, because the import cannot refuse them:
+ *  it replays the catalogue the app ships with, and stopping half way through
+ *  would leave the price list unusable. The Components tab lists them in full. */
+const duplicateSeedNote = (s: SeedNames) =>
+  `Note: ${s.duplicateNames} name${s.duplicateNames === 1 ? " is" : "s are"} used by more than one item ` +
+  `(${s.examples.slice(0, 3).join("; ")}${s.examples.length > 3 ? "; …" : ""}). ` +
+  `They were imported as they are — see the warning on the Components tab.`;
 
 const GROUPS: { kind: RmuPriceRow["kind"]; title: string; hint: string }[] = [
   { kind: "PANEL", title: "RMU panels", hint: "Minimum price per panel configuration (USD)" },
@@ -48,7 +69,13 @@ export default function PricingAdminPage() {
         if (s.counts.lvComponents === 0 && !autoImported.current) {
           autoImported.current = true;
           importLvCatalogue()
-            .then(() => api.pricing.status().then(setStatus))
+            .then((seeded) => {
+              // The catalogue file itself contains repeated descriptions. The
+              // seed is allowed to write them (refusing would leave the price
+              // list half-built), so it says so instead of staying quiet.
+              if (seeded.duplicateNames > 0) setToast(duplicateSeedNote(seeded));
+              return api.pricing.status().then(setStatus);
+            })
             .catch((e) => setError((e as Error).message))
             .finally(() => setProgress(""));
         }
@@ -65,11 +92,17 @@ export default function PricingAdminPage() {
   /** Send the LV catalogue from the browser in chunks — it lives in the app
    *  bundle, and 2,374 rows will not fit in one serverless request. Each chunk
    *  replaces its own slice, so re-running this can never duplicate rows. */
-  const importLvCatalogue = async () => {
+  const importLvCatalogue = async (): Promise<SeedNames> => {
     const CHUNK = 300;
+    // What the catalogue file itself repeats. Each chunk answers for the whole
+    // table, so the last answer is the final one.
+    let duplicateNames = 0;
+    let examples: string[] = [];
     for (let i = 0; i < COMPONENTS.length; i += CHUNK) {
       const slice = COMPONENTS.slice(i, i + CHUNK).map((c, j) => ({ ...c, sortIndex: i + j }));
-      await api.pricing.lvSeedChunk("LV_COMPONENTS", i, slice);
+      const r = await api.pricing.lvSeedChunk("LV_COMPONENTS", i, slice);
+      duplicateNames = r.duplicateNames ?? duplicateNames;
+      examples = r.duplicateExamples ?? examples;
       setProgress(`Importing components… ${Math.min(i + CHUNK, COMPONENTS.length)} of ${COMPONENTS.length}`);
     }
     for (let i = 0; i < ENCLOSURES.length; i += CHUNK) {
@@ -79,6 +112,7 @@ export default function PricingAdminPage() {
     }
     setProgress("Saving pricing factors…");
     await api.pricing.lvSettings(DEFAULT_FACTORS);
+    return { duplicateNames, examples };
   };
 
   const setUp = async () => {
@@ -94,11 +128,12 @@ export default function PricingAdminPage() {
       }
 
       // 2) LV — the catalogue itself.
-      await importLvCatalogue();
+      const seeded = await importLvCatalogue();
 
       setToast(
         `Price list created — ${Object.values(r.counts).reduce((a, b) => a + b, 0)} RMU prices, ` +
-          `${COMPONENTS.length} components and ${ENCLOSURES.length} enclosures imported.`
+          `${COMPONENTS.length} components and ${ENCLOSURES.length} enclosures imported.` +
+          (seeded.duplicateNames > 0 ? ` ${duplicateSeedNote(seeded)}` : "")
       );
       await loadAll();
     } catch (e) {
@@ -425,6 +460,85 @@ export default function PricingAdminPage() {
   );
 }
 
+/**
+ * Items that already share a name.
+ *
+ * The app cannot tell two items with the same name apart: everywhere a part is
+ * looked up by its description — the ATS / MCC / photocell combinations, and the
+ * breaker dropdowns, which show the description as the label — the first one in
+ * the list wins. When the two carry different prices, that difference is quoted
+ * without anybody choosing it.
+ *
+ * Shown, not fixed. Which of a pair is the right one is a commercial decision:
+ * they are two different ABB order codes, and renaming or removing one changes
+ * what the combinations resolve to. New ones are refused from now on; these are
+ * the ones that were already here.
+ */
+function DuplicateNames({ reloadKey }: { reloadKey: number }) {
+  const [rep, setRep] = useState<LvDuplicateNames | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    api.pricing.lvDuplicateNames().then(setRep).catch(() => setRep(null));
+  }, [reloadKey]);
+
+  if (!rep || rep.total === 0) return null;
+
+  const priceOf = (i: LvDuplicateNames["groups"][number]["items"][number]) =>
+    i.eur > 0 ? `€${i.eur.toFixed(2)}` : i.egp > 0 ? `${i.egp.toLocaleString()} EGP` : "no price";
+  // Same money, different order code, is a different problem from same name,
+  // different money — only the second one changes what a customer is charged.
+  const gap = (g: LvDuplicateNames["groups"][number]) => {
+    const [a, b] = g.items;
+    if (!b) return "";
+    const va = a.eur > 0 ? a.eur : a.egp;
+    const vb = b.eur > 0 ? b.eur : b.egp;
+    if (!va || !vb || (a.eur > 0) !== (b.eur > 0)) return ""; // euro vs pound: not comparable here
+    if (Math.abs(va - vb) < 0.005) return "same price";
+    return `${(Math.abs(vb - va) / Math.min(va, vb) * 100).toFixed(0)}% apart`;
+  };
+
+  return (
+    <div className="card mb-3 border-amber-300 bg-amber-50/60 p-3 dark:border-amber-400/40 dark:bg-amber-400/10">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-bold text-ink">
+          ⚠ {rep.total} name{rep.total === 1 ? " is" : "s are"} used by more than one item
+        </p>
+        <button className="btn-ghost" onClick={() => setOpen((o) => !o)}>
+          {open ? "Hide" : "Show them"}
+        </button>
+      </div>
+      <p className="mt-1 text-xs text-muted">
+        Two items with the same name cannot be told apart — the app uses whichever comes first in the list, so where the
+        two prices differ, the difference is quoted without anyone choosing it. Nothing has been changed: which of each
+        pair is the right one is your decision. Adding a new item with a name that is already used is now refused.
+      </p>
+      {open && (
+        <ul className="mt-2 max-h-72 space-y-2 overflow-auto rounded-lg border border-amber-300/60 bg-white p-2 text-xs dark:bg-transparent">
+          {rep.groups.map((g) => (
+            <li key={g.name}>
+              <div className="font-semibold text-ink">
+                {g.name}
+                {gap(g) && <span className="ml-2 font-normal text-muted">({gap(g)})</span>}
+              </div>
+              <div className="mt-0.5 space-y-0.5">
+                {g.items.map((i, n) => (
+                  <div key={i.id} className="flex flex-wrap gap-x-2 text-muted">
+                    <span className="font-mono text-[11px]">{i.ref || "no item code"}</span>
+                    <span>{priceOf(i)}</span>
+                    {n === 0 && <span className="font-semibold text-amber-700 dark:text-amber-300">← this one is used</span>}
+                    {!i.active && <span>(removed from the list)</span>}
+                  </div>
+                ))}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /** Add an LV component. Every field is required — an item missing its type,
  *  description or reference cannot be found or priced by the calculator. */
 function AddLvComponent({
@@ -495,7 +609,12 @@ function AddLvComponent({
   return (
     <div className="card mb-3 border-brand/40 p-4">
       <h2 className="sec-head">Add a component</h2>
-      <p className="mb-3 text-xs text-muted">All fields are required except the copper weights (leave 0 if the item has none). It is added to the end of the catalogue.</p>
+      {/* Said before they type it, not only after the server refuses it. */}
+      <p className="mb-3 text-xs text-muted">
+        All fields are required except the copper weights (leave 0 if the item has none). It is added to the end of the
+        catalogue. The description has to differ from every other item's — two items with the same name cannot be told
+        apart, and a quotation would use whichever comes first.
+      </p>
       <div className="grid gap-3 sm:grid-cols-3">
         <F k="t" label="Type" ph="MCCB" list={types} />
         <F k="f" label="Family" ph="XT2S" />
@@ -642,6 +761,8 @@ function LvPrices() {
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [addOpen, setAddOpen] = useState(false); // "+ Add a component" form (now opened from the button row)
+  // Bumped whenever rows are written, so the duplicate-name warning re-counts.
+  const [reloadKey, setReloadKey] = useState(0);
   const take = 50;
 
   useEffect(() => {
@@ -732,12 +853,17 @@ function LvPrices() {
       {dialogs}
       {tabRow}
 
+      {/* Items already sharing a name. Components only — enclosure names are
+          unique in the database, so the case cannot arise there. */}
+      {kind === "components" && <DuplicateNames reloadKey={reloadKey} />}
+
       {/* Bulk update from a spreadsheet — for a whole new supplier price list,
           where editing rows one at a time is not realistic. */}
       <div className="card mb-3 p-3">
         <LvExcelImport
           onApplied={() => {
             setPage(0);
+            setReloadKey((k) => k + 1);
             api.pricing.lvList({ kind, q, type, brand, fam, noPrice, page: 0, take }).then((r) => {
               setRows(r.rows);
               setTotal(r.total);
@@ -766,6 +892,7 @@ function LvPrices() {
           onAdded={() => {
             setPage(0);
             setQ("");
+            setReloadKey((k) => k + 1);
             api.pricing.lvList({ kind, take }).then((r) => {
               setRows(r.rows);
               setTotal(r.total);

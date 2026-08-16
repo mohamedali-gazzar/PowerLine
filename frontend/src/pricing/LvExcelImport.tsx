@@ -138,12 +138,16 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
   const [preview, setPreview] = useState<LvImportPreview | null>(null);
   const [tab, setTab] = useState<"updates" | "additions" | "noCode" | "warnings">("updates");
   const [done, setDone] = useState("");
+  // Rows the name rule refused at apply time — the catalogue can have moved on
+  // since the preview, so these are not always the ones the preview flagged.
+  const [notes, setNotes] = useState<string[]>([]);
   // Rows with no item code are matched on description and applied only if ticked.
   const [includeNoCode, setIncludeNoCode] = useState(false);
 
   const pickFile = () => {
     setError("");
     setDone("");
+    setNotes([]);
     fileRef.current?.click();
   };
 
@@ -253,6 +257,7 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
     try {
       const r = await api.pricing.lvImportApply(preview.batchId, includeNoCode);
       setPreview(null);
+      setNotes(r.nameClashes ?? []);
       const head = `${r.updated.toLocaleString()} item(s) updated, ${r.added} item(s) added`;
       if (r.published) {
         setDone(`${head} — live in quotations now.`);
@@ -313,6 +318,20 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
           ✓ {done}
         </p>
       )}
+      {/* Named one by one on purpose: a count of skipped rows is not something
+          anyone can act on, the item it clashed with is. */}
+      {notes.length > 0 && !preview && (
+        <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">
+          <p className="font-bold">
+            {notes.length} row{notes.length === 1 ? " was" : "s were"} left out because the name is already an item's:
+          </p>
+          <ul className="mt-1 list-disc space-y-1 pl-4">
+            {notes.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {preview &&
         s &&
@@ -348,6 +367,19 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
                       {pct(s.medianPct)} (range {pct(s.minPct)} to {pct(s.maxPct)})
                     </>
                   )}
+                </p>
+              )}
+
+              {s.nameClashes > 0 && (
+                <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs font-semibold text-amber-800 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">
+                  ⚠ {s.nameClashes.toLocaleString()} row{s.nameClashes === 1 ? "" : "s"} would give an item a name another
+                  item already has. Two items with the same name cannot be told apart, so a quotation would use whichever
+                  comes first — those rows are left out (a rename is left out on its own and the price still applies).
+                  The{" "}
+                  <button type="button" onClick={() => setTab("warnings")} className="font-bold underline underline-offset-2">
+                    Warnings
+                  </button>{" "}
+                  tab says which item each one clashes with. Everything else applies normally.
                 </p>
               )}
 

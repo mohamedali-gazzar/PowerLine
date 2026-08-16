@@ -221,9 +221,16 @@ export function rebuildDerived(): void {
   rebuildCellDb();
 }
 
+/** Zero-width and other invisible characters that a paste can leave inside a name.
+ *  `\s` does not match them, so without this "MCCB A1C" and "MCCB<zero-width>A1C"
+ *  are two different parts to the matcher while looking identical on screen.
+ *  Kept identical to normLvName() in backend/src/domain/lvNames.ts, which enforces
+ *  the no-duplicate-names rule and is only correct while it matches this function. */
+const INVISIBLE = /[\u00AD\u200B-\u200F\u2060\uFEFF]/g;
+
 /** Find a DB component whose display name matches a combination-template description. */
 export function findByName(desc: string): DbComponent | undefined {
-  const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  const norm = (s: string) => s.replace(INVISIBLE, "").replace(/\s+/g, " ").trim().toLowerCase();
   const want = norm(desc);
   return (
     COMPONENTS.find((c) => norm(c.n) === want) ??

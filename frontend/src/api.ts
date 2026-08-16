@@ -338,6 +338,10 @@ export interface LvImportSummary {
   /** New items with no price: not added, because they would quote as free. */
   unpriced: number;
   duplicates: number;
+  /** Rows refused because their description is already another item's name —
+   *  an add is dropped, a rename is dropped on its own and the price still
+   *  applies. Each one is spelled out in `warnings`. */
+  nameClashes: number;
   /** Rows with no item code, matched on description — offered as an opt-in. */
   noCodeUpdates: number;
   noCodeAdditions: number;
@@ -364,6 +368,26 @@ export interface LvImportPreview {
   warnings: string[];
   truncated: boolean;
   expiresAt: string;
+}
+
+/** One price-list name that more than one item is using. Two items with the same
+ *  name cannot be told apart: the app takes whichever comes first in the list. */
+export interface LvDuplicateNameGroup {
+  name: string;
+  items: {
+    id: string;
+    ref: string;
+    d: string;
+    eur: number;
+    egp: number;
+    active: boolean;
+    /** Position in the catalogue — the LOWER one is the row the app picks. */
+    sortIndex: number;
+  }[];
+}
+export interface LvDuplicateNames {
+  total: number;
+  groups: LvDuplicateNameGroup[];
 }
 
 /** The catalogue row an audit line refers to — needed to describe an added or
@@ -630,13 +654,18 @@ export const api = {
         body: JSON.stringify({ active }),
       }),
     lvFacets: () => request<{ types: string[]; brands: string[]; families: string[] }>("/pricing/lv/facets"),
+    /** Names already shared by two or more items. Reported, never repaired —
+     *  which of a pair is the right one is the owner's decision. */
+    lvDuplicateNames: () => request<LvDuplicateNames>("/pricing/lv/duplicates"),
     lvSetPrice: (id: string, kind: "components" | "enclosures", eur: number, egp: number) =>
       request<{ ok: true; row: LvRow }>(`/pricing/lv/${id}?kind=${kind}`, {
         method: "PATCH",
         body: JSON.stringify({ eur, egp }),
       }),
     lvSeedChunk: (stage: "LV_COMPONENTS" | "LV_ENCLOSURES", offset: number, rows: unknown[]) =>
-      request<{ ok: true; components: number; enclosures: number }>("/pricing/lv/seed-chunk", {
+      // The seed is counted, not blocked (it replays the catalogue shipped with
+      // the app), so it reports back how many names it wrote twice.
+      request<{ ok: true; components: number; enclosures: number; duplicateNames?: number; duplicateExamples?: string[] }>("/pricing/lv/seed-chunk", {
         method: "POST",
         body: JSON.stringify({ stage, offset, rows }),
       }),
@@ -661,7 +690,7 @@ export const api = {
         body: JSON.stringify({ rows }),
       }),
     lvImportApply: (batchId: string, includeNoCode = false) =>
-      request<{ ok: true; updated: number; added: number; skipped: number; published: boolean; version: number | null; blockers?: string[] }>(
+      request<{ ok: true; updated: number; added: number; skipped: number; nameClashes?: string[]; published: boolean; version: number | null; blockers?: string[] }>(
         `/pricing/lv/import/${batchId}/apply`,
         { method: "POST", body: JSON.stringify({ includeNoCode }) },
       ),
