@@ -5,6 +5,10 @@
 // When they change, an admin uploads a new version here rather than editing rows
 // in the app — one source of truth, and no risk of the two drifting apart.
 //
+// The workbooks are loaded DIRECTLY: combosExcel.ts works out which one it has
+// been handed and reads it into the sections it fills, so nobody has to convert
+// a file first. A previously downloaded .json is still accepted, unchanged.
+//
 // What it still does: shows what is loaded, takes a new file, hands the current
 // set back as a download, and can fall back to the version shipped with the app.
 // Every save is checked against the price list and reports any part that no longer
@@ -13,6 +17,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, getToken, type LvComboSection } from "../api";
 import { refreshCatalog } from "../lv/catalogSource";
+import { parseCombosWorkbook } from "./combosExcel";
 
 export default function LvCombosPanel() {
   const [sections, setSections] = useState<LvComboSection[]>([]);
@@ -47,29 +52,48 @@ export default function LvCombosPanel() {
     URL.revokeObjectURL(a.href);
   };
 
-  /** Takes a whole combos.json, or one section's worth of it. */
+  const labelOf = (section: string) => sections.find((s) => s.section === section)?.label ?? section;
+
+  /** One section's worth of an uploaded combos.json, or a whole one. */
+  const targetsFromJson = (text: string): (readonly [string, unknown])[] => {
+    const parsed = JSON.parse(text);
+    const whole = parsed && typeof parsed === "object" && !Array.isArray(parsed);
+    const keys = whole ? Object.keys(parsed) : [];
+    const known = sections.map((s) => s.section);
+    // A file holding several sections replaces each of them in turn.
+    if (whole && keys.some((k) => known.includes(k))) {
+      return keys.filter((k) => known.includes(k)).map((k) => [k, (parsed as Record<string, unknown>)[k]] as const);
+    }
+    // Anything else is taken as the section currently on screen.
+    if (!current) throw new Error("The combinations are still loading — try again in a moment.");
+    return [[current.section, parsed] as const];
+  };
+
+  /** Takes a combinations workbook (.xlsx) or a combos.json. */
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.target.value = "";
-    if (!f || !current) return;
-    setError(""); setDone(""); setWarnings([]); setBusy("Loading…");
+    if (!f) return;
+    setError(""); setDone(""); setWarnings([]); setBusy("Reading…");
     try {
-      const parsed = JSON.parse(await f.text());
-      const whole = parsed && typeof parsed === "object" && !Array.isArray(parsed);
-      const keys = whole ? Object.keys(parsed) : [];
-      const known = sections.map((s) => s.section);
-      // A file holding several sections replaces each of them in turn.
-      const targets = whole && keys.some((k) => known.includes(k))
-        ? keys.filter((k) => known.includes(k)).map((k) => [k, (parsed as Record<string, unknown>)[k]] as const)
-        : [[current.section, parsed] as const];
+      // A workbook says for itself which sections it fills — an MCC, ATS or
+      // photocell file also carries the withdrawable-kit tab, so one upload can
+      // update two sections. It refuses anything it cannot read faithfully.
+      const targets = /\.xlsx?$/i.test(f.name)
+        ? (await parseCombosWorkbook(f)).map((s) => [s.section, s.value] as const)
+        : targetsFromJson(await f.text());
 
       const allWarnings: string[] = [];
+      const saved: string[] = [];
       for (const [section, value] of targets) {
-        setBusy(`Saving ${section}…`);
+        setBusy(`Saving ${labelOf(section)}…`);
         const r = await api.pricing.lvComboSave(section, value);
         allWarnings.push(...(r.warnings ?? []));
+        // The server's own count of what it stored — the quickest way to spot a
+        // workbook that arrived with rows missing.
+        saved.push(`${labelOf(section)} (${r.summary})`);
       }
-      setDone(`Loaded "${f.name}" — ${targets.map(([k]) => k).join(", ")} updated and live now.`);
+      setDone(`Loaded "${f.name}" — ${saved.join(", ")}. Live now.`);
       setWarnings([...new Set(allWarnings)]);
       await load();
       void refreshCatalog(getToken()); // saving publishes; this session must catch up
@@ -104,6 +128,13 @@ export default function LvCombosPanel() {
           A change goes live the moment it is loaded. Quotations already saved keep the parts they
           were built with.
         </p>
+        <p className="mt-2 text-sm text-muted">
+          <b className="text-ink">Load the Excel workbook itself</b> — "Combinations Database - MCC.xlsx",
+          "- ATS.xlsx", "- photocell.xlsx". Nothing needs converting first. Each one also carries the
+          withdrawable-kit tab, so it updates that at the same time. If a workbook is missing
+          something the app needs, it is refused and nothing changes. Power-factor correction is not
+          on this list: the app works the capacitor bank out for itself.
+        </p>
       </div>
 
       <div className="mb-3 flex flex-wrap gap-1">
@@ -123,10 +154,11 @@ export default function LvCombosPanel() {
 
       <div className="card mb-3 flex flex-wrap items-center gap-2 p-3">
         <button className="btn-primary" disabled={!!busy} onClick={() => fileRef.current?.click()}>
-          {busy || "⬆ Load a new version"}
+          {busy || "⬆ Load a combinations workbook"}
         </button>
         <button className="btn-ghost" disabled={!!busy} onClick={downloadAll}>⬇ Download current</button>
-        <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={onFile} />
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.json" className="hidden" onChange={onFile} />
+        <span className="text-xs text-muted">Excel (.xlsx) — or a combos.json saved from here.</span>
         <div className="grow" />
         <button className="btn-ghost text-red-700" disabled={!!busy} onClick={resetAll}>
           Reset all to the app's version
@@ -158,7 +190,9 @@ export default function LvCombosPanel() {
             </span>
           </div>
           <p className="mt-2 text-xs text-muted">
-            Maintained in the combinations workbook. To change it, load a new version above.
+            {current.section === "motorized"
+              ? "No workbook covers the motorized breaker yet, so this one is loaded from a combos.json file."
+              : "Maintained in the combinations workbook. To change it, load the workbook above."}
           </p>
         </div>
       )}

@@ -24,6 +24,54 @@ closed off.
 
 ## 2026-08-16 · Mohamed's side · Claude
 
+**The Combinations tab now takes the Excel workbooks directly. Nothing to convert first.**
+
+Price list → LV prices → Combinations → **Load a combinations workbook**, and pick
+"Combinations Database - MCC.xlsx", "- ATS.xlsx" or "- photocell.xlsx". It works out which
+file it has and updates the right sections. Each of those three also carries the
+withdrawable-kit tab, so one upload refreshes that at the same time. It goes live
+immediately, and quotations already saved keep the parts they were built with.
+
+**Checked against the real files, by running it — not by reading it.** Every workbook was
+read back and compared with what the app already holds:
+
+| Workbook | Result |
+| --- | --- |
+| MCC | 110 starters + 10 control parts — identical |
+| ATS | both arrangements, 11 frames each, 440 lines — identical |
+| photocell | 19 ratings + 7 fixed parts — identical |
+| WD | 13 withdrawable kits — identical |
+
+It was also tried against 14 deliberately damaged copies, and it refuses a bad file rather
+than quietly wiping something:
+
+- **P.F.C** — refused, with a note that the app works the capacitor bank out itself.
+- **An ATS file with only one arrangement** — refused, because saving it would delete the other.
+- **Anything unrecognised** — refused, naming the tabs it expected.
+
+⚠️ **Something for the engineers: `Combinations Database - WD.xlsx` cannot be loaded on its
+own, and the app refuses it on purpose.** That file physically stops early — it has the two
+MCCB blocks but not the air-breaker one — so loading it would remove the E1.2 withdrawable
+kit from the app. The same WD tab inside the MCC, ATS and photocell workbooks is complete
+and gives all 13. Either use one of those, or add the missing block to the stand-alone file.
+
+✅ **Closing an earlier question of mine — I had it wrong.** I previously reported that the
+ATS sheet had an extra "Mecanical Interlock" part on the 2-out-of-3 E-frames that the app
+was missing. It is not a part: it is the *heading* for the group of parts below it. My
+earlier check treated a blank quantity as 1 and read the heading as a line item. The sheet
+and the app agree, and there was never anything to add.
+
+📌 One section still has no workbook: **motorized breaker**. It still comes from a
+`combos.json` file, and the screen says so rather than pointing at a file that does not exist.
+
+📌 One harmless difference: the workbook has re-sorted its starters, so one row
+(DOL-3Ph 7.5 kW Type 2) sits in a different position from the copy built into the app. Same
+110 starters with the same parts; the drop-downs come out in the same order either way.
+
+---
+
+## 2026-08-16 · Mohamed's side · Claude
+
 **Found why the other side keeps hitting errors — and it was never a real bug.**
 
 Pulled the 27 new commits and the backend refused to build: 13 errors saying things like
