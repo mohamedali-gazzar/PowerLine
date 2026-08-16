@@ -24,6 +24,46 @@ closed off.
 
 ## 2026-08-16 · Mohamed's side · Claude
 
+**Three things: no duplicate item names, no duplicate panel names, and Send-to-sales now offers WhatsApp as well as Outlook.**
+
+**1) The price list won't let two items share a name.** The combinations (MCC / ATS /
+photocell) find their parts by the item's name and take the first one they find, so two
+items with the same name means a quotation can quietly use the wrong one at the wrong
+price. Adding a component now refuses a name that's already taken and says which item it
+clashes with; capital letters and extra spaces don't count as a difference. An Excel
+upload is never rejected as a whole — only the clashing rows are left out, and a row that
+clashes still gets its price update.
+
+⚠️ **HEADS-UP for the engineers: the price list already holds 47 names used by two
+different items** — both live, both in the pickers, two different ABB order codes. 18 of
+them carry two different prices; the worst is "Change over switch 160A 3P" at €81.85
+against €179.91, and every quote today takes the cheaper one. Nothing was renamed or
+deleted — which of each pair is the real one is a business call. There's a warning at the
+top of the Components tab, "47 names are used by more than one item", with a **Show them**
+button listing both codes, both prices, and how far apart they are.
+
+**2) Two panels in one quotation can't share a name.** The panel name is what a customer
+reads on the offer and the material list. Where the app picks the name (a second LCP/KWHM/
+Spare cell, or "Build this panel" twice) it now adds "-1", "-2"…; where a person types a
+name that's already used, the field goes red, the panel list flags it, and the offer tabs
+stay closed until it's fixed. Two saved quotations already carry a duplicate — draft 21516
+and submitted QTN-26-01284 — they were left exactly as they are, with the warning shown so
+they can be corrected by hand.
+
+**3) Send-to-sales → choose Outlook or WhatsApp.** On a submitted quotation the "Send to…"
+button is now a choice. **Outlook** is as before: e-mail to the sales person, subject like
+"QTN-26-01234 (Emaar)", both PDFs attached. **WhatsApp** opens a chat to the sales person's
+phone with the QTN number, project name and a message ready, and downloads the two PDFs to
+attach (WhatsApp links can't carry files). No phone on file → it says so.
+
+❓ **QUESTION FOR MOHAMED:** what exact wording do you want in the WhatsApp message? Right
+now it uses a stand-in ("Please find the Technical and Commercial offers…"). Send me the
+text and I'll put it in.
+
+---
+
+## 2026-08-16 · Mohamed's side · Claude
+
 **The Combinations tab now takes the Excel workbooks directly. Nothing to convert first.**
 
 Price list → LV prices → Combinations → **Load a combinations workbook**, and pick
