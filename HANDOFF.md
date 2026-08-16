@@ -99,6 +99,7 @@ You only ever need this one. The rest are for Claude.
 | File | Who reads it | What it is |
 | --- | --- | --- |
 | **`HANDOFF.md`** | **You** | This file. |
+| **`START-PROMPT.md`** | **You** | The message to paste into Claude at the start of every session. Copy it from there. It makes Claude fix its own setup and study the project before doing anything. |
 | **`TEAM-LOG.md`** | **You** and Claude | What each side has been doing, newest first. |
 | `CLAUDE.md` | Claude, automatically | The working rules — how to behave, what never to break. Same for both of us, so we get the same behaviour. |
 | `ARCHITECTURE.md` | Claude | The full technical write-up of how the app works, from reading all 40,000 lines of it. **Tell your Claude to read this rather than exploring the code** — it saves about an hour every time. |

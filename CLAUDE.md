@@ -51,8 +51,34 @@ other. `TEAM-LOG.md` is how they stay in sync.
 
 **At the START of every session:**
 1. `git fetch` and check whether `origin/main` is ahead. If it is, pull.
-2. Read `TEAM-LOG.md` (newest entry is at the top).
-3. Tell your owner in one or two sentences what the other side did since last time.
+2. **If you pulled anything, re-sync before you touch or judge any code** — see §3a. Skipping
+   this produces a wall of TypeScript errors in code that is actually fine.
+3. Read `TEAM-LOG.md` (newest entry is at the top).
+4. Tell your owner in one or two sentences what the other side did since last time.
+
+### 3a. After every pull — do this before believing any error
+
+Two people push to this repo, so a pull can bring in a new dependency or a database-schema
+change. Your generated code is then out of date and the project stops compiling **even
+though nothing is wrong with it**. Run this after any pull that touched
+`package.json`, `package-lock.json` or `backend/prisma/schema.prisma` — and just run it
+anyway if you are unsure, it is quick and harmless:
+
+```
+cd backend  && npm install && npx prisma generate && npx prisma db push
+cd frontend && npm install
+```
+
+**`npx prisma generate` is the one people forget.** On 16 Aug 2026 a pull produced 13
+errors like `Property 'lvCombo' does not exist on type 'PrismaClient'` and
+`'removedAt' does not exist in type 'LvQtnWhereInput'`. Nothing was broken — the schema was
+committed correctly; only the local generated client was stale. One `npx prisma generate`
+cleared all 13.
+
+**So: if the backend suddenly will not compile and the errors mention Prisma, a model name,
+or a column name — regenerate first, and only then start reading code.** Never report a
+pull-related error to your owner as a bug before you have done this. Never "fix" real code
+to satisfy a stale client.
 
 **At the END of every session where you changed anything:**
 1. Add a new entry at the TOP of the log, under the `<!-- NEW ENTRIES GO HERE -->`

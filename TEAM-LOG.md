@@ -22,6 +22,38 @@ closed off.
 
 <!-- NEW ENTRIES GO HERE -->
 
+## 2026-08-16 · Mohamed's side · Claude
+
+**Found why the other side keeps hitting errors — and it was never a real bug.**
+
+Pulled the 27 new commits and the backend refused to build: 13 errors saying things like
+*"Property 'lvCombo' does not exist"* and *"'removedAt' does not exist"*. Nothing was
+actually wrong. Both schema changes were committed properly; only the **generated database
+code on this machine was out of date**. One `npx prisma generate` cleared all 13 at once.
+
+This is a trap, because the errors point at good code and read like someone broke the
+project. The danger is a Claude "fixing" perfectly correct code to satisfy a stale file.
+
+Three things done so it cannot keep costing time:
+
+- `CLAUDE.md` has a new **§3a — After every pull**, with the exact re-sync commands and a
+  plain instruction: if the backend will not build and the errors mention Prisma, a model
+  or a column, regenerate first and never report it as a bug.
+- New file **`START-PROMPT.md`** — a ready-made first message to paste into Claude at the
+  start of a session. It makes Claude fix its own setup, then study `ARCHITECTURE.md`
+  instead of exploring, then work in simple English and handle its own errors.
+- Confirmed the state of `main` at `fddca8e`: **frontend builds clean, backend builds clean
+  once regenerated.** Nothing is broken on the repository.
+
+👏 Also: both bugs written up in `CLAUDE.md` §7 are now **fixed** on the other side (KWHM
+panels printing empty, and the blank page on a damaged quotation) — and the KWHM fix went
+further than the write-up by repairing already-saved quotations on load. Good.
+
+❓ QUESTION FOR MOHAMED — still open from earlier: whether any **KWHM quotation was already
+sent to a customer** before the fix. Those offers printed no components while still being
+charged for. It needs one line pasted into `backend/.env` on your machine
+(`PROD_DATABASE_URL="…"`, copied from Vercel) and then it takes a minute to check.
+
 ## 2026-08-13 · Mohamed's side · Claude
 
 **Combinations tab is now read-only — the workbooks are the reference.**
