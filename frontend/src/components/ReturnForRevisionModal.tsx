@@ -37,6 +37,9 @@ export default function ReturnForRevisionModal({
   const [comments, setComments] = useState<ReturnComment[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
+  /** Collapsed to just its header. Everything typed is kept — only the body hides,
+   *  so the panel underneath can be read without losing the comments so far. */
+  const [minimised, setMinimised] = useState(false);
   const selectWrapRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ sx: number; sy: number; bx: number; by: number } | null>(null);
 
@@ -122,21 +125,41 @@ export default function ReturnForRevisionModal({
     onReturn?.(all);
   };
 
+  /**
+   * Drag from ANYWHERE on the dialog, not just its header — but never from something
+   * you are trying to use. Typing in the comment box, opening the panel list or
+   * pressing a button must behave normally, so anything interactive (and any text
+   * you are selecting) is excluded. preventDefault is only called once a real drag
+   * begins, or it would swallow clicks on the rest of the card.
+   */
   const startDrag = (e: ReactMouseEvent) => {
-    if ((e.target as HTMLElement).closest(".rfr-x")) return; // let the close button click through
+    const el = e.target as HTMLElement;
+    if (el.closest("button, input, textarea, select, a, [contenteditable], .rfr-list")) return;
     dragRef.current = { sx: e.clientX, sy: e.clientY, bx: pos.x, by: pos.y };
     e.preventDefault();
   };
 
   return createPortal(
     <div className="rfr-backdrop" role="dialog" aria-modal="false" aria-label="Return for revision">
-      <div className="rfr-card" style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}>
-        <div className="rfr-head" onMouseDown={startDrag}>
+      <div
+        className={`rfr-card ${minimised ? "is-min" : ""}`}
+        style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
+        onMouseDown={startDrag}
+      >
+        <div className="rfr-head">
           <div>
             <h2 className="rfr-title">Return for revision</h2>
-            {title ? <div className="rfr-sub">{title} · {panels.length} panels</div> : null}
+            {title ? <div className="rfr-sub">{title} · {panels.length} panels{minimised && comments.length ? ` · ${comments.length} noted` : ""}</div> : null}
           </div>
-          <button type="button" className="rfr-x" onClick={onCancel} aria-label="Close">×</button>
+          <div className="rfr-headbtns">
+            {/* Minimise keeps everything you have typed — it only hides the body, so
+                you can read the panel behind it and come back to finish. */}
+            <button type="button" className="rfr-x" onClick={() => setMinimised((v) => !v)}
+              aria-label={minimised ? "Expand" : "Minimise"} title={minimised ? "Expand" : "Minimise"}>
+              {minimised ? "▢" : "—"}
+            </button>
+            <button type="button" className="rfr-x" onClick={onCancel} aria-label="Close" title="Close">×</button>
+          </div>
         </div>
 
         <div className="rfr-divider" />
@@ -246,8 +269,8 @@ const styles = `
    the reviewer can pick another panel, scroll and read while taking notes; only the
    card itself captures pointer events. */
 .rfr-backdrop{position:fixed;inset:0;background:none;pointer-events:none;display:flex;align-items:center;justify-content:center;z-index:1000;}
-.rfr-card{pointer-events:auto;width:480px;max-width:calc(100vw - 32px);max-height:calc(100vh - 48px);overflow:auto;background:var(--c-card);border:1px solid rgb(var(--c-line));border-radius:14px;box-shadow:0 18px 55px rgba(0,0,0,.4);padding:24px;color:rgb(var(--c-ink));}
-.rfr-head{display:flex;justify-content:space-between;align-items:flex-start;cursor:move;user-select:none;}
+.rfr-card{pointer-events:auto;cursor:move;user-select:none;width:480px;max-width:calc(100vw - 32px);max-height:calc(100vh - 48px);overflow:auto;background:var(--c-card);border:1px solid rgb(var(--c-line));border-radius:14px;box-shadow:0 18px 55px rgba(0,0,0,.4);padding:24px;color:rgb(var(--c-ink));}
+.rfr-head{display:flex;justify-content:space-between;align-items:flex-start;user-select:none;}
 .rfr-title{margin:0;font-size:22px;font-weight:700;}
 .rfr-sub{margin-top:5px;font-size:13.5px;color:rgb(var(--c-muted));}
 .rfr-x{border:0;background:none;color:rgb(var(--c-muted));font-size:22px;cursor:pointer;padding:2px 8px;line-height:1;border-radius:6px;}
@@ -288,4 +311,12 @@ const styles = `
 .rfr-return{padding:12px 24px;font-size:14.5px;font-weight:600;font-family:inherit;color:#fff;background:#F16722;border:0;border-radius:8px;cursor:pointer;}
 .rfr-return:hover:not(:disabled){background:rgba(241,103,34,.88);}
 .rfr-return:disabled{opacity:.4;cursor:not-allowed;}
+
+/* Drag is on the whole card, so put the normal cursor back on anything you use. */
+.rfr-card button,.rfr-card input,.rfr-card textarea,.rfr-card select,.rfr-card a{cursor:auto;user-select:text;}
+.rfr-card button,.rfr-card .rfr-x{cursor:pointer;}
+.rfr-headbtns{display:flex;gap:4px;align-items:center;}
+/* Minimised: only the header shows, and the card shrinks to fit it. */
+.rfr-card.is-min > *:not(.rfr-head){display:none;}
+.rfr-card.is-min{padding-bottom:14px;width:340px;}
 `;
