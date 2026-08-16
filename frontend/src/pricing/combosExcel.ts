@@ -5,9 +5,13 @@
 // The workbook is opened here in the browser, exactly like the price-list import
 // (LvExcelImport.tsx) — the server only ever receives finished JSON.
 //
-// One workbook can carry more than one section: the MCC, ATS and photocell files
-// each also contain the same "WD" tab, so loading any of them refreshes the
-// withdrawable kits too.
+// One workbook CAN carry more than one section, and the engineers' own MCC, ATS
+// and photocell files do: each of them repeats the same "WD" tab, so loading any
+// of the three also refreshes the withdrawable kits. That is their file and this
+// reader keeps accepting it exactly as it is.
+//
+// What the app itself HANDS BACK is one file per combination — see the long note
+// above `buildSectionWorkbook` for why those do not repeat the WD tab.
 //
 // FOUR TRAPS THAT COST REAL TIME, DO NOT "TIDY" THEM AWAY
 //  1. Excel writes a NON-BREAKING SPACE (character 160) inside values such as
@@ -488,6 +492,27 @@ function parseWd(rows: Rows): { wd: WdEntry[]; headings: string[] } {
   return { wd: out, headings };
 }
 
+/** The three blocks a WD tab has to carry. Each one is the ONLY source of one of
+ *  the groups the app files a kit under — "3P", "4P" and "3P-Air" — so a tab
+ *  missing a block is a tab that would empty that group on save. */
+const WD_REQUIRED_BLOCKS: { heading: string; words: string }[] = [
+  { heading: "MCCB-3P", words: "the 3-pole moulded-case block (MCCB-3P)" },
+  { heading: "MCCB-4P", words: "the 4-pole moulded-case block (MCCB-4P)" },
+  { heading: "Air-3P", words: "the air circuit-breaker block (Air-3P — the E1.2 kit)" },
+];
+
+/** Which of those blocks a WD tab does NOT have. This judges the FILE and never
+ *  how it arrived: a complete WD tab is complete whether it came on its own or
+ *  inside the MCC workbook, and an incomplete one is incomplete either way. */
+function missingWdBlocks(headings: string[]): string[] {
+  const have = new Set(headings.map((h) => normKey(h)));
+  return WD_REQUIRED_BLOCKS.filter((b) => !have.has(normKey(b.heading))).map((b) => b.words);
+}
+
+/** "a", "a and b", "a, b and c" — these go into a sentence, not a list. */
+const andList = (xs: string[]): string =>
+  xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Which workbook is this?
 // ═══════════════════════════════════════════════════════════════════════════
@@ -571,13 +596,20 @@ export async function parseCombosWorkbook(file: File): Promise<ParsedComboSectio
 
   if (wdSheet) {
     const { wd, headings } = parseWd(rowsOf(wdSheet));
-    // The stand-alone "Combinations Database - WD.xlsx" stops after the two MCCB
-    // blocks and has no air-breaker block, so loading it would take the E1.2
-    // withdrawable kit out of the app without saying so. The same tab inside the
-    // MCC, ATS and photocell workbooks is complete.
-    if (!headings.some((h) => !/^MCCB-/i.test(h))) {
+    // A WD tab is judged on WHAT IS IN IT, never on whether it arrived alone.
+    // It used to be refused for arriving alone, because the engineers' own
+    // "Combinations Database - WD.xlsx" stops after the two MCCB blocks and
+    // loading it would have taken the E1.2 kit out of the app without saying so.
+    // That file is still refused, for that same reason — but by this rule, so a
+    // COMPLETE stand-alone WD file (the one this screen now hands back) loads.
+    const missing = missingWdBlocks(headings);
+    if (missing.length) {
       throw new Error(
-        "The WD tab in this file stops after the two MCCB blocks — the air circuit breaker block (E1.2) is missing, and loading it would take the E1.2 withdrawable kit out of the app. Nothing was changed. Use the WD tab inside the MCC, ATS or photocell workbook, which has all three blocks.",
+        `The WD tab in "${file.name}" is missing ${andList(missing)}. Loading it would take ` +
+          `${missing.length === 1 ? "that group of withdrawable kits" : "those groups of withdrawable kits"} ` +
+          "out of the app, so nothing was changed. A WD tab has to carry all three blocks: MCCB-3P, MCCB-4P and Air-3P. " +
+          'The engineers\' own "Combinations Database - WD.xlsx" stops after the two MCCB ones — use the WD tab inside ' +
+          "the MCC, ATS or photocell workbook, or the WD file this screen downloads, which do have all three.",
       );
     }
     out.push({ section: "wd", value: wd });
@@ -590,30 +622,59 @@ export async function parseCombosWorkbook(file: File): Promise<ParsedComboSectio
 // The other direction — hand back a workbook instead of combos.json
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// WHY ONE WORKBOOK AND NOT ONE PER SECTION
-// ───────────────────────────────────────
-// The engineers keep three files (MCC, ATS, photocell) and each of them also
-// carries the same WD tab. The download is ONE file carrying all five tabs
-// instead, for three reasons:
+// ONE FILE PER COMBINATION — the owner's decision, and it replaced the old
+// single all-tabs download
+// ─────────────────────────────────────────────────────────────────────────
+//     "when i download any excel of combination it download all combinations,
+//      i need every combination to be independent"
 //
-//  1. `parseCombosWorkbook` takes ONE file. Three downloads would mean three
-//     uploads, and the app would be half-old and half-new in between.
-//  2. Every one of those three files repeats the WD tab. Download three, edit
-//     the withdrawable kits in one of them, upload all three, and the two stale
-//     copies silently put the old kits back. One file cannot do that to you.
-//  3. It is not a new shape. Each engineers' file is a SUBSET of these tabs —
-//     same tab names, same columns, same conventions — so the reader above
-//     accepts this file and the engineers' own files equally, and the WD tab
-//     still travels beside the others exactly as it does in a real file.
+// So each combination comes out as its own workbook, named exactly like the
+// file he already keeps for it on disk:
 //
-// WHAT IS NOT IN IT, AND WHY
-// ──────────────────────────
-//  • 'motorized' has no tab, because it has no Excel shape anywhere: no
+//     Combinations Database - MCC.xlsx         Read me + MCC
+//     Combinations Database - ATS.xlsx         Read me + ATS 1 out of 2 + ATS 2 out of 3
+//     Combinations Database - photocell.xlsx   Read me + Photocell
+//     Combinations Database - WD.xlsx          Read me + WD
+//
+// Two of those files hold more than one tab and that is not a contradiction:
+// "ATS" is ONE combination whose two arrangements are two tabs, and the reader
+// refuses an ATS file carrying only one of them, because loading it would take
+// the other arrangement out of the app. The "Read me" tab is a page of prose;
+// the reader ignores it, because it is none of MCC / ATS / Photocell / WD.
+//
+// There is a fifth file beside those on his disk, "Combinations Database -
+// P.F.C.xlsx". It is a sizing calculator, not a combination: the app works
+// power-factor correction out for itself and stores nothing for it, so there is
+// nothing to write and no file is offered.
+//
+// WHY THE MCC, ATS AND PHOTOCELL FILES DO NOT CARRY THE WD TAB
+// ────────────────────────────────────────────────────────────
+// The engineers' own three files each repeat it, so carrying it would have been
+// the more faithful copy — but it is exactly the behaviour he is objecting to.
+// A WD tab inside the MCC file means loading MCC ALSO rewrites the withdrawable
+// kits. Worse, it rewrites them from a snapshot: edit the kits in the WD file,
+// load it, then load an MCC file downloaded an hour earlier, and the old kits
+// come silently back. That is the "not independent" trap, and it is the one
+// that costs data rather than time.
+//
+// So each file carries its own tab and nothing else, and the WD file is the one
+// and only way to change the kits. That is only safe because a stand-alone WD
+// file is now loadable at all — see the WD refusal in `parseCombosWorkbook`,
+// which judges whether the tab has all three blocks instead of whether it
+// arrived alone. The two changes are one decision and must stay together.
+//
+// Nothing was lost on the reading side: the engineers' three files still carry
+// their WD tab, the reader still reads it, and loading their MCC file still
+// refreshes the kits exactly as it always did.
+//
+// WHAT IS NOT IN ANY OF THEM, AND WHY
+// ───────────────────────────────────
+//  • 'motorized' has no file, because it has no Excel shape anywhere: no
 //    engineers' workbook contains it and the reader above has no parser for it.
 //    Inventing a layout would mean inventing the round trip too. It is left out
 //    and named by `combosWorkbookOmissions()` so the caller can say so on
 //    screen. Leaving it out is SAFE, not lossy: the reader never returns a
-//    'motorized' section either, so uploading this file cannot overwrite it.
+//    'motorized' section either, so no file it makes can overwrite it.
 //  • The photocell "DESCRIPTION" column is written as an empty column. The app
 //    stores only the price-list wording (trap 3); the short offer wording is
 //    not derivable — the engineers' own file writes "Contactor# AF460-30-00"
@@ -627,9 +688,10 @@ export async function parseCombosWorkbook(file: File): Promise<ParsedComboSectio
 // ────────────────────────────────
 // Every value is written in the form the app STORES, never the price-list form,
 // because the reader's two translation tables (MCC_CATALOGUE_TO_TEMPLATE and
-// ATS_DESC_MAP) leave an already-translated value alone — verified by feeding a
-// built workbook back through `parseCombosWorkbook` and comparing with
-// combos.json, section by section.
+// ATS_DESC_MAP) leave an already-translated value alone — verified by building
+// each combination's file from combos.json, feeding it back through
+// `parseCombosWorkbook` on its own, and comparing: all four come back
+// character-for-character identical.
 //
 // The one deliberate difference from the engineers' ATS tabs is how many frames
 // share a QTY column. Their file lets frames of DIFFERENT length share one
@@ -642,10 +704,17 @@ export async function parseCombosWorkbook(file: File): Promise<ParsedComboSectio
 // rules: the 1-out-of-2 tab comes back as 4 blocks instead of 3, and reads back
 // identically.
 
-/** The sections `buildCombosWorkbook` can put in a file, in tab order. */
+/** The combinations that have a workbook of their own, in the order the screen
+ *  offers them. Anything not on this list has no Excel shape at all. */
 export const COMBOS_WORKBOOK_SECTIONS = ["mcc", "ats", "photocell", "wd"] as const;
 
-/** Plain-English names of the sections handed in that the workbook cannot
+/** True when this combination can be downloaded as a file — so the caller can
+ *  grey the button out instead of finding out by catching an error. */
+export function sectionHasWorkbook(section: string): boolean {
+  return (COMBOS_WORKBOOK_SECTIONS as readonly string[]).includes(normKey(section));
+}
+
+/** Plain-English names of the sections handed in that no workbook can
  *  carry, for the caller to show on screen. Empty when everything fits. */
 export function combosWorkbookOmissions(sections: ParsedComboSection[]): string[] {
   const known = new Set<string>(COMBOS_WORKBOOK_SECTIONS);
@@ -837,6 +906,18 @@ function wdGrid(value: unknown): Grid {
     }
   }
 
+  // Never write a WD file the reader would then refuse. The kits are a complete
+  // set or they are nothing, so if the app has somehow lost a whole group, say
+  // so here rather than handing over a file that fails on the way back in.
+  const headings = order.map((p) => wdHeadingOf(p).heading);
+  const short = missingWdBlocks(headings);
+  if (short.length) {
+    throw new Error(
+      `The withdrawable kits in the app are missing ${andList(short)}, so no Excel file was made — it would be ` +
+        "refused when you tried to load it back. Nothing was changed — please send this message on.",
+    );
+  }
+
   const g: Grid = [];
   let r = 0;
   for (const poles of order) {
@@ -858,32 +939,156 @@ function wdGrid(value: unknown): Grid {
   return g;
 }
 
-// ── Read me tab ────────────────────────────────────────────────────────────
-// Ignored by the reader (it is none of MCC / ATS / Photocell / WD), and there
-// so the file explains itself to whoever opens it.
-function readMeGrid(present: string[], missing: string[]): Grid {
-  const lines = [
-    "PowerLine — combinations currently in the app",
+// ── One combination, one workbook ──────────────────────────────────────────
+
+/** The file each combination is handed back as — the engineers' own names, so a
+ *  download drops into the same folder and beside the same file it replaces.
+ *  Note the small "photocell": their file spells it that way. */
+const SECTION_FILE_NAME: Record<string, string> = {
+  mcc: "Combinations Database - MCC.xlsx",
+  ats: "Combinations Database - ATS.xlsx",
+  photocell: "Combinations Database - photocell.xlsx",
+  wd: "Combinations Database - WD.xlsx",
+};
+
+/** What each file is, in one line, for the top of its Read me tab. */
+const SECTION_BLURB: Record<string, string> = {
+  mcc: "the motor starters, and the control parts that go with them",
+  ats: "the automatic transfer switches — the parts for every breaker frame",
+  photocell: "the photocell contactor for each breaker rating, and the fixed parts",
+  wd: "the withdrawable kits — the fixed part and the moving part of each one",
+};
+
+/** The line every file except WD carries, so nobody goes looking for the kits
+ *  in the wrong file. This is the "independence" decision, said out loud. */
+const WD_ELSEWHERE = [
+  "The withdrawable kits are NOT in this file. They have a file of their own,",
+  '"Combinations Database - WD.xlsx". Loading this one leaves them untouched.',
+];
+
+/** The one thing about each tab somebody editing it has to know. */
+const SECTION_NOTES: Record<string, string[]> = {
+  mcc: [
+    "MCC tab: the control block lists the DOL parts only. Star-delta uses the",
+    "same parts plus the ON-delay timer, which the app adds by itself.",
     "",
-    "Downloaded from the Combinations tab. Edit a tab and upload this same file",
-    "back on that tab to change what the app builds.",
+    ...WD_ELSEWHERE,
+  ],
+  ats: [
+    "Both arrangements have to stay in this file. A file carrying only one of",
+    "them is refused, because loading it would take the other one out of the app.",
+    "",
+    ...WD_ELSEWHERE,
+  ],
+  photocell: [
+    "Photocell tab: the DESCRIPTION column is left empty on purpose. The app",
+    "keeps only the price-list wording beside it, and works the short wording",
+    "out itself.",
+    "",
+    ...WD_ELSEWHERE,
+  ],
+  wd: [
+    "All three blocks have to stay in this file — MCCB-3P, MCCB-4P and Air-3P.",
+    "A file missing one of them is refused, because loading it would take that",
+    "whole group of kits out of the app.",
+    "",
+    "This is the only file that changes the withdrawable kits. The MCC, ATS and",
+    "photocell files the app hands back do not carry them, so they cannot put an",
+    "older version of the kits back by accident.",
+  ],
+};
+
+/** Written when the app is asked for a file it has no layout for. Same voice as
+ *  the refusals above: say what is wrong, not what threw. */
+function noWorkbookFor(section: string): Error {
+  if (normKey(section) === "motorized") {
+    return new Error(
+      "There is no Excel file for the motorised circuit-breaker table. It is not kept in Excel anywhere — no workbook has ever carried it — so the app cannot make one. Nothing was changed.",
+    );
+  }
+  return new Error(
+    `There is no Excel file for the "${section}" list. The combinations that have one are MCC, ATS, photocell and WD. Nothing was changed.`,
+  );
+}
+
+/** The file name one combination is downloaded as. Throws, in plain English,
+ *  for a combination that has no file. */
+export function sectionWorkbookFilename(section: string): string {
+  const name = SECTION_FILE_NAME[normKey(section)];
+  if (!name) throw noWorkbookFor(section);
+  return name;
+}
+
+interface Sheet {
+  name: string;
+  grid: Grid;
+}
+
+/** Both ATS tabs. The pair is checked here rather than on the way back in, so a
+ *  half-file is never written in the first place. */
+function atsSheetsOf(value: unknown): Sheet[] {
+  const ats = asObj(value);
+  if (!ats) throw badShape("ats");
+  const missing = ATS_REQUIRED_TYPES.filter((t) => !asObj(ats[t]));
+  if (missing.length) {
+    throw new Error(
+      `The app has no "${missing.map((t) => ATS_TYPE_WORDS[t]).join('" and no "')}" arrangement, so no ATS file was made — ` +
+        "it would be refused when you tried to load it back. Nothing was changed — please send this message on.",
+    );
+  }
+  return Object.keys(ats).map((type) => {
+    const table = asObj(ats[type]);
+    if (!table) throw badShape("ats");
+    const words = atsWordsOf(type);
+    return { name: `ATS ${words}`, grid: atsGrid(table as AtsType, words) };
+  });
+}
+
+/** The data tabs of one combination's workbook, in tab order. One place, so the
+ *  per-combination files cannot drift away from each other. */
+function sectionSheets(section: string, value: unknown): Sheet[] {
+  switch (normKey(section)) {
+    case "mcc":
+      return [{ name: "MCC", grid: mccGrid(value) }];
+    case "ats":
+      return atsSheetsOf(value);
+    case "photocell":
+      return [{ name: "Photocell", grid: photocellGrid(value) }];
+    case "wd":
+      return [{ name: "WD", grid: wdGrid(value) }];
+    default:
+      throw noWorkbookFor(section);
+  }
+}
+
+// ── Read me tab ────────────────────────────────────────────────────────────
+// Ignored by the reader — "Read me" is none of MCC / ATS / Photocell / WD, and
+// it is not "PFC" either, so the file-recognition logic cannot mistake it for a
+// data tab. It is there so the file explains itself to whoever opens it.
+function readMeGrid(section: string, sheets: Sheet[]): Grid {
+  const key = normKey(section);
+  const lines = [
+    `PowerLine — ${SECTION_BLURB[key] ?? section}, as the app has them right now`,
+    "",
+    `Downloaded from the Combinations tab as "${sectionWorkbookFilename(section)}".`,
+    "Edit the tab next to this one and load this same file back on that screen to",
+    "change what the app builds.",
+    "",
+    "THIS FILE HOLDS ONE COMBINATION AND NOTHING ELSE. Loading it changes only",
+    "that one — every other combination stays exactly as it is.",
     "",
     "Tabs in this file:",
-    ...present.map((p) => `    ${p}`),
+    "    Read me — this page. The app ignores it.",
+    ...sheets.map((s) => `    ${s.name}`),
     "",
     "Please do not rename the tabs or move the columns — the app finds the",
     "figures by tab name and by heading.",
     "",
-    ...(missing.length
-      ? [`Not in this file: ${missing.join(", ")}. It is not kept in Excel anywhere,`,
-         "so it stays as it is in the app and uploading this file will not touch it.",
-         ""]
-      : []),
-    "Photocell tab: the DESCRIPTION column is left empty. The app keeps only the",
-    "price-list wording next to it, and works the short wording out itself.",
+    'Leaving a description or a quantity cell EMPTY is read as "this row is a',
+    'heading", which drops that row and the ones under it. Change the words in',
+    "the cells, not the shape of the tab.",
     "",
-    "MCC tab: the control block lists the DOL parts only. Star-delta uses the",
-    "same parts plus the ON-delay timer, which the app adds by itself.",
+    ...(SECTION_NOTES[key] ?? []),
   ];
   return lines.map((l) => [l]);
 }
@@ -908,55 +1113,40 @@ function addSheet(wb: XLSX.WorkBook, name: string, g: Grid): void {
   XLSX.utils.book_append_sheet(wb, ws, name);
 }
 
-/**
- * Build the workbook the Combinations tab hands back — the same file the app
- * can read again, so download → edit → upload is a safe loop.
- *
- * One file with a tab per section (see the long note above for why), carrying
- * everything except 'motorized', which has no Excel shape;
- * `combosWorkbookOmissions()` names anything left out so the caller can say so.
- *
- * Throws an Error written for a non-programmer if a section arrives in a shape
- * that cannot be laid out, rather than writing a file that will not load again.
- */
-export function buildCombosWorkbook(sections: ParsedComboSection[]): Blob {
-  const by = new Map<string, unknown>();
-  for (const s of sections) by.set(s.section, s.value);
-
-  const wb = XLSX.utils.book_new();
-  const present: string[] = [];
-  const later: { name: string; grid: Grid }[] = [];
-
-  if (by.has("mcc")) {
-    later.push({ name: "MCC", grid: mccGrid(by.get("mcc")) });
-    present.push("MCC — motor starters and the control parts that go with them");
-  }
-  if (by.has("ats")) {
-    const ats = asObj(by.get("ats"));
-    if (!ats) throw badShape("ats");
-    for (const type of Object.keys(ats)) {
-      const words = atsWordsOf(type);
-      const value = ats[type];
-      const table = asObj(value);
-      if (!table) throw badShape("ats");
-      later.push({ name: `ATS ${words}`, grid: atsGrid(table as AtsType, words) });
-      present.push(`ATS ${words} — the parts per breaker frame`);
-    }
-  }
-  if (by.has("photocell")) {
-    later.push({ name: "Photocell", grid: photocellGrid(by.get("photocell")) });
-    present.push("Photocell — contactor per breaker rating, and the fixed parts");
-  }
-  if (by.has("wd")) {
-    later.push({ name: "WD", grid: wdGrid(by.get("wd")) });
-    present.push("WD — withdrawable kits (fixed part and moving part)");
-  }
-
-  addSheet(wb, "Read me", readMeGrid(present, combosWorkbookOmissions(sections)));
-  for (const s of later) addSheet(wb, s.name, s.grid);
-
+function toBlob(wb: XLSX.WorkBook): Blob {
   const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
   return new Blob([buf], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
 }
+
+/**
+ * Build ONE combination's workbook — the file the Combinations tab hands back
+ * for the list that is on screen, and the same file the app can read again, so
+ * download → edit → load is a safe loop.
+ *
+ * `section` is the combination's name as the app stores it ("mcc", "ats",
+ * "photocell", "wd") and `value` is that section's saved value. Use
+ * `sectionWorkbookFilename()` for the name to save it under.
+ *
+ * The file carries that combination and nothing else, so loading it back cannot
+ * touch any other one — see the long note above for why, and in particular why
+ * the MCC, ATS and photocell files no longer repeat the WD tab.
+ *
+ * Throws an Error written for a non-programmer when the combination has no
+ * Excel shape at all ('motorized'), or when the value arrives in a shape that
+ * cannot be laid out — rather than writing a file that will not load again.
+ */
+export function buildSectionWorkbook(section: string, value: unknown): Blob {
+  const sheets = sectionSheets(section, value);
+  const wb = XLSX.utils.book_new();
+  addSheet(wb, "Read me", readMeGrid(section, sheets));
+  for (const s of sheets) addSheet(wb, s.name, s.grid);
+  return toBlob(wb);
+}
+
+// The old all-in-one download — one workbook carrying every combination — was
+// deleted here once the Combinations screen switched to `buildSectionWorkbook`.
+// It was the behaviour the owner objected to, and leaving it in the file as dead
+// code is an invitation to wire a button back to it by mistake. There is now one
+// way to make a download, and it makes one combination.

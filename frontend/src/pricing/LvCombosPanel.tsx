@@ -18,21 +18,36 @@
 // The download used to be combos.json. It is Excel now because the people who use
 // this screen do not open .json files: a download that cannot be edited in the tool
 // they already use, and cannot be loaded back without being converted first, is a
-// dead end. The one thing Excel cannot carry is named on screen every time, so a
-// download is never mistaken for a complete backup.
+// dead end.
+//
+// ONE FILE PER COMBINATION — the owner's decision, and it replaced a single
+// download that handed back every list at once:
+//     "when i download any excel of combination it download all combinations,
+//      i need every combination to be independent"
+//
+// So the button hands back the ONE combination whose chip is selected, saved under
+// the same name he already keeps on disk — "Combinations Database - MCC.xlsx" and
+// so on — and it says which file that is before he presses it, so a download is
+// never a surprise. The motorised table is not kept in Excel anywhere: on that chip
+// the download is switched off and says why, rather than handing over a file that
+// quietly lacks it.
+//
+// The withdrawable kits are said out loud too. The engineers' own MCC, ATS and
+// photocell files each repeat the WD tab, but the files this screen writes do not —
+// otherwise loading an MCC file downloaded an hour ago would put an older copy of
+// the kits back without a word. Reading is unchanged: their files still refresh the
+// kits exactly as before.
 
 import { useEffect, useRef, useState } from "react";
 import { api, getToken, type LvComboSection } from "../api";
 import { refreshCatalog } from "../lv/catalogSource";
-import { buildCombosWorkbook, combosWorkbookOmissions, parseCombosWorkbook } from "./combosExcel";
-
-/** Today as 2026-08-16, so a folder of downloads sorts itself and two of them
- *  taken on different days do not overwrite each other. */
-const stamp = (): string => {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
+import {
+  buildSectionWorkbook,
+  combosWorkbookOmissions,
+  parseCombosWorkbook,
+  sectionHasWorkbook,
+  sectionWorkbookFilename,
+} from "./combosExcel";
 
 /** "a", "a and b", "a, b and c" — this goes into a sentence, not a list. */
 const andList = (xs: string[]): string =>
@@ -66,15 +81,30 @@ export default function LvCombosPanel() {
   // the sections ever change.
   const omitted = combosWorkbookOmissions(sections);
 
-  const downloadAll = () => {
+  // Asked of the exporter, never assumed here: it owns the list of combinations
+  // that have a file, so the button cannot promise one the app cannot write.
+  const canDownload = Boolean(current && sectionHasWorkbook(current.section));
+  const downloadName = current && canDownload ? sectionWorkbookFilename(current.section) : "";
+  /** The name of the selected list when it has no file at all — empty both when a
+   *  file exists and while the screen is still loading, so "no Excel file" is only
+   *  ever said about a list that really has none. */
+  const noFileFor = current && !canDownload ? current.label : "";
+  const isWd = current ? current.section.toLowerCase() === "wd" : false;
+
+  /** Hands back ONLY the combination whose chip is selected. */
+  const downloadCurrent = () => {
     setError(""); setDone(""); setNote("");
+    if (!current || !canDownload) return;
     try {
-      const name = `Combinations Database - from PowerLine ${stamp()}.xlsx`;
+      // Built first: if this combination cannot be laid out, the reason is shown
+      // and no half-made file ever reaches the downloads folder.
+      const blob = buildSectionWorkbook(current.section, current.value);
+      const name = sectionWorkbookFilename(current.section);
       const a = document.createElement("a");
       // The anchor has to be IN the document and the URL must outlive the click:
       // revoking in the same tick can hand back a truncated or empty file while the
       // success message still appears. The other downloads in this app do it this way.
-      const url = URL.createObjectURL(buildCombosWorkbook(sections));
+      const url = URL.createObjectURL(blob);
       a.href = url;
       a.download = name;
       document.body.appendChild(a);
@@ -82,13 +112,17 @@ export default function LvCombosPanel() {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
       setDone(
-        `Saved "${name}" to your downloads — one tab per list, and it loads straight back into this screen. ` +
-          `If you edit a tab, change only the words in the cells: leaving a description or a quantity cell EMPTY ` +
-          `is read as "this row is a heading", which drops that row and the ones under it.`,
+        `Saved "${name}" to your downloads. It holds ${current.label} and nothing else — loading it back ` +
+          `changes only this list, and every other combination stays exactly as it is. If you edit a tab, ` +
+          `change only the words in the cells: leaving a description or a quantity cell EMPTY is read as ` +
+          `"this row is a heading", which drops that row and the ones under it.`,
       );
-      if (omitted.length) {
+      if (!isWd) {
         setNote(
-          `That file does not include ${andList(omitted)} — it is not kept in Excel anywhere, so no workbook can carry it. Treat the download as a copy of everything else, not as a complete backup. Nothing is lost: it stays exactly as it is in the app, and loading this file back will not touch it.`,
+          `The withdrawable kits are not in that file. They have one of their own, ` +
+            `"Combinations Database - WD.xlsx", and it is the only file that changes them. That is on ` +
+            `purpose: it means loading an older "${name}" can never put yesterday's kits back over today's ` +
+            `without telling you.`,
         );
       }
     } catch (e) {
@@ -174,24 +208,36 @@ export default function LvCombosPanel() {
         </p>
         <p className="mt-2 text-sm text-muted">
           <b className="text-ink">Load the Excel workbook itself</b> — "Combinations Database - MCC.xlsx",
-          "- ATS.xlsx", "- photocell.xlsx". Nothing needs converting first. Each one also carries the
-          withdrawable-kit tab, so it updates that at the same time. If a workbook is missing
-          something the app needs, it is refused and nothing changes. Power-factor correction is not
-          on this list: the app works the capacitor bank out for itself.
+          "- ATS.xlsx", "- photocell.xlsx", or a "- WD.xlsx" that carries all three blocks of kits
+          (MCCB-3P, MCCB-4P and Air-3P — the WD file this screen gives you does; your own one stops
+          after the two MCCB blocks and is refused, because loading it would take the E1.2 kit out of
+          the app). Nothing needs converting first, and if a workbook is missing something the app
+          needs it is refused and nothing changes. Power-factor correction is not on this list: the
+          app works the capacitor bank out for itself.
         </p>
         <p className="mt-2 text-sm text-muted">
-          <b className="text-ink">Download gives you the same kind of workbook back</b> — an Excel
-          file holding everything the app is using right now, one tab per list, with the same tab
-          names and columns as the files above. Open it in Excel, change what you need, and load that
-          same file back here. Use it to see exactly what is live, or to keep a copy before loading
-          something new.
+          <b className="text-ink">Download gives you one combination at a time</b> — whichever one is
+          selected below, on its own, saved under the name you already keep it under: "Combinations
+          Database - MCC.xlsx", "- ATS.xlsx", "- photocell.xlsx", "- WD.xlsx". It holds that
+          combination and nothing else, with the same tab names and columns as your files, so you can
+          open it in Excel, change what you need, and load that same file straight back. Loading it
+          changes only that one list — every other one stays exactly as it is.
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          <b className="text-ink">The withdrawable kits are only in the WD file.</b> Your own MCC, ATS
+          and photocell workbooks each repeat the kits, and loading any of them still updates them —
+          that has not changed. The files this screen hands back do not, so an MCC file you saved last
+          week can never quietly put last week's kits back over today's.
         </p>
         {omitted.length > 0 && (
           <p className="mt-2 text-sm text-muted">
-            <b className="text-ink">One thing the download cannot carry:</b> {andList(omitted)}. It is
-            not kept in Excel anywhere, so the downloaded file is a copy of everything else and not a
-            complete backup. It is not at risk — it stays as it is in the app, and loading the file
-            back will not touch it.
+            <b className="text-ink">
+              {omitted.length === 1 ? "One list has" : `${omitted.length} lists have`} no Excel file at
+              all:
+            </b>{" "}
+            {andList(omitted)}. Not kept in Excel anywhere, so there is nothing to download and
+            nothing you load here can change it. Not at risk either — it stays exactly as it is in the
+            app.
           </p>
         )}
       </div>
@@ -215,13 +261,42 @@ export default function LvCombosPanel() {
         <button className="btn-primary" disabled={!!busy} onClick={() => fileRef.current?.click()}>
           {busy || "⬆ Load a combinations workbook"}
         </button>
-        <button className="btn-ghost" disabled={!!busy || !sections.length} onClick={downloadAll}>
-          ⬇ Download the current workbook
+        {/* Named, not generic: the button says which of his own files it is about
+            to give him, and it is switched off for the one list that has none. */}
+        <button
+          className="btn-ghost"
+          disabled={!!busy || !canDownload}
+          onClick={downloadCurrent}
+          title={
+            canDownload
+              ? `Saves "${downloadName}". It holds this one combination and nothing else.`
+              : noFileFor
+                ? `${noFileFor} is not kept in Excel anywhere, so there is no file to give you.`
+                : "Choose a combination first."
+          }
+        >
+          {canDownload
+            ? `⬇ Download "${downloadName}"`
+            : noFileFor
+              ? `⬇ ${noFileFor} has no Excel file`
+              : "⬇ Download this combination"}
         </button>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.json" className="hidden" onChange={onFile} />
         <span className="text-xs text-muted">
-          Excel in, Excel out — the file you download loads straight back. A combos.json saved from
-          here still works too.
+          {noFileFor ? (
+            <>
+              {noFileFor} is not kept in Excel anywhere — no workbook has ever carried it — so the app
+              cannot make you one, and a file that quietly left it out would look like a backup
+              without being one. Nothing you load or download here touches it. Pick another
+              combination above to download that one.
+            </>
+          ) : (
+            <>
+              Excel in, Excel out — one file per combination. The file you download loads straight
+              back, and it changes only the combination it holds. A combos.json saved from here still
+              works too.
+            </>
+          )}
         </span>
         <div className="grow" />
         <button className="btn-ghost text-red-700" disabled={!!busy} onClick={resetAll}>
@@ -257,9 +332,9 @@ export default function LvCombosPanel() {
           {/* Asked of the exporter rather than hardcoded, so this cannot drift
               away from what the download actually contains. */}
           <p className="mt-2 text-xs text-muted">
-            {combosWorkbookOmissions([current]).length
-              ? "No workbook covers this one, so it is loaded from a combos.json file — and it is the one list the Excel download leaves out. It is not affected by anything you load or download here."
-              : "Maintained in the combinations workbook. To change it, download the workbook above, edit it, and load it back — or load the engineers' own file."}
+            {canDownload
+              ? `Maintained in "${downloadName}". To change it: download that file above, edit it in Excel, and load the same file back — or load your own copy. It carries this combination only, so loading it leaves every other one alone.`
+              : "No workbook covers this one anywhere, so there is no file to download and none to load. It came from a combos.json file and stays exactly as it is — nothing you do on this screen changes it."}
           </p>
         </div>
       )}
