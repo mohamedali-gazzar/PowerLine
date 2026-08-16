@@ -2790,7 +2790,15 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                 </thead>
                 <tbody>
                   {(() => {
-                    const secs = p.sections.filter((sec) => p.components.some((c) => c.section === sec));
+                    let secs = p.sections.filter((sec) => p.components.some((c) => c.section === sec));
+                    // Quotations saved before the KWHM section fix carry components
+                    // filed under a section their panel does not have, so nothing
+                    // matched and the panel printed empty while still being charged
+                    // for. Falling back to the sections the components actually claim
+                    // repairs those on load — no migration, and their totals are
+                    // untouched. Only "no components at all" now prints empty.
+                    if (secs.length === 0 && p.components.length > 0)
+                      secs = [...new Set(p.components.map((c) => c.section).filter(Boolean))];
                     if (secs.length === 0)
                       return (
                         <tr><td colSpan={5} className="px-2 py-5 text-center text-sm text-muted">No components.</td></tr>
@@ -3624,7 +3632,12 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
   const searchRef = useRef<HTMLInputElement>(null);
   const qtyRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (pending) { qtyRef.current?.focus({ preventScroll: true }); qtyRef.current?.select(); } }, [pending]);
-  const pickComp = (c: DbComponent) => { setPending(toPanelComponent(c, "LCP", 1)); setPendQty(""); };
+  // This editor serves LCP *and* KWHM panels. Hardcoding "LCP" filed every KWHM
+  // component under a section its panel does not have, so the Technical Offer found
+  // nothing to print and fell through to "No components." — while the cost and the
+  // Material List read the components directly and charged for them anyway.
+  const ownSection = p.sections[0] ?? "LCP";
+  const pickComp = (c: DbComponent) => { setPending(toPanelComponent(c, ownSection, 1)); setPendQty(""); };
   const confirmAdd = () => {
     if (!pending) return;
     u({ components: [...p.components, { ...pending, qty: Math.max(1, parseInt(pendQty, 10) || 1) }] });
@@ -3633,7 +3646,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
   };
   const cancelAdd = () => { setPending(null); setPendQty(""); };
   const changeComp = (id: string, c: DbComponent) => {
-    const nc = toPanelComponent(c, "LCP", 1);
+    const nc = toPanelComponent(c, ownSection, 1);
     u({ components: p.components.map((r) => (r.id === id ? { ...nc, id: r.id, qty: r.qty } : r)) });
     setEditId(null);
   };

@@ -146,15 +146,13 @@ That filename must match the one in `frontend/dist/assets/` after `npm run build
 
 Do not re-investigate these. Fix them when asked.
 
-1. **KWHM panels print no components on the Technical Offer, but are still charged
-   for.** A KWHM panel is created with `sections: ["KWHM"]`
-   (`frontend/src/lv/store.ts:418`), but its editor creates every component with the
-   section hardcoded to `"LCP"` (`LvConfiguratorPage.tsx:3501` and `:3510`). The offer
-   table only renders sections that match, so it falls through to "No components."
-   (`:2669`), while the cost and Material List read the components directly.
-   *Root fix:* use the panel's own section instead of the literal `"LCP"`. *Also* make
-   the offer table fall back to showing components when no section matches, so
-   quotations already saved are repaired without a migration.
+1. ~~KWHM panels print no components on the Technical Offer, but are still charged
+   for.~~ **FIXED 13 Aug 2026.** The shared LCP/KWHM editor filed every component under
+   a hardcoded `"LCP"`; it now uses the panel own first section. The offer table also
+   falls back to the sections the components actually claim, so quotations saved with
+   the wrong one are repaired on load with no migration and no change to their totals.
+   A panel with NO components is now an export blocker rather than a silent empty page:
+   4 such panels existed locally, 3 of them charged for.
 2. ~~A quotation whose saved state has no `factors` key opens as a blank white page.~~
    **FIXED 13 Aug 2026.** `normalize()` now fills the structural keys from
    `initialState()` before anything reads them — and it was wider than `factors`:

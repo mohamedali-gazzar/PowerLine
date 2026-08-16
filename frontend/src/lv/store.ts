@@ -1214,11 +1214,21 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   const missingCopper: string[] = [];
   const lcpCables: string[] = []; // LCP cells with no cables cost (mandatory)
   const highlighted: string[] = []; // panels flagged with the sidebar highlighter
+  const emptyPanels: string[] = []; // costed, but nothing to show the customer
   s.panels.forEach((p, i) => {
     const label = `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}`;
     if (p.highlight) highlighted.push(label);
     // A highlighted panel carries a 🖍️ marker on any other warning it raises.
     const tag = p.highlight ? `🖍️ ${label}` : label;
+    // 0) A panel with no components prints as "No components." while its enclosure,
+    //    kits and cables are still charged — the customer pays for a box that shows
+    //    nothing. Empty KWHM spare panels are how this reached submitted offers.
+    //    Blocked rather than hidden: silently dropping a panel that is being charged
+    //    for would leave the price unexplained on the offer.
+    if (p.components.length === 0) {
+      const costed = !!p.lcpBox || !!p.lcpBox2 || (p.cablesEgp ?? 0) > 0;
+      emptyPanels.push(`${tag}: no components${costed ? " — but it is still being charged for" : ""}`);
+    }
     // 1) Zero price
     for (const c of p.components) {
       if (isSpacer(c) || c.type === "Space") continue;
@@ -1256,6 +1266,7 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   });
   const out: ExportCheck[] = [];
   if (highlighted.length) out.push({ title: "🖍️ Highlighted panels", items: highlighted });
+  if (emptyPanels.length) out.push({ title: "Empty panels — nothing would print", items: emptyPanels });
   if (zeroPrice.length) out.push({ title: "Zero price", items: zeroPrice });
   if (noCells.length) out.push({ title: "No cells selected", items: noCells });
   if (missingCopper.length) out.push({ title: "Missing copper", items: missingCopper });
