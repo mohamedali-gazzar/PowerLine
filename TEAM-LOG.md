@@ -24,6 +24,41 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**Combinations tab is now read-only — the workbooks are the reference.**
+
+The editing tables are gone. The tab shows what is loaded and when, takes a new version,
+downloads the current set, or falls back to the version built into the app. One source of
+truth instead of two that quietly drift apart.
+
+⚠️ **It still takes `combos.json`, not `.xlsx`.** The Excel reader is not built yet, so a
+workbook has to be converted first. That is the next job.
+
+📌 **Groundwork done, for whoever picks it up.** All five workbooks were opened and their
+shapes recorded:
+
+| Workbook | Shape | Maps to |
+| --- | --- | --- |
+| MCC | key column + parts across | `mcc.combos` — 110 starters, already verified identical |
+| ATS | matrix, frames across in 3 column blocks | `ats[type][frame]` — 2 differences found and fixed |
+| photocell | Rating / DESCRIPTION / PL Description / Aux | `photocell.ratings` |
+| WD | matrix, 3P and 4P blocks, FP and MP rows | `wd` |
+| **P.F.C** | **a calculator, not a list** | **nothing — see below** |
+
+❓ **QUESTION FOR MOHAMED — the P.F.C workbook does not fit.** It is a sizing calculator
+(Volt, Insert KVAR, No. of fixed steps, capacitor size…), not a list of parts like the
+others. The app has no stored P.F.C combination at all — it works those out in code as you
+choose the kVAR. So there is nothing for an upload to replace. Is that sheet meant to be
+the reference for how the app *calculates* P.F.C, or is it just your working sheet?
+
+Two useful things also spotted: the photocell sheet carries **both** wordings side by side
+— the template one and the price-list one — which is exactly the translation the app keeps
+in code, so an importer could read it straight from the sheet. And the MCC sheet uses a
+non-breaking space in "0.06 kW", which silently breaks matching unless it is flattened.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **Fixed: a damaged quotation used to open as a blank white page.**
 
 If a quotation's saved details were incomplete — a save interrupted, an older record,
