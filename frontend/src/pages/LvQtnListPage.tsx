@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listQtns, listAllQtns, deleteQtn, restoreQtn, duplicateQtn, amendQtn, supersededNumbers, type QtnListItem } from "../lv/qtns";
+import { listQtns, listAllQtns, deleteQtn, restoreQtn, duplicateQtn, amendQtn, supersededNumbers, parseRevision, type QtnListItem } from "../lv/qtns";
 import { useDialogs } from "../components/ConfirmModal";
 import { api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE, type QtnStatus } from "../api";
 import { useAuth } from "../auth/AuthContext";
@@ -145,6 +145,35 @@ export default function LvQtnListPage() {
     }
     return out;
   }, [qtns]);
+
+  // Keep the revisions of one quotation together. The overall order stays exactly as
+  // it is now (recency, as the server returns it) — but the moment a base number has
+  // more than one revision, they are shown one after the other instead of scattered by
+  // date. A group takes the position where its first row already appears in the list,
+  // and inside the group the newest revision leads with the older ones beneath it.
+  // Grouped per owner because QTN numbers repeat across users (same reason as
+  // `cancelledIds`); when nothing has been amended every group is one row, so the list
+  // is identical to before.
+  const ordered = useMemo(() => {
+    const keyOf = (x: QtnListItem) => `${(x.ownerEmail || "").toLowerCase()}|${parseRevision(x.number).base}`;
+    const groups = new Map<string, QtnListItem[]>();
+    for (const x of filtered) {
+      const k = keyOf(x);
+      const g = groups.get(k);
+      if (g) g.push(x); else groups.set(k, [x]);
+    }
+    for (const g of groups.values())
+      if (g.length > 1) g.sort((a, b) => parseRevision(b.number).rev - parseRevision(a.number).rev);
+    const seen = new Set<string>();
+    const out: QtnListItem[] = [];
+    for (const x of filtered) {
+      const k = keyOf(x);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(...groups.get(k)!);
+    }
+    return out;
+  }, [filtered]);
 
   const myEmail = (user?.email || "").toLowerCase();
   const mayManage = myPerms.includes("access.manage");
@@ -347,7 +376,7 @@ export default function LvQtnListPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((x, i) => {
+                  {ordered.map((x, i) => {
                     const st = statusOf(x);
                     const dead = cancelledIds.has(x.id);
                     return (
