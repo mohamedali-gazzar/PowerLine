@@ -534,19 +534,10 @@ export default function LvConfiguratorPage() {
     if (d.startsWith("0")) d = `20${d.slice(1)}`; // local Egyptian 0-number → +20
     return d;
   };
-  // DEFAULT WhatsApp message — pending the owner's exact wording. QTN + project first,
-  // as asked, then the greeting/body/sign-off. Kept close to the e-mail wording so the
-  // two channels read the same.
-  const salesWaText = () => [
-    salesMailSubject(),                                  // "QTN-26-01234 (Emaar)"
-    "",
-    `Dear ${s.project.salesPerson.trim() || "Sales"},`,
-    "Please find the Technical and Commercial offers — the two PDF files are attached here.",
-    `Offer on factor "${s.factors.factor}".`,
-    "",
-    "Best regards,",
-    s.project.supportEngineer.trim() || user?.name || "",
-  ].join("\n");
+  // WhatsApp message = the SAME wording as the Outlook e-mail (owner's request). Outlook
+  // splits into a subject and a body; WhatsApp has no subject line, so the subject
+  // ("<QTN> (<Project>)") goes on top, then the identical e-mail body underneath.
+  const salesWaText = () => `${salesMailSubject()}\n\n${salesMailBody()}`;
   const sendViaWhatsApp = async () => {
     if (sendingOffers) return;
     const digits = salesWaDigits(s.project.salesMobile);
