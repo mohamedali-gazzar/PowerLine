@@ -281,7 +281,7 @@ export default function LvConfiguratorPage() {
 
   // Themed stand-ins for window.confirm / alert / prompt. `confirmModal` is
   // rendered once, near the bottom of this component; it portals to document.body.
-  const { confirm: askConfirm, prompt: askFor, dialogs: confirmModal } = useDialogs();
+  const { confirm: askConfirm, prompt: askFor, notify: askNotify, dialogs: confirmModal } = useDialogs();
   // Async-loaded from the backend (per signed-in user). `rec` is null until loaded.
   const [rec, setRec] = useState<QtnRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -454,12 +454,10 @@ export default function LvConfiguratorPage() {
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   };
-  // Send-to-sales. Each offer only renders on its own tab, so flip there, capture the
-  // PDF, then restore the tab. When Outlook (Microsoft 365) is configured, build a
-  // DRAFT with both PDFs ATTACHED and open it to send. Otherwise fall back: download
-  // the two PDFs and open a prefilled mailto (a mailto can't carry attachments).
-  const sendToSales = async () => {
-    if (sendingOffers) return;
+  // Build both offer PDFs. Each offer only renders on its own tab, so flip there,
+  // capture the PDF, then restore the tab. Shared by the Outlook and WhatsApp senders
+  // so both attach exactly the same two files.
+  const buildOfferPdfs = async (): Promise<{ toBlob: Blob | null; coBlob: Blob | null; toName: string; coName: string }> => {
     const waitFor = (sel: string, ms = 5000) => new Promise<HTMLElement | null>((resolve) => {
       const start = Date.now();
       const tick = () => {
@@ -474,17 +472,29 @@ export default function LvConfiguratorPage() {
     const rev = s.project.revisionNo;
     const toName = `${offerTitle("TO", qtnNum, rev)}.pdf`;
     const coName = `${offerTitle("CO", qtnNum, rev)}.pdf`;
+    const { exportTechnicalPdf, exportSheetsPdf } = await import("../lv/technicalPdf");
+    setTab("technical");
+    const tArea = await waitFor("[data-pdf-root]");
+    const toBlob = (tArea ? await exportTechnicalPdf({ printArea: tArea, filename: toName, asBlob: true }) : null) || null;
+    setTab("commercial");
+    const cArea = await waitFor("[data-co-root]");
+    const coBlob = (cArea ? await exportSheetsPdf({ printArea: cArea, filename: coName, asBlob: true }) : null) || null;
+    setTab(original);
+    return { toBlob, coBlob, toName, coName };
+  };
+
+  // Send-to-sales → OUTLOOK / e-mail. When Outlook (Microsoft 365) is configured, build
+  // a DRAFT with both PDFs ATTACHED and open it to send. Otherwise fall back: Windows
+  // share sheet, or download the two PDFs + open a prefilled mailto (a mailto can't
+  // carry attachments). To = the sales person's e-mail from the Project tab; subject =
+  // "<QTN> (<Project>)".
+  const sendToSales = async () => {
+    if (sendingOffers) return;
+    const original = tab;
     setSendingOffers(true);
     try {
-      const { exportTechnicalPdf, exportSheetsPdf } = await import("../lv/technicalPdf");
       const { graphConfigured, createOutlookDraft } = await import("../lv/outlookGraph");
-      setTab("technical");
-      const tArea = await waitFor("[data-pdf-root]");
-      const toBlob = (tArea ? await exportTechnicalPdf({ printArea: tArea, filename: toName, asBlob: true }) : null) || null;
-      setTab("commercial");
-      const cArea = await waitFor("[data-co-root]");
-      const coBlob = (cArea ? await exportSheetsPdf({ printArea: cArea, filename: coName, asBlob: true }) : null) || null;
-      setTab(original);
+      const { toBlob, coBlob, toName, coName } = await buildOfferPdfs();
 
       if (graphConfigured()) {
         const attachments = [
@@ -523,6 +533,57 @@ export default function LvConfiguratorPage() {
     } catch (e) {
       setTab(original);
       setWfError(`Couldn't build the offer e-mail — ${(e as Error).message || "please try again"}.`);
+    } finally {
+      setSendingOffers(false);
+    }
+  };
+
+  // Send-to-sales → WHATSAPP. A wa.me link can't carry files, so the two offer PDFs are
+  // downloaded (ready to drag into the chat) and WhatsApp opens with the message
+  // prefilled: the QTN number, the project name, then the default message. Number comes
+  // from the Project tab, normalised to international digits — an Egyptian local number
+  // starting "0" becomes "20…", a "00…" international prefix is dropped.
+  const salesWaDigits = (raw: string): string => {
+    let d = (raw || "").replace(/\D/g, "");
+    if (!d) return "";
+    if (d.startsWith("00")) d = d.slice(2);       // 00-prefixed international dialling
+    if (d.startsWith("0")) d = `20${d.slice(1)}`; // local Egyptian 0-number → +20
+    return d;
+  };
+  // DEFAULT WhatsApp message — pending the owner's exact wording. QTN + project first,
+  // as asked, then the greeting/body/sign-off. Kept close to the e-mail wording so the
+  // two channels read the same.
+  const salesWaText = () => [
+    salesMailSubject(),                                  // "QTN-26-01234 (Emaar)"
+    "",
+    `Dear ${s.project.salesPerson.trim() || "Sales"},`,
+    "Please find the Technical and Commercial offers — the two PDF files are attached here.",
+    `Offer on factor "${s.factors.factor}".`,
+    "",
+    "Best regards,",
+    s.project.supportEngineer.trim() || user?.name || "",
+  ].join("\n");
+  const sendViaWhatsApp = async () => {
+    if (sendingOffers) return;
+    const digits = salesWaDigits(s.project.salesMobile);
+    if (!digits) {
+      void askNotify({
+        title: "No WhatsApp number",
+        message: "This sales person has no phone number on the Project tab. Add one there, then try again.",
+      });
+      return;
+    }
+    const original = tab;
+    setSendingOffers(true);
+    try {
+      const { toBlob, coBlob, toName, coName } = await buildOfferPdfs();
+      // wa.me cannot attach files — download them so they are ready to attach in the chat.
+      if (toBlob) downloadBlob(toBlob, toName);
+      if (coBlob) downloadBlob(coBlob, coName);
+      window.open(`https://wa.me/${digits}?text=${encodeURIComponent(salesWaText())}`, "_blank", "noopener");
+    } catch (e) {
+      setTab(original);
+      setWfError(`Couldn't prepare the WhatsApp message — ${(e as Error).message || "please try again"}.`);
     } finally {
       setSendingOffers(false);
     }
@@ -1064,14 +1125,27 @@ export default function LvConfiguratorPage() {
                 📎 Attach &amp; send to {s.project.salesPerson.trim().split(/\s+/)[0] || "Sales"}
               </button>
             ) : (
-              <button type="button" onClick={sendToSales} disabled={sendingOffers}
-                title="Prepare the Technical & Commercial offer PDFs and hand them to the sales person's e-mail (attached via the Windows share sheet, or downloaded + Outlook if sharing isn't available)"
-                className="btn-primary inline-flex items-center gap-1.5 disabled:opacity-60">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7z" />
-                </svg>
-                {sendingOffers ? "Preparing offers…" : `Send to ${s.project.salesPerson.trim().split(/\s+/)[0] || "Sales"}`}
-              </button>
+              // One primary control, two ways out: Outlook e-mail or WhatsApp. Modelled
+              // on the Share dropdown below so the header stays consistent; it never
+              // holds a value — picking an option fires that sender and snaps back.
+              <select
+                value=""
+                disabled={sendingOffers}
+                title="Send the Technical & Commercial offers to the sales person — by Outlook e-mail or WhatsApp"
+                className="btn-primary cursor-pointer disabled:opacity-60"
+                onChange={(e) => {
+                  const v = e.target.value;
+                  e.target.value = "";
+                  if (v === "outlook") void sendToSales();
+                  if (v === "whatsapp") void sendViaWhatsApp();
+                }}
+              >
+                <option value="">
+                  {sendingOffers ? "Preparing offers…" : `➤ Send to ${s.project.salesPerson.trim().split(/\s+/)[0] || "Sales"}…`}
+                </option>
+                <option value="outlook">📧 Outlook — e-mail with both PDFs attached</option>
+                <option value="whatsapp">🟢 WhatsApp — message + the two PDFs to attach</option>
+              </select>
             ))}
           </div>
           {/* Hand over and Co-Work both answer "give this to someone else", so they
