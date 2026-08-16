@@ -76,11 +76,22 @@ function summaryOf(state: LvState): QtnSummaryInput {
 
 /** Forward-compatible defaults for a state loaded from the server. */
 function normalize(state: LvState): LvState {
+  // STRUCTURAL DEFAULTS FIRST. The server is deliberately lenient — it stores
+  // `state ?? {}` and hands back `{}` for a row it cannot parse — so any of these
+  // can be missing, and each one is dereferenced further down (state.panels
+  // .forEach, state.project.name in summaryOf, state.factors.vat while pricing).
+  // A missing key used to throw during load and the quotation opened as a blank
+  // white page, which looks exactly like the work has been lost.
+  const base = initialState();
+  state.project ??= base.project;
+  state.factors ??= base.factors;
+  if (!Array.isArray(state.panels)) state.panels = [];
+
   // Merge in any factor key added since this QTN was saved. Without this a new
   // key is `undefined` on every server-loaded quotation and turns the whole
   // calculation chain into NaN — critical now that factors can change centrally.
   // Existing values always win, so a quotation keeps the rates it was made with.
-  if (state.factors) state.factors = { ...DEFAULT_FACTORS, ...state.factors };
+  state.factors = { ...DEFAULT_FACTORS, ...state.factors };
   state.notesGeneral ??= [...DEFAULT_GENERAL_NOTES];
   state.notesAdditional ??= [];
   state.abbItemDiscounts ??= {};
@@ -88,7 +99,7 @@ function normalize(state: LvState): LvState {
   state.recordResults ??= "";
   // Safety factor is now a % markup (selling × (1 + safetyFactor)); default 0 (no change).
   // The old default was 1 (a ÷ divisor) — reset it to 0 so it doesn't double the price.
-  if (state.factors && (state.factors.safetyFactor == null || state.factors.safetyFactor === 1)) state.factors.safetyFactor = 0;
+  if (state.factors.safetyFactor == null || state.factors.safetyFactor === 1) state.factors.safetyFactor = 0;
   // QTN kind: legacy QTNs (no kind) are panel quotations. "spare" and "edms" are
   // the explicit kinds and must survive the round-trip — anything else normalises
   // to "panels". Adding a kind means listing it here, or it is silently downgraded

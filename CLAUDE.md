@@ -155,12 +155,14 @@ Do not re-investigate these. Fix them when asked.
    *Root fix:* use the panel's own section instead of the literal `"LCP"`. *Also* make
    the offer table fall back to showing components when no section matches, so
    quotations already saved are repaired without a migration.
-2. **A quotation whose saved state has no `factors` key opens as a blank white page.**
-   `normalize()` in `frontend/src/lv/qtns.ts:80` only patches `factors` when it already
-   exists (`if (state.factors)`), so a missing one stays undefined and
-   `s.factors.vat` throws. The server is deliberately lenient — it stores
-   `state ?? {}` and returns `{}` for a corrupt row — so the client must cope.
-   *Fix:* `state.factors = { ...DEFAULT_FACTORS, ...(state.factors ?? {}) }`.
+2. ~~A quotation whose saved state has no `factors` key opens as a blank white page.~~
+   **FIXED 13 Aug 2026.** `normalize()` now fills the structural keys from
+   `initialState()` before anything reads them — and it was wider than `factors`:
+   `state.panels.forEach` and `state.project.name` threw the same way, so patching
+   only `factors` would have moved the crash rather than removed it. The server is
+   deliberately lenient (it stores `state ?? {}` and returns `{}` for a row it cannot
+   parse), so the client copes with any of them missing. Verified against a quotation
+   whose state is literally `{}`: it opens with every tab and no errors.
 
 `OPEN-ISSUES.md` and `ARCHITECTURE.md` §10–11 carry the rest, including several that
 affect money on customer paper.

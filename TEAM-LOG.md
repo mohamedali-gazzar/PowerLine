@@ -24,6 +24,27 @@ closed off.
 
 ## 2026-08-13 · Mohamed's side · Claude
 
+**Fixed: a damaged quotation used to open as a blank white page.**
+
+If a quotation's saved details were incomplete — a save interrupted, an older record,
+anything the server could not read back — opening it showed nothing at all. A white
+screen, no message, no way in. It looks exactly like the work has been lost, and it has
+been on the known-problems list for a while.
+
+It now opens normally: whatever is missing is filled in with the standard starting values,
+and everything that did survive is kept.
+
+It turned out to be wider than written up. The note blamed the pricing rates, but the panel
+list and the project details failed in the same way — fixing only the rates would have
+moved the blank page rather than removed it. All three are now covered.
+
+Checked by deliberately damaging a test quotation until it had no details at all: it opens
+with every tab in place and nothing broken.
+
+---
+
+## 2026-08-13 · Mohamed's side · Claude
+
 **The quotation header can now be pinned.**
 
 There is a small **📌 Pin** next to "← All QTNs" at the top of a quotation. Press it and the
