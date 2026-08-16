@@ -338,6 +338,10 @@ export default function PricingAdminPage() {
             <History onChanged={loadAll} />
           </div>
 
+          {/* Only meaningful once the LV catalogue exists — before that, setup writes
+              these itself. */}
+          {section === "LV" && status.counts.lvComponents > 0 && <DefaultRates onSaved={loadAll} />}
+
           {section === "LV" && status.counts.lvComponents === 0 && (
             <div className="card p-6 text-center">
               <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
@@ -924,6 +928,87 @@ function LvPrices() {
           ? "Poles can be edited here — click the number, type, press Enter. It goes live straight away, because connection copper is costed as copper-per-pole × poles, so an item with no poles is quoted with no copper cost at all (those are tinted amber). Prices and copper weights are still read-only — set them through the Excel upload above (matched on Item Code), then re-upload. Use Remove to stop offering an item."
           : "Prices are read-only here — set them through the Excel upload above (matched on Item Code), then re-upload. Use Remove to stop offering an item."}
       </p>
+    </div>
+  );
+}
+
+/**
+ * The rates a NEW quotation starts from.
+ *
+ * These live in the published price book, so they were only ever written once,
+ * during first-time setup — there was no way to change them afterwards from
+ * anywhere in the app. The configurator's own "Pricing Settings" tab edits a
+ * single quotation, not the defaults, which is a genuinely easy thing to confuse.
+ *
+ * Saving publishes, so the new rates reach everyone on their next click. Existing
+ * quotations are untouched: each one carries the rates it was built with, on
+ * purpose, so an offer already sent never re-prices itself.
+ */
+function DefaultRates({ onSaved }: { onSaved: () => void }) {
+  const [usd, setUsd] = useState("");
+  const [euro, setEuro] = useState("");
+  const [safety, setSafety] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  // Seed the fields from what is published right now.
+  useEffect(() => {
+    setUsd(String(DEFAULT_FACTORS.usd ?? ""));
+    setEuro(String(DEFAULT_FACTORS.euro ?? ""));
+    setSafety(String(((DEFAULT_FACTORS.safetyFactor ?? 0) * 100).toFixed(2).replace(/\.?0+$/, "")));
+  }, []);
+
+  const save = async () => {
+    const u = Number(usd), e = Number(euro), s = Number(safety);
+    if (![u, e, s].every(Number.isFinite) || u <= 0 || e <= 0 || s < 0 || s > 10) {
+      setErr("Enter a USD and EUR rate above zero, and a safety factor between 0 and 10%.");
+      return;
+    }
+    setBusy(true); setErr(""); setMsg("");
+    try {
+      // Stored as a fraction — the field is a percentage, so 2 means ×1.02.
+      await api.pricing.lvSettings({ usd: u, euro: e, safetyFactor: s / 100 });
+      const r = await api.pricing.publish();
+      await refreshCatalog(getToken());
+      setMsg(`Saved and published (version ${r.version}). New quotations start from these.`);
+      onSaved();
+    } catch (e2) {
+      setErr((e2 as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card mb-4 p-4">
+      <h2 className="sec-head mb-0">Default rates for new quotations</h2>
+      <p className="mb-3 mt-1 text-xs text-muted">
+        What a brand-new quotation starts from. Quotations already saved keep the rates they
+        were built with, so nothing already sent to a customer changes.
+      </p>
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="label" htmlFor="dr-usd">USD → EGP</label>
+          <input id="dr-usd" className="input w-32" type="number" step="0.01" min="0"
+            value={usd} onChange={(e) => setUsd(e.target.value)} />
+        </div>
+        <div>
+          <label className="label" htmlFor="dr-eur">EUR → EGP</label>
+          <input id="dr-eur" className="input w-32" type="number" step="0.01" min="0"
+            value={euro} onChange={(e) => setEuro(e.target.value)} />
+        </div>
+        <div>
+          <label className="label" htmlFor="dr-sf">Safety factor (%)</label>
+          <input id="dr-sf" className="input w-32" type="number" step="0.1" min="0" max="10"
+            value={safety} onChange={(e) => setSafety(e.target.value)} />
+        </div>
+        <button className="btn-primary mb-0.5" disabled={busy} onClick={save}>
+          {busy ? "Saving…" : "Save & publish"}
+        </button>
+      </div>
+      {err && <p className="mt-2 text-sm font-semibold text-red-700">{err}</p>}
+      {msg && <p className="mt-2 text-sm font-semibold text-green-700">{msg}</p>}
     </div>
   );
 }
