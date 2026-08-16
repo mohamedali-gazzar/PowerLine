@@ -318,9 +318,6 @@ export default function LvConfiguratorPage() {
   const [edmsWarn, setEdmsWarn] = useState<{ panelId: string; snapshot: LvPanel } | null>(null);
   const edmsWarnedRef = useRef<Set<string>>(new Set());
   const [sendingOffers, setSendingOffers] = useState(false);
-  // Offer PDFs prepared for the Windows Share sheet — set once generated so a second
-  // tap (a fresh user gesture, which navigator.share requires) can share them attached.
-  const [shareReady, setShareReady] = useState<File[] | null>(null);
   // Cancelled = this revision was superseded by a newer amendment (a higher revision of
   // the same base exists). Derived from the QTN list; makes the revision read-only.
   const [cancelled, setCancelled] = useState(false);
@@ -507,26 +504,13 @@ export default function LvConfiguratorPage() {
         if (link) window.open(link, "_blank", "noopener");
         return;
       }
-      // Windows Share — hand the two PDFs (attached) to the OS share menu, where the
-      // user picks a mail app. navigator.share needs a fresh gesture, and generating
-      // the PDFs used this click's up, so stash the files and let the button flip to a
-      // "share" action the user taps.
-      const files = [
-        toBlob ? new File([toBlob], toName, { type: "application/pdf" }) : null,
-        coBlob ? new File([coBlob], coName, { type: "application/pdf" }) : null,
-      ].filter(Boolean) as File[];
-      if (files.length && typeof navigator.canShare === "function" && navigator.canShare({ files })) {
-        try {
-          // One tap: share straight away while the click is still "active".
-          await navigator.share({ files, title: salesMailSubject(), text: salesMailBody() });
-        } catch (err) {
-          // AbortError = the user closed the share sheet (fine). Otherwise the click's
-          // activation lapsed during PDF generation → fall back to a manual second tap.
-          if ((err as Error).name !== "AbortError") setShareReady(files);
-        }
-        return;
-      }
-      // Nothing can attach here → download the PDFs and open a prefilled mailto.
+      // Microsoft 365 isn't configured, so we can't build a ready-made Outlook draft with
+      // the two PDFs already attached. A mailto is the only thing that reliably fills the
+      // RECIPIENT and the SUBJECT in whatever mail app opens — desktop Outlook, new
+      // Outlook, or Outlook on the web — so open that, and download the two PDFs so they
+      // are ready to attach by hand (a mailto can't carry files). The Windows share sheet
+      // used to run here instead, but it carries neither a recipient nor a subject —
+      // exactly what was missing.
       if (toBlob) downloadBlob(toBlob, toName);
       if (coBlob) downloadBlob(coBlob, coName);
       window.location.href = salesMailtoHref();
@@ -586,18 +570,6 @@ export default function LvConfiguratorPage() {
       setWfError(`Couldn't prepare the WhatsApp message — ${(e as Error).message || "please try again"}.`);
     } finally {
       setSendingOffers(false);
-    }
-  };
-  // Second tap: open the Windows share sheet with the prepared PDFs attached, carrying
-  // the subject (title) and body (text) for mail targets that use them.
-  const doShare = async () => {
-    if (!shareReady) return;
-    try {
-      await navigator.share({ files: shareReady, title: salesMailSubject(), text: salesMailBody() });
-    } catch (e) {
-      if ((e as Error).name !== "AbortError") setWfError("Sharing was cancelled or didn't complete.");
-    } finally {
-      setShareReady(null);
     }
   };
   const isOwner = !wf.ownerId || wf.ownerId === rec?.ownerId;
@@ -1118,13 +1090,7 @@ export default function LvConfiguratorPage() {
                 {submitting ? "Submitting…" : "✓ Submit"}
               </button>
             )}
-            {status === "SUBMITTED" && (shareReady ? (
-              <button type="button" onClick={doShare}
-                title="Open the Windows share menu with the two offer PDFs attached — pick your mail app (Mail / Outlook)"
-                className="btn-primary inline-flex items-center gap-1.5">
-                📎 Attach &amp; send to {s.project.salesPerson.trim().split(/\s+/)[0] || "Sales"}
-              </button>
-            ) : (
+            {status === "SUBMITTED" && (
               // One primary control, two ways out: Outlook e-mail or WhatsApp. Modelled
               // on the Share dropdown below so the header stays consistent; it never
               // holds a value — picking an option fires that sender and snaps back.
@@ -1143,10 +1109,10 @@ export default function LvConfiguratorPage() {
                 <option value="">
                   {sendingOffers ? "Preparing offers…" : `➤ Send to ${s.project.salesPerson.trim().split(/\s+/)[0] || "Sales"}…`}
                 </option>
-                <option value="outlook">📧 Outlook — e-mail with both PDFs attached</option>
-                <option value="whatsapp">🟢 WhatsApp — message + the two PDFs to attach</option>
+                <option value="outlook">📧 Outlook — e-mail, with the two PDFs</option>
+                <option value="whatsapp">🟢 WhatsApp — message, with the two PDFs</option>
               </select>
-            ))}
+            )}
           </div>
           {/* Hand over and Co-Work both answer "give this to someone else", so they
               share one dropdown, on its own line under the action buttons and matching
