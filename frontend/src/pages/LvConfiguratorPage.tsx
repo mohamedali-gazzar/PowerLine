@@ -1015,22 +1015,6 @@ export default function LvConfiguratorPage() {
                 ✓ Approve
               </button>
             )}
-            {!cancelled && status === "WAITING_APPROVAL" && canReturn && (
-              <button className="btn-ghost" disabled={submitting} onClick={() => setReturnOpen(true)}>
-                ↩ Return for revision
-              </button>
-            )}
-            {!cancelled && status === "WAITING_APPROVAL" && isOwner && (
-              <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
-                confirm: {
-                  title: "Withdraw from approval",
-                  message: "It goes back to draft and you can edit it again. Whoever was reviewing it will no longer see it in their queue.",
-                  confirmLabel: "Withdraw",
-                },
-              })}>
-                Withdraw
-              </button>
-            )}
             {!cancelled && status === "APPROVED" && (
               <button className="btn-primary" disabled={submitting} onClick={() => doTransition("SUBMITTED", {
                 confirm: {
@@ -1059,17 +1043,6 @@ export default function LvConfiguratorPage() {
                 {sendingOffers ? "Preparing offers…" : `Send to ${s.project.salesPerson.trim().split(/\s+/)[0] || "Sales"}`}
               </button>
             ))}
-            {status === "SUBMITTED" && canReopen && (
-              <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
-                confirm: {
-                  title: "Reopen for editing",
-                  message: "This submitted quotation goes back to draft so it can be changed. The offer already sent to the customer is not affected.",
-                  confirmLabel: "Reopen",
-                },
-              })}>
-                🔓 Reopen
-              </button>
-            )}
           </div>
           {/* Hand over and Co-Work both answer "give this to someone else", so they
               share one dropdown, on its own line under the action buttons and matching
@@ -1092,7 +1065,39 @@ export default function LvConfiguratorPage() {
             </select>
           )}
           </div>
+          {/* Second row: the secondary workflow moves — Return for revision, Withdraw,
+              Reopen — alongside the file/refresh actions. Keeping them out of the top
+              row means it is always the same three controls (Undo, Redo, and the one
+              main action for this stage) with Share spanning them, whatever the
+              workflow stage. */}
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {!cancelled && status === "WAITING_APPROVAL" && canReturn && (
+              <button className="btn-ghost" disabled={submitting} onClick={() => setReturnOpen(true)}>
+                ↩ Return for revision
+              </button>
+            )}
+            {!cancelled && status === "WAITING_APPROVAL" && isOwner && (
+              <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
+                confirm: {
+                  title: "Withdraw from approval",
+                  message: "It goes back to draft and you can edit it again. Whoever was reviewing it will no longer see it in their queue.",
+                  confirmLabel: "Withdraw",
+                },
+              })}>
+                Withdraw
+              </button>
+            )}
+            {status === "SUBMITTED" && canReopen && (
+              <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
+                confirm: {
+                  title: "Reopen for editing",
+                  message: "This submitted quotation goes back to draft so it can be changed. The offer already sent to the customer is not affected.",
+                  confirmLabel: "Reopen",
+                },
+              })}>
+                🔓 Reopen
+              </button>
+            )}
             {erpCount > 0 && (
               <button onClick={exportErpCsv}
                 title={`Download ${erpCount} panel${erpCount > 1 ? "s" : ""} as an ERPNext "Bulk Edit Items" CSV for your ERP`}
