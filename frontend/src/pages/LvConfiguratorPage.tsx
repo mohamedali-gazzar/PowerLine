@@ -14,7 +14,7 @@ import {
   type DbComponent, type DbEnclosure,
 } from "../lv/catalog";
 import {
-  newPanel, newSparePanel, duplicatePanel, nextDuplicateName, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
+  newPanel, newSparePanel, duplicatePanel, nextDuplicateName, uniquePanelName, panelNameOwner, panelNameClashMessage, blankSpareNames, blankSpareMessage, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
@@ -776,10 +776,32 @@ export default function LvConfiguratorPage() {
   // RPT-1: block every offer/output tab until each panel has its mandatory fields,
   // plus the mandatory project-level fields (the Sales support engineer prints on the
   // offer). Spare cells carry no rating/enclosure, so they're exempt from the panel checks.
+  const panelLabel = (p: LvPanel, i: number) => `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}`;
+  // Two panels under one name is checked across EVERY panel, spare cells included —
+  // the auxiliary cells are where guaranteed duplicates came from.
+  //
+  // Only a quotation whose offer has ALREADY LEFT is exempt: submitted, or cancelled.
+  // Not `readOnly` — that also covers "Waiting for approval" and "Approved", where
+  // nothing has been sent yet and the approver is precisely the person who should see
+  // two identical panels before saying yes. It is also permission-dependent, so the
+  // same quotation would block for the owner and not for a sales engineer. On a
+  // genuinely sent offer the clash still shows in the pre-export warnings and on the
+  // panel list, but its own tabs stay open — nobody could correct it there anyway.
+  const offerAlreadySent = status === "SUBMITTED" || cancelled;
+  const blankSpares = blankSpareNames(s.panels);
+  const nameIssues = offerAlreadySent ? [] : [
+    ...s.panels.flatMap((p, i) => {
+      // The later panel of the pair reports it, so one clash reads as one problem.
+      const twin = panelNameOwner(p.name, s.panels, p.id);
+      return twin && s.panels.indexOf(twin) < i ? [`${panelLabel(p, i)}: ${panelNameClashMessage(twin, s.panels)}`] : [];
+    }),
+    ...(blankSpares.length ? [blankSpareMessage(blankSpares, s.panels)] : []),
+  ];
   const offerIssues = [
     ...(s.project.supportEngineer.trim() ? [] : ["Sales support engineer is required — pick one on the Project tab."]),
     ...s.panels.flatMap((p, i) =>
-      p.spare ? [] : panelInvalid(p).map((msg) => `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}: ${msg}`)),
+      p.spare ? [] : panelInvalid(p).map((msg) => `${panelLabel(p, i)}: ${msg}`)),
+    ...nameIssues,
   ];
 
   // Once submitted the QTN is read-only. Content edits are frozen, but pure navigation
@@ -842,7 +864,15 @@ export default function LvConfiguratorPage() {
     if (readOnly) return;
     const c = newSparePanel(kind);
     if (coWork && user?.id) c.ownerId = user.id; // co-work: a new cell belongs to its creator
-    apply((old) => ({ ...old, panels: [...old.panels, c], selectedId: c.id }));
+    apply((old) => {
+      // These cells arrive pre-named from a fixed label ("Spare parts" / "LCP" /
+      // "KWHM"), so a second one of a kind used to be an exact duplicate of the first
+      // with nothing typed at all. The app named it, so the app resolves it — "LCP-1",
+      // the same "<base>-N" scheme a duplicated panel uses. The section keeps the plain
+      // label; only the printed panel name is suffixed.
+      const named = { ...c, name: uniquePanelName(c.name, old.panels) };
+      return { ...old, panels: [...old.panels, named], selectedId: named.id };
+    });
     setTab(isSpareQtn ? "spare" : "panels");
   };
   const removePanel = (id: string) => {
@@ -1256,6 +1286,15 @@ function panelInvalid(p: LvPanel): string[] {
   if (!p.name.trim()) out.push("Panel name is required");
   if (!p.ratingA || p.ratingA <= 0) out.push("Busbar Rating is required");
   return out;
+}
+// A name a PERSON typed is never rewritten or refused mid-word — being overruled while
+// typing is worse than being told. The field goes red and says whose name it already is,
+// and the offer tabs stay blocked until it is changed, so the clash cannot reach paper.
+const nameClashOf = (s: LvState, p: LvPanel) => panelNameOwner(p.name, s.panels, p.id);
+function PanelNameClash({ s, p }: { s: LvState; p: LvPanel }) {
+  const twin = nameClashOf(s, p);
+  if (!twin) return null;
+  return <p className="mt-1 text-[11px] font-semibold text-red-600">⚠ {panelNameClashMessage(twin, s.panels)}</p>;
 }
 function OfferBlocked({ issues }: { issues: string[] }) {
   return (
@@ -3461,8 +3500,9 @@ function SpareEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: 
         <h2 className="sec-head flex items-center gap-2">🧰 Spare Parts</h2>
         <div className="mt-3 max-w-sm">
           <L>Name</L>
-          <input className="input" value={p.name} placeholder="Spare parts"
-            onChange={(e) => u({ name: e.target.value })} />
+          <input className={`input ${nameClashOf(s, p) ? "border-red-400 bg-red-50/40" : ""}`} value={p.name}
+            placeholder="Spare parts" onChange={(e) => u({ name: e.target.value })} />
+          <PanelNameClash s={s} p={p} />
         </div>
       </div>
 
@@ -3815,7 +3855,9 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <L>Panel name</L>
-              <input className="input" value={p.name} placeholder="KWHM" onChange={(e) => u({ name: e.target.value })} />
+              <input className={`input ${nameClashOf(s, p) ? "border-red-400 bg-red-50/40" : ""}`} value={p.name}
+                placeholder="KWHM" onChange={(e) => u({ name: e.target.value })} />
+              <PanelNameClash s={s} p={p} />
             </div>
             <div>
               <L>Quantity</L>
@@ -3844,7 +3886,9 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="sm:col-span-2 lg:col-span-2">
               <L>Panel name</L>
-              <input className="input" value={p.name} placeholder="LCP" onChange={(e) => u({ name: e.target.value })} />
+              <input className={`input ${nameClashOf(s, p) ? "border-red-400 bg-red-50/40" : ""}`} value={p.name}
+                placeholder="LCP" onChange={(e) => u({ name: e.target.value })} />
+              <PanelNameClash s={s} p={p} />
             </div>
             <div>
               <L>Quantity</L>
@@ -4234,7 +4278,18 @@ function SelectivityTab({ s, upPanel }: { s: LvState; upPanel: (id: string, patc
                   return (
                   <tr key={p.id}>
                     <td className={`${cell} text-center font-semibold text-muted`}>{no}</td>
-                    <td className={cell}><input className={inp} value={p.name} placeholder="Panel name" onChange={(e) => upPanel(p.id, { name: e.target.value })} /></td>
+                    {/* The same field as Panel details, so it carries the same rule.
+                        It matters twice over here: the "Fed From" lookup below is by
+                        name, so two panels sharing one make the upstream feeder a
+                        coin-toss. Kept compact — a table cell has no room for a
+                        sentence, so the full message is on hover. */}
+                    <td className={cell}>
+                      <input className={`${inp} ${nameClashOf(s, p) ? "bg-red-50 text-red-700 ring-1 ring-red-400" : ""}`}
+                        value={p.name} placeholder="Panel name"
+                        title={(() => { const t = nameClashOf(s, p); return t ? panelNameClashMessage(t, s.panels) : undefined; })()}
+                        onChange={(e) => upPanel(p.id, { name: e.target.value })} />
+                      {nameClashOf(s, p) && <span className="mt-0.5 block px-1 text-[10px] font-semibold text-red-600">Same name as another panel</span>}
+                    </td>
                     <td className={`${cell} px-3 text-sm`} title="Read from this panel's Main Incoming breaker">{inc ? inc.name : <span className="text-muted/50">—</span>}</td>
                     <td className={cell}><input className={inp} value={p.fedFrom} placeholder="—" onChange={(e) => upPanel(p.id, { fedFrom: e.target.value })} /></td>
                     <td className={`${cell} px-3 text-sm`} title="The Main Incoming breaker of the panel in ‘Fed From’ (the upstream feeder)">{feederInc ? feederInc.name : <span className="text-muted/50">—</span>}</td>
@@ -4413,6 +4468,15 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
                     className="shrink-0 rounded p-0.5 text-sm text-red-500 transition-colors hover:bg-white">✕</button>
                 </div>
               </div>
+              {/* A clash is a property of a PAIR, so it has to be visible from the list —
+                  otherwise it is only found by opening each panel in turn. This is also
+                  the only place a clash arriving from a co-worker's 15-second merge, or
+                  carried in by a duplicated quotation, shows itself without hunting. */}
+              {(() => { const twin = nameClashOf(s, p); return twin ? (
+                <p className="mt-0.5 pl-1 text-[10px] font-bold text-red-600" title={panelNameClashMessage(twin, s.panels)}>
+                  ⚠ Same name as Panel {s.panels.indexOf(twin) + 1}
+                </p>
+              ) : null; })()}
             </div>
           );
         })}
@@ -4691,8 +4755,9 @@ function PanelEditor({ s, p, up, upPanel }: {
         {detailsOpen && (
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <div><L>Panel name <span className="text-brand">*</span></L>
-            <input className={`input ${!p.name.trim() ? "border-red-400 bg-red-50/40" : ""}`} value={p.name}
-              placeholder="required" onChange={(e) => u({ name: e.target.value })} /></div>
+            <input className={`input ${!p.name.trim() || nameClashOf(s, p) ? "border-red-400 bg-red-50/40" : ""}`} value={p.name}
+              placeholder="required" onChange={(e) => u({ name: e.target.value })} />
+            <PanelNameClash s={s} p={p} /></div>
           <div><L>Fed from</L><input className="input" value={p.fedFrom} onChange={(e) => u({ fedFrom: e.target.value })} /></div>
           <div><L>Quantity</L><input className="input" inputMode="numeric" value={p.qty}
             onChange={(e) => u({ qty: Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1) })} /></div>
@@ -4825,27 +4890,36 @@ function copperEnterNav(e: { key: string; preventDefault: () => void; currentTar
 // ── Standard Panels view (inside the Components card) ───────────────────────
 // Pick TR kVA + P.F.C + Outgoings and the whole panel is built from the house
 // standard: name, components, PLP cells and main-busbar copper.
-function StandardPanelsView({ p, u }: {
-  p: LvPanel; u: (patch: Partial<LvPanel>) => void;
+function StandardPanelsView({ p, u, panels }: {
+  p: LvPanel; u: (patch: Partial<LvPanel>) => void; panels: LvPanel[];
 }) {
   const { confirm, dialogs } = useDialogs();
   const kva = p.stdTrKva ?? STD_TR_KVA_DEFAULT;
   const pfc = p.stdPfc ?? "No";
   const out = p.stdOutgoings ?? STD_OUTGOINGS[0];
   const std = stdPanel(kva, pfc, out);
+  // Building writes the standard's OWN name ("MDB 1000A+5*250A+25kVAR"), so building the
+  // same standard on two panels used to name both identically — the app choosing the
+  // name, not the user, so the app resolves it. The suffix is announced in the
+  // confirmation rather than applied behind the engineer's back.
+  const stdName = std ? uniquePanelName(std.name, panels, p.id) : "";
+  const renamed = !!std && stdName !== std.name;
   const apply = async () => {
     if (!std) return;
     if (
-      p.components.length &&
+      (p.components.length || renamed) &&
       !(await confirm({
         title: `Build "${std.name}" from the standard`,
-        message: "This panel's components, cells and copper are all replaced by the standard ones.",
+        message: (p.components.length ? "This panel's components, cells and copper are all replaced by the standard ones." : "")
+          + (renamed ? `${p.components.length ? "\n\n" : ""}Another panel is already called “${std.name}”, so this one will be named “${stdName}”.` : ""),
         confirmLabel: "Build it",
-        tone: "danger",
+        // Danger is for the replacement of existing work; a rename notice on an empty
+        // panel is not a warning, it is information.
+        tone: p.components.length ? "danger" : "brand",
       }))
     )
       return;
-    u(applyStdPanel(p, std));
+    u({ ...applyStdPanel(p, std), name: stdName });
   };
   return (
     <div className="space-y-2">
@@ -5651,7 +5725,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
           continuous orange header rather than a white gap between them. */}
       {isEdmsPanel && (
         <div className="-mx-5 bg-brand-tint px-5 py-3">
-          <StandardPanelsView p={p} u={u} />
+          <StandardPanelsView p={p} u={u} panels={s.panels} />
         </div>
       )}
 

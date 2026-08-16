@@ -867,22 +867,132 @@ export function spacerComponent(section: string): PanelComponent {
   };
 }
 
-/** RPT: incremental duplicate name — "PANEL 4" → "PANEL 4-1" → "PANEL 4-2" …
- *  Strips an existing "-N" (or legacy "(copy)") suffix so the series continues
- *  from the highest number already used for that base name. */
-export function nextDuplicateName(srcName: string, panels: LvPanel[]): string {
-  const base = srcName
+// ── Panel names must be unique within one quotation ──────────────────────────
+// The name is how a reader tells one switchboard from another: it is printed on the
+// Technical Offer and the Commercial Offer, the Material List groups by it, and a
+// "Return for revision" comment is tagged to a panel by name. Two panels sharing a
+// name produce paper the customer cannot read, so no path may create one.
+
+/** Zero-width and other invisible characters a paste can leave inside a name. `\s`
+ *  matches none of them, so without this two names that print identically are two
+ *  different names to the rule. Kept the same as INVISIBLE in lv/catalog.ts and
+ *  normLvName() in the backend, so the app has ONE idea of "the same name". */
+const INVISIBLE = /[\u00AD\u200B-\u200F\u2060\uFEFF]/g;
+
+/** How a READER compares two panel names — case, spacing and invisible characters
+ *  distinguish nothing on a printed page, so "MDB" and "mdb " are the same
+ *  switchboard. Every uniqueness rule below compares through this key, never the
+ *  raw string. */
+export const panelNameKey = (name: string): string =>
+  name.replace(INVISIBLE, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+/** The OTHER panel already carrying this name, or undefined when the name is free.
+ *  A BLANK name is never a clash: a new panel deliberately starts blank while work is
+ *  in progress, and the separate "Panel name is required" rule is what stops a
+ *  nameless panel reaching an offer. */
+export function panelNameOwner(name: string, panels: LvPanel[], exceptId?: string): LvPanel | undefined {
+  const key = panelNameKey(name);
+  if (!key) return undefined;
+  return panels.find((p) => p.id !== exceptId && panelNameKey(p.name) === key);
+}
+
+/** Auxiliary cells (Spare parts / LCP / KWHM) left with no name, when there is more
+ *  than one of them.
+ *
+ *  Blank is legal while work is in progress, and an unnamed ORDINARY panel is already
+ *  stopped by "Panel name is required" — but that rule skips spare cells, and these
+ *  are exactly the cells the app auto-names. Two of them left blank print as two
+ *  identical empty rows on the offer, which is the same defect as two panels sharing
+ *  a name and is reported the same way. One blank is fine: nothing to confuse it with. */
+export function blankSpareNames(panels: LvPanel[]): LvPanel[] {
+  const blanks = panels.filter((p) => p.spare && !panelNameKey(p.name));
+  return blanks.length > 1 ? blanks : [];
+}
+
+/** The clash sentence for those, naming them so nobody has to open each cell. */
+export function blankSpareMessage(blanks: LvPanel[], panels: LvPanel[]): string {
+  const which = blanks.map((p) => `Panel ${panels.indexOf(p) + 1}`).join(" and ");
+  return `${which}: more than one auxiliary panel has no name — unnamed panels print as identical rows on the offer. Give each one a name.`;
+}
+
+/** Plain English for the person who typed it, naming the panel it clashes with —
+ *  without that name they have to hunt for the twin themselves. One wording, used
+ *  by the field, the offer-tab block and the pre-export check alike. */
+export function panelNameClashMessage(twin: LvPanel, panels: LvPanel[]): string {
+  const i = panels.indexOf(twin) + 1;
+  const which = i > 0 ? `Panel ${i}` : "another panel";
+  // The twin's own spelling is quoted because the clash can be a difference of
+  // capitals or spaces only ("MDB-01" vs "mdb 01"), which is invisible otherwise.
+  return `This name is already used by ${which} (“${twin.name.trim()}”). Two panels with the same name cannot be told apart on the offer — please give one of them a different name.`;
+}
+
+/** "PANEL 4-2" → "PANEL 4": the name without its duplicate suffix, so a copy of a
+ *  copy continues one series instead of growing "-1-1-1". */
+function panelNameBase(name: string): string {
+  const base = name
     .replace(/\s*\(copy[^)]*\)\s*$/i, "") // legacy "(copy)" / "(copy 2)"
     .replace(/\s*-\s*\d+\s*$/, "")          // existing "-N"
     .trim();
-  const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return base || name.trim(); // a name that is nothing BUT a suffix keeps itself
+}
+
+/** "<base>-N" continuing from the highest N already in use, then stepped on until it
+ *  is genuinely free. The second pass matters: the highest-N scan only sees the
+ *  "<base>-N" series, while the freedom check compares against every panel. */
+function nextFreeSeriesName(srcName: string, panels: LvPanel[], exceptId?: string): string {
+  const base = panelNameBase(srcName);
+  const esc = panelNameKey(base).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const re = new RegExp(`^${esc}\\s*-\\s*(\\d+)$`);
   let max = 0;
   for (const p of panels) {
-    const m = p.name.trim().match(re);
+    // The panel being renamed must not count towards the series, or re-building a
+    // Standard EDMS panel from its OWN standard walks its name upward every press
+    // ("MDB X-1" → "-3" → "-4") on an action the engineer expects to change nothing.
+    if (p.id === exceptId) continue;
+    const m = panelNameKey(p.name).match(re);
     if (m) max = Math.max(max, parseInt(m[1], 10));
   }
-  return `${base}-${max + 1}`;
+  for (let n = max + 1; n <= max + 500; n++) {
+    const candidate = `${base}-${n}`;
+    if (!panelNameOwner(candidate, panels, exceptId)) return candidate;
+  }
+  return `${base}-${uid()}`; // unreachable in practice — but never hand back a duplicate
+}
+
+/** RPT: incremental duplicate name — "PANEL 4" → "PANEL 4-1" → "PANEL 4-2" …
+ *  Compared through `panelNameKey`, so an existing "mdb-1" also blocks "MDB-1". */
+export function nextDuplicateName(srcName: string, panels: LvPanel[]): string {
+  return nextFreeSeriesName(srcName, panels);
+}
+
+/** The name to actually give a panel THE APP is naming — a new auxiliary cell, a
+ *  duplicate, a panel built from a Standard EDMS standard.
+ *
+ *  WHY auto-resolve here but block a typed name: the app must never hand someone a
+ *  duplicate they did not ask for (adding a second LCP cell used to produce an exact
+ *  twin with nothing typed at all), yet it must not overrule a person mid-word. So
+ *  every name the app picks is made unique silently, using the house "<base>-N"
+ *  scheme already used for duplicated panels and sections — and a name a PERSON types
+ *  is left exactly as typed and flagged instead.
+ *
+ *  A blank name comes back blank: blank is allowed while work is in progress. */
+export function uniquePanelName(wanted: string, panels: LvPanel[], exceptId?: string): string {
+  const name = wanted.trim();
+  if (!panelNameOwner(name, panels, exceptId)) return name;
+  // Already carrying a name from this same series, and it is still free? Keep it.
+  // Without this, re-building a Standard EDMS panel from its own standard renames it
+  // on every press — "MDB X-1" → "MDB X-3" → "MDB X-4" — on an action that is meant
+  // to rebuild the contents, not rename the panel.
+  const self = exceptId ? panels.find((p) => p.id === exceptId) : undefined;
+  if (
+    self &&
+    panelNameKey(panelNameBase(self.name)) === panelNameKey(panelNameBase(name)) &&
+    panelNameKey(self.name) &&
+    !panelNameOwner(self.name, panels, exceptId)
+  ) {
+    return self.name.trim();
+  }
+  return nextFreeSeriesName(name, panels, exceptId);
 }
 
 export function duplicatePanel(p: LvPanel, name: string): LvPanel {
@@ -1207,7 +1317,8 @@ export interface ExportCheck { title: string; items: string[] }
  *   1. Zero price   — a real component priced at 0 (spare "Space" items excluded).
  *   2. No cells     — a Cells-mode panel with no editable cell qty (fixed Sides ignored).
  *   3. Missing copper — recommended Phase/Neutral/Earth (per the incomer) not entered
- *                       in the Copper Tool, or the panel's busbar weight is 0. */
+ *                       in the Copper Tool, or the panel's busbar weight is 0.
+ *   4. Same name    — two panels a reader of the offer cannot tell apart. */
 export function exportBlockers(s: LvState): ExportCheck[] {
   const zeroPrice: string[] = [];
   const noCells: string[] = [];
@@ -1215,6 +1326,7 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   const lcpCables: string[] = []; // LCP cells with no cables cost (mandatory)
   const highlighted: string[] = []; // panels flagged with the sidebar highlighter
   const emptyPanels: string[] = []; // costed, but nothing to show the customer
+  const dupNames: string[] = []; // two panels a reader cannot tell apart
   s.panels.forEach((p, i) => {
     const label = `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}`;
     if (p.highlight) highlighted.push(label);
@@ -1237,6 +1349,17 @@ export function exportBlockers(s: LvState): ExportCheck[] {
     // LCP: the cables cost is mandatory — it has no auto value.
     if (p.spareKind === "lcp" && !(p.cablesEgp && p.cablesEgp > 0)) {
       lcpCables.push(`${tag}: cables cost not entered`);
+    }
+    // Two panels under one name. Reported here as well as on the offer tabs because a
+    // quotation SAVED before this rule existed (or one a co-worker's merge brought a
+    // clash into) must still be exportable — it is not the app's place to rewrite a
+    // saved quotation, so it says so and leaves the correction to a person.
+    // Reported from the LATER panel of the pair only. Asking both sides produces the
+    // same clash twice ("Panel 1 same as Panel 4", "Panel 4 same as Panel 1"), which
+    // reads as two separate problems.
+    const twin = panelNameOwner(p.name, s.panels, p.id);
+    if (twin && s.panels.indexOf(twin) < s.panels.indexOf(p)) {
+      dupNames.push(`${tag}: same name as Panel ${s.panels.indexOf(twin) + 1}`);
     }
     // Spare-parts cell: no sizing / cells / busbar rules to check.
     if (p.spare) return;
@@ -1264,8 +1387,13 @@ export function exportBlockers(s: LvState): ExportCheck[] {
     }
     if (reasons.length) missingCopper.push(`${tag}: ${reasons.join("; ")}`);
   });
+  // Two unnamed auxiliary cells are two indistinguishable rows on the offer for the
+  // same reason a shared name is, so they belong under the same heading.
+  const blankSpares = blankSpareNames(s.panels);
+  if (blankSpares.length) dupNames.push(blankSpareMessage(blankSpares, s.panels));
   const out: ExportCheck[] = [];
   if (highlighted.length) out.push({ title: "🖍️ Highlighted panels", items: highlighted });
+  if (dupNames.length) out.push({ title: "Two panels with the same name", items: dupNames });
   if (emptyPanels.length) out.push({ title: "Empty panels — nothing would print", items: emptyPanels });
   if (zeroPrice.length) out.push({ title: "Zero price", items: zeroPrice });
   if (noCells.length) out.push({ title: "No cells selected", items: noCells });
