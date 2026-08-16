@@ -1844,91 +1844,6 @@ function NeutralPromptModal({ breaker, sensor, onAdd, onClose }: { breaker: stri
   );
 }
 
-/** "Download Data Sheets" — lists the material list's ABB-coded parts; each row streams
- *  its data-sheet PDF via the backend proxy (/api/abb/datasheet, which resolves ABB's
- *  DocumentID → signed library PDF). If ABB can't be reached the row falls back to
- *  opening the product page (English → Print to PDF). */
-function DataSheetsModal({ rows, onClose }: { rows: { code: string; name: string }[]; onClose: () => void }) {
-  const { confirm, dialogs } = useDialogs();
-  const [busy, setBusy] = useState<Set<string>>(() => new Set());
-  const [done, setDone] = useState<Set<string>>(() => new Set());
-  const [failed, setFailed] = useState<Set<string>>(() => new Set());
-  const [all, setAll] = useState(false);
-  const abbPage = (code: string) => `https://new.abb.com/products/${encodeURIComponent(code)}`;
-  const setIn = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, code: string, on: boolean) =>
-    setter((prev) => { const n = new Set(prev); on ? n.add(code) : n.delete(code); return n; });
-
-  const download = async (code: string, name: string): Promise<boolean> => {
-    setIn(setBusy, code, true); setIn(setFailed, code, false);
-    try {
-      const res = await fetch(`/api/abb/datasheet?code=${encodeURIComponent(code)}`, { headers: { Authorization: `Bearer ${getToken() ?? ""}` } });
-      if (!res.ok) throw new Error(String(res.status));
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `${(name || code).replace(/[^\w .()-]+/g, "_").slice(0, 80)} - ${code}.pdf`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 3000);
-      setIn(setDone, code, true);
-      return true;
-    } catch {
-      setIn(setFailed, code, true);
-      window.open(abbPage(code), "_blank", "noopener"); // fallback: open the page to Print-to-PDF
-      return false;
-    } finally { setIn(setBusy, code, false); }
-  };
-  const downloadAll = async () => {
-    if (
-      rows.length > 8 &&
-      !(await confirm({
-        title: `Download ${rows.length} data sheets`,
-        message: "They are fetched from ABB one by one, so this takes a little while.",
-        confirmLabel: "Download them",
-      }))
-    )
-      return;
-    setAll(true);
-    for (const r of rows) await download(r.code, r.name);
-    setAll(false);
-  };
-
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
-      {dialogs}
-      <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-label="Download data sheets"
-        className="relative flex max-h-[85vh] w-full max-w-xl flex-col rounded-xl2 border border-line bg-white p-6 shadow-lift animate-pop">
-        <div className="mb-3 flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-tint text-xl">📄</div>
-          <div>
-            <h2 className="text-lg font-extrabold tracking-tight text-ink">Download data sheets</h2>
-            <p className="text-sm text-muted">Downloads the official ABB PDF for each order code. If ABB can’t be reached, the product page opens so you can Print-to-PDF.</p>
-          </div>
-        </div>
-        <div className="min-h-0 flex-1 divide-y divide-line overflow-auto rounded-lg border border-line">
-          {rows.map((r) => (
-            <div key={r.code} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-              <span className="min-w-0"><span className="block truncate font-medium text-ink">{r.name}</span><span className="text-[11px] text-muted">{r.code}</span></span>
-              <button type="button" onClick={() => download(r.code, r.name)} disabled={busy.has(r.code)}
-                className="shrink-0 rounded-full border border-brand bg-white px-3 py-1 text-xs font-bold text-brand-dark hover:bg-brand-light disabled:opacity-50">
-                {busy.has(r.code) ? "…" : failed.has(r.code) ? "Open page ↗" : done.has(r.code) ? "✓ Again" : "⬇ Download"}
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 flex items-center justify-between gap-2">
-          <span className="text-[11px] text-muted">{rows.length} ABB component{rows.length > 1 ? "s" : ""} · {done.size} done{failed.size ? ` · ${failed.size} via page` : ""}</span>
-          <div className="flex gap-2">
-            <button className="btn-ghost" onClick={onClose}>Close</button>
-            <button className="btn-primary" onClick={downloadAll} disabled={all}>{all ? "Downloading…" : "⬇ Download all"}</button>
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
 /** Technical Offer — one document page per panel, in the reference layout:
  *  red item bar (Item No. | name | Item Qty.), red-label spec grid, then the
  *  components table (Qty | Description | Reference | Brand | Poles).
@@ -7726,18 +7641,6 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   const { confirm, prompt: askFor, dialogs } = useDialogs();
   const ml = useMemo(() => buildMaterialList(s), [s]);
   const empty = !s.panels.length || (!ml.abb.length && !ml.other.length && !ml.abbEnclosures.length && !ml.proE.length && !ml.is2.length && !ml.plpCells.length);
-  // "Download Data Sheets" — unique ABB order codes (from ABB products + enclosures),
-  // each opening its ABB product page where the datasheet is printed (English → PDF).
-  const [dsOpen, setDsOpen] = useState(false);
-  const dsRows = useMemo(() => {
-    const seen = new Set<string>(); const out: { code: string; name: string }[] = [];
-    for (const r of [...ml.abb, ...ml.abbEnclosures]) {
-      const code = (r.reference || "").trim();
-      if (!/^\d[A-Z]{2,4}\d/i.test(code) || seen.has(code)) continue; // ABB order-code shape only
-      seen.add(code); out.push({ code, name: r.description || r.name || code });
-    }
-    return out.sort((a, b) => a.name.localeCompare(b.name));
-  }, [ml]);
   // Per-item ABB discount (%) — defaults to the Pricing-Settings global, editable
   // per item. Stored by reference||name; drives each ABB item's price in the quote.
   const globalPct = Math.round(s.factors.abbDiscount * 100);
@@ -7832,12 +7735,6 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
             className="rounded-full border border-line bg-white px-4 py-1.5 text-xs font-bold text-muted hover:border-brand/40 disabled:opacity-40 no-print">
             ↺ Default Discount{overrideCount ? ` (${overrideCount})` : ""}
           </button>
-          {dsRows.length > 0 && (
-            <button onClick={() => setDsOpen(true)} title="Open each ABB component's product page — pick English then Print to PDF to save its data sheet"
-              className="rounded-full border border-brand bg-white px-4 py-1.5 text-xs font-bold text-brand-dark hover:bg-brand-light no-print">
-              ⬇ Download Data Sheets
-            </button>
-          )}
           {!empty && (
             <button onClick={exportExcel} title="Download the current Material List as an .xlsx file"
               className="rounded-full border border-brand bg-white px-4 py-1.5 text-xs font-bold text-brand-dark hover:bg-brand-light no-print">
@@ -7846,7 +7743,6 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
           )}
         </div>
       </div>
-      {dsOpen && <DataSheetsModal rows={dsRows} onClose={() => setDsOpen(false)} />}
 
       {empty ? (
         <div className="card p-10 text-center text-sm text-muted">Configure panels first — the Material List updates automatically.</div>
