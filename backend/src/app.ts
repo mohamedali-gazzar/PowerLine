@@ -42,7 +42,6 @@ import {
   getLvCatalogChanges,
   getLvDuplicateNames,
 } from "./controllers/pricing-lv.controller";
-import { getAbbDatasheet } from "./controllers/abb.controller";
 import {
   postLvImportPreview,
   postLvImportApply,
@@ -157,8 +156,6 @@ export function createApp() {
   // What changed in the price list — readable by everyone, so an offer author can
   // check they are quoting on current prices without price-admin rights.
   app.get("/api/catalog/lv/changes", requireAuth, getLvCatalogChanges);
-  // ABB data-sheet proxy — resolve + stream a component's PDF by order code
-  app.get("/api/abb/datasheet", requireAuth, getAbbDatasheet);
   app.get("/api/pricing/lv", requireAuth, requirePriceViewer, listLvPrices);
   app.get("/api/pricing/lv/facets", requireAuth, requirePriceViewer, getLvFacets);
   // Items that already share a name — read-only, and viewable by anyone who can
