@@ -11,6 +11,10 @@ import NewQtnPicker from "../components/NewQtnPicker";
 /** Deleting is refused (409) once a quotation has entered the approval flow, so
  *  the button is only offered on the two stages the server still accepts. */
 const DELETABLE = new Set<QtnStatus>(["DRAFT", "RETURNED"]);
+// Status-filter value for superseded revisions. "Cancelled" is derived from the
+// revision numbers, not a stored status, so it needs a sentinel that can never collide
+// with a real QtnStatus.
+const CANCELLED_FILTER = "__cancelled__";
 
 /** LV landing page — the offers history. "+ New QTN" opens a fresh workspace
  *  (Project / Pricing / Panels / Technical / Commercial / Material). */
@@ -32,7 +36,7 @@ export default function LvQtnListPage() {
   const [actionErr, setActionErr] = useState("");
   const [picker, setPicker] = useState(false);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<QtnStatus | "">("");
+  const [status, setStatus] = useState<QtnStatus | "" | typeof CANCELLED_FILTER>("");
   const [owner, setOwner] = useState("");
   const [approver, setApprover] = useState("");
   const [from, setFrom] = useState("");
@@ -109,29 +113,10 @@ export default function LvQtnListPage() {
   const filtersOn = Boolean(q || status || owner || approver || from || to);
   const clearFilters = () => { setQ(""); setStatus(""); setOwner(""); setApprover(""); setFrom(""); setTo(""); };
 
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    // The pickers give a calendar day, so the "to" bound has to cover its whole day.
-    const fromMs = from ? new Date(`${from}T00:00:00`).getTime() : null;
-    const toMs = to ? new Date(`${to}T23:59:59.999`).getTime() : null;
-    return (qtns ?? []).filter((x) => {
-      if (status && (x.status ?? "DRAFT") !== status) return false;
-      if (owner && x.ownerEmail !== owner) return false;
-      if (approver && x.approverEmail !== approver) return false;
-      if (fromMs !== null || toMs !== null) {
-        const t = new Date(x.updatedAt).getTime();
-        if (fromMs !== null && t < fromMs) return false;
-        if (toMs !== null && t > toMs) return false;
-      }
-      if (needle && ![x.number, x.projectName, x.customer].some((f) => (f || "").toLowerCase().includes(needle)))
-        return false;
-      return true;
-    });
-  }, [qtns, q, status, owner, approver, from, to]);
-
   // QTN numbers superseded by a higher revision — shown as "Cancelled". Numbers
   // repeat across users, so revisions are matched within one owner's numbering
   // only; otherwise one user's "-2" would cancel another user's original.
+  // Defined before `filtered` so the "Cancelled" filter choice can use it.
   const cancelledIds = useMemo(() => {
     const byOwner = new Map<string, QtnListItem[]>();
     for (const x of qtns ?? []) {
@@ -145,6 +130,29 @@ export default function LvQtnListPage() {
     }
     return out;
   }, [qtns]);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    // The pickers give a calendar day, so the "to" bound has to cover its whole day.
+    const fromMs = from ? new Date(`${from}T00:00:00`).getTime() : null;
+    const toMs = to ? new Date(`${to}T23:59:59.999`).getTime() : null;
+    return (qtns ?? []).filter((x) => {
+      // "Cancelled" is not a stored status — it is a superseded revision — so it is a
+      // filter choice of its own rather than one of the workflow statuses.
+      if (status === CANCELLED_FILTER) { if (!cancelledIds.has(x.id)) return false; }
+      else if (status && (x.status ?? "DRAFT") !== status) return false;
+      if (owner && x.ownerEmail !== owner) return false;
+      if (approver && x.approverEmail !== approver) return false;
+      if (fromMs !== null || toMs !== null) {
+        const t = new Date(x.updatedAt).getTime();
+        if (fromMs !== null && t < fromMs) return false;
+        if (toMs !== null && t > toMs) return false;
+      }
+      if (needle && ![x.number, x.projectName, x.customer].some((f) => (f || "").toLowerCase().includes(needle)))
+        return false;
+      return true;
+    });
+  }, [qtns, q, status, owner, approver, from, to, cancelledIds]);
 
   // Keep the revisions of one quotation together. The overall order stays exactly as
   // it is now (recency, as the server returns it) — but the moment a base number has
@@ -318,9 +326,10 @@ export default function LvQtnListPage() {
             <div>
               <label className="label" htmlFor="qtn-status">Status</label>
               <select id="qtn-status" className="input w-56" value={status}
-                onChange={(e) => setStatus(e.target.value as QtnStatus | "")}>
+                onChange={(e) => setStatus(e.target.value as QtnStatus | "" | typeof CANCELLED_FILTER)}>
                 <option value="">All statuses</option>
                 {QTN_STATUSES.map((s) => <option key={s} value={s}>{QTN_STATUS_LABEL[s]}</option>)}
+                <option value={CANCELLED_FILTER}>Cancelled (old revisions)</option>
               </select>
             </div>
             {owners.length > 1 && (
