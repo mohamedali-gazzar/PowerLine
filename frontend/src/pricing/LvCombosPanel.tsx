@@ -10,14 +10,33 @@
 // a file first. A previously downloaded .json is still accepted, unchanged.
 //
 // What it still does: shows what is loaded, takes a new file, hands the current
-// set back as a download, and can fall back to the version shipped with the app.
-// Every save is checked against the price list and reports any part that no longer
-// resolves, because the builders find their parts by description.
+// set back as a workbook OF THE SAME SHAPE it accepts, and can fall back to the
+// version shipped with the app. Every save is checked against the price list and
+// reports any part that no longer resolves, because the builders find their parts
+// by description.
+//
+// The download used to be combos.json. It is Excel now because the people who use
+// this screen do not open .json files: a download that cannot be edited in the tool
+// they already use, and cannot be loaded back without being converted first, is a
+// dead end. The one thing Excel cannot carry is named on screen every time, so a
+// download is never mistaken for a complete backup.
 
 import { useEffect, useRef, useState } from "react";
 import { api, getToken, type LvComboSection } from "../api";
 import { refreshCatalog } from "../lv/catalogSource";
-import { parseCombosWorkbook } from "./combosExcel";
+import { buildCombosWorkbook, combosWorkbookOmissions, parseCombosWorkbook } from "./combosExcel";
+
+/** Today as 2026-08-16, so a folder of downloads sorts itself and two of them
+ *  taken on different days do not overwrite each other. */
+const stamp = (): string => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+/** "a", "a and b", "a, b and c" — this goes into a sentence, not a list. */
+const andList = (xs: string[]): string =>
+  xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
 
 export default function LvCombosPanel() {
   const [sections, setSections] = useState<LvComboSection[]>([]);
@@ -25,6 +44,7 @@ export default function LvCombosPanel() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
+  const [note, setNote] = useState("");
   const [warnings, setWarnings] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -41,15 +61,39 @@ export default function LvCombosPanel() {
 
   const current = sections.find((s) => s.section === active);
 
+  // Whatever is loaded that Excel has no shape for. Worked out from what is
+  // actually on the screen rather than hardcoded, so the sentence stays true if
+  // the sections ever change.
+  const omitted = combosWorkbookOmissions(sections);
+
   const downloadAll = () => {
-    const out: Record<string, unknown> = {};
-    for (const s of sections) out[s.section] = s.value;
-    const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "combos.json";
-    a.click();
-    URL.revokeObjectURL(a.href);
+    setError(""); setDone(""); setNote("");
+    try {
+      const name = `Combinations Database - from PowerLine ${stamp()}.xlsx`;
+      const a = document.createElement("a");
+      // The anchor has to be IN the document and the URL must outlive the click:
+      // revoking in the same tick can hand back a truncated or empty file while the
+      // success message still appears. The other downloads in this app do it this way.
+      const url = URL.createObjectURL(buildCombosWorkbook(sections));
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      setDone(
+        `Saved "${name}" to your downloads — one tab per list, and it loads straight back into this screen. ` +
+          `If you edit a tab, change only the words in the cells: leaving a description or a quantity cell EMPTY ` +
+          `is read as "this row is a heading", which drops that row and the ones under it.`,
+      );
+      if (omitted.length) {
+        setNote(
+          `That file does not include ${andList(omitted)} — it is not kept in Excel anywhere, so no workbook can carry it. Treat the download as a copy of everything else, not as a complete backup. Nothing is lost: it stays exactly as it is in the app, and loading this file back will not touch it.`,
+        );
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The Excel file could not be made.");
+    }
   };
 
   const labelOf = (section: string) => sections.find((s) => s.section === section)?.label ?? section;
@@ -74,7 +118,7 @@ export default function LvCombosPanel() {
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
-    setError(""); setDone(""); setWarnings([]); setBusy("Reading…");
+    setError(""); setDone(""); setNote(""); setWarnings([]); setBusy("Reading…");
     try {
       // A workbook says for itself which sections it fills — an MCC, ATS or
       // photocell file also carries the withdrawable-kit tab, so one upload can
@@ -105,7 +149,7 @@ export default function LvCombosPanel() {
   };
 
   const resetAll = async () => {
-    setBusy("Resetting…"); setError(""); setDone(""); setWarnings([]);
+    setBusy("Resetting…"); setError(""); setDone(""); setNote(""); setWarnings([]);
     try {
       await api.pricing.lvCombosReset();
       setDone("All combinations are back to the version shipped with the app.");
@@ -135,13 +179,28 @@ export default function LvCombosPanel() {
           something the app needs, it is refused and nothing changes. Power-factor correction is not
           on this list: the app works the capacitor bank out for itself.
         </p>
+        <p className="mt-2 text-sm text-muted">
+          <b className="text-ink">Download gives you the same kind of workbook back</b> — an Excel
+          file holding everything the app is using right now, one tab per list, with the same tab
+          names and columns as the files above. Open it in Excel, change what you need, and load that
+          same file back here. Use it to see exactly what is live, or to keep a copy before loading
+          something new.
+        </p>
+        {omitted.length > 0 && (
+          <p className="mt-2 text-sm text-muted">
+            <b className="text-ink">One thing the download cannot carry:</b> {andList(omitted)}. It is
+            not kept in Excel anywhere, so the downloaded file is a copy of everything else and not a
+            complete backup. It is not at risk — it stays as it is in the app, and loading the file
+            back will not touch it.
+          </p>
+        )}
       </div>
 
       <div className="mb-3 flex flex-wrap gap-1">
         {sections.map((s) => (
           <button
             key={s.section}
-            onClick={() => { setActive(s.section); setDone(""); setError(""); setWarnings([]); }}
+            onClick={() => { setActive(s.section); setDone(""); setNote(""); setError(""); setWarnings([]); }}
             className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
               active === s.section ? "bg-brand text-white" : "bg-brand-tint/60 text-brand-dark hover:bg-brand-tint"
             }`}
@@ -156,9 +215,14 @@ export default function LvCombosPanel() {
         <button className="btn-primary" disabled={!!busy} onClick={() => fileRef.current?.click()}>
           {busy || "⬆ Load a combinations workbook"}
         </button>
-        <button className="btn-ghost" disabled={!!busy} onClick={downloadAll}>⬇ Download current</button>
+        <button className="btn-ghost" disabled={!!busy || !sections.length} onClick={downloadAll}>
+          ⬇ Download the current workbook
+        </button>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.json" className="hidden" onChange={onFile} />
-        <span className="text-xs text-muted">Excel (.xlsx) — or a combos.json saved from here.</span>
+        <span className="text-xs text-muted">
+          Excel in, Excel out — the file you download loads straight back. A combos.json saved from
+          here still works too.
+        </span>
         <div className="grow" />
         <button className="btn-ghost text-red-700" disabled={!!busy} onClick={resetAll}>
           Reset all to the app's version
@@ -167,6 +231,7 @@ export default function LvCombosPanel() {
 
       {error && <div className="card mb-3 border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>}
       {done && <div className="card mb-3 border-green-300 bg-green-50 p-3 text-sm font-semibold text-green-800">{done}</div>}
+      {note && <div className="card mb-3 border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{note}</div>}
       {warnings.length > 0 && (
         <div className="card mb-3 border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
           <b>{warnings.length} part{warnings.length === 1 ? "" : "s"} did not match anything in the price list.</b>
@@ -189,10 +254,12 @@ export default function LvCombosPanel() {
               {current.updatedBy ? ` · last loaded by ${current.updatedBy}` : " · as shipped with the app"}
             </span>
           </div>
+          {/* Asked of the exporter rather than hardcoded, so this cannot drift
+              away from what the download actually contains. */}
           <p className="mt-2 text-xs text-muted">
-            {current.section === "motorized"
-              ? "No workbook covers the motorized breaker yet, so this one is loaded from a combos.json file."
-              : "Maintained in the combinations workbook. To change it, load the workbook above."}
+            {combosWorkbookOmissions([current]).length
+              ? "No workbook covers this one, so it is loaded from a combos.json file — and it is the one list the Excel download leaves out. It is not affected by anything you load or download here."
+              : "Maintained in the combinations workbook. To change it, download the workbook above, edit it, and load it back — or load the engineers' own file."}
           </p>
         </div>
       )}

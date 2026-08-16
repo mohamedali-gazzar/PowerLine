@@ -585,3 +585,378 @@ export async function parseCombosWorkbook(file: File): Promise<ParsedComboSectio
 
   return out;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// The other direction — hand back a workbook instead of combos.json
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// WHY ONE WORKBOOK AND NOT ONE PER SECTION
+// ───────────────────────────────────────
+// The engineers keep three files (MCC, ATS, photocell) and each of them also
+// carries the same WD tab. The download is ONE file carrying all five tabs
+// instead, for three reasons:
+//
+//  1. `parseCombosWorkbook` takes ONE file. Three downloads would mean three
+//     uploads, and the app would be half-old and half-new in between.
+//  2. Every one of those three files repeats the WD tab. Download three, edit
+//     the withdrawable kits in one of them, upload all three, and the two stale
+//     copies silently put the old kits back. One file cannot do that to you.
+//  3. It is not a new shape. Each engineers' file is a SUBSET of these tabs —
+//     same tab names, same columns, same conventions — so the reader above
+//     accepts this file and the engineers' own files equally, and the WD tab
+//     still travels beside the others exactly as it does in a real file.
+//
+// WHAT IS NOT IN IT, AND WHY
+// ──────────────────────────
+//  • 'motorized' has no tab, because it has no Excel shape anywhere: no
+//    engineers' workbook contains it and the reader above has no parser for it.
+//    Inventing a layout would mean inventing the round trip too. It is left out
+//    and named by `combosWorkbookOmissions()` so the caller can say so on
+//    screen. Leaving it out is SAFE, not lossy: the reader never returns a
+//    'motorized' section either, so uploading this file cannot overwrite it.
+//  • The photocell "DESCRIPTION" column is written as an empty column. The app
+//    stores only the price-list wording (trap 3); the short offer wording is
+//    not derivable — the engineers' own file writes "Contactor# AF460-30-00"
+//    against a part whose code is "AF460-30-00-00" — so it is left blank rather
+//    than guessed. The reader ignores that column.
+//  • The MCC control block is written with its "DOL" group only, because that
+//    is the only one stored (see MCC_CONTROL_GROUP above). The workbook's
+//    "Star Delta" group is the same list plus a timer the app adds itself.
+//
+// HOW THE ROUND TRIP IS KEPT EXACT
+// ────────────────────────────────
+// Every value is written in the form the app STORES, never the price-list form,
+// because the reader's two translation tables (MCC_CATALOGUE_TO_TEMPLATE and
+// ATS_DESC_MAP) leave an already-translated value alone — verified by feeding a
+// built workbook back through `parseCombosWorkbook` and comparing with
+// combos.json, section by section.
+//
+// The one deliberate difference from the engineers' ATS tabs is how many frames
+// share a QTY column. Their file lets frames of DIFFERENT length share one
+// block and leaves the odd cell empty — which works on paper, but rebuilding it
+// would mean guessing how to align rows that are not the same, and a wrong
+// guess turns a part into a heading (trap 2). So frames are grouped into a
+// block only while they agree exactly on groups and quantities, which is the
+// rule that makes "blank QTY + fills the whole block = heading" provably right.
+// The block count is read, never hardcoded, so this is inside the format's own
+// rules: the 1-out-of-2 tab comes back as 4 blocks instead of 3, and reads back
+// identically.
+
+/** The sections `buildCombosWorkbook` can put in a file, in tab order. */
+export const COMBOS_WORKBOOK_SECTIONS = ["mcc", "ats", "photocell", "wd"] as const;
+
+/** Plain-English names of the sections handed in that the workbook cannot
+ *  carry, for the caller to show on screen. Empty when everything fits. */
+export function combosWorkbookOmissions(sections: ParsedComboSection[]): string[] {
+  const known = new Set<string>(COMBOS_WORKBOOK_SECTIONS);
+  const words: Record<string, string> = { motorized: "the motorised circuit-breaker table" };
+  return sections.filter((s) => !known.has(s.section)).map((s) => words[s.section] ?? `the "${s.section}" list`);
+}
+
+/** The reader compares this lower-cased (MCC_CONTROL_GROUP); this is how the
+ *  workbook itself spells it. Edit the two together. */
+const MCC_CONTROL_GROUP_LABEL = "DOL";
+
+type Grid = unknown[][];
+
+/** Sheets are filled cell by cell, so every hole must become a real `null`:
+ *  XLSX.utils.aoa_to_sheet reads `.length` on every row it is given. */
+function put(g: Grid, r: number, c: number, v: unknown): void {
+  while (g.length <= r) g.push([]);
+  const row = g[r];
+  while (row.length <= c) row.push(null);
+  row[c] = v;
+}
+
+const asObj = (v: unknown): Record<string, unknown> | null =>
+  v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+
+/** Written when the app hands over something this file cannot lay out. Same
+ *  voice as the refusals above: say what is wrong, not what threw. */
+function badShape(section: string): Error {
+  return new Error(
+    `The "${section}" list is not in the shape this download expects, so no Excel file was made. Nothing was changed — please send this message on.`,
+  );
+}
+
+// ── MCC tab ────────────────────────────────────────────────────────────────
+// Same geometry the reader walks: key in F, parts from G, and the control block
+// underneath in A..D behind the "CONTROL ACC." marker. Columns A..C carry the
+// picker legend, which is rebuilt from the starters (the app does not store it)
+// and which the reader ignores.
+function mccGrid(value: unknown): Grid {
+  const o = asObj(value);
+  const combos = o && Array.isArray(o.combos) ? (o.combos as MccCombo[]) : null;
+  const control = o && Array.isArray(o.control) ? (o.control as QtyDesc[]) : null;
+  if (!combos || !control) throw badShape("mcc");
+
+  const g: Grid = [];
+  combos.forEach((c, i) => {
+    const r = i + 1;
+    put(g, r, MCC_KEY_COL, `${c.kind}-${c.kw}-Type ${c.type}`);
+    c.parts.forEach((p, k) => put(g, r, MCC_PART_COL_FROM + k, p));
+  });
+
+  const uniq = (xs: string[]): string[] => xs.filter((x, i) => xs.indexOf(x) === i);
+  put(g, 0, 0, "MCC");
+  put(g, 0, 1, "Rating");
+  put(g, 0, 2, "Type");
+  uniq(combos.map((c) => c.kind)).forEach((v, i) => put(g, i + 1, 0, v));
+  uniq(combos.map((c) => c.kw)).forEach((v, i) => put(g, i + 1, 1, v));
+  uniq(combos.map((c) => `Type ${c.type}`)).forEach((v, i) => put(g, i + 1, 2, v));
+
+  const start = g.length + 2; // two blank rows, as in the engineers' file
+  control.forEach((it, i) => {
+    const r = start + i;
+    if (i === 0) put(g, r, MCC_CTRL_MARK_COL, "CONTROL ACC.");
+    put(g, r, MCC_CTRL_GROUP_COL, MCC_CONTROL_GROUP_LABEL);
+    put(g, r, MCC_CTRL_QTY_COL, it.qty);
+    put(g, r, MCC_CTRL_DESC_COL, it.desc);
+  });
+  return g;
+}
+
+// ── ATS tabs ───────────────────────────────────────────────────────────────
+
+/** "1oo2" -> "1 out of 2", for the tab name and the banner. */
+function atsWordsOf(type: string): string {
+  const known = ATS_TYPE_WORDS[type];
+  if (known) return known;
+  const m = /^(\d+)oo(\d+)$/i.exec(type);
+  return m ? `${m[1]} out of ${m[2]}` : type;
+}
+
+/** Two frames may share a QTY column only when they agree on every group name
+ *  and every quantity — see the note above about not guessing an alignment. */
+const atsSkeleton = (groups: AtsGroup[]): string =>
+  groups.map((g) => `${g.group} ${g.items.map((i) => i.qty).join(",")}`).join("");
+
+/** The header cell for a frame. The reader strips a leading "ATS", so a frame
+ *  that already begins with it is written bare rather than doubled. */
+const atsFrameHeader = (frame: string): string => (/^ats/i.test(frame) ? frame : `ATS${frame}`);
+
+function atsGrid(type: AtsType, words: string): Grid {
+  const frames = Object.keys(type);
+  const blocks: { frames: string[]; groups: AtsGroup[] }[] = [];
+  for (const f of frames) {
+    const groups = type[f];
+    if (!Array.isArray(groups)) throw badShape("ats");
+    const last = blocks[blocks.length - 1];
+    if (last && atsSkeleton(last.groups) === atsSkeleton(groups)) last.frames.push(f);
+    else blocks.push({ frames: [f], groups });
+  }
+
+  const TITLE_ROW = 4;
+  const HEADER_ROW = 5;
+  const g: Grid = [];
+  put(g, 0, 0, "ATS");
+  put(g, 0, 1, words);
+
+  let col = 0;
+  for (const b of blocks) {
+    put(g, TITLE_ROW, col, words);
+    put(g, HEADER_ROW, col, "QTY");
+    b.frames.forEach((f, i) => put(g, HEADER_ROW, col + 1 + i, atsFrameHeader(f)));
+
+    let r = HEADER_ROW + 1;
+    b.groups.forEach((grp, gi) => {
+      // A heading: QTY left empty and the same text in every frame column of
+      // the block. That is exactly the rule the reader uses.
+      b.frames.forEach((_, i) => put(g, r, col + 1 + i, grp.group));
+      r += 1;
+      grp.items.forEach((item, ii) => {
+        put(g, r, col, item.qty);
+        b.frames.forEach((f, i) => put(g, r, col + 1 + i, type[f][gi].items[ii].desc));
+        r += 1;
+      });
+    });
+    col += b.frames.length + 2; // this block's columns, plus a blank spacer
+  }
+  return g;
+}
+
+// ── Photocell tab ──────────────────────────────────────────────────────────
+// Ratings first, stopped by a blank row, then the fixed parts as
+// qty | description | "fixed" — the two shapes the reader looks for.
+function photocellGrid(value: unknown): Grid {
+  const o = asObj(value);
+  const ratings = o && Array.isArray(o.ratings) ? (o.ratings as PhotocellRating[]) : null;
+  const fixed = o && Array.isArray(o.fixed) ? (o.fixed as QtyDesc[]) : null;
+  if (!ratings || !fixed) throw badShape("photocell");
+
+  const g: Grid = [];
+  put(g, 0, 0, "Rating of CB");
+  put(g, 0, 1, "DESCRIPTION"); // left empty on purpose — see the note above
+  put(g, 0, 2, "PL Description");
+  put(g, 0, 3, "Aux Contactor");
+  ratings.forEach((rt, i) => {
+    const r = i + 1;
+    put(g, r, 0, rt.a);
+    put(g, r, 2, rt.contactor);
+    put(g, r, 3, rt.aux);
+  });
+
+  const start = g.length + 2; // the blank row is what ends the ratings run
+  fixed.forEach((it, i) => {
+    const r = start + i;
+    put(g, r, 0, it.qty);
+    put(g, r, 1, it.desc);
+    put(g, r, 2, "fixed");
+  });
+  return g;
+}
+
+// ── WD tab ─────────────────────────────────────────────────────────────────
+// One four-row block per heading, in the order the kits are stored.
+
+/** "3P" -> "MCCB-3P", "3P-Air" -> "Air-3P". The exact reverse of the reader,
+ *  which takes the breaker type and the pole count out of the heading. */
+function wdHeadingOf(poles: string): { heading: string; digits: string } {
+  const m = /^(\d+P)(?:-(.+))?$/i.exec(flat(poles));
+  if (!m) {
+    throw new Error(
+      `A withdrawable kit is filed under "${poles}", which does not say how many poles it has. The download expects something like "3P" or "3P-Air". Nothing was changed — please send this message on.`,
+    );
+  }
+  const digits = m[1].toUpperCase();
+  return { heading: `${m[2] ? m[2].trim() : "MCCB"}-${digits}`, digits };
+}
+
+function wdGrid(value: unknown): Grid {
+  if (!Array.isArray(value)) throw badShape("wd");
+  const wd = value as WdEntry[];
+
+  const order: string[] = [];
+  const byPoles = new Map<string, WdEntry[]>();
+  for (const e of wd) {
+    const list = byPoles.get(e.poles);
+    if (list) list.push(e);
+    else {
+      byPoles.set(e.poles, [e]);
+      order.push(e.poles);
+    }
+  }
+
+  const g: Grid = [];
+  let r = 0;
+  for (const poles of order) {
+    const { heading, digits } = wdHeadingOf(poles);
+    put(g, r, 0, heading);
+    const kr = r + 1;
+    put(g, kr, 0, null); // the key row's label cell must be empty
+    put(g, kr + 1, 0, "CB");
+    put(g, kr + 2, 0, "FP");
+    put(g, kr + 3, 0, "MP");
+    (byPoles.get(poles) ?? []).forEach((e, i) => {
+      const c = i + 1;
+      put(g, kr, c, `${e.frame}-${digits}-WD`);
+      put(g, kr + 2, c, e.fp);
+      put(g, kr + 3, c, e.mp);
+    });
+    r = kr + 5; // four rows of block, then one blank row
+  }
+  return g;
+}
+
+// ── Read me tab ────────────────────────────────────────────────────────────
+// Ignored by the reader (it is none of MCC / ATS / Photocell / WD), and there
+// so the file explains itself to whoever opens it.
+function readMeGrid(present: string[], missing: string[]): Grid {
+  const lines = [
+    "PowerLine — combinations currently in the app",
+    "",
+    "Downloaded from the Combinations tab. Edit a tab and upload this same file",
+    "back on that tab to change what the app builds.",
+    "",
+    "Tabs in this file:",
+    ...present.map((p) => `    ${p}`),
+    "",
+    "Please do not rename the tabs or move the columns — the app finds the",
+    "figures by tab name and by heading.",
+    "",
+    ...(missing.length
+      ? [`Not in this file: ${missing.join(", ")}. It is not kept in Excel anywhere,`,
+         "so it stays as it is in the app and uploading this file will not touch it.",
+         ""]
+      : []),
+    "Photocell tab: the DESCRIPTION column is left empty. The app keeps only the",
+    "price-list wording next to it, and works the short wording out itself.",
+    "",
+    "MCC tab: the control block lists the DOL parts only. Star-delta uses the",
+    "same parts plus the ON-delay timer, which the app adds by itself.",
+  ];
+  return lines.map((l) => [l]);
+}
+
+// ── The download itself ────────────────────────────────────────────────────
+
+/** Roughly how wide each column should open, so the file is readable. */
+const widthsFor = (g: Grid): { wch: number }[] => {
+  const n = g.reduce((m, row) => Math.max(m, row.length), 0);
+  const out: { wch: number }[] = [];
+  for (let c = 0; c < n; c++) {
+    let w = 8;
+    for (const row of g) w = Math.max(w, Math.min(60, flat(row[c]).length + 2));
+    out.push({ wch: w });
+  }
+  return out;
+};
+
+function addSheet(wb: XLSX.WorkBook, name: string, g: Grid): void {
+  const ws = XLSX.utils.aoa_to_sheet(g);
+  ws["!cols"] = widthsFor(g);
+  XLSX.utils.book_append_sheet(wb, ws, name);
+}
+
+/**
+ * Build the workbook the Combinations tab hands back — the same file the app
+ * can read again, so download → edit → upload is a safe loop.
+ *
+ * One file with a tab per section (see the long note above for why), carrying
+ * everything except 'motorized', which has no Excel shape;
+ * `combosWorkbookOmissions()` names anything left out so the caller can say so.
+ *
+ * Throws an Error written for a non-programmer if a section arrives in a shape
+ * that cannot be laid out, rather than writing a file that will not load again.
+ */
+export function buildCombosWorkbook(sections: ParsedComboSection[]): Blob {
+  const by = new Map<string, unknown>();
+  for (const s of sections) by.set(s.section, s.value);
+
+  const wb = XLSX.utils.book_new();
+  const present: string[] = [];
+  const later: { name: string; grid: Grid }[] = [];
+
+  if (by.has("mcc")) {
+    later.push({ name: "MCC", grid: mccGrid(by.get("mcc")) });
+    present.push("MCC — motor starters and the control parts that go with them");
+  }
+  if (by.has("ats")) {
+    const ats = asObj(by.get("ats"));
+    if (!ats) throw badShape("ats");
+    for (const type of Object.keys(ats)) {
+      const words = atsWordsOf(type);
+      const value = ats[type];
+      const table = asObj(value);
+      if (!table) throw badShape("ats");
+      later.push({ name: `ATS ${words}`, grid: atsGrid(table as AtsType, words) });
+      present.push(`ATS ${words} — the parts per breaker frame`);
+    }
+  }
+  if (by.has("photocell")) {
+    later.push({ name: "Photocell", grid: photocellGrid(by.get("photocell")) });
+    present.push("Photocell — contactor per breaker rating, and the fixed parts");
+  }
+  if (by.has("wd")) {
+    later.push({ name: "WD", grid: wdGrid(by.get("wd")) });
+    present.push("WD — withdrawable kits (fixed part and moving part)");
+  }
+
+  addSheet(wb, "Read me", readMeGrid(present, combosWorkbookOmissions(sections)));
+  for (const s of later) addSheet(wb, s.name, s.grid);
+
+  const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
+  return new Blob([buf], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
