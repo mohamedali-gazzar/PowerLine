@@ -1324,8 +1324,17 @@ export function searchComponents(q: string, limit = 50): DbComponent[] {
   // lights show before Compact ATS. Specific "ats"/"truone" searches are unaffected
   // (only ATS rows match those terms).
   const atsLast = (c: DbComponent) => (/truone/i.test(c.t || "") ? 1 : 0);
+  // Cheapest first among results that match EQUALLY well — the usual case is one
+  // family of breakers differing only by trip unit and poles, and price order is what
+  // you want to compare them. It is a tie-break, not the primary sort: ranking by
+  // price outright would let a vaguely-matching cheap part outrank an exact hit.
+  // EUR items are converted at the current rate so the two currencies compare;
+  // discounts and the selling factor are left out, as they shift everything alike.
+  const priceEgp = (c: DbComponent) =>
+    (c.eur ?? 0) > 0 ? (c.eur ?? 0) * (DEFAULT_FACTORS.euro || 1) : (c.egp ?? 0);
   scored.sort((a, b) =>
-    a.score - b.score || a.pos - b.pos || atsLast(a.c) - atsLast(b.c) || a.c.n.length - b.c.n.length || a.c.n.localeCompare(b.c.n)
+    a.score - b.score || a.pos - b.pos || priceEgp(a.c) - priceEgp(b.c) ||
+    atsLast(a.c) - atsLast(b.c) || a.c.n.length - b.c.n.length || a.c.n.localeCompare(b.c.n)
   );
   return scored.slice(0, limit).map((x) => x.c);
 }
