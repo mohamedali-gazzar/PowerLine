@@ -81,13 +81,25 @@ export default function EdmsStandardWarningModal({
   userName,
   onRevert,
   onAcknowledge,
+  onClose,
+  subtitle,
+  revertLabel = "Revert changes",
+  acknowledgeLabel = "Got it — I’ll recheck",
 }: {
   open: boolean;
   userName?: string;
   onRevert: () => void;
   onAcknowledge: () => void;
+  /** × and Esc. Defaults to onAcknowledge (the edit-warning's "close = acknowledge").
+   *  The send-for-approval use passes its own so a stray Esc cancels, not sends. */
+  onClose?: () => void;
+  /** The line under the title. Defaults to the standard-panel wording. */
+  subtitle?: React.ReactNode;
+  revertLabel?: string;
+  acknowledgeLabel?: string;
 }) {
   const primaryRef = useRef<HTMLButtonElement | null>(null);
+  const close = onClose ?? onAcknowledge;
 
   // First word of the account name; "engineer" when nothing is available.
   const firstName = (userName || "").trim().split(/\s+/)[0] || "engineer";
@@ -95,17 +107,17 @@ export default function EdmsStandardWarningModal({
   useEffect(() => {
     if (!open) return;
     primaryRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onAcknowledge(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onAcknowledge]);
+  }, [open, close]);
 
   if (!open) return null;
 
   return createPortal(
     <div className="edms-warn-backdrop">
       <div className="edms-warn-modal" role="alertdialog" aria-modal="true" aria-labelledby="edmsWarnTitle" aria-describedby="edmsWarnMsg">
-        <button className="edms-warn-close" aria-label="Close" onClick={onAcknowledge}>&#10005;</button>
+        <button className="edms-warn-close" aria-label="Close" onClick={close}>&#10005;</button>
 
         <div className="edms-warn-body">
           <div className="edms-warn-icon"><PanelWarningIcon /></div>
@@ -114,7 +126,7 @@ export default function EdmsStandardWarningModal({
             <span className="edms-warn-badge">EDMS STANDARD PANEL</span>
             <h2 id="edmsWarnTitle">Hold on, {firstName}.</h2>
             <p className="edms-warn-msg" id="edmsWarnMsg">
-              These panels are <strong>standard</strong> — qty, sizing and copper.
+              {subtitle ?? <>These panels are <strong>standard</strong> — qty, sizing and copper.</>}
             </p>
             <div className="edms-warn-callout">
               <h3>MADE ANY CHANGES? DON&rsquo;T FORGET:</h3>
@@ -129,8 +141,8 @@ export default function EdmsStandardWarningModal({
         </div>
 
         <div className="edms-warn-foot">
-          <button className="edms-warn-ghost" onClick={onRevert}>Revert changes</button>
-          <button className="edms-warn-primary" ref={primaryRef} onClick={onAcknowledge}>Got it — I&rsquo;ll recheck</button>
+          <button className="edms-warn-ghost" onClick={onRevert}>{revertLabel}</button>
+          <button className="edms-warn-primary" ref={primaryRef} onClick={onAcknowledge}>{acknowledgeLabel}</button>
         </div>
       </div>
       <style>{CSS}</style>

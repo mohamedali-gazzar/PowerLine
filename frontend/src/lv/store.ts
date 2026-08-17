@@ -109,6 +109,11 @@ export interface LvPanel {
   stdTrKva?: string;      // transformer rating, kVA
   stdPfc?: string;        // "Yes" | "No" — power-factor correction included
   stdOutgoings?: string;  // "C.B" | "SWF" — outgoing device type
+  // Set once a STANDARD (EDMS) panel has been changed away from its standard (a
+  // component/sizing/copper edit — not "Build this panel"). Drives the extra recheck
+  // confirmation shown when the quotation is sent for approval; cleared by rebuilding
+  // from the standard or reverting the change.
+  edmsEdited?: boolean;
   spare?: boolean;        // this cell is the Spare-parts list (no sizing/specs; components + copper only)
   spareKind?: string;     // which spare-list variant the cell is: "spare" | "lcp" | "kwhm"
   noGroups?: number;      // LCP: control groups / KWHM: number of meters — drives auto-fill + auto-sizing

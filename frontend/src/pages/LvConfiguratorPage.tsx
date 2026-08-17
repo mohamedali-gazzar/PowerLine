@@ -258,6 +258,8 @@ function SearchSelect({ value, placeholder, options, onPick, heightMatch }: {
 const EDMS_IGNORE_KEYS = new Set<string>([
   "activeSection", "name", "fedFrom", "code",
   "stdTrKva", "stdPfc", "stdOutgoings",
+  // UI-only markers — not a change to the panel's contents/sizing.
+  "highlight", "draft", "edmsEdited",
 ]);
 
 export default function LvConfiguratorPage() {
@@ -320,6 +322,9 @@ export default function LvConfiguratorPage() {
   // edmsWarnedRef remembers panels already warned this session (once per panel).
   const [edmsWarn, setEdmsWarn] = useState<{ panelId: string; snapshot: LvPanel } | null>(null);
   const edmsWarnedRef = useRef<Set<string>>(new Set());
+  // The same warning, shown a second time as an extra confirmation when a changed
+  // standard (EDMS) quotation is sent for approval.
+  const [edmsSendConfirm, setEdmsSendConfirm] = useState(false);
   const [sendingOffers, setSendingOffers] = useState(false);
   // Cancelled = this revision was superseded by a newer amendment (a higher revision of
   // the same base exists). Derived from the QTN list; makes the revision read-only.
@@ -464,15 +469,22 @@ export default function LvConfiguratorPage() {
   // Block sending until it's picked, surfacing why and jumping to the Project tab. Then
   // show every other missing thing (see approvalWarnings) before the quotation is locked,
   // so the approver sees it rather than discovering it at export time.
+  // Past the EDMS confirmation: the offer's own checks, then the transition.
+  const proceedSend = () => {
+    const warns = approvalWarnings();
+    if (warns.length) { setApprovalWarns(warns); return; } // the modal confirms the send
+    runSendForApproval();
+  };
   const sendForApproval = () => {
     if (!s.project.supportEngineer.trim()) {
       setWfError("Select a Sales support engineer on the Project tab before sending for approval.");
       setTab("project");
       return;
     }
-    const warns = approvalWarnings();
-    if (warns.length) { setApprovalWarns(warns); return; } // the modal confirms the send
-    runSendForApproval();
+    // A STANDARD (EDMS) quotation whose panel was changed gets the recheck warning a
+    // second time here, as an extra confirmation — but only when something was changed.
+    if (isEdmsQtn && s.panels.some((p) => p.edmsEdited)) { setEdmsSendConfirm(true); return; }
+    proceedSend();
   };
   // "Send to <sales person>" — compose the offer e-mail in Outlook via a mailto link.
   // Recipient is the sales person's e-mail from the Project tab (empty To when none is
@@ -899,15 +911,22 @@ export default function LvConfiguratorPage() {
     // navigation/labels — snapshot it and warn. Building from the standard
     // (applyStdPanel rewrites components + copper together) is NOT an edit, so it is
     // excluded and never warns.
-    if (isEdmsQtn && !edmsWarnedRef.current.has(id)) {
+    let next = patch;
+    if (isEdmsQtn) {
       const isBuild = "components" in patch && "copperTool" in patch;
       const meaningful = Object.keys(patch).some((k) => !EDMS_IGNORE_KEYS.has(k));
       if (!isBuild && meaningful) {
-        const cur = s.panels.find((p) => p.id === id);
-        if (cur) { edmsWarnedRef.current.add(id); setEdmsWarn({ panelId: id, snapshot: cur }); }
+        // Persisted mark so the send-for-approval recheck confirmation (#2) survives a
+        // reload — set on every protected edit, cleared by rebuild/revert.
+        if (patch.edmsEdited === undefined) next = { ...patch, edmsEdited: true };
+        // First protected edit of this panel this session → snapshot + warn (#1).
+        if (!edmsWarnedRef.current.has(id)) {
+          const cur = s.panels.find((p) => p.id === id);
+          if (cur) { edmsWarnedRef.current.add(id); setEdmsWarn({ panelId: id, snapshot: cur }); }
+        }
       }
     }
-    apply((old) => ({ ...old, panels: old.panels.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
+    apply((old) => ({ ...old, panels: old.panels.map((p) => (p.id === id ? { ...p, ...next } : p)) }));
   };
   // "Revert changes" on the EDMS warning: restore the panel to the snapshot taken
   // when the warning first fired (undoes every protected change made since).
@@ -1257,6 +1276,17 @@ export default function LvConfiguratorPage() {
         userName={user?.name}
         onRevert={revertEdmsPanel}
         onAcknowledge={() => setEdmsWarn(null)}
+      />
+      {/* Second appearance: the extra recheck confirmation on Send for approval. */}
+      <EdmsStandardWarningModal
+        open={edmsSendConfirm}
+        userName={user?.name}
+        subtitle={<>You changed a <strong>standard</strong> panel. Before it goes for approval, recheck the sizing, copper and EDMS approval.</>}
+        revertLabel="Not yet"
+        acknowledgeLabel="Send for approval"
+        onClose={() => setEdmsSendConfirm(false)}
+        onRevert={() => setEdmsSendConfirm(false)}
+        onAcknowledge={() => { setEdmsSendConfirm(false); proceedSend(); }}
       />
       <ReassignQtnModal
         open={reassignOpen}
@@ -4931,7 +4961,9 @@ function StandardPanelsView({ p, u, panels }: {
       }))
     )
       return;
-    u({ ...applyStdPanel(p, std), name: stdName });
+    // Building from the standard resets the panel to pristine, so it is no longer
+    // "changed from standard" — clear the recheck mark.
+    u({ ...applyStdPanel(p, std), name: stdName, edmsEdited: false });
   };
   return (
     <div className="space-y-2">
