@@ -24,6 +24,18 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
+**The Panel step of the New RMU Offer screen is now side-by-side (two columns).**
+
+- On the **Panel** step, the **Panel — RMU Code** card is now **half width, on the left**, and
+  **Metering** plus **Smart / RTU** sit on the **right**. The left card's rows were tightened
+  slightly so both sides finish at **exactly the same height** (checked for every product type,
+  with and without metering/smart).
+- **The look did not change at all** — same colours, same buttons, same cards as before. This
+  was purely a rearrangement, so nothing about how the page works changed either.
+- On a phone or tablet the two columns stack one above the other, as you'd expect.
+
+## 2026-08-17 · Mohamed's side · Claude
+
 **The New RMU Offer screen is back to its original design.**
 
 - After trying the "Offer Configurator" restyle (including a two-column Panel step), the

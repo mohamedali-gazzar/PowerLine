@@ -440,6 +440,10 @@ export default function NewOfferPage() {
       {/* ── Panel tab ───────────────────────────────────────────────────── */}
       {tab === "panel" && (
         <div className="space-y-5">
+          {/* Two columns: the panel card (half width) on the left, Metering and
+              Smart/RTU on the right. The grid's default stretch plus `grow` on the
+              right column's last card makes both sides exactly the same height. */}
+          <div className="grid gap-5 lg:grid-cols-2">
           <section className="card p-5 animate-fade-up">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="sec-head !mb-0 !pb-0 after:hidden">Panel — RMU Code</h2>
@@ -449,7 +453,7 @@ export default function NewOfferPage() {
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               <Field label="Product type">
                 <Segmented
                   value={rmu.productType}
@@ -499,7 +503,7 @@ export default function NewOfferPage() {
                 </>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <Field label="Rated voltage">
                   <Segmented
                     value={String(rmu.voltageKv) as "12" | "24"}
@@ -518,7 +522,7 @@ export default function NewOfferPage() {
                 </Field>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <Field
                   label={isLucy ? "Feeders (R)" : "Ring feeders (R)"}
                   hint={isLucy ? "Load-break switches (L)" : "NAL — R0 to R5"}
@@ -533,7 +537,7 @@ export default function NewOfferPage() {
                 </Field>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <Field label="Busbar current">
                   <NumberInput value={rmu.busbarCurrentA} suffix="A" onChange={(v) => setR("busbarCurrentA", v)} />
                 </Field>
@@ -553,8 +557,9 @@ export default function NewOfferPage() {
             </div>
           </section>
 
+          <div className="flex flex-col gap-5">
           {/* Metering — a toggle for every type; CT/VT options for PRAL/PSEC only. */}
-          <section className="card p-5 animate-fade-up">
+          <section className={`card p-5 animate-fade-up${rmu.productType === "PRAL" ? " grow" : ""}`}>
             <Toggle
               checked={rmu.hasMetering}
               onChange={(v) => setR("hasMetering", v)}
@@ -609,7 +614,7 @@ export default function NewOfferPage() {
           {/* Smart / RTU — optional, PSEC & Lucy only (PRAL has no smart). Works
               like the metering toggle: turn it on, then pick the level. */}
           {rmu.productType !== "PRAL" && (
-            <section className="card p-5 animate-fade-up">
+            <section className="card grow p-5 animate-fade-up">
               <Toggle
                 checked={rmu.rtuType !== "NONE"}
                 onChange={(on) => setR("rtuType", on ? "READY1" : "NONE")}
@@ -624,6 +629,8 @@ export default function NewOfferPage() {
               )}
             </section>
           )}
+          </div>
+          </div>
 
           <div className="flex justify-between">
             <button type="button" className="btn-ghost" onClick={() => setTab("project")}>← Project</button>
