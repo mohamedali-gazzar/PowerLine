@@ -547,6 +547,22 @@ function parsePfc(rows: Rows): { grid: unknown[][] } {
   return { grid };
 }
 
+// ── Standard LV EDMS ─────────────────────────────────────────────────────────
+// A whole workbook of standard-panel definitions — one sheet per transformer size
+// (300 KVA … 2500 KVA), each holding several panel blocks. The app builds the
+// standard panels in code, so this is kept as an editable REFERENCE: every sheet
+// stored cell for cell, and written straight back. A "Read me" tab (added by the
+// download) is skipped so it never accumulates on a round trip.
+function parseStdLvEdms(names: string[], rowsOf: (n: string) => Rows): { sheets: { name: string; grid: unknown[][] }[] } {
+  const sheets = names
+    .filter((n) => !isReadMeSheet(n))
+    .map((name) => ({
+      name,
+      grid: rowsOf(name).map((row) => (Array.isArray(row) ? row.map((c) => (c === undefined ? null : c)) : [])),
+    }));
+  return { sheets };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Which workbook is this?
 // ═══════════════════════════════════════════════════════════════════════════
@@ -618,7 +634,12 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
     names.find(isMotorizedSheet) ??
     (nameSaysMotorized && !otherKnown ? names.find((n) => !isReadMeSheet(n) && !isPfcSheet(n)) : undefined);
 
-  const recognised = otherKnown || Boolean(motorizedSheet);
+  // Standard LV EDMS — recognised by its file name (its tabs are transformer sizes,
+  // "300 KVA" … "2500 KVA", which match no combination tab). Stored as a reference.
+  const nameSaysStdLvEdms = /(standard|std)\s*lv\s*edms/i.test(file.name);
+  const hasStdLvData = nameSaysStdLvEdms && !otherKnown && !motorizedSheet && names.some((n) => !isReadMeSheet(n));
+
+  const recognised = otherKnown || Boolean(motorizedSheet) || hasStdLvData;
 
   // ── Refusals ────────────────────────────────────────────────────────────
   // Each of these stops the upload rather than saving something the app would
@@ -681,6 +702,11 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
     // Stored as a reference, cell for cell — validated as "a sheet with rows",
     // nothing more, because the app does not consume it.
     out.push({ section: "pfc", value: parsePfc(rowsOf(pfcSheet)) });
+  }
+
+  if (hasStdLvData) {
+    // Every sheet stored cell for cell — a reference, not consumed by the builder.
+    out.push({ section: "stdlvedms", value: parseStdLvEdms(names, rowsOf) });
   }
 
   return { sections: out, removals };
@@ -774,7 +800,7 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
 
 /** The combinations that have a workbook of their own, in the order the screen
  *  offers them. Anything not on this list has no Excel shape at all. */
-export const COMBOS_WORKBOOK_SECTIONS = ["mcc", "ats", "photocell", "wd", "motorized", "pfc"] as const;
+export const COMBOS_WORKBOOK_SECTIONS = ["mcc", "ats", "photocell", "wd", "motorized", "pfc", "stdlvedms"] as const;
 
 /** True when this combination can be downloaded as a file — so the caller can
  *  grey the button out instead of finding out by catching an error. */
@@ -1044,6 +1070,22 @@ function pfcGrid(value: unknown): Grid {
   return grid;
 }
 
+// ── Standard LV EDMS sheets ──────────────────────────────────────────────────
+// The mirror of parseStdLvEdms: every stored sheet written straight back, in order.
+function stdLvEdmsSheets(value: unknown): Sheet[] {
+  const o = asObj(value);
+  const sheets = o && Array.isArray(o.sheets) ? (o.sheets as { name?: unknown; grid?: unknown }[]) : null;
+  if (!sheets || sheets.length === 0) {
+    throw new Error(
+      "There is no Standard LV EDMS reference to write yet, so no Excel file was made. Load the workbook first. Nothing was changed.",
+    );
+  }
+  return sheets.map((sh, i) => ({
+    name: String(sh.name || `Sheet ${i + 1}`).slice(0, 31), // Excel tab-name limit
+    grid: Array.isArray(sh.grid) ? (sh.grid as Grid) : [],
+  }));
+}
+
 // ── One combination, one workbook ──────────────────────────────────────────
 
 /** The file each combination is handed back as — the engineers' own names, so a
@@ -1056,6 +1098,7 @@ const SECTION_FILE_NAME: Record<string, string> = {
   wd: "Combinations Database - WD.xlsx",
   motorized: "Combinations Database - Motorized.xlsx",
   pfc: "Combinations Database - P.F.C.xlsx",
+  stdlvedms: "Standard LV EDMS.xlsx",
 };
 
 /** What each file is, in one line, for the top of its Read me tab. */
@@ -1066,6 +1109,7 @@ const SECTION_BLURB: Record<string, string> = {
   wd: "the withdrawable kits — the fixed part and the moving part of each one",
   motorized: "the motorised breaker parts, listed down a column per breaker frame",
   pfc: "the power-factor-correction sizing sheet — kept as a reference, cell for cell",
+  stdlvedms: "the standard LV EDMS panels, one sheet per transformer size — a reference",
 };
 
 /** The line every file except WD carries, so nobody goes looking for the kits
@@ -1120,13 +1164,20 @@ const SECTION_NOTES: Record<string, string[]> = {
     "reference; the layout is kept as-is. Cell formatting (colours, merged cells) is",
     "not stored — only the values in the cells are.",
   ],
+  stdlvedms: [
+    "This is a REFERENCE the app keeps for you — it is not used to build the",
+    "standard panels (the app builds those in code). One sheet per transformer size.",
+    "Edit the cells freely and load the file back to update the reference; every",
+    "sheet is kept as-is. Cell formatting (colours, merged cells) is not stored —",
+    "only the values in the cells are.",
+  ],
 };
 
 /** Written when the app is asked for a file it has no layout for. Same voice as
  *  the refusals above: say what is wrong, not what threw. */
 function noWorkbookFor(section: string): Error {
   return new Error(
-    `There is no Excel file for the "${section}" list. The combinations that have one are MCC, ATS, photocell, WD, Motorized and P.F.C. Nothing was changed.`,
+    `There is no Excel file for the "${section}" list. The combinations that have one are MCC, ATS, photocell, WD, Motorized, P.F.C and Standard LV EDMS. Nothing was changed.`,
   );
 }
 
@@ -1179,6 +1230,8 @@ function sectionSheets(section: string, value: unknown): Sheet[] {
       return [{ name: "Motorized", grid: motorizedGrid(value) }];
     case "pfc":
       return [{ name: "PFC", grid: pfcGrid(value) }];
+    case "stdlvedms":
+      return stdLvEdmsSheets(value);
     default:
       throw noWorkbookFor(section);
   }

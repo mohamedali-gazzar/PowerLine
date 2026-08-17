@@ -58,31 +58,46 @@ const SECTION_SCHEMA: Record<ComboSection, z.ZodTypeAny> = {
 const isSection = (s: string): s is ComboSection =>
   (COMBO_SECTIONS as readonly string[]).includes(s);
 
-// ── P.F.C — an EXTRA reference section ───────────────────────────────────────
-// P.F.C is stored, listed, edited and downloaded on the Combinations tab like the
-// others, but it is deliberately NOT in COMBO_SECTIONS. The app does not consume it
-// (it sizes the capacitor bank itself), and keeping it out of that list leaves
-// combosForPayload's completeness guard — and therefore the served catalogue —
-// completely untouched. It is stored as the sheet's own grid, so nothing here needs
-// the description/quantity structure the real combinations have.
-const PFC_SECTION = "pfc";
-const PFC_LABEL = "P.F.C — power-factor correction";
-const PFC_SCHEMA = z.object({ grid: z.array(z.array(z.any())) });
-
-const isKnownSection = (s: string): boolean => isSection(s) || s === PFC_SECTION;
-const labelOf = (s: string): string =>
-  isSection(s) ? COMBO_SECTION_LABEL[s] : s === PFC_SECTION ? PFC_LABEL : s;
-const schemaFor = (s: string): z.ZodTypeAny | null =>
-  isSection(s) ? SECTION_SCHEMA[s] : s === PFC_SECTION ? PFC_SCHEMA : null;
-const summariseAny = (s: string, value: unknown): string => {
-  if (s === PFC_SECTION) {
-    const g = (value as { grid?: unknown[] } | null)?.grid;
-    return Array.isArray(g) ? `reference sheet · ${g.length} rows` : "reference sheet";
-  }
-  return isSection(s) ? summarise(s, value) : "";
+// ── EXTRA reference sections (P.F.C, Standard LV EDMS) ───────────────────────
+// These are stored, listed, edited and downloaded on the Combinations tab like the
+// real combinations, but are deliberately NOT in COMBO_SECTIONS. The app does not
+// consume them (P.F.C: the app sizes the bank itself; Standard LV EDMS: the standard
+// panels are built in code), and keeping them out of that list leaves
+// combosForPayload's completeness guard — and the served catalogue — untouched. Each
+// is stored as the workbook's own cells, so none needs a modelled shape.
+//   pfc        — one sheet  → { grid: cell[][] }
+//   stdlvedms  — many sheets → { sheets: { name, grid: cell[][] }[] }
+const grid2d = z.array(z.array(z.any()));
+const REFERENCE: Record<string, { label: string; schema: z.ZodTypeAny; summary: (v: unknown) => string }> = {
+  pfc: {
+    label: "P.F.C — power-factor correction",
+    schema: z.object({ grid: grid2d }),
+    summary: (v) => {
+      const g = (v as { grid?: unknown[] } | null)?.grid;
+      return Array.isArray(g) ? `reference sheet · ${g.length} rows` : "reference sheet";
+    },
+  },
+  stdlvedms: {
+    label: "Standard LV EDMS",
+    schema: z.object({ sheets: z.array(z.object({ name: z.string(), grid: grid2d })) }),
+    summary: (v) => {
+      const sh = (v as { sheets?: unknown[] } | null)?.sheets;
+      return Array.isArray(sh) ? `reference · ${sh.length} sheet${sh.length === 1 ? "" : "s"}` : "reference";
+    },
+  },
 };
+const REFERENCE_SECTIONS = Object.keys(REFERENCE);
+const isReference = (s: string): boolean => s in REFERENCE;
+
+const isKnownSection = (s: string): boolean => isSection(s) || isReference(s);
+const labelOf = (s: string): string =>
+  isSection(s) ? COMBO_SECTION_LABEL[s] : REFERENCE[s]?.label ?? s;
+const schemaFor = (s: string): z.ZodTypeAny | null =>
+  isSection(s) ? SECTION_SCHEMA[s] : REFERENCE[s]?.schema ?? null;
+const summariseAny = (s: string, value: unknown): string =>
+  isReference(s) ? REFERENCE[s].summary(value) : isSection(s) ? summarise(s, value) : "";
 const descriptionsAny = (s: string, value: unknown): string[] =>
-  isSection(s) ? descriptionsIn(s, value) : []; // pfc names no components — it is a reference
+  isSection(s) ? descriptionsIn(s, value) : []; // references name no components
 
 /** A one-line summary per section, so the tab can show "110 starters" not "[object]". */
 export function summarise(section: ComboSection, value: unknown): string {
@@ -285,8 +300,12 @@ export async function listCombos(_req: Request, res: Response) {
     });
     // P.F.C is an extra reference and is not seeded, so offer it here even before it
     // has ever been loaded — otherwise there is no way to load it the first time.
-    if (!sections.some((s) => s.section === PFC_SECTION)) {
-      sections.push({ section: PFC_SECTION, label: PFC_LABEL, summary: "not loaded yet", updatedAt: "", updatedBy: "", value: null });
+    // Offer each reference section even before it has ever been loaded, so it is
+    // selectable the first time — in their declared order, after the real combos.
+    for (const ref of REFERENCE_SECTIONS) {
+      if (!sections.some((s) => s.section === ref)) {
+        sections.push({ section: ref, label: labelOf(ref), summary: "not loaded yet", updatedAt: "", updatedBy: "", value: null });
+      }
     }
     res.json({ sections });
   } catch (e) {
@@ -333,7 +352,9 @@ export async function putCombo(req: Request, res: Response) {
             section,
             payload,
             // pfc is not in COMBO_SECTIONS, so index it just past them (last).
-            sortIndex: isSection(section) ? COMBO_SECTIONS.indexOf(section) : COMBO_SECTIONS.length,
+            sortIndex: isSection(section)
+              ? COMBO_SECTIONS.indexOf(section)
+              : COMBO_SECTIONS.length + REFERENCE_SECTIONS.indexOf(section),
             updatedBy: by,
           },
         });
