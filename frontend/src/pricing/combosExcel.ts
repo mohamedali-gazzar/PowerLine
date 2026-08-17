@@ -532,14 +532,22 @@ const ATS_TYPE_WORDS: Record<string, string> = { "1oo2": "1 out of 2", "2oo3": "
 /**
  * Read one of the engineers' combinations workbooks.
  *
- * Returns one entry per section the file could fill in — an MCC, ATS or
- * photocell workbook also refreshes the withdrawable kits, because all three
- * carry the same WD tab.
+ * The uploaded file is the NEW SOURCE OF TRUTH: each section it carries comes
+ * back with exactly the rows in it, so a load can add, change OR remove rows
+ * freely. A section the file does not mention is simply not returned, so it is
+ * left as it is — loading an MCC file never touches the ATS or photocell lists.
+ * Completeness is judged against the FILE, never against the previous version.
  *
- * Throws an Error written for a non-programmer when the file is not one of them,
- * or when it is one of them but is missing something the app needs.
+ * `removals` lists the two COARSE removals that used to be refused outright — a
+ * whole ATS arrangement, or a whole withdrawable-kit block, that this file
+ * leaves out. They are no longer rejected; the caller shows them and asks once
+ * before saving, because each takes an option out of the app for new work.
+ *
+ * Still throws (in plain words) only when the file is not a combinations
+ * workbook at all, or a tab in it is malformed — that is "nothing the app can
+ * read", not "different content".
  */
-export async function parseCombosWorkbook(file: File): Promise<ParsedComboSection[]> {
+export async function parseCombosWorkbook(file: File): Promise<{ sections: ParsedComboSection[]; removals: string[] }> {
   let wb: XLSX.WorkBook;
   try {
     wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
@@ -575,6 +583,7 @@ export async function parseCombosWorkbook(file: File): Promise<ParsedComboSectio
   }
 
   const out: ParsedComboSection[] = [];
+  const removals: string[] = [];
 
   if (atsSheets.length) {
     const ats: Record<string, AtsType> = {};
@@ -582,11 +591,12 @@ export async function parseCombosWorkbook(file: File): Promise<ParsedComboSectio
       const type = atsTypeOf(name);
       if (type) ats[type] = parseAtsSheet(rowsOf(name));
     }
-    const missing = ATS_REQUIRED_TYPES.filter((t) => !ats[t]);
-    if (missing.length) {
-      throw new Error(
-        `The ATS workbook is missing the "${missing.map((t) => ATS_TYPE_WORDS[t]).join('" and "')}" tab. Loading it would take that arrangement out of the app, so nothing was changed. Use the full ATS workbook.`,
-      );
+    // An arrangement the file leaves out is dropped, not refused — the file is
+    // the new source of truth. It is a coarse removal though (that arrangement
+    // can no longer be offered for new work), so it goes on `removals` for the
+    // caller to confirm once before saving.
+    for (const t of ATS_REQUIRED_TYPES) {
+      if (!ats[t]) removals.push(`the "${ATS_TYPE_WORDS[t]}" ATS arrangement`);
     }
     out.push({ section: "ats", value: ats });
   }
@@ -596,26 +606,17 @@ export async function parseCombosWorkbook(file: File): Promise<ParsedComboSectio
 
   if (wdSheet) {
     const { wd, headings } = parseWd(rowsOf(wdSheet));
-    // A WD tab is judged on WHAT IS IN IT, never on whether it arrived alone.
-    // It used to be refused for arriving alone, because the engineers' own
-    // "Combinations Database - WD.xlsx" stops after the two MCCB blocks and
-    // loading it would have taken the E1.2 kit out of the app without saying so.
-    // That file is still refused, for that same reason — but by this rule, so a
-    // COMPLETE stand-alone WD file (the one this screen now hands back) loads.
-    const missing = missingWdBlocks(headings);
-    if (missing.length) {
-      throw new Error(
-        `The WD tab in "${file.name}" is missing ${andList(missing)}. Loading it would take ` +
-          `${missing.length === 1 ? "that group of withdrawable kits" : "those groups of withdrawable kits"} ` +
-          "out of the app, so nothing was changed. A WD tab has to carry all three blocks: MCCB-3P, MCCB-4P and Air-3P. " +
-          'The engineers\' own "Combinations Database - WD.xlsx" stops after the two MCCB ones — use the WD tab inside ' +
-          "the MCC, ATS or photocell workbook, or the WD file this screen downloads, which do have all three.",
-      );
-    }
+    // A WD tab is judged on WHAT IS IN IT. A block it leaves out is removed, not
+    // refused — but each dropped block empties a group of withdrawable kits
+    // (Air-3P is the E1.2 kit), so it is a coarse removal the caller confirms.
+    // This is how the engineers' own "Combinations Database - WD.xlsx", which
+    // stops after the two MCCB blocks, now loads: it takes the E1.2 kit out,
+    // with a confirmation first instead of a flat refusal.
+    for (const words of missingWdBlocks(headings)) removals.push(words);
     out.push({ section: "wd", value: wd });
   }
 
-  return out;
+  return { sections: out, removals };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -41,12 +41,17 @@
 import { useEffect, useRef, useState } from "react";
 import { api, getToken, type LvComboSection } from "../api";
 import { refreshCatalog } from "../lv/catalogSource";
+import { useDialogs } from "../components/ConfirmModal";
 import {
   buildSectionWorkbook,
   parseCombosWorkbook,
   sectionHasWorkbook,
   sectionWorkbookFilename,
 } from "./combosExcel";
+
+/** "a", "a and b", "a, b and c" — for a sentence, not a bullet list. */
+const andList = (xs: string[]): string =>
+  xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
 
 export default function LvCombosPanel() {
   const [sections, setSections] = useState<LvComboSection[]>([]);
@@ -57,6 +62,7 @@ export default function LvCombosPanel() {
   const [note, setNote] = useState("");
   const [warnings, setWarnings] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { confirm, dialogs } = useDialogs();
 
   const load = () =>
     api.pricing
@@ -144,12 +150,32 @@ export default function LvCombosPanel() {
     if (!f) return;
     setError(""); setDone(""); setNote(""); setWarnings([]); setBusy("Reading…");
     try {
-      // A workbook says for itself which sections it fills — an MCC, ATS or
-      // photocell file also carries the withdrawable-kit tab, so one upload can
-      // update two sections. It refuses anything it cannot read faithfully.
-      const targets = /\.xlsx?$/i.test(f.name)
-        ? (await parseCombosWorkbook(f)).map((s) => [s.section, s.value] as const)
-        : targetsFromJson(await f.text());
+      // A workbook says for itself which sections it fills, and the file is the new
+      // source of truth for each — rows can be added, changed or removed. It still
+      // refuses a file that is not a combinations workbook or has a malformed tab.
+      let targets: (readonly [string, unknown])[];
+      if (/\.xlsx?$/i.test(f.name)) {
+        const { sections: parsed, removals } = await parseCombosWorkbook(f);
+        // A whole ATS arrangement or withdrawable-kit block left out of the file is
+        // allowed, but it takes that option out of the app for new work — so confirm
+        // it once rather than doing it silently. Everything else applies straight away.
+        if (removals.length) {
+          setBusy("");
+          const ok = await confirm({
+            title: "This file leaves some combinations out",
+            message:
+              `Loading "${f.name}" will remove ${andList(removals)} from the app. Quotations already ` +
+              "saved keep what they were built with — this only changes what is offered for new work. Load it anyway?",
+            confirmLabel: "Load it",
+            tone: "danger",
+          });
+          if (!ok) return;
+          setBusy("Reading…");
+        }
+        targets = parsed.map((s) => [s.section, s.value] as const);
+      } else {
+        targets = targetsFromJson(await f.text());
+      }
 
       const allWarnings: string[] = [];
       const saved: string[] = [];
@@ -188,6 +214,7 @@ export default function LvCombosPanel() {
 
   return (
     <div>
+      {dialogs}
       <div className="mb-3 flex flex-wrap gap-1">
         {sections.map((s) => (
           <button
