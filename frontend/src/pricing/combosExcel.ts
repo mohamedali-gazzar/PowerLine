@@ -513,6 +513,29 @@ function missingWdBlocks(headings: string[]): string[] {
 const andList = (xs: string[]): string =>
   xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
 
+// ── Motorized breaker ────────────────────────────────────────────────────────
+// One tab, laid out as one COLUMN per breaker frame: the top cell is the frame
+// (e.g. "XT1/XT3", "E1.2", "E2.2 - E6.2") and the cells beneath it are that
+// frame's parts, in order, down to the first empty cell. Read verbatim (`clean`
+// keeps inner spacing) so the descriptions still match the price list.
+//
+// The value is exactly the app's `motorized` shape: { [frame]: string[] }.
+function parseMotorized(rows: Rows): Record<string, string[]> {
+  const header = rows[0] ?? [];
+  const out: Record<string, string[]> = {};
+  for (let c = 0; c < header.length; c++) {
+    const frame = clean(header[c]);
+    if (!frame) continue; // a column with no frame heading is not a frame
+    const parts: string[] = [];
+    for (let r = 1; r < rows.length; r++) {
+      const v = clean(rows[r]?.[c]);
+      if (v) parts.push(v);
+    }
+    if (parts.length) out[frame] = parts;
+  }
+  return out;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Which workbook is this?
 // ═══════════════════════════════════════════════════════════════════════════
@@ -523,6 +546,13 @@ const isWdSheet = (n: string) => normKey(n) === "wd";
 const isAtsSheet = (n: string) => /^ats\b/.test(normKey(n)) && atsTypeOf(n) !== null;
 /** "PFC", "P.F.C", "P F C" — the power-factor workbook. */
 const isPfcSheet = (n: string) => normKey(n).replace(/[^a-z]/g, "") === "pfc";
+/** The motorised-breaker tab. The engineers' own file names its one tab generically
+ *  ("Sheet1"), so the WORKBOOK is ALSO recognised by its file name (see
+ *  parseCombosWorkbook). The download this screen makes names the tab "Motorized",
+ *  so a re-load is recognised by the tab too. */
+const isMotorizedSheet = (n: string) => /motori[sz]/.test(normKey(n)); // "motorized" (z) or "motorised" (s)
+/** The prose tab in a downloaded file — the reader skips it. */
+const isReadMeSheet = (n: string) => normKey(n).replace(/[^a-z]/g, "") === "readme";
 
 /** The two ATS arrangements the app offers. A workbook that carries only one of
  *  them would wipe the other on save, so both are required — see "Refusals". */
@@ -564,7 +594,19 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
   const wdSheet = names.find(isWdSheet);
   const atsSheets = names.filter(isAtsSheet);
 
-  const recognised = Boolean(mccSheet || photocellSheet || wdSheet || atsSheets.length);
+  // Motorized is a dedicated workbook in its own right and must NOT be required to
+  // carry MCC / ATS / photocell / WD tabs. Its tab has no distinctive name in the
+  // engineers' file (it is "Sheet1"), so the workbook counts as the Motorized one
+  // when a tab is actually named "Motorized" (what this screen's download makes) OR
+  // its FILE name says so and it is none of the other workbooks. Its single table
+  // is then read on its own format.
+  const otherKnown = Boolean(mccSheet || photocellSheet || wdSheet || atsSheets.length);
+  const nameSaysMotorized = /motori[sz]/i.test(file.name); // "Motorized" (z) or "Motorised" (s)
+  const motorizedSheet =
+    names.find(isMotorizedSheet) ??
+    (nameSaysMotorized && !otherKnown ? names.find((n) => !isReadMeSheet(n) && !isPfcSheet(n)) : undefined);
+
+  const recognised = otherKnown || Boolean(motorizedSheet);
 
   // ── Refusals ────────────────────────────────────────────────────────────
   // Each of these stops the upload rather than saving something the app would
@@ -614,6 +656,19 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
     // with a confirmation first instead of a flat refusal.
     for (const words of missingWdBlocks(headings)) removals.push(words);
     out.push({ section: "wd", value: wd });
+  }
+
+  if (motorizedSheet) {
+    // Validated on the Motorized format alone: a top row of frame columns with
+    // parts beneath. Nothing about the general combinations tabs is required.
+    const value = parseMotorized(rowsOf(motorizedSheet));
+    if (Object.keys(value).length === 0) {
+      throw new Error(
+        `"${file.name}" looks like the Motorized workbook, but its first row has no breaker-frame columns with parts beneath them. ` +
+          'The top row should name the frames (for example "XT1/XT3", "XT5", "E1.2"), and each frame\'s parts run down its column.',
+      );
+    }
+    out.push({ section: "motorized", value });
   }
 
   return { sections: out, removals };
@@ -707,7 +762,7 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
 
 /** The combinations that have a workbook of their own, in the order the screen
  *  offers them. Anything not on this list has no Excel shape at all. */
-export const COMBOS_WORKBOOK_SECTIONS = ["mcc", "ats", "photocell", "wd"] as const;
+export const COMBOS_WORKBOOK_SECTIONS = ["mcc", "ats", "photocell", "wd", "motorized"] as const;
 
 /** True when this combination can be downloaded as a file — so the caller can
  *  grey the button out instead of finding out by catching an error. */
@@ -940,6 +995,29 @@ function wdGrid(value: unknown): Grid {
   return g;
 }
 
+// ── Motorized tab ────────────────────────────────────────────────────────────
+// The mirror of parseMotorized: one column per frame, the frame in the top cell
+// and its parts down the column. Written in the same shape the engineers' file
+// uses, so a download loads straight back.
+function motorizedGrid(value: unknown): Grid {
+  const o = asObj(value);
+  if (!o) throw badShape("motorized");
+  const frames = Object.keys(o);
+  if (frames.length === 0) {
+    // Never hand over an empty workbook — it would look like a backup of nothing.
+    throw new Error(
+      "There is no motorised-breaker data to write yet, so no Excel file was made. Load a Motorized workbook first. Nothing was changed.",
+    );
+  }
+  const g: Grid = [];
+  frames.forEach((frame, c) => {
+    put(g, 0, c, frame);
+    const parts = Array.isArray(o[frame]) ? (o[frame] as unknown[]) : [];
+    parts.forEach((p, i) => put(g, i + 1, c, typeof p === "string" ? p : String(p ?? "")));
+  });
+  return g;
+}
+
 // ── One combination, one workbook ──────────────────────────────────────────
 
 /** The file each combination is handed back as — the engineers' own names, so a
@@ -950,6 +1028,7 @@ const SECTION_FILE_NAME: Record<string, string> = {
   ats: "Combinations Database - ATS.xlsx",
   photocell: "Combinations Database - photocell.xlsx",
   wd: "Combinations Database - WD.xlsx",
+  motorized: "Combinations Database - Motorized.xlsx",
 };
 
 /** What each file is, in one line, for the top of its Read me tab. */
@@ -958,6 +1037,7 @@ const SECTION_BLURB: Record<string, string> = {
   ats: "the automatic transfer switches — the parts for every breaker frame",
   photocell: "the photocell contactor for each breaker rating, and the fixed parts",
   wd: "the withdrawable kits — the fixed part and the moving part of each one",
+  motorized: "the motorised breaker parts, listed down a column per breaker frame",
 };
 
 /** The line every file except WD carries, so nobody goes looking for the kits
@@ -997,18 +1077,21 @@ const SECTION_NOTES: Record<string, string[]> = {
     "photocell files the app hands back do not carry them, so they cannot put an",
     "older version of the kits back by accident.",
   ],
+  motorized: [
+    "Motorized tab: one COLUMN per breaker frame. The top cell of a column is the",
+    "frame (for example XT1/XT3, XT5, E1.2), and that frame's parts run down the",
+    "column beneath it. Add a part by typing it in the next empty cell of a column;",
+    "remove one by clearing its cell and closing the gap. Add a new frame by",
+    "filling a new column. This file is the whole motorised list — loading it",
+    "replaces what the app has, so anything you leave out is dropped.",
+  ],
 };
 
 /** Written when the app is asked for a file it has no layout for. Same voice as
  *  the refusals above: say what is wrong, not what threw. */
 function noWorkbookFor(section: string): Error {
-  if (normKey(section) === "motorized") {
-    return new Error(
-      "There is no Excel file for the motorised circuit-breaker table. It is not kept in Excel anywhere — no workbook has ever carried it — so the app cannot make one. Nothing was changed.",
-    );
-  }
   return new Error(
-    `There is no Excel file for the "${section}" list. The combinations that have one are MCC, ATS, photocell and WD. Nothing was changed.`,
+    `There is no Excel file for the "${section}" list. The combinations that have one are MCC, ATS, photocell, WD and Motorized. Nothing was changed.`,
   );
 }
 
@@ -1057,6 +1140,8 @@ function sectionSheets(section: string, value: unknown): Sheet[] {
       return [{ name: "Photocell", grid: photocellGrid(value) }];
     case "wd":
       return [{ name: "WD", grid: wdGrid(value) }];
+    case "motorized":
+      return [{ name: "Motorized", grid: motorizedGrid(value) }];
     default:
       throw noWorkbookFor(section);
   }
@@ -1127,16 +1212,15 @@ function toBlob(wb: XLSX.WorkBook): Blob {
  * download → edit → load is a safe loop.
  *
  * `section` is the combination's name as the app stores it ("mcc", "ats",
- * "photocell", "wd") and `value` is that section's saved value. Use
- * `sectionWorkbookFilename()` for the name to save it under.
+ * "photocell", "wd", "motorized") and `value` is that section's saved value.
+ * Use `sectionWorkbookFilename()` for the name to save it under.
  *
  * The file carries that combination and nothing else, so loading it back cannot
  * touch any other one — see the long note above for why, and in particular why
  * the MCC, ATS and photocell files no longer repeat the WD tab.
  *
- * Throws an Error written for a non-programmer when the combination has no
- * Excel shape at all ('motorized'), or when the value arrives in a shape that
- * cannot be laid out — rather than writing a file that will not load again.
+ * Throws an Error written for a non-programmer when the value arrives in a shape
+ * that cannot be laid out — rather than writing a file that will not load again.
  */
 export function buildSectionWorkbook(section: string, value: unknown): Blob {
   const sheets = sectionSheets(section, value);
