@@ -24,14 +24,13 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
-**The New RMU Offer screen restyle is back — now in a two-column layout.**
+**The New RMU Offer screen is back to its original design.**
 
-- After the earlier rollback, the cleaner "Offer Configurator" look was re-applied to the
-  New RMU Offer screen, this time with a **two-column Panel step**: the **Panel — RMU Code**
-  card sits half-width on the **left**; **Metering, Smart/RTU and the Code-breakdown** strip
-  sit on the **right**, with the left card tightened so the two sides are roughly the same
-  height. Everything else (pricing, PDF downloads, staff lists) works exactly as before, and
-  the look is still sandboxed to this one screen (LV and the rest of the app untouched).
+- After trying the "Offer Configurator" restyle (including a two-column Panel step), the
+  screen was returned to its **original look** at Mohamed's request — the restyle is fully
+  removed. How it works never changed at any point.
+- **The RMU printed-page header change stays** (product code shown top-right on pages 2
+  onward). Only the on-screen configurator design was reverted.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
