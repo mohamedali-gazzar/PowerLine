@@ -307,11 +307,14 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOff
 
 function runningHeader(doc: PDFKit.PDFDocument, g: GeneratedOffer) {
   safeImage(doc, asset("logo.png"), MARGIN, 22, { width: 74 });
-  doc.font(BOLD).fontSize(10).fillColor(ORANGE_DK)
-    .text(`${g.titleProduct} — Technical Offer`, MARGIN, 34, {
-      width: CONTENT_W,
-      align: "right",
-    });
+  // Right-aligned product identity: the system code (bold) over its config code —
+  // the panel's own reference, rather than the readable product name.
+  doc.font(BOLD).fontSize(11).fillColor(ORANGE_DK)
+    .text(g.panelCode, MARGIN, 30, { width: CONTENT_W, align: "right", lineBreak: false });
+  if (g.configCode) {
+    doc.font(BODY).fontSize(8.5).fillColor(GREY)
+      .text(g.configCode, MARGIN, 46, { width: CONTENT_W, align: "right", lineBreak: false });
+  }
   doc.moveTo(MARGIN, 74).lineTo(PAGE_W - MARGIN, 74).lineWidth(1).strokeColor(LIGHT).stroke();
   doc.fillColor(INK);
   doc.x = MARGIN;
