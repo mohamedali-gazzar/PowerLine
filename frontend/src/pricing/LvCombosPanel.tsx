@@ -230,22 +230,7 @@ export default function LvCombosPanel() {
         <div className="min-w-0 p-5">
           {current ? (
             <>
-              <div className="flex items-start justify-between gap-4">
-                <h3 className="text-base font-bold text-ink">{current.label}</h3>
-                <span className="shrink-0 text-right text-[11px] leading-relaxed text-muted">
-                  {current.summary}
-                  <br />
-                  {current.updatedBy ? `last loaded by ${current.updatedBy}` : "as shipped with the app"}
-                </span>
-              </div>
-
-              {/* Taken from the exporter, never hardcoded, so it cannot drift from
-                  what the download actually contains. */}
-              <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-muted">
-                {canDownload
-                  ? `Maintained in "${downloadName}". To change it: download the file, edit it in Excel, and load the same file back — or load your own copy. Loading carries this combination only; every other one is left alone.`
-                  : "No workbook covers this one anywhere, so there is no file to download and none to load. It came from a combos.json file and stays exactly as it is — nothing here changes it."}
-              </p>
+              <h3 className="text-base font-bold text-ink">{current.label}</h3>
 
               <div className="mt-4 flex flex-wrap items-center gap-2.5">
                 <button className="btn-primary" disabled={!!busy} onClick={() => fileRef.current?.click()}>
@@ -280,12 +265,6 @@ export default function LvCombosPanel() {
                   </ul>
                 </div>
               )}
-
-              <p className="mt-4 border-t border-line pt-3 text-[11px] text-muted">
-                {noFileFor
-                  ? `${noFileFor} is not kept in Excel anywhere — nothing you load or download here touches it.`
-                  : "One file per combination. The file you download loads straight back and changes only the combination it holds. A combos.json saved from here still works too."}
-              </p>
             </>
           ) : (
             <p className="text-sm text-muted">Loading combinations…</p>
