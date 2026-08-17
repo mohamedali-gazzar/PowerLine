@@ -201,98 +201,97 @@ export default function LvCombosPanel() {
   return (
     <div>
       {dialogs}
-      <div className="mb-3 flex flex-wrap gap-1">
-        {sections.map((s) => (
-          <button
-            key={s.section}
-            onClick={() => { setActive(s.section); setDone(""); setNote(""); setError(""); setWarnings([]); }}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-              active === s.section ? "bg-brand text-white" : "bg-brand-tint/60 text-brand-dark hover:bg-brand-tint"
-            }`}
-          >
-            {s.label}
-            <span className={`ml-2 text-xs font-normal ${active === s.section ? "text-white/80" : "text-muted"}`}>{s.summary}</span>
-          </button>
-        ))}
-      </div>
+      {/* One hidden picker for the whole panel — the primary action in the content
+          area opens it. A loaded file still says for itself which sections it fills. */}
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.json" className="hidden" onChange={onFile} />
 
-      <div className="card mb-3 flex flex-wrap items-center gap-2 p-3">
-        <button className="btn-primary" disabled={!!busy} onClick={() => fileRef.current?.click()}>
-          {busy || "⬆ Load a combinations workbook"}
-        </button>
-        {/* Named, not generic: the button says which of his own files it is about
-            to give him, and it is switched off for the one list that has none. */}
-        <button
-          className="btn-ghost"
-          disabled={!!busy || !canDownload}
-          onClick={downloadCurrent}
-          title={
-            canDownload
-              ? `Saves "${downloadName}". It holds this one combination and nothing else.`
-              : noFileFor
-                ? `${noFileFor} is not kept in Excel anywhere, so there is no file to give you.`
-                : "Choose a combination first."
-          }
-        >
-          {canDownload
-            ? `⬇ Download "${downloadName}"`
-            : noFileFor
-              ? `⬇ ${noFileFor} has no Excel file`
-              : "⬇ Download this combination"}
-        </button>
-        <input ref={fileRef} type="file" accept=".xlsx,.xls,.json" className="hidden" onChange={onFile} />
-        <span className="text-xs text-muted">
-          {noFileFor ? (
+      {/* Left category list + right content panel. Orange is an accent only: the
+          selected category (tint + left rule) and the one primary action. */}
+      <div className="card grid grid-cols-[220px_1fr] overflow-hidden p-0">
+        <div className="border-r border-line bg-surface/60 p-2.5">
+          {sections.length === 0 && <div className="px-2 py-1 text-xs text-muted">Loading…</div>}
+          {sections.map((s) => {
+            const on = s.section === active;
+            return (
+              <button
+                key={s.section}
+                onClick={() => { setActive(s.section); setDone(""); setNote(""); setError(""); setWarnings([]); }}
+                className={`mb-0.5 block w-full rounded-lg border-l-2 px-3 py-2.5 text-left transition ${
+                  on ? "border-brand bg-brand-tint" : "border-transparent hover:bg-brand-tint/40"
+                }`}
+              >
+                <div className={`text-[13px] text-ink ${on ? "font-bold" : "font-medium"}`}>{s.label}</div>
+                <div className="mt-0.5 text-[11px] text-muted">{s.summary}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="min-w-0 p-5">
+          {current ? (
             <>
-              {noFileFor} is not kept in Excel anywhere — no workbook has ever carried it — so the app
-              cannot make you one, and a file that quietly left it out would look like a backup
-              without being one. Nothing you load or download here touches it. Pick another
-              combination above to download that one.
+              <div className="flex items-start justify-between gap-4">
+                <h3 className="text-base font-bold text-ink">{current.label}</h3>
+                <span className="shrink-0 text-right text-[11px] leading-relaxed text-muted">
+                  {current.summary}
+                  <br />
+                  {current.updatedBy ? `last loaded by ${current.updatedBy}` : "as shipped with the app"}
+                </span>
+              </div>
+
+              {/* Taken from the exporter, never hardcoded, so it cannot drift from
+                  what the download actually contains. */}
+              <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-muted">
+                {canDownload
+                  ? `Maintained in "${downloadName}". To change it: download the file, edit it in Excel, and load the same file back — or load your own copy. Loading carries this combination only; every other one is left alone.`
+                  : "No workbook covers this one anywhere, so there is no file to download and none to load. It came from a combos.json file and stays exactly as it is — nothing here changes it."}
+              </p>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2.5">
+                <button className="btn-primary" disabled={!!busy} onClick={() => fileRef.current?.click()}>
+                  {busy || "⬆ Load workbook"}
+                </button>
+                <button
+                  className="btn-ghost"
+                  disabled={!!busy || !canDownload}
+                  onClick={downloadCurrent}
+                  title={
+                    canDownload
+                      ? `Saves "${downloadName}". It holds this one combination and nothing else.`
+                      : `${noFileFor} is not kept in Excel anywhere, so there is no file to give you.`
+                  }
+                >
+                  {canDownload ? `⬇ Download "${downloadName}"` : `⬇ ${noFileFor || "This combination"} has no Excel file`}
+                </button>
+              </div>
+
+              {error && <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>}
+              {done && <div className="mt-3 rounded-lg border border-green-300 bg-green-50 p-3 text-sm font-semibold text-green-800">{done}</div>}
+              {note && <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{note}</div>}
+              {warnings.length > 0 && (
+                <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  <b>{warnings.length} part{warnings.length === 1 ? "" : "s"} did not match anything in the price list.</b>
+                  <p className="mt-1">
+                    Combinations find their parts by description, so these would come out as rows with no
+                    price. Either correct the wording in the workbook or add the component to the price list.
+                  </p>
+                  <ul className="mt-2 max-h-48 list-disc overflow-y-auto pl-5 font-mono text-xs">
+                    {warnings.map((w) => <li key={w}>{w}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              <p className="mt-4 border-t border-line pt-3 text-[11px] text-muted">
+                {noFileFor
+                  ? `${noFileFor} is not kept in Excel anywhere — nothing you load or download here touches it.`
+                  : "One file per combination. The file you download loads straight back and changes only the combination it holds. A combos.json saved from here still works too."}
+              </p>
             </>
           ) : (
-            <>
-              Excel in, Excel out — one file per combination. The file you download loads straight
-              back, and it changes only the combination it holds. A combos.json saved from here still
-              works too.
-            </>
+            <p className="text-sm text-muted">Loading combinations…</p>
           )}
-        </span>
+        </div>
       </div>
-
-      {error && <div className="card mb-3 border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>}
-      {done && <div className="card mb-3 border-green-300 bg-green-50 p-3 text-sm font-semibold text-green-800">{done}</div>}
-      {note && <div className="card mb-3 border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{note}</div>}
-      {warnings.length > 0 && (
-        <div className="card mb-3 border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          <b>{warnings.length} part{warnings.length === 1 ? "" : "s"} did not match anything in the price list.</b>
-          <p className="mt-1">
-            Combinations find their parts by description, so these would come out as rows with no
-            price. Either correct the wording in the workbook or add the component to the price list.
-          </p>
-          <ul className="mt-2 max-h-48 list-disc overflow-y-auto pl-5 font-mono text-xs">
-            {warnings.map((w) => <li key={w}>{w}</li>)}
-          </ul>
-        </div>
-      )}
-
-      {current && (
-        <div className="card p-3">
-          <div className="flex items-baseline justify-between">
-            <h3 className="sec-head mb-0">{current.label}</h3>
-            <span className="text-xs text-muted">
-              {current.summary}
-              {current.updatedBy ? ` · last loaded by ${current.updatedBy}` : " · as shipped with the app"}
-            </span>
-          </div>
-          {/* Asked of the exporter rather than hardcoded, so this cannot drift
-              away from what the download actually contains. */}
-          <p className="mt-2 text-xs text-muted">
-            {canDownload
-              ? `Maintained in "${downloadName}". To change it: download that file above, edit it in Excel, and load the same file back — or load your own copy. It carries this combination only, so loading it leaves every other one alone.`
-              : "No workbook covers this one anywhere, so there is no file to download and none to load. It came from a combos.json file and stays exactly as it is — nothing you do on this screen changes it."}
-          </p>
-        </div>
-      )}
     </div>
   );
 }
