@@ -73,9 +73,6 @@ export default function HomeDashboard() {
 
   return (
     <div className="animate-fade-up">
-      {/* Owner-posted announcements — only renders when something is active */}
-      <Announcements items={announcements} />
-
       {/* Stale-price warning: open QTNs priced on an older list, review before submitting */}
       {staleCount > 0 && (
         <div className="mb-4">
@@ -114,6 +111,9 @@ export default function HomeDashboard() {
           )}
         </div>
       </div>
+
+      {/* Owner-posted announcements — below the welcome; renders only when something is active */}
+      <Announcements items={announcements} />
 
       {can("qtn.approve") && <ApprovalInbox />}
 
