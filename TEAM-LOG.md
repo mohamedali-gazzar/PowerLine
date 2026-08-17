@@ -24,19 +24,13 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
-**The "New RMU Offer" screen has a new, cleaner look — and the RMU page header now shows the product code.**
+**RMU printed pages now show the product code in the header. (A restyle of the New RMU Offer screen was deployed, then rolled back at Mohamed's request.)**
 
-- **New RMU Offer page restyled.** The screen where you configure a Ring Main Unit (Project
-  → Panel → Technical → Commercial) now uses a calmer, more modern theme: a numbered step
-  bar across the top, tidy cards, cleaner switches/segmented buttons, a live code chip, and a
-  small **"Code breakdown"** strip that spells out what each part of the code means (family,
-  voltage, brand, R/T counts, +M, indoor/outdoor). Nothing about how it *works* changed — the
-  live pricing, the PDF downloads and the shared staff lists all behave exactly as before.
-- **Only that one screen changed.** The new look is fully sandboxed to the RMU offer page, so
-  the LV section and everything else are untouched.
 - **RMU printed pages (2 onward) now show the product code in the top-right header** — e.g.
   `PRAL12ABEECH2R1T1M` over `PRAL12(2+1+M)` — instead of the old "P-Ral 12KV (Indoor) —
-  Technical Offer" line. The cover page (page 1) is unchanged.
+  Technical Offer" line. The cover page (page 1) is unchanged. **This is live and stays.**
+- **A new look for the New RMU Offer screen was tried and then withdrawn** — the page is back
+  to exactly how it was before. Nothing else was affected either way.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
