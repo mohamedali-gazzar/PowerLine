@@ -58,6 +58,32 @@ const SECTION_SCHEMA: Record<ComboSection, z.ZodTypeAny> = {
 const isSection = (s: string): s is ComboSection =>
   (COMBO_SECTIONS as readonly string[]).includes(s);
 
+// ── P.F.C — an EXTRA reference section ───────────────────────────────────────
+// P.F.C is stored, listed, edited and downloaded on the Combinations tab like the
+// others, but it is deliberately NOT in COMBO_SECTIONS. The app does not consume it
+// (it sizes the capacitor bank itself), and keeping it out of that list leaves
+// combosForPayload's completeness guard — and therefore the served catalogue —
+// completely untouched. It is stored as the sheet's own grid, so nothing here needs
+// the description/quantity structure the real combinations have.
+const PFC_SECTION = "pfc";
+const PFC_LABEL = "P.F.C — power-factor correction";
+const PFC_SCHEMA = z.object({ grid: z.array(z.array(z.any())) });
+
+const isKnownSection = (s: string): boolean => isSection(s) || s === PFC_SECTION;
+const labelOf = (s: string): string =>
+  isSection(s) ? COMBO_SECTION_LABEL[s] : s === PFC_SECTION ? PFC_LABEL : s;
+const schemaFor = (s: string): z.ZodTypeAny | null =>
+  isSection(s) ? SECTION_SCHEMA[s] : s === PFC_SECTION ? PFC_SCHEMA : null;
+const summariseAny = (s: string, value: unknown): string => {
+  if (s === PFC_SECTION) {
+    const g = (value as { grid?: unknown[] } | null)?.grid;
+    return Array.isArray(g) ? `reference sheet · ${g.length} rows` : "reference sheet";
+  }
+  return isSection(s) ? summarise(s, value) : "";
+};
+const descriptionsAny = (s: string, value: unknown): string[] =>
+  isSection(s) ? descriptionsIn(s, value) : []; // pfc names no components — it is a reference
+
 /** A one-line summary per section, so the tab can show "110 starters" not "[object]". */
 export function summarise(section: ComboSection, value: unknown): string {
   try {
@@ -240,23 +266,28 @@ export async function listCombos(_req: Request, res: Response) {
   try {
     await seedCombosIfMissing();
     const rows = await prisma.lvCombo.findMany({ orderBy: { sortIndex: "asc" } });
-    const sections = rows.map((r) => {
+    type Entry = { section: string; label: string; summary: string; updatedAt: string; updatedBy: string; value: unknown };
+    const sections: Entry[] = rows.map((r) => {
       let value: unknown = null;
       try {
         value = JSON.parse(r.payload);
       } catch {
         /* reported as an empty summary below */
       }
-      const section = r.section as ComboSection;
       return {
-        section,
-        label: COMBO_SECTION_LABEL[section] ?? section,
-        summary: value == null ? "unreadable" : summarise(section, value),
-        updatedAt: r.updatedAt,
+        section: r.section,
+        label: labelOf(r.section),
+        summary: value == null ? "unreadable" : summariseAny(r.section, value),
+        updatedAt: r.updatedAt.toISOString(),
         updatedBy: r.updatedBy,
         value,
       };
     });
+    // P.F.C is an extra reference and is not seeded, so offer it here even before it
+    // has ever been loaded — otherwise there is no way to load it the first time.
+    if (!sections.some((s) => s.section === PFC_SECTION)) {
+      sections.push({ section: PFC_SECTION, label: PFC_LABEL, summary: "not loaded yet", updatedAt: "", updatedBy: "", value: null });
+    }
     res.json({ sections });
   } catch (e) {
     fail(res, e);
@@ -272,14 +303,15 @@ export async function listCombos(_req: Request, res: Response) {
 export async function putCombo(req: Request, res: Response) {
   try {
     const section = String(req.params.section || "");
-    if (!isSection(section)) {
+    const schema = schemaFor(section);
+    if (!isKnownSection(section) || !schema) {
       return res.status(400).json({ error: `Unknown section "${section}".` });
     }
     const value = req.body?.value;
     if (value === undefined || value === null) {
       return res.status(400).json({ error: "No combination data supplied." });
     }
-    const parsed = SECTION_SCHEMA[section].safeParse(value);
+    const parsed = schema.safeParse(value);
     if (!parsed.success) {
       const first = parsed.error.issues[0];
       return res.status(400).json({
@@ -289,10 +321,10 @@ export async function putCombo(req: Request, res: Response) {
 
     const by = req.userEmail ?? "";
     const existing = await prisma.lvCombo.findUnique({ where: { section } });
-    const before = existing ? summarise(section, JSON.parse(existing.payload)) : "(none)";
+    const before = existing ? summariseAny(section, JSON.parse(existing.payload)) : "(none)";
     // Store the ORIGINAL, not zod's output — see SECTION_SCHEMA.
     const payload = JSON.stringify(value);
-    const after = summarise(section, value);
+    const after = summariseAny(section, value);
 
     const row = existing
       ? await prisma.lvCombo.update({ where: { section }, data: { payload, updatedBy: by } })
@@ -300,7 +332,8 @@ export async function putCombo(req: Request, res: Response) {
           data: {
             section,
             payload,
-            sortIndex: COMBO_SECTIONS.indexOf(section),
+            // pfc is not in COMBO_SECTIONS, so index it just past them (last).
+            sortIndex: isSection(section) ? COMBO_SECTIONS.indexOf(section) : COMBO_SECTIONS.length,
             updatedBy: by,
           },
         });
@@ -310,7 +343,7 @@ export async function putCombo(req: Request, res: Response) {
         domain: "LV",
         entity: "LvCombo",
         entityId: row.id,
-        label: COMBO_SECTION_LABEL[section],
+        label: labelOf(section),
         field: "payload",
         oldValue: before,
         newValue: after,
@@ -319,9 +352,9 @@ export async function putCombo(req: Request, res: Response) {
       },
     });
 
-    await publishCurrentPrices(by, `Combinations: ${COMBO_SECTION_LABEL[section]}`);
+    await publishCurrentPrices(by, `Combinations: ${labelOf(section)}`);
 
-    const warnings = await unresolved(descriptionsIn(section, value));
+    const warnings = await unresolved(descriptionsAny(section, value));
     res.json({ ok: true, section, summary: after, warnings });
   } catch (e) {
     fail(res, e);

@@ -536,6 +536,17 @@ function parseMotorized(rows: Rows): Record<string, string[]> {
   return out;
 }
 
+// ── P.F.C (power-factor correction) ──────────────────────────────────────────
+// The P.F.C workbook is a sizing sheet, not a parts template like the others: a
+// worked example on the left, a parts list in the middle, reference lists down
+// the side. The app still works the capacitor bank out for itself and does not
+// consume this — it is kept as an editable REFERENCE that round-trips through
+// Excel. So it is stored as the sheet's own grid, cell for cell, verbatim.
+function parsePfc(rows: Rows): { grid: unknown[][] } {
+  const grid = rows.map((row) => (Array.isArray(row) ? row.map((c) => (c === undefined ? null : c)) : []));
+  return { grid };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Which workbook is this?
 // ═══════════════════════════════════════════════════════════════════════════
@@ -593,6 +604,7 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
   const photocellSheet = names.find(isPhotocellSheet);
   const wdSheet = names.find(isWdSheet);
   const atsSheets = names.filter(isAtsSheet);
+  const pfcSheet = names.find(isPfcSheet);
 
   // Motorized is a dedicated workbook in its own right and must NOT be required to
   // carry MCC / ATS / photocell / WD tabs. Its tab has no distinctive name in the
@@ -600,7 +612,7 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
   // when a tab is actually named "Motorized" (what this screen's download makes) OR
   // its FILE name says so and it is none of the other workbooks. Its single table
   // is then read on its own format.
-  const otherKnown = Boolean(mccSheet || photocellSheet || wdSheet || atsSheets.length);
+  const otherKnown = Boolean(mccSheet || photocellSheet || wdSheet || atsSheets.length || pfcSheet);
   const nameSaysMotorized = /motori[sz]/i.test(file.name); // "Motorized" (z) or "Motorised" (s)
   const motorizedSheet =
     names.find(isMotorizedSheet) ??
@@ -611,12 +623,6 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
   // ── Refusals ────────────────────────────────────────────────────────────
   // Each of these stops the upload rather than saving something the app would
   // read as "that option no longer exists".
-
-  if (!recognised && names.some(isPfcSheet)) {
-    throw new Error(
-      "There is nothing to load from the power-factor-correction workbook. The app works the capacitor bank out for itself from the kVAR and the number of steps, so it does not keep a parts list for it. Load the MCC, ATS, photocell or WD workbook instead.",
-    );
-  }
 
   if (!recognised) {
     throw new Error(
@@ -669,6 +675,12 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
       );
     }
     out.push({ section: "motorized", value });
+  }
+
+  if (pfcSheet) {
+    // Stored as a reference, cell for cell — validated as "a sheet with rows",
+    // nothing more, because the app does not consume it.
+    out.push({ section: "pfc", value: parsePfc(rowsOf(pfcSheet)) });
   }
 
   return { sections: out, removals };
@@ -762,7 +774,7 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
 
 /** The combinations that have a workbook of their own, in the order the screen
  *  offers them. Anything not on this list has no Excel shape at all. */
-export const COMBOS_WORKBOOK_SECTIONS = ["mcc", "ats", "photocell", "wd", "motorized"] as const;
+export const COMBOS_WORKBOOK_SECTIONS = ["mcc", "ats", "photocell", "wd", "motorized", "pfc"] as const;
 
 /** True when this combination can be downloaded as a file — so the caller can
  *  grey the button out instead of finding out by catching an error. */
@@ -1018,6 +1030,20 @@ function motorizedGrid(value: unknown): Grid {
   return g;
 }
 
+// ── P.F.C tab ────────────────────────────────────────────────────────────────
+// The mirror of parsePfc: the stored grid, written straight back cell for cell.
+function pfcGrid(value: unknown): Grid {
+  const o = asObj(value);
+  const grid = o && Array.isArray(o.grid) ? (o.grid as Grid) : null;
+  if (!grid || grid.length === 0) {
+    // Never hand over an empty workbook — it would look like a backup of nothing.
+    throw new Error(
+      "There is no P.F.C reference to write yet, so no Excel file was made. Load a P.F.C workbook first. Nothing was changed.",
+    );
+  }
+  return grid;
+}
+
 // ── One combination, one workbook ──────────────────────────────────────────
 
 /** The file each combination is handed back as — the engineers' own names, so a
@@ -1029,6 +1055,7 @@ const SECTION_FILE_NAME: Record<string, string> = {
   photocell: "Combinations Database - photocell.xlsx",
   wd: "Combinations Database - WD.xlsx",
   motorized: "Combinations Database - Motorized.xlsx",
+  pfc: "Combinations Database - P.F.C.xlsx",
 };
 
 /** What each file is, in one line, for the top of its Read me tab. */
@@ -1038,6 +1065,7 @@ const SECTION_BLURB: Record<string, string> = {
   photocell: "the photocell contactor for each breaker rating, and the fixed parts",
   wd: "the withdrawable kits — the fixed part and the moving part of each one",
   motorized: "the motorised breaker parts, listed down a column per breaker frame",
+  pfc: "the power-factor-correction sizing sheet — kept as a reference, cell for cell",
 };
 
 /** The line every file except WD carries, so nobody goes looking for the kits
@@ -1085,13 +1113,20 @@ const SECTION_NOTES: Record<string, string[]> = {
     "filling a new column. This file is the whole motorised list — loading it",
     "replaces what the app has, so anything you leave out is dropped.",
   ],
+  pfc: [
+    "PFC tab: this is a REFERENCE the app keeps for you — it is not used to build a",
+    "quotation. The app still sizes the capacitor bank itself from the kVAR and the",
+    "number of steps. Edit the cells freely and load the file back to update the",
+    "reference; the layout is kept as-is. Cell formatting (colours, merged cells) is",
+    "not stored — only the values in the cells are.",
+  ],
 };
 
 /** Written when the app is asked for a file it has no layout for. Same voice as
  *  the refusals above: say what is wrong, not what threw. */
 function noWorkbookFor(section: string): Error {
   return new Error(
-    `There is no Excel file for the "${section}" list. The combinations that have one are MCC, ATS, photocell, WD and Motorized. Nothing was changed.`,
+    `There is no Excel file for the "${section}" list. The combinations that have one are MCC, ATS, photocell, WD, Motorized and P.F.C. Nothing was changed.`,
   );
 }
 
@@ -1142,6 +1177,8 @@ function sectionSheets(section: string, value: unknown): Sheet[] {
       return [{ name: "WD", grid: wdGrid(value) }];
     case "motorized":
       return [{ name: "Motorized", grid: motorizedGrid(value) }];
+    case "pfc":
+      return [{ name: "PFC", grid: pfcGrid(value) }];
     default:
       throw noWorkbookFor(section);
   }
