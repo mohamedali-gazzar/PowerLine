@@ -426,18 +426,51 @@ export default function LvConfiguratorPage() {
         confirmLabel: "Send for approval",
       },
     });
-  // Sales support engineer is mandatory — it prints on the offer. Block sending for
-  // approval until it's picked, surfacing why and jumping to the Project tab. Then run
-  // the same checks the offer export runs (missing copper, empty panels, no cells, zero
-  // price, LCP cables, duplicate names) and show them before the quotation is locked —
-  // the approver should see what is missing rather than discover it at export time.
+  // Everything shown before a quotation is locked for review. It starts from the same
+  // checks the offer export runs (empty panels, zero price, NO CELLS chosen, MISSING
+  // COPPER on a cells panel, LCP cables, duplicate names) and adds the pre-send checks
+  // asked for on top:
+  //   • mandatory fields not filled — panel name and busbar rating (panelInvalid);
+  //   • a panel whose TYPE & SIZING was never chosen (sizingMode still "none");
+  //   • prices that have fallen behind the published price list.
+  const approvalWarnings = (): ExportCheck[] => {
+    const required: string[] = []; // mandatory fields left blank
+    const noSizing: string[] = []; // panel type & sizing never chosen
+    s.panels.forEach((p, i) => {
+      if (p.spare) return; // spare cells have no sizing / rating rules
+      const label = `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}`;
+      for (const m of panelInvalid(p)) required.push(`${label}: ${m}`);
+      if (p.sizingMode === "none") noSizing.push(`${label}: panel type & sizing not chosen`);
+    });
+    const head: ExportCheck[] = [];
+    if (required.length) head.push({ title: "Required fields not filled", items: required });
+    if (noSizing.length) head.push({ title: "Panel type & sizing not chosen", items: noSizing });
+    // Out of date: would repricing to today's published list actually move anything?
+    // repriceToCatalog doesn't mutate — it just reports what a refresh would change.
+    const { changed, removed } = repriceToCatalog(s);
+    const tail: ExportCheck[] = [];
+    if (changed + removed > 0) {
+      const bits: string[] = [];
+      if (changed) bits.push(`${changed} line${changed === 1 ? "" : "s"} would change price`);
+      if (removed) bits.push(`${removed} item${removed === 1 ? "" : "s"} no longer in the price list`);
+      tail.push({
+        title: "Prices are out of date with the price list",
+        items: [`${bits.join(" · ")} — press “⟳ Check for updates” on this quotation to bring it up to date.`],
+      });
+    }
+    return [...head, ...exportBlockers(s), ...tail];
+  };
+  // Sales support engineer is mandatory — it prints on the offer and routes the approval.
+  // Block sending until it's picked, surfacing why and jumping to the Project tab. Then
+  // show every other missing thing (see approvalWarnings) before the quotation is locked,
+  // so the approver sees it rather than discovering it at export time.
   const sendForApproval = () => {
     if (!s.project.supportEngineer.trim()) {
       setWfError("Select a Sales support engineer on the Project tab before sending for approval.");
       setTab("project");
       return;
     }
-    const warns = exportBlockers(s);
+    const warns = approvalWarnings();
     if (warns.length) { setApprovalWarns(warns); return; } // the modal confirms the send
     runSendForApproval();
   };
