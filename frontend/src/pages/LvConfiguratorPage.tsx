@@ -309,6 +309,9 @@ export default function LvConfiguratorPage() {
   const [myPerms, setMyPerms] = useState<string[]>([]);
   const [wfError, setWfError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // The missing-copper / empty-panel / no-cells etc. warnings, surfaced when sending for
+  // approval so the approver sees them before the quotation is locked. Null = no modal.
+  const [approvalWarns, setApprovalWarns] = useState<ExportCheck[] | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
   const [coWorkOpen, setCoWorkOpen] = useState(false);
@@ -412,21 +415,31 @@ export default function LvConfiguratorPage() {
     }
   };
 
-  // Sales support engineer is mandatory — it prints on the offer. Block sending for
-  // approval until it's picked, surfacing why and jumping to the Project tab.
-  const sendForApproval = () => {
-    if (!s.project.supportEngineer.trim()) {
-      setWfError("Select a Sales support engineer on the Project tab before sending for approval.");
-      setTab("project");
-      return;
-    }
-    void doTransition("WAITING_APPROVAL", {
+  // The actual transition. When the pre-approval warnings modal is what confirmed the
+  // send, it carries its own "Send anyway" button and its own note, so the plain confirm
+  // is skipped to avoid a second dialog saying the same thing.
+  const runSendForApproval = (skipConfirm = false) =>
+    void doTransition("WAITING_APPROVAL", skipConfirm ? undefined : {
       confirm: {
         title: "Send for approval",
         message: "You won't be able to edit this quotation while it is under review.",
         confirmLabel: "Send for approval",
       },
     });
+  // Sales support engineer is mandatory — it prints on the offer. Block sending for
+  // approval until it's picked, surfacing why and jumping to the Project tab. Then run
+  // the same checks the offer export runs (missing copper, empty panels, no cells, zero
+  // price, LCP cables, duplicate names) and show them before the quotation is locked —
+  // the approver should see what is missing rather than discover it at export time.
+  const sendForApproval = () => {
+    if (!s.project.supportEngineer.trim()) {
+      setWfError("Select a Sales support engineer on the Project tab before sending for approval.");
+      setTab("project");
+      return;
+    }
+    const warns = exportBlockers(s);
+    if (warns.length) { setApprovalWarns(warns); return; } // the modal confirms the send
+    runSendForApproval();
   };
   // "Send to <sales person>" — compose the offer e-mail in Outlook via a mailto link.
   // Recipient is the sales person's e-mail from the Project tab (empty To when none is
@@ -1188,6 +1201,17 @@ export default function LvConfiguratorPage() {
       )}
       {/* Themed replacement for window.confirm — renders only while one is open. */}
       {confirmModal}
+      {/* The offer-export warnings, shown before a quotation is sent for approval. */}
+      {approvalWarns && (
+        <ExportWarnModal
+          checks={approvalWarns}
+          title="Review before sending for approval"
+          subtitle="These are the same checks the offer runs. You won't be able to edit this quotation while it is under review — fix them first, or send anyway."
+          proceedLabel="Send anyway"
+          onClose={() => setApprovalWarns(null)}
+          onProceed={() => { setApprovalWarns(null); runSendForApproval(true); }}
+        />
+      )}
       <ReturnForRevisionModal
         open={returnOpen}
         title={`${qtnNum}${s.project?.name ? ` · ${s.project.name}` : ""}`}
@@ -1775,9 +1799,18 @@ function PrintBar({ label, docTitle, blockers, exportFn }: { label: string; docT
   );
 }
 
-/** Pre-export validation warning — lists the failing checks; the user can fix them
- *  or accept and export anyway. */
-function ExportWarnModal({ checks, onClose, onProceed }: { checks: ExportCheck[]; onClose: () => void; onProceed: () => void }) {
+/** Validation warning — lists the failing checks; the user can fix them or accept and
+ *  proceed. Shared by the offer export and by "Send for approval" (the wording of the
+ *  heading, the note and the proceed button change per caller). */
+function ExportWarnModal({
+  checks, onClose, onProceed,
+  title = "Review before exporting",
+  subtitle = "These issues were found. Fix them, or export anyway.",
+  proceedLabel = "Export anyway",
+}: {
+  checks: ExportCheck[]; onClose: () => void; onProceed: () => void;
+  title?: string; subtitle?: string; proceedLabel?: string;
+}) {
   // Portal to <body>: the offer tabs sit inside an animate-fade-up wrapper whose
   // lingering transform would otherwise capture `position: fixed`, pushing the
   // dialog down the tall page. Anchored near the top so it's visible without scrolling.
@@ -1785,13 +1818,13 @@ function ExportWarnModal({ checks, onClose, onProceed }: { checks: ExportCheck[]
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print"
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
       <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-label="Export warnings"
+      <div role="dialog" aria-modal="true" aria-label={title}
         className="relative w-full max-w-lg rounded-xl2 border border-line bg-white p-6 shadow-lift animate-pop">
         <div className="mb-3 flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xl">⚠</div>
           <div>
-            <h2 className="text-lg font-extrabold tracking-tight text-ink">Review before exporting</h2>
-            <p className="text-sm text-muted">These issues were found. Fix them, or export anyway.</p>
+            <h2 className="text-lg font-extrabold tracking-tight text-ink">{title}</h2>
+            <p className="text-sm text-muted">{subtitle}</p>
           </div>
         </div>
         <div className="max-h-[50vh] space-y-3 overflow-auto">
@@ -1806,7 +1839,7 @@ function ExportWarnModal({ checks, onClose, onProceed }: { checks: ExportCheck[]
         </div>
         <div className="mt-5 flex justify-end gap-2">
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={onProceed}>Export anyway</button>
+          <button className="btn-primary" onClick={onProceed}>{proceedLabel}</button>
         </div>
       </div>
     </div>,

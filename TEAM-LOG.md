@@ -22,6 +22,26 @@ closed off.
 
 <!-- NEW ENTRIES GO HERE -->
 
+## 2026-08-17 · Mohamed's side · Claude
+
+**A batch of history / send / offer tidy-ups.**
+
+- **Missing-item warnings now show when you press "Send for approval."** The same checks
+  the offer runs (empty panels, missing copper, no cells, zero price, LCP cables,
+  duplicate panel names) pop up first, listing exactly what's missing on which panel.
+  You can fix them or choose "Send anyway" — nothing is blocked, you just see it before
+  the quotation is locked for review.
+- **Offers history keeps a quotation's revisions together.** Same order as before, but
+  when a number has been amended, its revisions sit one after the other (newest on top).
+- **New "Cancelled (old revisions)" choice in the history Status filter**, so you can
+  show just the superseded revisions.
+- **Outlook send now fills the recipient and the subject.** It was falling through to the
+  Windows share sheet, which had neither. WhatsApp now uses the exact same wording as the
+  Outlook e-mail. (Both still download the two PDFs to attach by hand — auto-attaching
+  needs the Microsoft 365 setup that's still with IT.)
+- **Removed the "Download Data Sheets" button** from the Material List, and the unused
+  ABB helper behind it.
+
 ## 2026-08-16 · Mohamed's side · Claude
 
 **Three things: no duplicate item names, no duplicate panel names, and Send-to-sales now offers WhatsApp as well as Outlook.**
