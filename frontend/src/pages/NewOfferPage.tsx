@@ -441,11 +441,15 @@ export default function NewOfferPage() {
       {tab === "panel" && (
         <div className="space-y-5">
           {/* Two columns: the panel card (half width) on the left, Metering and
-              Smart/RTU on the right. The grid's default stretch plus `grow` on the
-              right column's last card makes both sides exactly the same height. */}
-          <div className="grid gap-5 lg:grid-cols-2">
-          <section className="card p-5 animate-fade-up">
-            <div className="mb-3 flex items-center justify-between">
+              Smart/RTU on the right. `items-start` keeps every card at its natural
+              height — the left card's rows are tightened so the two sides come out
+              close without stretching a card into empty white space. */}
+          <div className="grid items-start gap-5 lg:grid-cols-2">
+          {/* Tighter vertical rhythm than the other cards (py-3 + 5px row gaps) so
+              this half-width column finishes level with Metering + Smart/RTU on the
+              right instead of running past them. */}
+          <section className="card px-5 py-3 animate-fade-up">
+            <div className="mb-2 flex items-center justify-between">
               <h2 className="sec-head !mb-0 !pb-0 after:hidden">Panel — RMU Code</h2>
               <div className="text-right">
                 <span key={panelCode} className="code-chip animate-pop">{panelCode}</span>
@@ -453,7 +457,7 @@ export default function NewOfferPage() {
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-[5px]">
               <Field label="Product type">
                 <Segmented
                   value={rmu.productType}
@@ -558,8 +562,11 @@ export default function NewOfferPage() {
           </section>
 
           <div className="flex flex-col gap-5">
-          {/* Metering — a toggle for every type; CT/VT options for PRAL/PSEC only. */}
-          <section className={`card p-5 animate-fade-up${rmu.productType === "PRAL" ? " grow" : ""}`}>
+          {/* Metering — a toggle for every type; CT/VT options for PRAL/PSEC only.
+              Cards keep their natural height and pack from the top, so Smart/RTU
+              sits directly under Metering instead of a card being stretched into
+              a tall empty white box to force the columns to match. */}
+          <section className="card p-5 animate-fade-up">
             <Toggle
               checked={rmu.hasMetering}
               onChange={(v) => setR("hasMetering", v)}
@@ -614,7 +621,7 @@ export default function NewOfferPage() {
           {/* Smart / RTU — optional, PSEC & Lucy only (PRAL has no smart). Works
               like the metering toggle: turn it on, then pick the level. */}
           {rmu.productType !== "PRAL" && (
-            <section className="card grow p-5 animate-fade-up">
+            <section className="card p-5 animate-fade-up">
               <Toggle
                 checked={rmu.rtuType !== "NONE"}
                 onChange={(on) => setR("rtuType", on ? "READY1" : "NONE")}

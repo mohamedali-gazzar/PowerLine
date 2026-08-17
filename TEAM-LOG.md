@@ -24,6 +24,21 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
+**Panel step tidy-up — no more empty white box, and the two sides finish level.**
+
+- Fixed a problem where the **Smart / RTU** card was stretched into a tall empty white
+  box when it was switched off. Cards now keep their natural size, so **Smart / RTU sits
+  directly under Metering** instead of being pushed to the bottom of an empty area.
+- The **Panel — RMU Code** card on the left was tightened a little so that, with Metering
+  and Smart/RTU both switched on, the left and right sides **finish at the same line**.
+- When Metering or Smart/RTU is switched *off* those cards shrink to a small bar, so the
+  right side naturally ends higher — that is expected, and is the alternative to putting
+  the empty white box back.
+- Colours, buttons and everything else look exactly as before; nothing about how the page
+  works changed.
+
+## 2026-08-17 · Mohamed's side · Claude
+
 **The Panel step of the New RMU Offer screen is now side-by-side (two columns).**
 
 - On the **Panel** step, the **Panel — RMU Code** card is now **half width, on the left**, and
