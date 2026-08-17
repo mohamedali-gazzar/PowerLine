@@ -43,15 +43,10 @@ import { api, getToken, type LvComboSection } from "../api";
 import { refreshCatalog } from "../lv/catalogSource";
 import {
   buildSectionWorkbook,
-  combosWorkbookOmissions,
   parseCombosWorkbook,
   sectionHasWorkbook,
   sectionWorkbookFilename,
 } from "./combosExcel";
-
-/** "a", "a and b", "a, b and c" — this goes into a sentence, not a list. */
-const andList = (xs: string[]): string =>
-  xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
 
 export default function LvCombosPanel() {
   const [sections, setSections] = useState<LvComboSection[]>([]);
@@ -75,11 +70,6 @@ export default function LvCombosPanel() {
   useEffect(() => { void load(); }, []);
 
   const current = sections.find((s) => s.section === active);
-
-  // Whatever is loaded that Excel has no shape for. Worked out from what is
-  // actually on the screen rather than hardcoded, so the sentence stays true if
-  // the sections ever change.
-  const omitted = combosWorkbookOmissions(sections);
 
   // Asked of the exporter, never assumed here: it owns the list of combinations
   // that have a file, so the button cannot promise one the app cannot write.
@@ -198,50 +188,6 @@ export default function LvCombosPanel() {
 
   return (
     <div>
-      <div className="card mb-3 p-3">
-        <p className="text-sm text-muted">
-          These decide what goes <b className="text-ink">inside</b> a combination when someone adds
-          one to a panel — the contactors in a starter, the parts of an ATS. They are maintained in
-          the combinations workbooks and loaded here, so the workbook stays the single reference.
-          A change goes live the moment it is loaded. Quotations already saved keep the parts they
-          were built with.
-        </p>
-        <p className="mt-2 text-sm text-muted">
-          <b className="text-ink">Load the Excel workbook itself</b> — "Combinations Database - MCC.xlsx",
-          "- ATS.xlsx", "- photocell.xlsx", or a "- WD.xlsx" that carries all three blocks of kits
-          (MCCB-3P, MCCB-4P and Air-3P — the WD file this screen gives you does; your own one stops
-          after the two MCCB blocks and is refused, because loading it would take the E1.2 kit out of
-          the app). Nothing needs converting first, and if a workbook is missing something the app
-          needs it is refused and nothing changes. Power-factor correction is not on this list: the
-          app works the capacitor bank out for itself.
-        </p>
-        <p className="mt-2 text-sm text-muted">
-          <b className="text-ink">Download gives you one combination at a time</b> — whichever one is
-          selected below, on its own, saved under the name you already keep it under: "Combinations
-          Database - MCC.xlsx", "- ATS.xlsx", "- photocell.xlsx", "- WD.xlsx". It holds that
-          combination and nothing else, with the same tab names and columns as your files, so you can
-          open it in Excel, change what you need, and load that same file straight back. Loading it
-          changes only that one list — every other one stays exactly as it is.
-        </p>
-        <p className="mt-2 text-sm text-muted">
-          <b className="text-ink">The withdrawable kits are only in the WD file.</b> Your own MCC, ATS
-          and photocell workbooks each repeat the kits, and loading any of them still updates them —
-          that has not changed. The files this screen hands back do not, so an MCC file you saved last
-          week can never quietly put last week's kits back over today's.
-        </p>
-        {omitted.length > 0 && (
-          <p className="mt-2 text-sm text-muted">
-            <b className="text-ink">
-              {omitted.length === 1 ? "One list has" : `${omitted.length} lists have`} no Excel file at
-              all:
-            </b>{" "}
-            {andList(omitted)}. Not kept in Excel anywhere, so there is nothing to download and
-            nothing you load here can change it. Not at risk either — it stays exactly as it is in the
-            app.
-          </p>
-        )}
-      </div>
-
       <div className="mb-3 flex flex-wrap gap-1">
         {sections.map((s) => (
           <button
