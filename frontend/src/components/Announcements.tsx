@@ -31,7 +31,9 @@ export default function Announcements({ items = [] }: { items?: Announcement[] }
   return (
     <div style={S.card}>
       <div style={S.head}>
-        <span style={S.title}>Announcements</span>
+        {/* Same heading as the "Waiting for your approval" card — the app's .sec-head
+            (16px bold with the short orange underline bar). */}
+        <h2 className="sec-head" style={{ marginBottom: 0 }}>Announcements</h2>
         <span style={S.count}>{active.length} new</span>
       </div>
       <div style={S.list}>
@@ -61,9 +63,6 @@ export default function Announcements({ items = [] }: { items?: Announcement[] }
 const S: Record<string, React.CSSProperties> = {
   card: { background: C.card, borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.05)", padding: "16px 20px", marginBottom: 16, color: C.ink },
   head: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  // Same size as the "Waiting for approval" status text (12px); the orange accent is
-  // an underline UNDER the word, not a bar beside it.
-  title: { fontSize: 12, fontWeight: 700, display: "inline-block", paddingBottom: 4, borderBottom: `2px solid ${C.orange}` },
   count: { fontSize: 12, fontWeight: 600, color: C.orange, background: C.orangeTint, padding: "3px 11px", borderRadius: 12 },
   list: { display: "flex", flexDirection: "column", gap: 10 },
   ann: { display: "flex", alignItems: "flex-start", gap: 12, border: `0.5px solid ${C.line}`, borderLeftWidth: 3, borderLeftStyle: "solid", borderRadius: 9, padding: "12px 14px", background: "#fff" },

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   api,
   type Announcement,
@@ -144,10 +145,16 @@ export default function AnnouncementsAdminPage() {
 
       {error && <div className="card mb-3 border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>}
 
-      {draft && (
-        <div className="card mb-4 p-4">
-          <h2 className="mb-3 text-base font-bold text-ink">{draft.id ? "Edit announcement" : "New announcement"}</h2>
-          <div className="grid gap-3 md:grid-cols-2">
+      {draft && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onKeyDown={(e) => { if (e.key === "Escape" && !busy) { setDraft(null); setError(""); } }}>
+          <div className="fixed inset-0 bg-ink/40 animate-fade-in" />
+          <div role="dialog" aria-modal="true" aria-label={draft.id ? "Edit announcement" : "New announcement"}
+            className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl2 border border-line bg-white shadow-lift animate-pop">
+            <h2 className="border-b border-line px-6 py-4 text-base font-bold text-ink">{draft.id ? "Edit announcement" : "New announcement"}</h2>
+            <div className="min-h-0 flex-1 overflow-auto px-6 py-4">
+              {error && <div className="mb-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>}
+              <div className="grid gap-3 md:grid-cols-2">
             <div className="md:col-span-2">
               <label className="label">Title</label>
               <input className="input" value={draft.title} onChange={(e) => set("title", e.target.value)} placeholder="e.g. Planned maintenance this Friday" />
@@ -192,15 +199,18 @@ export default function AnnouncementsAdminPage() {
               <input type="checkbox" className="h-4 w-4 accent-brand" checked={draft.published} onChange={(e) => set("published", e.target.checked)} />
               <span className="text-sm text-ink">Published (unchecked = hidden draft, nobody sees it)</span>
             </label>
+              </div>
+              <div className="mt-3 text-xs text-muted">
+                Will show <b>{fmt(windowOf(draft).start)}</b> → <b>{fmt(windowOf(draft).end)}</b>.
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-line px-6 py-3">
+              <button className="btn-ghost" disabled={busy} onClick={() => { setDraft(null); setError(""); }}>Cancel</button>
+              <button className="btn-primary" disabled={busy} onClick={save}>{busy ? "Saving…" : draft.id ? "Save changes" : "Create"}</button>
+            </div>
           </div>
-          <div className="mt-2 text-xs text-muted">
-            Will show <b>{fmt(windowOf(draft).start)}</b> → <b>{fmt(windowOf(draft).end)}</b>.
-          </div>
-          <div className="mt-4 flex gap-2">
-            <button className="btn-primary" disabled={busy} onClick={save}>{busy ? "Saving…" : draft.id ? "Save changes" : "Create"}</button>
-            <button className="btn-ghost" disabled={busy} onClick={() => { setDraft(null); setError(""); }}>Cancel</button>
-          </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {items === null ? (
