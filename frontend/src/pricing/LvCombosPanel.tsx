@@ -77,53 +77,49 @@ export default function LvCombosPanel() {
 
   const current = sections.find((s) => s.section === active);
 
-  // Asked of the exporter, never assumed here: it owns the list of combinations
-  // that have a file, so the button cannot promise one the app cannot write.
-  const canDownload = Boolean(current && sectionHasWorkbook(current.section));
-  const downloadName = current && canDownload ? sectionWorkbookFilename(current.section) : "";
-  /** The name of the selected list when it has no file at all — empty both when a
-   *  file exists and while the screen is still loading, so "no Excel file" is only
-   *  ever said about a list that really has none. */
-  const noFileFor = current && !canDownload ? current.label : "";
-  const isWd = current ? current.section.toLowerCase() === "wd" : false;
+  // A row can be downloaded when its combination has an Excel shape AND holds data
+  // (P.F.C before it has ever been loaded has none, so its download stays disabled).
+  const canDownloadSection = (s: LvComboSection) => sectionHasWorkbook(s.section) && s.value != null;
 
-  /** Hands back ONLY the combination whose chip is selected. */
-  const downloadCurrent = () => {
+  /** Hand back ONE combination's workbook. */
+  const downloadSection = (s: LvComboSection) => {
     setError(""); setDone(""); setNote("");
-    if (!current || !canDownload) return;
+    if (!canDownloadSection(s)) return;
     try {
       // Built first: if this combination cannot be laid out, the reason is shown
       // and no half-made file ever reaches the downloads folder.
-      const blob = buildSectionWorkbook(current.section, current.value);
-      const name = sectionWorkbookFilename(current.section);
+      const blob = buildSectionWorkbook(s.section, s.value);
+      const name = sectionWorkbookFilename(s.section);
       const a = document.createElement("a");
       // The anchor has to be IN the document and the URL must outlive the click:
-      // revoking in the same tick can hand back a truncated or empty file while the
-      // success message still appears. The other downloads in this app do it this way.
+      // revoking in the same tick can hand back a truncated file while "Saved" shows.
       const url = URL.createObjectURL(blob);
-      a.href = url;
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      setDone(
-        `Saved "${name}" to your downloads. It holds ${current.label} and nothing else — loading it back ` +
-          `changes only this list, and every other combination stays exactly as it is. If you edit a tab, ` +
-          `change only the words in the cells: leaving a description or a quantity cell EMPTY is read as ` +
-          `"this row is a heading", which drops that row and the ones under it.`,
-      );
-      if (!isWd) {
-        setNote(
-          `The withdrawable kits are not in that file. They have one of their own, ` +
-            `"Combinations Database - WD.xlsx", and it is the only file that changes them. That is on ` +
-            `purpose: it means loading an older "${name}" can never put yesterday's kits back over today's ` +
-            `without telling you.`,
-        );
+      setDone(`Saved "${name}" — it holds ${s.label} and nothing else. Edit its cells and load the same file back to update this list.`);
+      if (s.section.toLowerCase() !== "wd") {
+        setNote(`The withdrawable kits are not in that file — they have their own "Combinations Database - WD.xlsx", the only file that changes them.`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "The Excel file could not be made.");
     }
+  };
+
+  /** Upload a workbook for a row. A loaded file still says for itself which sections
+   *  it fills; setting `active` only helps a JSON that carries a single bare section. */
+  const uploadFor = (section: string) => {
+    setActive(section);
+    setError(""); setDone(""); setNote(""); setWarnings([]);
+    fileRef.current?.click();
+  };
+
+  /** The last time a person loaded this list — null for the app's shipped defaults
+   *  (seeded) and for a list never loaded, which the table shows as "—". */
+  const lastUploaded = (s: LvComboSection): string | null => {
+    if (!s.updatedAt || !s.updatedBy || s.updatedBy === "seed") return null;
+    const d = new Date(s.updatedAt);
+    return isNaN(d.getTime()) ? null : d.toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   };
 
   const labelOf = (section: string) => sections.find((s) => s.section === section)?.label ?? section;
@@ -201,75 +197,84 @@ export default function LvCombosPanel() {
   return (
     <div>
       {dialogs}
-      {/* One hidden picker for the whole panel — the primary action in the content
-          area opens it. A loaded file still says for itself which sections it fills. */}
+      {/* One hidden picker — a row's Upload opens it. A loaded file says for itself
+          which sections it fills, so it need not match the row it was opened from. */}
       <input ref={fileRef} type="file" accept=".xlsx,.xls,.json" className="hidden" onChange={onFile} />
 
-      {/* Left category list + right content panel. Orange is an accent only: the
-          selected category (tint + left rule) and the one primary action. */}
-      <div className="card grid grid-cols-[220px_1fr] overflow-hidden p-0">
-        <div className="border-r border-line bg-surface/60 p-2.5">
-          {sections.length === 0 && <div className="px-2 py-1 text-xs text-muted">Loading…</div>}
-          {sections.map((s) => {
-            const on = s.section === active;
-            return (
-              <button
-                key={s.section}
-                onClick={() => { setActive(s.section); setDone(""); setNote(""); setError(""); setWarnings([]); }}
-                className={`mb-0.5 block w-full rounded-lg border-l-2 px-3 py-2.5 text-left transition ${
-                  on ? "border-brand bg-brand-tint" : "border-transparent hover:bg-brand-tint/40"
-                }`}
-              >
-                <div className={`text-[13px] text-ink ${on ? "font-bold" : "font-medium"}`}>{s.label}</div>
-                <div className="mt-0.5 text-[11px] text-muted">{s.summary}</div>
-              </button>
-            );
-          })}
+      {busy && <div className="mb-3 text-sm font-semibold text-brand-dark">{busy}</div>}
+      {error && <div className="card mb-3 border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>}
+      {done && <div className="card mb-3 border-green-300 bg-green-50 p-3 text-sm font-semibold text-green-800">{done}</div>}
+      {note && <div className="card mb-3 border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{note}</div>}
+      {warnings.length > 0 && (
+        <div className="card mb-3 border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <b>{warnings.length} part{warnings.length === 1 ? "" : "s"} did not match anything in the price list.</b>
+          <p className="mt-1">
+            Combinations find their parts by description, so these would come out as rows with no
+            price. Either correct the wording in the workbook or add the component to the price list.
+          </p>
+          <ul className="mt-2 max-h-48 list-disc overflow-y-auto pl-5 font-mono text-xs">
+            {warnings.map((w) => <li key={w}>{w}</li>)}
+          </ul>
         </div>
+      )}
 
-        <div className="min-w-0 p-5">
-          {current ? (
-            <>
-              <h3 className="text-base font-bold text-ink">{current.label}</h3>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2.5">
-                <button className="btn-primary" disabled={!!busy} onClick={() => fileRef.current?.click()}>
-                  {busy || "⬆ Load workbook"}
-                </button>
-                <button
-                  className="btn-ghost"
-                  disabled={!!busy || !canDownload}
-                  onClick={downloadCurrent}
-                  title={
-                    canDownload
-                      ? `Saves "${downloadName}". It holds this one combination and nothing else.`
-                      : `${noFileFor} is not kept in Excel anywhere, so there is no file to give you.`
-                  }
-                >
-                  {canDownload ? `⬇ Download "${downloadName}"` : `⬇ ${noFileFor || "This combination"} has no Excel file`}
-                </button>
-              </div>
-
-              {error && <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>}
-              {done && <div className="mt-3 rounded-lg border border-green-300 bg-green-50 p-3 text-sm font-semibold text-green-800">{done}</div>}
-              {note && <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{note}</div>}
-              {warnings.length > 0 && (
-                <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                  <b>{warnings.length} part{warnings.length === 1 ? "" : "s"} did not match anything in the price list.</b>
-                  <p className="mt-1">
-                    Combinations find their parts by description, so these would come out as rows with no
-                    price. Either correct the wording in the workbook or add the component to the price list.
-                  </p>
-                  <ul className="mt-2 max-h-48 list-disc overflow-y-auto pl-5 font-mono text-xs">
-                    {warnings.map((w) => <li key={w}>{w}</li>)}
-                  </ul>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-muted">Loading combinations…</p>
-          )}
-        </div>
+      <div className="card overflow-x-auto p-0">
+        <table className="w-full text-sm">
+          <thead className="bg-brand-tint text-left text-[11px] uppercase tracking-wide text-brand-dark">
+            <tr>
+              <th className="px-4 py-3">Name</th>
+              <th className="px-4 py-3">Download</th>
+              <th className="px-4 py-3">Upload</th>
+              <th className="px-4 py-3">Last uploaded</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sections.length === 0 && (
+              <tr><td colSpan={4} className="px-4 py-6 text-center text-muted">Loading…</td></tr>
+            )}
+            {sections.map((s) => {
+              const dl = canDownloadSection(s);
+              const when = lastUploaded(s);
+              return (
+                <tr key={s.section} className="border-t border-line align-top">
+                  <td className="px-4 py-3">
+                    <div className="font-semibold text-ink">{s.label}</div>
+                    <div className="text-[11px] text-muted">{s.summary}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      className="rounded-full border border-brand bg-white px-3 py-1 text-xs font-bold text-brand-dark hover:bg-brand-light disabled:opacity-40"
+                      disabled={!!busy || !dl}
+                      onClick={() => downloadSection(s)}
+                      title={dl ? `Download "${sectionWorkbookFilename(s.section)}"` : "Nothing to download yet — load a workbook first."}
+                    >
+                      ⬇ Download
+                    </button>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      className="rounded-full bg-brand px-3 py-1 text-xs font-bold text-white hover:bg-brand-dark disabled:opacity-50"
+                      disabled={!!busy}
+                      onClick={() => uploadFor(s.section)}
+                    >
+                      ⬆ Upload
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted">
+                    {when ? (
+                      <>
+                        {when}
+                        {s.updatedBy ? <div className="text-[10px]">by {s.updatedBy}</div> : null}
+                      </>
+                    ) : (
+                      <span title="Never loaded — using the version shipped with the app">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
