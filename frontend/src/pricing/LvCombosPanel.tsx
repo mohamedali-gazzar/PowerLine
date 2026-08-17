@@ -198,20 +198,6 @@ export default function LvCombosPanel() {
     }
   };
 
-  const resetAll = async () => {
-    setBusy("Resetting…"); setError(""); setDone(""); setNote(""); setWarnings([]);
-    try {
-      await api.pricing.lvCombosReset();
-      setDone("All combinations are back to the version shipped with the app.");
-      await load();
-      void refreshCatalog(getToken());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not reset.");
-    } finally {
-      setBusy("");
-    }
-  };
-
   return (
     <div>
       {dialogs}
@@ -271,10 +257,6 @@ export default function LvCombosPanel() {
             </>
           )}
         </span>
-        <div className="grow" />
-        <button className="btn-ghost text-red-700" disabled={!!busy} onClick={resetAll}>
-          Reset all to the app's version
-        </button>
       </div>
 
       {error && <div className="card mb-3 border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>}
