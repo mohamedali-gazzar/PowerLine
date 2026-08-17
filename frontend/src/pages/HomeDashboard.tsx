@@ -105,10 +105,10 @@ export default function HomeDashboard() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button className="btn-primary" onClick={() => setChooser(true)}>+ New QTN</button>
           {can("access.manage") && (
             <button className="btn-ghost" onClick={() => navigate("/access")}>🔑 Access Center</button>
           )}
+          <button className="btn-primary" onClick={() => setChooser(true)}>+ New QTN</button>
         </div>
       </div>
 
