@@ -60,7 +60,7 @@ import {
   deleteAnnouncement,
 } from "./controllers/announcements.controller";
 import { withPriceBook } from "./middleware/priceBook";
-import { requirePriceAdmin, requireOwner, requirePriceViewer } from "./middleware/roles";
+import { requirePriceAdmin, requireOwner, requirePriceViewer, requireAnnouncements } from "./middleware/roles";
 import {
   listNotifications,
   markRead,
@@ -190,12 +190,13 @@ export function createApp() {
   app.post("/api/pricing/lv/import/:id/cancel", requireAuth, requirePriceAdmin, postLvImportCancel);
 
   // Announcements: every signed-in user reads the ACTIVE ones for the dashboard;
-  // only an owner may list-all or create/edit/delete them.
+  // managing them needs the "announcements.manage" permission (the Admin role holds
+  // it; grant it to anyone else from the Access Center).
   app.get("/api/announcements", requireAuth, listActiveAnnouncements);
-  app.get("/api/announcements/all", requireAuth, requireOwner, listAllAnnouncements);
-  app.post("/api/announcements", requireAuth, requireOwner, createAnnouncement);
-  app.patch("/api/announcements/:id", requireAuth, requireOwner, updateAnnouncement);
-  app.delete("/api/announcements/:id", requireAuth, requireOwner, deleteAnnouncement);
+  app.get("/api/announcements/all", requireAuth, requireAnnouncements, listAllAnnouncements);
+  app.post("/api/announcements", requireAuth, requireAnnouncements, createAnnouncement);
+  app.patch("/api/announcements/:id", requireAuth, requireAnnouncements, updateAnnouncement);
+  app.delete("/api/announcements/:id", requireAuth, requireAnnouncements, deleteAnnouncement);
 
   app.get("/api/pricing/history", requireAuth, requirePriceViewer, getHistory);
   app.post("/api/pricing/changes/:id/undo", requireAuth, requirePriceAdmin, postUndo);

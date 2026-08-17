@@ -27,6 +27,7 @@ export const PERMS = [
   "qtn.amendAll",
   "qtn.audit",
   "qtn.approveOwn",
+  "announcements.manage",
 ] as const;
 export type Perm = (typeof PERMS)[number];
 
@@ -45,6 +46,7 @@ export const PERM_LABEL: Record<Perm, string> = {
   "qtn.amendAll": "Amend all QTNs",
   "qtn.audit": "View audit trail",
   "qtn.approveOwn": "Approve their own QTNs",
+  "announcements.manage": "Manage announcements",
 };
 
 /** Admins hold everything except the deliberate self-approval exception, which stays
@@ -190,3 +192,5 @@ export const requirePriceViewer = requireAnyPerm("prices.view", "prices.edit");
 // Back-compat aliases so every existing wiring site in app.ts stays untouched.
 export const requirePriceAdmin = requirePerm("prices.edit");
 export const requireOwner = requirePerm("access.manage");
+/** Manage announcements — an Access-Center permission the Admin role holds. */
+export const requireAnnouncements = requirePerm("announcements.manage");

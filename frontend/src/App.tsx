@@ -143,7 +143,7 @@ export default function App() {
               <span className="shrink-0">{priceIcon}</span>
               <span className={lbl}>Price list</span>
             </NavLink>
-            {can("access.manage") && (
+            {can("announcements.manage") && (
               <NavLink to="/announcements" title="Announcements" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>
                 <span className="shrink-0">{megaphoneIcon}</span>
                 <span className={lbl}>Announcements</span>
