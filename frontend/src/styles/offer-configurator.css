@@ -1,0 +1,180 @@
+/* PowerLine — RMU Offer Configurator theme.
+   Restrained: neutral surfaces, orange reserved for selected state, the RMU code
+   chip and the primary action. EVERYTHING is scoped under `.oc` so these tokens
+   and element rules never leak into the rest of the app (the LV section, the
+   shared field components, etc. are untouched). */
+
+.oc{
+  --accent:#F16722;
+  --accent-ink:#B8460F;
+  --accent-wash:#FEF5F0;
+  --ink:#16181B;
+  --ink-2:#4B5158;
+  --ink-3:#858B93;
+  --line:#E4E6E9;
+  --line-2:#EEF0F2;
+  --surface:#FFFFFF;
+  --track:#F4F5F7;
+  --page:#FAFAFB;
+  --radius:10px;
+  --shadow:0 1px 2px rgba(16,18,21,.05);
+  --shadow-lift:0 1px 2px rgba(16,18,21,.06),0 1px 1px rgba(16,18,21,.04);
+
+  color:var(--ink);
+  font:400 14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.oc *{box-sizing:border-box}
+.oc .mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;font-variant-ligatures:none}
+
+/* ---------- page top bar ---------- */
+.oc .topbar{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.oc .topbar-in{padding:0 18px;min-height:56px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.oc .wordmark{display:flex;align-items:center;gap:9px;font-weight:600;letter-spacing:-.01em}
+.oc .wordmark i{width:8px;height:8px;border-radius:2px;background:var(--accent);display:block}
+.oc .topbar .sep{width:1px;height:20px;background:var(--line)}
+.oc .qtn{font-size:12px;color:var(--ink-3)}
+.oc .qtn b{color:var(--ink-2);font-weight:500}
+.oc .topbar .spacer{flex:1}
+
+/* ---------- stepper ---------- */
+.oc .steps{padding:18px 2px 0;display:flex;gap:26px;flex-wrap:wrap}
+.oc .step{appearance:none;background:none;border:0;font:inherit;cursor:pointer;
+  display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3)}
+.oc .step .n{width:19px;height:19px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;font-size:10.5px;background:#fff}
+.oc .step.is-current{color:var(--ink);font-weight:500}
+.oc .step.is-current .n{border-color:var(--accent);color:var(--accent-ink);background:var(--accent-wash)}
+
+/* ---------- layout ---------- */
+.oc .wrap{padding:18px 0 0}
+.oc .cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+.oc .stack{display:flex;flex-direction:column;gap:20px}
+/* Panel tab: Panel card on the left, Metering / Smart / code-breakdown stacked on
+   the right. Left card's rows are tightened so the two columns sit close in height. */
+.oc .panel-cols{align-items:start}
+.oc .panel-cols .grid2 > .cell{padding:8px 0}
+.oc .panel-cols .card-body{padding-top:4px;padding-bottom:12px}
+.oc .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.oc .card + .card{margin-top:20px}
+.oc .card-head{padding:14px 18px;display:flex;align-items:flex-start;gap:14px}
+.oc .card.has-body .card-head{border-bottom:1px solid var(--line-2)}
+.oc .card-title{margin:0;font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.oc .card-sub{margin:3px 0 0;font-size:12px;color:var(--ink-3)}
+.oc .card-body{padding:6px 18px 16px}
+.oc .code-out{margin-left:auto;text-align:right;flex:none}
+.oc .chip{display:inline-block;background:var(--accent);color:#fff;padding:5px 9px;border-radius:7px;font-size:12.5px;font-weight:500;letter-spacing:.02em}
+.oc .chip.pop{animation:oc-pop .18s ease-out}
+@keyframes oc-pop{from{transform:scale(.94);opacity:.4}to{transform:scale(1);opacity:1}}
+.oc .code-alt{margin-top:5px;font-size:11px;color:var(--ink-3)}
+
+/* ---------- fields ---------- */
+.oc .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 24px}
+.oc .grid2 > .cell{padding:11px 0;border-bottom:1px solid var(--line-2)}
+.oc .grid2 > .cell.span2{grid-column:1/-1}
+.oc .grid2 > .cell.no-line{border-bottom:0}
+.oc .lbl{display:block;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);margin-bottom:6px}
+.oc .hint{margin-top:5px;font-size:11px;color:var(--ink-3);line-height:1.4}
+
+.oc .seg{display:flex;background:var(--track);border:1px solid var(--line-2);border-radius:var(--radius);padding:3px;gap:3px}
+.oc .seg button{flex:1;appearance:none;border:1px solid transparent;background:transparent;font:inherit;font-size:12.5px;color:var(--ink-2);
+  padding:6px 8px;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:background .12s,color .12s,border-color .12s;min-width:0}
+.oc .seg button span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oc .seg button:hover:not([aria-checked="true"]):not([disabled]){color:var(--ink);background:rgba(255,255,255,.65)}
+.oc .seg button[aria-checked="true"]{background:var(--surface);border-color:var(--line);color:var(--ink);font-weight:500;box-shadow:var(--shadow-lift)}
+.oc .seg button[aria-checked="true"]::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--accent);flex:none}
+.oc .seg button[disabled]{color:#B6BBC1;cursor:not-allowed}
+.oc .seg button[disabled] svg{width:11px;height:11px;flex:none;opacity:.75}
+.oc .seg button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+.oc .num{display:flex;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);height:36px;overflow:hidden}
+.oc .num button{width:36px;height:100%;flex:none;border:0;background:transparent;cursor:pointer;font-size:16px;color:var(--ink-2);line-height:1}
+.oc .num button:hover:not(:disabled){background:var(--track);color:var(--ink)}
+.oc .num button:disabled{color:#C9CDD2;cursor:not-allowed}
+.oc .num .val{flex:1;width:100%;min-width:0;text-align:center;font:inherit;font-size:14px;font-weight:500;color:var(--ink);
+  background:transparent;border:0;border-left:1px solid var(--line-2);border-right:1px solid var(--line-2);height:100%;outline:0}
+.oc .num .val::-webkit-outer-spin-button,.oc .num .val::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.oc .num .val[type=number]{-moz-appearance:textfield}
+
+.oc .inp{position:relative;display:flex;align-items:center}
+.oc .inp input,.oc .inp select{width:100%;height:36px;padding:0 32px 0 11px;font:inherit;font-size:13.5px;color:var(--ink);
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);outline:0}
+.oc .inp select{padding-right:30px;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23858B93' stroke-width='2.5'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 11px center}
+.oc .inp input::placeholder{color:#B6BBC1}
+.oc .inp input:focus,.oc .inp select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(241,103,34,.13)}
+.oc .inp .unit{position:absolute;right:11px;font-size:12px;color:var(--ink-3);pointer-events:none}
+.oc .inp.is-fixed input{background:var(--track);color:var(--ink-2);border-color:var(--line-2)}
+
+/* ---------- toggle ---------- */
+.oc .sw-row{display:flex;align-items:center;gap:12px}
+.oc .sw-label{font-size:13.5px;font-weight:600;color:var(--ink)}
+.oc .sw{margin-left:auto;flex:none;appearance:none;border:0;padding:0;cursor:pointer;
+  width:38px;height:22px;border-radius:11px;background:#D7DADE;position:relative;transition:background .15s}
+.oc .sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;
+  box-shadow:0 1px 2px rgba(0,0,0,.18);transition:transform .15s}
+.oc .sw[aria-checked="true"]{background:var(--accent)}
+.oc .sw[aria-checked="true"]::after{transform:translateX(16px)}
+.oc .sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- decode ---------- */
+.oc .decode{margin-top:14px;border:1px solid var(--line-2);border-radius:var(--radius);background:#FCFCFD;padding:10px 11px}
+.oc .decode-h{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);margin:0 0 8px}
+.oc .tokens{display:flex;flex-wrap:wrap;gap:7px}
+.oc .tok{border:1px solid var(--line);background:#fff;border-radius:6px;padding:4px 7px;min-width:52px}
+.oc .tok .k{display:block;font-size:12px;font-weight:600;color:var(--accent-ink)}
+.oc .tok .v{display:block;font-size:10.5px;color:var(--ink-3);margin-top:1px}
+
+/* ---------- totals ---------- */
+.oc .totals{margin-top:16px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--track);padding:12px 14px;font-size:13px}
+.oc .totrow{display:flex;justify-content:space-between;color:var(--ink-2);padding:2px 0}
+.oc .totrow.grand{margin-top:6px;padding-top:8px;border-top:1px solid var(--line);font-size:16px;font-weight:700;color:var(--accent-ink)}
+
+/* ---------- notices ---------- */
+.oc .notice{border-radius:12px;padding:12px 14px;font-size:13px;margin-bottom:16px}
+.oc .notice.ok{border:1px solid #BBE7C6;background:#F1FBF4;color:#166534}
+.oc .notice.warn{border:1px solid #F3D19B;background:#FEF7EA;color:#8A5A12}
+.oc .notice.err{border:1px solid #F1C0C0;background:#FDF2F2;color:#B42318}
+.oc .notice .n-title{font-weight:700}
+.oc .notice-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+
+/* ---------- staff list ---------- */
+.oc .list{border:1px solid var(--line);border-radius:var(--radius);max-height:11rem;overflow:auto}
+.oc .list-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 11px;border-bottom:1px solid var(--line-2);font-size:13px}
+.oc .list-row:last-child{border-bottom:0}
+.oc .list-row .meta{font-size:11px;color:var(--ink-3)}
+.oc .taglist{display:flex;flex-wrap:wrap;gap:6px}
+.oc .tag{display:inline-flex;align-items:center;gap:6px;background:var(--track);border:1px solid var(--line-2);border-radius:7px;padding:4px 9px;font-size:12.5px}
+.oc .linkbtn{appearance:none;border:0;background:none;color:#C0453A;font:inherit;font-size:12px;cursor:pointer;padding:0}
+.oc .linkbtn:hover{text-decoration:underline}
+
+/* ---------- action bar ---------- */
+.oc .actionbar{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.oc .actionbar-in{padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.oc .ab-code{font-size:13px;font-weight:500}
+.oc .ab-code small{display:block;font-size:11px;color:var(--ink-3);font-weight:400;margin-top:1px}
+.oc .actionbar .spacer{flex:1}
+
+/* ---------- buttons ---------- */
+.oc .btn{appearance:none;font:inherit;font-size:13px;border-radius:9px;padding:9px 15px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink-2)}
+.oc .btn:hover:not(:disabled){border-color:#D3D7DC;color:var(--ink)}
+.oc .btn:disabled{opacity:.6;cursor:default}
+.oc .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:500}
+.oc .btn-primary:hover:not(:disabled){background:#DE5C1B;border-color:#DE5C1B;color:#fff}
+.oc .btn-sm{padding:7px 11px;font-size:12.5px}
+
+.oc [hidden]{display:none !important}
+
+/* ---------- skeleton ---------- */
+.oc .sk{border-radius:8px;background:linear-gradient(90deg,var(--track),#EDEEF1,var(--track));background-size:200% 100%;animation:oc-sk 1.2s ease-in-out infinite}
+@keyframes oc-sk{from{background-position:200% 0}to{background-position:-200% 0}}
+
+@media (max-width:980px){
+  .oc .cols{grid-template-columns:1fr}
+}
+@media (max-width:620px){
+  .oc .grid2{grid-template-columns:1fr;gap:0}
+  .oc .seg[data-field="product"]{flex-direction:column}
+  .oc .card-head{flex-wrap:wrap}
+  .oc .code-out{margin-left:0;text-align:left}
+  .oc .step span.txt{display:none}
+}

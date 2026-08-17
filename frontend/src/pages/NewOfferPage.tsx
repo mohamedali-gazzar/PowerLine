@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
-import {
-  Field,
-  TextInput,
-  NumberInput,
-  Select,
-  Segmented,
-  Toggle,
-} from "../components/fields";
 import OfferView from "../components/OfferView";
 import { useStaff, findPerson, SALES_MANAGER } from "../staff";
 import {
@@ -17,8 +9,10 @@ import {
   AVAILABLE_BRANDS_BY_FAMILY,
   CLIENT_SPECS,
   AVAILABLE_CLIENT_SPECS,
+  label as toLabel,
 } from "../options";
 import type { GeneratedOffer, OfferInput, RmuConfigInput, LbsBrand } from "../types";
+import "../styles/offer-configurator.css";
 
 const initialRmu: RmuConfigInput = {
   productType: "PRAL",
@@ -300,481 +294,475 @@ export default function NewOfferPage() {
 
   const generateAll = () => download(priceMissing ? ["Technical"] : ["Technical", "Commercial"]);
 
+  const ti = TABS.findIndex((t) => t.key === tab);
+  const prevTab = TABS[ti - 1];
+  const nextTab = TABS[ti + 1];
+
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between animate-fade-up">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">New RMU Offer</h1>
-          <p className="text-sm text-muted">Configure the panel — the offer builds itself.</p>
-        </div>
-        <button type="button" className="btn-primary" disabled={submitting} onClick={generateAll}>
-          {submitting ? "Generating…" : "Generate & Download →"}
-        </button>
-      </div>
-
-      {/* Tab bar (sticky), like the LV section */}
-      <div className="sticky top-0 z-20 -mx-4 mb-5 bg-surface/85 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <div className="flex flex-wrap gap-2">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
-              className={`rounded-full px-5 py-2 text-sm font-bold transition-all ${
-                tab === t.key
-                  ? "bg-brand text-white shadow-soft"
-                  : "bg-white text-muted ring-1 ring-line hover:ring-brand/40"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {done && (
-        <div className="card mb-4 border-green-300 bg-green-50 p-4 animate-fade-in">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="font-bold text-green-800">✓ Offer {done.offerNumber} generated</p>
-              <p className="text-sm text-green-700">
-                Downloading {done.items.join(" · ")} PDF{done.items.length > 1 ? "s" : ""} — check your Downloads folder.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button type="button" className="btn-ghost" onClick={() => navigate(`/offers/${done.id}`)}>
-                View offer →
-              </button>
-            </div>
+    <div className="oc animate-fade-up">
+      {/* ── Page top bar: identity + live code ──────────────────────────── */}
+      <div className="topbar">
+        <div className="topbar-in">
+          <span className="wordmark"><i />New RMU Offer</span>
+          <span className="sep" />
+          <span className="qtn">QTN&nbsp;<b>{team.quotationNo || "—"}</b></span>
+          <span className="qtn">·&nbsp;{projectName || "Untitled project"}</span>
+          <span className="spacer" />
+          <div className="code-out">
+            <span key={panelCode} className="chip mono pop">{panelCode}</span>
+            <div className="code-alt">{code}</div>
           </div>
         </div>
-      )}
+      </div>
 
-      {error && (
-        <div className="card mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-700 animate-fade-in">
-          {error}
-        </div>
-      )}
+      {/* ── Stepper ─────────────────────────────────────────────────────── */}
+      <div className="steps">
+        {TABS.map((t, i) => (
+          <button key={t.key} type="button" className={`step${tab === t.key ? " is-current" : ""}`} onClick={() => setTab(t.key)}>
+            <span className="n">{i + 1}</span>
+            <span className="txt">{t.label}</span>
+          </button>
+        ))}
+      </div>
 
-      {/* ── Project tab — mirrors the LV Project tab (Revision removed) ──── */}
-      {tab === "project" && (
-        <div className="grid max-w-4xl gap-5 animate-fade-up">
-          <div className="card p-5">
-            <h2 className="sec-head">Project</h2>
-            <p className="mb-3 text-xs text-muted">Used to generate the Technical &amp; Commercial offer cover pages.</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div><L>Project name</L><input className="input" value={projectName} onChange={(e) => setProjectName(e.target.value)} /></div>
-              <div><L>Customer</L><input className="input" value={customer} onChange={(e) => setCustomer(e.target.value)} /></div>
-              <div><L>QTN No.</L><input className="input" value={team.quotationNo} onChange={(e) => upTeam({ quotationNo: e.target.value })} /></div>
-              <div><L>OPTY No.</L><input className="input" value={team.opportunityNo} onChange={(e) => upTeam({ opportunityNo: e.target.value })} /></div>
+      <div className="wrap">
+        {done && (
+          <div className="notice ok">
+            <div className="notice-row">
               <div>
-                <L>Sales support engineer</L>
-                <select className="input cursor-pointer" value={team.supportName} onChange={(e) => pickSupport(e.target.value)}>
-                  <option value="">— select —</option>
-                  {staff.supportEngineers.map((p) => <option key={p.name}>{p.name}</option>)}
-                </select>
+                <div className="n-title">✓ Offer {done.offerNumber} generated</div>
+                <div>Downloading {done.items.join(" · ")} PDF{done.items.length > 1 ? "s" : ""} — check your Downloads folder.</div>
               </div>
-              <div><L>Date</L><input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-              <div className="grid content-start gap-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div><L>Sales manager</L><input className="input bg-surface" value={manager.name} readOnly /></div>
-                  <div><L>Phone no.</L><input className="input bg-surface" value={manager.mobile} readOnly /></div>
-                </div>
-                <div><L>Manager email</L><input className="input bg-surface" value={manager.email} readOnly /></div>
-              </div>
-              <div className="grid content-start gap-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <L>Sales person</L>
-                    <select className="input cursor-pointer" value={team.salesName} onChange={(e) => pickSales(e.target.value)}>
-                      <option value="">— select —</option>
-                      {staff.salesPeople.filter((p) => p.name !== SALES_MANAGER).map((p) => <option key={p.name}>{p.name}</option>)}
-                    </select>
-                  </div>
-                  <div><L>Phone no.</L><input className="input bg-surface" value={team.salesMobile} readOnly /></div>
-                </div>
-                <div><L>Sales person email</L><input className="input bg-surface" value={team.salesEmail} readOnly /></div>
-              </div>
+              <button type="button" className="btn btn-sm" onClick={() => navigate(`/offers/${done.id}`)}>View offer →</button>
             </div>
           </div>
+        )}
+        {error && <div className="notice err">{error}</div>}
 
-          <div className="card p-5">
-            <h2 className="sec-head">Staff lists</h2>
-            <p className="mb-3 text-xs text-muted">Editable — <b>shared with the LV section</b>. Add or remove names.</p>
-            <L>Sales people</L>
-            <div className="mb-2 max-h-44 overflow-auto rounded-lg border border-line">
-              {staff.salesPeople.map((p) => (
-                <div key={p.name} className="flex items-center justify-between border-b border-line/60 px-3 py-1 text-sm last:border-0">
-                  <span>{p.name} <span className="text-[11px] text-muted">{p.mobile} · {p.email}</span></span>
-                  <button type="button" className="text-red-500 hover:underline" onClick={() => removeSalesPerson(p.name)}>remove</button>
+        {/* ── Project tab ─────────────────────────────────────────────── */}
+        {tab === "project" && (
+          <div className="stack">
+            <section className="card has-body">
+              <div className="card-head">
+                <div>
+                  <h2 className="card-title">Project</h2>
+                  <p className="card-sub">Used to generate the Technical &amp; Commercial offer cover pages.</p>
                 </div>
-              ))}
-            </div>
-            <div className="mb-4 flex flex-wrap gap-2">
-              <input className="input h-9 w-36" placeholder="Name" value={newSales.name} onChange={(e) => setNewSales({ ...newSales, name: e.target.value })} />
-              <input className="input h-9 w-36" placeholder="Mobile" value={newSales.mobile} onChange={(e) => setNewSales({ ...newSales, mobile: e.target.value })} />
-              <input className="input h-9 w-48" placeholder="Email" value={newSales.email} onChange={(e) => setNewSales({ ...newSales, email: e.target.value })} />
-              <button type="button" className="btn-ghost h-9" onClick={addSalesPerson}>+ Add</button>
-            </div>
-            <L>Sales support engineers</L>
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {staff.supportEngineers.map((eng) => (
-                <span key={eng.name} className="chip bg-surface text-ink">
-                  {eng.name}
-                  <button type="button" className="ml-1.5 text-red-500" onClick={() => removeEngineer(eng.name)}>×</button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input className="input h-9 w-56" placeholder="New engineer name" value={newEng} onChange={(e) => setNewEng(e.target.value)} />
-              <button type="button" className="btn-ghost h-9" onClick={addEngineer}>+ Add</button>
-            </div>
+              </div>
+              <div className="card-body">
+                <div className="grid2">
+                  <Cell label="Project name"><Inp value={projectName} onChange={setProjectName} /></Cell>
+                  <Cell label="Customer"><Inp value={customer} onChange={setCustomer} /></Cell>
+                  <Cell label="QTN No."><Inp value={team.quotationNo} onChange={(v) => upTeam({ quotationNo: v })} /></Cell>
+                  <Cell label="OPTY No."><Inp value={team.opportunityNo} onChange={(v) => upTeam({ opportunityNo: v })} /></Cell>
+                  <Cell label="Sales support engineer">
+                    <div className="inp">
+                      <select value={team.supportName} onChange={(e) => pickSupport(e.target.value)}>
+                        <option value="">— select —</option>
+                        {staff.supportEngineers.map((p) => <option key={p.name}>{p.name}</option>)}
+                      </select>
+                    </div>
+                  </Cell>
+                  <Cell label="Date"><Inp type="date" value={date} onChange={setDate} /></Cell>
+                  <Cell label="Sales person">
+                    <div className="inp">
+                      <select value={team.salesName} onChange={(e) => pickSales(e.target.value)}>
+                        <option value="">— select —</option>
+                        {staff.salesPeople.filter((p) => p.name !== SALES_MANAGER).map((p) => <option key={p.name}>{p.name}</option>)}
+                      </select>
+                    </div>
+                  </Cell>
+                  <Cell label="Sales person phone"><Inp value={team.salesMobile} fixed /></Cell>
+                  <Cell label="Sales person email" span><Inp value={team.salesEmail} fixed /></Cell>
+                  <Cell label="Sales manager"><Inp value={manager.name} fixed /></Cell>
+                  <Cell label="Manager phone"><Inp value={manager.mobile} fixed /></Cell>
+                  <Cell label="Manager email" span noLine><Inp value={manager.email} fixed /></Cell>
+                </div>
+              </div>
+            </section>
+
+            <section className="card has-body">
+              <div className="card-head">
+                <div>
+                  <h2 className="card-title">Staff lists</h2>
+                  <p className="card-sub">Editable — <b>shared with the LV section</b>. Add or remove names.</p>
+                </div>
+              </div>
+              <div className="card-body">
+                <span className="lbl">Sales people</span>
+                <div className="list" style={{ marginBottom: 10 }}>
+                  {staff.salesPeople.map((p) => (
+                    <div key={p.name} className="list-row">
+                      <span>{p.name} <span className="meta">{p.mobile} · {p.email}</span></span>
+                      <button type="button" className="linkbtn" onClick={() => removeSalesPerson(p.name)}>remove</button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
+                  <div className="inp" style={{ width: 150 }}><input placeholder="Name" value={newSales.name} onChange={(e) => setNewSales({ ...newSales, name: e.target.value })} /></div>
+                  <div className="inp" style={{ width: 150 }}><input placeholder="Mobile" value={newSales.mobile} onChange={(e) => setNewSales({ ...newSales, mobile: e.target.value })} /></div>
+                  <div className="inp" style={{ width: 210 }}><input placeholder="Email" value={newSales.email} onChange={(e) => setNewSales({ ...newSales, email: e.target.value })} /></div>
+                  <button type="button" className="btn btn-sm" onClick={addSalesPerson}>+ Add</button>
+                </div>
+                <span className="lbl">Sales support engineers</span>
+                <div className="taglist" style={{ marginBottom: 10 }}>
+                  {staff.supportEngineers.map((eng) => (
+                    <span key={eng.name} className="tag">{eng.name}<button type="button" className="linkbtn" onClick={() => removeEngineer(eng.name)}>×</button></span>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <div className="inp" style={{ width: 240 }}><input placeholder="New engineer name" value={newEng} onChange={(e) => setNewEng(e.target.value)} /></div>
+                  <button type="button" className="btn btn-sm" onClick={addEngineer}>+ Add</button>
+                </div>
+              </div>
+            </section>
           </div>
+        )}
 
-          <div className="flex justify-end">
-            <button type="button" className="btn-primary" onClick={() => setTab("panel")}>Next: Panel →</button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Panel tab ───────────────────────────────────────────────────── */}
-      {tab === "panel" && (
-        <div className="space-y-5">
-          <section className="card p-5 animate-fade-up">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="sec-head !mb-0 !pb-0 after:hidden">Panel — RMU Code</h2>
-              <div className="text-right">
-                <span key={panelCode} className="code-chip animate-pop">{panelCode}</span>
-                <div className="mt-1 text-xs text-muted">{code}</div>
+        {/* ── Panel tab ───────────────────────────────────────────────── */}
+        {tab === "panel" && (
+          <div className="cols panel-cols">
+            <div className="stack">
+            <section className="card has-body">
+              <div className="card-head">
+                <div>
+                  <h2 className="card-title">Panel — RMU Code</h2>
+                  <p className="card-sub">The code updates live as you configure.</p>
+                </div>
+                <div className="code-out">
+                  <span key={panelCode} className="chip mono pop">{panelCode}</span>
+                  <div className="code-alt">{code}</div>
+                </div>
               </div>
+              <div className="card-body">
+                <div className="grid2">
+                  <Cell label="Product type" span>
+                    <Seg field="product" value={rmu.productType} onChange={(v) => setR("productType", v)}
+                      options={["PRAL", "PSEC", "LUCY"] as const}
+                      renderLabel={(v) => (v === "PRAL" ? "PRAL · Air" : v === "PSEC" ? "PSEC · SF6" : "LUCY · GIS")} />
+                  </Cell>
+                  {!isLucy && (
+                    <>
+                      <Cell label="LBS brand / type" span
+                        hint={rmu.productType === "PSEC" ? "ABB · Murge available · Schneider locked (no data)" : "ABB available · Chint locked (no data)"}>
+                        <Seg value={(rmu.lbsBrand ?? "ABB") as LbsBrand} onChange={(v) => setR("lbsBrand", v)}
+                          options={BRANDS_BY_FAMILY[rmu.productType] as readonly LbsBrand[]}
+                          disabledOptions={BRANDS_BY_FAMILY[rmu.productType].filter((b) => !AVAILABLE_BRANDS_BY_FAMILY[rmu.productType].includes(b)) as readonly LbsBrand[]} />
+                      </Cell>
+                      <Cell label="Client specification" span hint="EECH available · KAHRABA locked (no technical offer)">
+                        <Seg value={rmu.clientSpec ?? "EECH"} onChange={(v) => setR("clientSpec", v)}
+                          options={CLIENT_SPECS}
+                          disabledOptions={CLIENT_SPECS.filter((s) => !AVAILABLE_CLIENT_SPECS.includes(s)) as readonly ("EECH" | "KAHRABA")[]} />
+                      </Cell>
+                    </>
+                  )}
+                  <Cell label="Rated voltage">
+                    <Seg value={String(rmu.voltageKv) as "12" | "24"} onChange={(v) => setR("voltageKv", Number(v) as 12 | 24)}
+                      options={["12", "24"] as const} renderLabel={(v) => `${v} kV`} />
+                  </Cell>
+                  <Cell label="Installation" hint="Outdoor adds an enclosure (priced in the commercial offer)">
+                    <Seg value={rmu.installation} onChange={(v) => setR("installation", v)}
+                      options={["INDOOR", "OUTDOOR"] as const} renderLabel={(v) => (v === "INDOOR" ? "Indoor" : "Outdoor")} />
+                  </Cell>
+                  <Cell label={isLucy ? "Feeders (R)" : "Ring feeders (R)"} hint={isLucy ? "Load-break switches (L)" : "NAL — R0 to R5"}>
+                    <Num value={rmu.nalCount} min={0} onChange={(v) => setR("nalCount", Number.isNaN(v) ? 0 : v)} />
+                  </Cell>
+                  <Cell label="Transformer feeders (T)" hint={isLucy ? "Circuit breakers (V)" : "NALF — T0 to T2"}>
+                    <Num value={rmu.nalfCount} min={0} onChange={(v) => setR("nalfCount", Number.isNaN(v) ? 0 : v)} />
+                  </Cell>
+                  <Cell label="Busbar current">
+                    <Inp type="number" unit="A" value={rmu.busbarCurrentA} onChange={(s) => setR("busbarCurrentA", s === "" ? 0 : Number(s))} />
+                  </Cell>
+                  {!isLucy && (
+                    <Cell label="Fuse rating" hint="Blank = catalogue max ('up to')">
+                      <Inp type="number" unit="A" placeholder="standard" value={rmu.fuseRatingA ?? ""} onChange={(s) => setR("fuseRatingA", s === "" ? null : Number(s))} />
+                    </Cell>
+                  )}
+                </div>
+              </div>
+            </section>
             </div>
 
-            <div className="space-y-4">
-              <Field label="Product type">
-                <Segmented
-                  value={rmu.productType}
-                  onChange={(v) => setR("productType", v)}
-                  options={["PRAL", "PSEC", "LUCY"] as const}
-                  renderLabel={(v) =>
-                    v === "PRAL" ? "PRAL · Air" : v === "PSEC" ? "PSEC · SF6" : "LUCY · GIS"
-                  }
-                />
-              </Field>
-
-              {/* Lucy has no LBS brand or client specification — hidden for it. */}
-              {!isLucy && (
-                <>
-                  <Field
-                    label="LBS brand / type"
-                    hint={
-                      rmu.productType === "PSEC"
-                        ? "ABB · Murge available · Schneider locked (no data)"
-                        : "ABB available · Chint locked (no data)"
-                    }
-                  >
-                    <Segmented
-                      value={(rmu.lbsBrand ?? "ABB") as LbsBrand}
-                      onChange={(v) => setR("lbsBrand", v)}
-                      options={BRANDS_BY_FAMILY[rmu.productType] as readonly LbsBrand[]}
-                      disabledOptions={
-                        BRANDS_BY_FAMILY[rmu.productType].filter(
-                          (b) => !AVAILABLE_BRANDS_BY_FAMILY[rmu.productType].includes(b)
-                        ) as readonly LbsBrand[]
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Client specification" hint="EECH available · KAHRABA locked (no technical offer)">
-                    <Segmented
-                      value={rmu.clientSpec ?? "EECH"}
-                      onChange={(v) => setR("clientSpec", v)}
-                      options={CLIENT_SPECS}
-                      disabledOptions={
-                        CLIENT_SPECS.filter(
-                          (s) => !AVAILABLE_CLIENT_SPECS.includes(s)
-                        ) as readonly ("EECH" | "KAHRABA")[]
-                      }
-                    />
-                  </Field>
-                </>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Rated voltage">
-                  <Segmented
-                    value={String(rmu.voltageKv) as "12" | "24"}
-                    onChange={(v) => setR("voltageKv", Number(v) as 12 | 24)}
-                    options={["12", "24"] as const}
-                    renderLabel={(v) => `${v} kV`}
-                  />
-                </Field>
-                <Field label="Installation" hint="Outdoor adds an enclosure (priced in the commercial offer)">
-                  <Segmented
-                    value={rmu.installation}
-                    onChange={(v) => setR("installation", v)}
-                    options={["INDOOR", "OUTDOOR"] as const}
-                    renderLabel={(v) => (v === "INDOOR" ? "Indoor" : "Outdoor")}
-                  />
-                </Field>
+            <div className="stack">
+            {/* Metering */}
+            <section className={`card${rmu.hasMetering ? " has-body" : ""}`}>
+              <div className="card-head">
+                <Sw checked={rmu.hasMetering} onChange={(v) => setR("hasMetering", v)} label="Include Metering cubicle (+M)" />
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Field
-                  label={isLucy ? "Feeders (R)" : "Ring feeders (R)"}
-                  hint={isLucy ? "Load-break switches (L)" : "NAL — R0 to R5"}
-                >
-                  <NumberInput value={rmu.nalCount} min={0} onChange={(v) => setR("nalCount", v)} />
-                </Field>
-                <Field
-                  label={isLucy ? "Transformer feeders (T)" : "Transformer feeders (T)"}
-                  hint={isLucy ? "Circuit breakers (V)" : "NALF — T0 to T2"}
-                >
-                  <NumberInput value={rmu.nalfCount} min={0} onChange={(v) => setR("nalfCount", v)} />
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Busbar current">
-                  <NumberInput value={rmu.busbarCurrentA} suffix="A" onChange={(v) => setR("busbarCurrentA", v)} />
-                </Field>
-                {/* Lucy has no fuse (transformer feeders are circuit breakers). */}
-                {!isLucy && (
-                  <Field label="Fuse rating" hint="Blank = catalogue max ('up to')">
-                    <NumberInput
-                      value={rmu.fuseRatingA ?? NaN}
-                      suffix="A"
-                      placeholder="standard"
-                      onChange={(v) => setR("fuseRatingA", Number.isNaN(v) ? null : v)}
-                    />
-                  </Field>
-                )}
-              </div>
-
-            </div>
-          </section>
-
-          {/* Metering — a toggle for every type; CT/VT options for PRAL/PSEC only. */}
-          <section className="card p-5 animate-fade-up">
-            <Toggle
-              checked={rmu.hasMetering}
-              onChange={(v) => setR("hasMetering", v)}
-              label="Include Metering cubicle (+M)"
-            />
-            {rmu.hasMetering && isLucy && (
-              <p className="mt-2 text-xs text-muted">
-                Lucy metering is a fixed Air-Insulated Metering Unit (100/5A CT, 50 VA VT) — no extra options.
-              </p>
-            )}
-            {rmu.hasMetering && !isLucy && (
-              <div className="mt-4 grid grid-cols-1 gap-4 rounded-lg bg-brand-tint p-4 sm:grid-cols-2 animate-fade-up">
-                <Field label="CT primary current" hint="Fills X/5 & Ip — blank keeps 'X'">
-                  <NumberInput
-                    value={rmu.meteringCtPrimaryA ?? NaN}
-                    suffix="A"
-                    placeholder="e.g. 200"
-                    onChange={(v) => setR("meteringCtPrimaryA", Number.isNaN(v) ? null : v)}
-                  />
-                </Field>
-                <Field label="CT class (CL)" hint="Metering CT accuracy class">
-                  <Segmented
-                    value={(rmu.ctClass ?? "0.5") as "0.5" | "0.5S" | "0.2"}
-                    onChange={(v) => setR("ctClass", v)}
-                    options={["0.5", "0.5S", "0.2"] as const}
-                    renderLabel={(v) => v}
-                  />
-                </Field>
-                <Field label="Voltage transformer" hint="Two core → with fuse · single core → without fuse">
-                  <Segmented
-                    value={String(rmu.vtCores ?? 1) as "1" | "2"}
-                    onChange={(v) => {
-                      const cores = Number(v);
-                      setR("vtCores", cores);
-                      // Fuse follows the core count: two core = with fuse, single = without.
-                      setR("meteringWithFuse", cores === 2);
-                    }}
-                    options={["1", "2"] as const}
-                    renderLabel={(v) => (v === "1" ? "Single core" : "Two core")}
-                  />
-                </Field>
-                <Field label="VT burden (VA)" hint="Fixed (non-editable)">
-                  <input className="input bg-surface" value="50-100" readOnly />
-                </Field>
-                <Field label="VT class (CL)" hint="Fixed (non-editable)">
-                  <input className="input bg-surface" value="0.5" readOnly />
-                </Field>
-              </div>
-            )}
-          </section>
-
-          {/* Smart / RTU — optional, PSEC & Lucy only (PRAL has no smart). Works
-              like the metering toggle: turn it on, then pick the level. */}
-          {rmu.productType !== "PRAL" && (
-            <section className="card p-5 animate-fade-up">
-              <Toggle
-                checked={rmu.rtuType !== "NONE"}
-                onChange={(on) => setR("rtuType", on ? "READY1" : "NONE")}
-                label="Smart / RTU (optional)"
-              />
-              {rmu.rtuType !== "NONE" && (
-                <div className="mt-4 sm:max-w-md animate-fade-up">
-                  <Field label="Smart level" hint="Priced as a separate line in the commercial offer">
-                    <Select value={rmu.rtuType} onChange={(v) => setR("rtuType", v)} options={RTU_TYPES} />
-                  </Field>
+              {rmu.hasMetering && (
+                <div className="card-body">
+                  {isLucy ? (
+                    <p className="hint">Lucy metering is a fixed Air-Insulated Metering Unit (100/5A CT, 50 VA VT) — no extra options.</p>
+                  ) : (
+                    <div className="grid2">
+                      <Cell label="CT primary current" hint="Fills X/5 & Ip — blank keeps 'X'">
+                        <Inp type="number" unit="A" placeholder="e.g. 200" value={rmu.meteringCtPrimaryA ?? ""} onChange={(s) => setR("meteringCtPrimaryA", s === "" ? null : Number(s))} />
+                      </Cell>
+                      <Cell label="CT class (CL)" hint="Metering CT accuracy class">
+                        <Seg value={(rmu.ctClass ?? "0.5") as "0.5" | "0.5S" | "0.2"} onChange={(v) => setR("ctClass", v)} options={["0.5", "0.5S", "0.2"] as const} renderLabel={(v) => v} />
+                      </Cell>
+                      <Cell label="Voltage transformer" span hint="Two core → with fuse · single core → without fuse">
+                        <Seg value={String(rmu.vtCores ?? 1) as "1" | "2"} onChange={(v) => { const c = Number(v); setR("vtCores", c); setR("meteringWithFuse", c === 2); }} options={["1", "2"] as const} renderLabel={(v) => (v === "1" ? "Single core" : "Two core")} />
+                      </Cell>
+                      <Cell label="VT burden (VA)" hint="Fixed"><Inp value="50-100" fixed /></Cell>
+                      <Cell label="VT class (CL)" hint="Fixed" noLine><Inp value="0.5" fixed /></Cell>
+                    </div>
+                  )}
                 </div>
               )}
             </section>
-          )}
 
-          <div className="flex justify-between">
-            <button type="button" className="btn-ghost" onClick={() => setTab("project")}>← Project</button>
-            <button type="button" className="btn-primary" onClick={() => setTab("technical")}>
-              Next: Technical Offer →
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Technical Offer tab ─────────────────────────────────────────── */}
-      {tab === "technical" && (
-        <div className="space-y-4 animate-fade-up">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
-              <span className="h-2 w-2 rounded-full bg-green-500" /> Live technical offer
-            </div>
-            <button type="button" className="btn-primary" disabled={submitting} onClick={() => download(["Technical"])}>
-              {submitting ? "Generating…" : "⬇ Download Technical PDF"}
-            </button>
-          </div>
-          <div className="card p-5">
-            {previewErr ? (
-              <p className="rounded bg-red-50 p-2 text-sm text-red-600">{previewErr}</p>
-            ) : preview ? (
-              <OfferView g={preview} />
-            ) : (
-              <div className="space-y-3">
-                <div className="skeleton h-24" />
-                <div className="skeleton h-32" />
-                <div className="skeleton h-40" />
-              </div>
-            )}
-          </div>
-          <div className="flex justify-between">
-            <button type="button" className="btn-ghost" onClick={() => setTab("panel")}>← Panel</button>
-            <button type="button" className="btn-primary" onClick={() => setTab("commercial")}>
-              Next: Commercial Offer →
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Commercial Offer tab ────────────────────────────────────────── */}
-      {tab === "commercial" && (
-        <div className="space-y-4 animate-fade-up">
-          <section className="card p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="sec-head !mb-0 !pb-0 after:hidden">Commercial</h2>
-              {basePrice != null ? (
-                <span className="chip bg-brand-light text-brand-dark">
-                  Panel list (min): {currency} {basePrice.toLocaleString()}
-                </span>
-              ) : (
-                <span className="chip bg-amber-100 text-amber-700">No catalogue price</span>
-              )}
-            </div>
-            {basePrice == null && (
-              <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                ⚠ <b>{panelCode}</b> isn’t in the price list, so it has no automatic price.
-                Enter the <b>unit price</b> manually below.
-              </div>
-            )}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <Field label="Currency">
-                <Segmented value={currency} onChange={(v) => setCurrency(v)} options={["USD", "EGP"] as const} />
-              </Field>
-              {currency === "EGP" && (
-                <Field label="USD → EGP rate" hint="Auto-fetched daily rate — editable">
-                  <div className="flex gap-2">
-                    <NumberInput value={usdRate || NaN} step={0.01} placeholder="rate" onChange={(v) => setUsdRate(Number.isNaN(v) ? 0 : v)} />
-                    <button type="button" className="btn-ghost shrink-0 whitespace-nowrap" onClick={fetchRate} disabled={rateLoading}>
-                      {rateLoading ? "…" : "↻ Fetch"}
-                    </button>
+            {/* Smart / RTU — PSEC & Lucy only (PRAL has no smart) */}
+            {rmu.productType !== "PRAL" && (
+              <section className={`card${rmu.rtuType !== "NONE" ? " has-body" : ""}`}>
+                <div className="card-head">
+                  <Sw checked={rmu.rtuType !== "NONE"} onChange={(on) => setR("rtuType", on ? "READY1" : "NONE")} label="Smart / RTU (optional)" />
+                </div>
+                {rmu.rtuType !== "NONE" && (
+                  <div className="card-body">
+                    <div className="grid2">
+                      <Cell label="Smart level" span noLine hint="Priced as a separate line in the commercial offer">
+                        <Sel value={rmu.rtuType} onChange={(v) => setR("rtuType", v)} options={RTU_TYPES} />
+                      </Cell>
+                    </div>
                   </div>
-                </Field>
-              )}
-              <Field
-                label={basePrice == null ? "Unit price *" : "Unit price"}
-                hint={basePrice != null ? "From price list — editable" : "Required — no catalogue price"}
-              >
-                <NumberInput
-                  value={unitPrice || NaN}
-                  step={0.01}
-                  placeholder={basePrice != null ? String(basePrice) : "0"}
-                  onChange={(v) => { setPriceTouched(true); setUnitPrice(Number.isNaN(v) ? 0 : v); }}
-                />
-              </Field>
-              <Field label="Quantity">
-                <NumberInput value={quantity} min={1} suffix="pcs" onChange={setQuantity} />
-              </Field>
-              <Field label="Discount (%)">
-                <NumberInput value={discountPct} step={0.5} onChange={setDiscountPct} />
-              </Field>
-              <Field label="Validity (days)">
-                <NumberInput value={validityDays} onChange={setValidityDays} />
-              </Field>
-              <Field label="Delivery (weeks)">
-                <NumberInput value={deliveryWeeks} onChange={setDeliveryWeeks} />
-              </Field>
-              <Field label="Warranty (months)">
-                <NumberInput value={warrantyMonths} onChange={setWarrantyMonths} />
-              </Field>
-              <div className="sm:col-span-2">
-                <Field label="Payment terms">
-                  <TextInput value={paymentTerms} onChange={setPaymentTerms} placeholder="50% advance, 50% before delivery" />
-                </Field>
-              </div>
-            </div>
-            {/* Live commercial totals */}
-            <div className="mt-4 rounded-lg bg-brand-tint p-4 text-sm">
-              <div className="flex justify-between text-muted">
-                <span>Panel · {quantity} × {currency} {effUnit.toLocaleString()}</span>
-                <span>{currency} {totals.panelSubtotal.toLocaleString()}</span>
-              </div>
-              {addOns.map((a) => (
-                <div key={a.name} className="flex justify-between text-muted">
-                  <span>{a.name} · {quantity} × {currency} {(a.price * rate).toLocaleString()}</span>
-                  <span>{currency} {(a.price * rate * quantity).toLocaleString()}</span>
+                )}
+              </section>
+            )}
+            <section className="card">
+              <div className="card-body" style={{ paddingTop: 16 }}>
+                <p className="decode-h">Code breakdown</p>
+                <div className="tokens">
+                  {decodeTokens(rmu).map((t, i) => (
+                    <span key={i} className="tok"><span className="k">{t.k}</span><span className="v">{t.v}</span></span>
+                  ))}
                 </div>
-              ))}
-              {discountPct > 0 && (
-                <div className="flex justify-between text-muted">
-                  <span>Discount ({discountPct}%)</span>
-                  <span>− {currency} {totals.discount.toLocaleString()}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-muted">
-                <span>VAT ({vatPct}%)</span>
-                <span>{currency} {totals.vat.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
               </div>
-              <div className="mt-1 flex justify-between text-lg font-extrabold text-brand-dark">
-                <span>Total (incl. VAT)</span>
-                <span>{currency} {totals.incVat.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-              </div>
+            </section>
             </div>
-          </section>
-
-          <div className="flex items-center justify-between">
-            <button type="button" className="btn-ghost" onClick={() => setTab("technical")}>← Technical Offer</button>
-            <button type="button" className="btn-primary" disabled={submitting} onClick={() => download(["Commercial"])}>
-              {submitting ? "Generating…" : "⬇ Download Commercial PDF"}
-            </button>
           </div>
+        )}
+
+        {/* ── Technical Offer tab ─────────────────────────────────────── */}
+        {tab === "technical" && (
+          <div className="stack">
+            <div className="notice-row" style={{ marginBottom: 2 }}>
+              <span className="qtn" style={{ textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>
+                <span style={{ color: "#16a34a" }}>●</span>&nbsp;Live technical offer
+              </span>
+              <button type="button" className="btn btn-primary btn-sm" disabled={submitting} onClick={() => download(["Technical"])}>
+                {submitting ? "Generating…" : "⬇ Download Technical PDF"}
+              </button>
+            </div>
+            <section className="card">
+              <div className="card-body" style={{ paddingTop: 16 }}>
+                {previewErr ? (
+                  <div className="notice err" style={{ margin: 0 }}>{previewErr}</div>
+                ) : preview ? (
+                  <OfferView g={preview} />
+                ) : (
+                  <div className="stack">
+                    <div className="sk" style={{ height: 96 }} />
+                    <div className="sk" style={{ height: 128 }} />
+                    <div className="sk" style={{ height: 160 }} />
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* ── Commercial Offer tab ────────────────────────────────────── */}
+        {tab === "commercial" && (
+          <div className="stack">
+            <section className="card has-body">
+              <div className="card-head">
+                <div>
+                  <h2 className="card-title">Commercial</h2>
+                  <p className="card-sub">Pricing, quantity and terms for the commercial offer.</p>
+                </div>
+                <div className="code-out">
+                  {basePrice != null ? (
+                    <span className="chip mono">{currency} {basePrice.toLocaleString()}</span>
+                  ) : (
+                    <span className="chip mono" style={{ background: "#8A5A12" }}>No catalogue price</span>
+                  )}
+                  <div className="code-alt">{basePrice != null ? "Panel list (min)" : "enter a unit price"}</div>
+                </div>
+              </div>
+              <div className="card-body">
+                {basePrice == null && (
+                  <div className="notice warn">
+                    <b>{panelCode}</b> isn’t in the price list, so it has no automatic price. Enter the <b>unit price</b> manually below.
+                  </div>
+                )}
+                <div className="grid2">
+                  <Cell label="Currency"><Seg value={currency} onChange={(v) => setCurrency(v)} options={["USD", "EGP"] as const} renderLabel={(v) => v} /></Cell>
+                  {currency === "EGP" && (
+                    <Cell label="USD → EGP rate" hint="Auto-fetched daily rate — editable">
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <Inp type="number" step={0.01} placeholder="rate" value={usdRate || ""} onChange={(s) => setUsdRate(s === "" ? 0 : Number(s))} />
+                        <button type="button" className="btn btn-sm" onClick={fetchRate} disabled={rateLoading} style={{ whiteSpace: "nowrap" }}>{rateLoading ? "…" : "↻ Fetch"}</button>
+                      </div>
+                    </Cell>
+                  )}
+                  <Cell label={basePrice == null ? "Unit price *" : "Unit price"} hint={basePrice != null ? "From price list — editable" : "Required — no catalogue price"}>
+                    <Inp type="number" unit={currency} placeholder={basePrice != null ? String(basePrice) : "0"} value={unitPrice || ""} onChange={(s) => { setPriceTouched(true); setUnitPrice(s === "" ? 0 : Number(s)); }} />
+                  </Cell>
+                  <Cell label="Quantity"><Num value={quantity} min={1} onChange={(v) => setQuantity(Number.isNaN(v) ? 1 : v)} /></Cell>
+                  <Cell label="Discount (%)"><Inp type="number" unit="%" step={0.5} value={discountPct} onChange={(s) => setDiscountPct(s === "" ? 0 : Number(s))} /></Cell>
+                  <Cell label="Validity (days)"><Inp type="number" unit="days" value={validityDays} onChange={(s) => setValidityDays(s === "" ? 0 : Number(s))} /></Cell>
+                  <Cell label="Delivery (weeks)"><Inp type="number" unit="wks" value={deliveryWeeks} onChange={(s) => setDeliveryWeeks(s === "" ? 0 : Number(s))} /></Cell>
+                  <Cell label="Warranty (months)"><Inp type="number" unit="mo" value={warrantyMonths} onChange={(s) => setWarrantyMonths(s === "" ? 0 : Number(s))} /></Cell>
+                  <Cell label="Payment terms" span noLine><Inp value={paymentTerms} placeholder="50% advance, 50% before delivery" onChange={setPaymentTerms} /></Cell>
+                </div>
+                <div className="totals">
+                  <div className="totrow"><span>Panel · {quantity} × {currency} {effUnit.toLocaleString()}</span><span>{currency} {totals.panelSubtotal.toLocaleString()}</span></div>
+                  {addOns.map((a) => (
+                    <div key={a.name} className="totrow"><span>{a.name} · {quantity} × {currency} {(a.price * rate).toLocaleString()}</span><span>{currency} {(a.price * rate * quantity).toLocaleString()}</span></div>
+                  ))}
+                  {discountPct > 0 && (
+                    <div className="totrow"><span>Discount ({discountPct}%)</span><span>− {currency} {totals.discount.toLocaleString()}</span></div>
+                  )}
+                  <div className="totrow"><span>VAT ({vatPct}%)</span><span>{currency} {totals.vat.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></div>
+                  <div className="totrow grand"><span>Total (incl. VAT)</span><span>{currency} {totals.incVat.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></div>
+                </div>
+                <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
+                  <button type="button" className="btn btn-primary" disabled={submitting} onClick={() => download(["Commercial"])}>
+                    {submitting ? "Generating…" : "⬇ Download Commercial PDF"}
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
+      </div>
+
+      {/* ── Action bar ──────────────────────────────────────────────────── */}
+      <div className="actionbar">
+        <div className="actionbar-in">
+          <div className="ab-code">{panelCode}<small>{code}</small></div>
+          <span className="spacer" />
+          {prevTab && <button type="button" className="btn" onClick={() => setTab(prevTab.key)}>← {prevTab.label}</button>}
+          {nextTab && <button type="button" className="btn" onClick={() => setTab(nextTab.key)}>{nextTab.label} →</button>}
+          <button type="button" className="btn btn-primary" disabled={submitting} onClick={generateAll}>
+            {submitting ? "Generating…" : "Generate & Download →"}
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
-// Small field label, matching the LV section's Project tab.
-function L({ children }: { children: ReactNode }) {
-  return <label className="label">{children}</label>;
+/* ─────────────────────────── local themed controls ───────────────────────
+   These render the offer-configurator theme's markup (.seg/.num/.sw/.inp) and
+   live only on this page, so the shared LV field components stay untouched. */
+
+function Cell({ label, hint, span, noLine, children }: { label?: string; hint?: string; span?: boolean; noLine?: boolean; children: ReactNode }) {
+  return (
+    <div className={`cell${span ? " span2" : ""}${noLine ? " no-line" : ""}`}>
+      {label && <span className="lbl">{label}</span>}
+      {children}
+      {hint && <p className="hint">{hint}</p>}
+    </div>
+  );
+}
+
+function LockI() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <rect x="5" y="11" width="14" height="9" rx="1.5" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
+
+function Seg<T extends string>({ value, onChange, options, renderLabel, disabledOptions, field }: {
+  value: T; onChange: (v: T) => void; options: readonly T[];
+  renderLabel?: (v: T) => ReactNode; disabledOptions?: readonly T[]; field?: string;
+}) {
+  return (
+    <div className="seg" data-field={field}>
+      {options.map((o) => {
+        const active = o === value;
+        const locked = disabledOptions?.includes(o);
+        return (
+          <button key={o} type="button" aria-checked={active} disabled={locked}
+            title={locked ? "No data yet — locked" : undefined}
+            onClick={() => !locked && onChange(o)}>
+            {locked && <LockI />}
+            <span className="t">{renderLabel ? renderLabel(o) : toLabel(o)}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Num({ value, onChange, min, step = 1, placeholder }: {
+  value: number; onChange: (v: number) => void; min?: number; step?: number; placeholder?: string;
+}) {
+  const cur = Number.isNaN(value) ? NaN : value;
+  const base = Number.isNaN(cur) ? (min ?? 0) : cur;
+  const atMin = min != null && !Number.isNaN(cur) && cur <= min;
+  return (
+    <div className="num">
+      <button type="button" aria-label="decrease" disabled={atMin}
+        onClick={() => { const n = base - step; onChange(min != null ? Math.max(min, n) : n); }}>−</button>
+      <input className="val" type="number" min={min} step={step} placeholder={placeholder}
+        value={Number.isNaN(value) ? "" : value}
+        onChange={(e) => onChange(e.target.value === "" ? NaN : Number(e.target.value))} />
+      <button type="button" aria-label="increase" onClick={() => onChange(base + step)}>+</button>
+    </div>
+  );
+}
+
+function Inp({ value, onChange, type = "text", unit, placeholder, fixed, step }: {
+  value: string | number; onChange?: (v: string) => void; type?: string;
+  unit?: string; placeholder?: string; fixed?: boolean; step?: number;
+}) {
+  const editable = !fixed && !!onChange;
+  return (
+    <div className={`inp${fixed ? " is-fixed" : ""}`}>
+      <input type={type} value={value} placeholder={placeholder} step={step} readOnly={!editable}
+        onChange={editable ? (e) => onChange!(e.target.value) : undefined} />
+      {unit && <span className="unit">{unit}</span>}
+    </div>
+  );
+}
+
+function Sel<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: readonly T[] }) {
+  return (
+    <div className="inp">
+      <select value={value} onChange={(e) => onChange(e.target.value as T)}>
+        {options.map((o) => <option key={o} value={o}>{toLabel(o)}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function Sw({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <div className="sw-row">
+      <span className="sw-label">{label}</span>
+      <button type="button" role="switch" aria-checked={checked} aria-label={label} className="sw" onClick={() => onChange(!checked)} />
+    </div>
+  );
+}
+
+/** Break the live RMU code into labelled tokens for the "Code breakdown" strip. */
+function decodeTokens(rmu: RmuConfigInput): { k: string; v: string }[] {
+  const fam = rmu.productType === "PRAL" ? "Air RMU" : rmu.productType === "PSEC" ? "SF6 RMU" : "GIS RMU";
+  const t: { k: string; v: string }[] = [
+    { k: rmu.productType, v: fam },
+    { k: `${rmu.voltageKv}kV`, v: "Rated voltage" },
+  ];
+  if (rmu.productType !== "LUCY" && rmu.lbsBrand) t.push({ k: rmu.lbsBrand, v: "LBS brand" });
+  if (rmu.productType !== "LUCY" && rmu.clientSpec) t.push({ k: rmu.clientSpec, v: "Client spec" });
+  t.push({ k: `R${rmu.nalCount}`, v: rmu.productType === "LUCY" ? "Feeders" : "Ring feeders" });
+  t.push({ k: `T${rmu.nalfCount}`, v: "Transformer" });
+  if (rmu.hasMetering) t.push({ k: "+M", v: "Metering" });
+  t.push({ k: rmu.installation === "INDOOR" ? "Indoor" : "Outdoor", v: "Installation" });
+  if (rmu.rtuType && rmu.rtuType !== "NONE") t.push({ k: "RTU", v: toLabel(rmu.rtuType) });
+  return t;
 }
