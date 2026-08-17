@@ -52,6 +52,13 @@ import {
   putCombo,
   resetCombos,
 } from "./controllers/pricing-lv-combos.controller";
+import {
+  listActiveAnnouncements,
+  listAllAnnouncements,
+  createAnnouncement,
+  updateAnnouncement,
+  deleteAnnouncement,
+} from "./controllers/announcements.controller";
 import { withPriceBook } from "./middleware/priceBook";
 import { requirePriceAdmin, requireOwner, requirePriceViewer } from "./middleware/roles";
 import {
@@ -181,6 +188,14 @@ export function createApp() {
   app.post("/api/pricing/lv/import/preview", requireAuth, requirePriceAdmin, postLvImportPreview);
   app.post("/api/pricing/lv/import/:id/apply", requireAuth, requirePriceAdmin, postLvImportApply);
   app.post("/api/pricing/lv/import/:id/cancel", requireAuth, requirePriceAdmin, postLvImportCancel);
+
+  // Announcements: every signed-in user reads the ACTIVE ones for the dashboard;
+  // only an owner may list-all or create/edit/delete them.
+  app.get("/api/announcements", requireAuth, listActiveAnnouncements);
+  app.get("/api/announcements/all", requireAuth, requireOwner, listAllAnnouncements);
+  app.post("/api/announcements", requireAuth, requireOwner, createAnnouncement);
+  app.patch("/api/announcements/:id", requireAuth, requireOwner, updateAnnouncement);
+  app.delete("/api/announcements/:id", requireAuth, requireOwner, deleteAnnouncement);
 
   app.get("/api/pricing/history", requireAuth, requirePriceViewer, getHistory);
   app.post("/api/pricing/changes/:id/undo", requireAuth, requirePriceAdmin, postUndo);

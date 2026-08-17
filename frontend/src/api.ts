@@ -456,6 +456,31 @@ export interface StalePricedQtns {
   applied: string[];
 }
 
+export type AnnouncementType = "News" | "Maintenance" | "Alert";
+export type AnnouncementPriority = "High" | "Medium" | "Low";
+/** Times are epoch-millisecond numbers — announcementUtils.ts works in ms. */
+export interface Announcement {
+  id: string;
+  type: AnnouncementType;
+  priority: AnnouncementPriority;
+  title: string;
+  body: string;
+  start: number;
+  end: number;
+  published: boolean;
+  createdBy: string;
+  updatedAt: number;
+}
+export interface AnnouncementInput {
+  type: AnnouncementType;
+  priority: AnnouncementPriority;
+  title: string;
+  body: string;
+  start: number;
+  end: number;
+  published: boolean;
+}
+
 export const api = {
   // ── RMU offers ─────────────────────────────────────────────────────────────
   listOffers: () => request<Offer[]>("/offers"),
@@ -743,5 +768,19 @@ export const api = {
     setAccess: (id: string, data: { role?: string; perms?: string[]; notifyByEmail?: boolean }) =>
       request<{ ok: true }>(`/access/users/${id}`, { method: "POST", body: JSON.stringify(data) }),
     history: () => request<{ items: PriceChangeRow[] }>("/access/history"),
+  },
+
+  // ── Announcements ───────────────────────────────────────────────────────────
+  announcements: {
+    /** Active ones for the dashboard — any signed-in user. */
+    active: () => request<{ announcements: Announcement[] }>("/announcements"),
+    /** Every announcement, for management — owner only. */
+    all: () => request<{ announcements: Announcement[] }>("/announcements/all"),
+    create: (data: Partial<AnnouncementInput>) =>
+      request<{ announcement: Announcement }>("/announcements", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<AnnouncementInput>) =>
+      request<{ announcement: Announcement }>(`/announcements/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: string) =>
+      request<{ ok: true }>(`/announcements/${id}`, { method: "DELETE" }),
   },
 };

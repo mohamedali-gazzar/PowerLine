@@ -52,6 +52,13 @@ const priceIcon = (
     <line x1="7" y1="7" x2="7.01" y2="7" />
   </svg>
 );
+const megaphoneIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 11l14-7v16L3 13z" />
+    <path d="M3 11v2a2 2 0 0 0 2 2h1" />
+    <path d="M8 15v3a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-2" />
+  </svg>
+);
 
 export default function App() {
   const { user, signOut } = useAuth();
@@ -136,6 +143,12 @@ export default function App() {
               <span className="shrink-0">{priceIcon}</span>
               <span className={lbl}>Price list</span>
             </NavLink>
+            {can("access.manage") && (
+              <NavLink to="/announcements" title="Announcements" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>
+                <span className="shrink-0">{megaphoneIcon}</span>
+                <span className={lbl}>Announcements</span>
+              </NavLink>
+            )}
           </nav>
 
           {/* Pin toggle + dark/light mode */}

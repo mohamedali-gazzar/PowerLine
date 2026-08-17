@@ -20,6 +20,8 @@ const PricingAdminPage = React.lazy(() => import("./pages/PricingAdminPage"));
 const PcssSelectorPage = React.lazy(() => import("./pages/PcssSelectorPage"));
 // And for the Access Center — only admins ever open it.
 const AccessCenterPage = React.lazy(() => import("./pages/AccessCenterPage"));
+// Announcements manager — owner only, opened rarely.
+const AnnouncementsAdminPage = React.lazy(() => import("./pages/AnnouncementsAdminPage"));
 // Brand fonts — self-hosted via @fontsource so local dev stays offline-capable.
 import "@fontsource/poppins/300.css";
 import "@fontsource/poppins/400.css";
@@ -81,6 +83,14 @@ function Gate() {
           element={
             <React.Suspense fallback={<div className="skeleton h-64" />}>
               <AccessCenterPage />
+            </React.Suspense>
+          }
+        />
+        <Route
+          path="announcements"
+          element={
+            <React.Suspense fallback={<div className="skeleton h-64" />}>
+              <AnnouncementsAdminPage />
             </React.Suspense>
           }
         />

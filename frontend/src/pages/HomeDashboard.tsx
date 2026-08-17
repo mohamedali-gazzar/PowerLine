@@ -3,11 +3,13 @@ import { useNavigate } from "react-router-dom";
 import {
   api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type HistoryItem, type QtnStatus, type QtnListItemDto, type MyAccess, type StalePricedQtns,
+  type Announcement,
 } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useAutoRefresh, useChangedKeys } from "../hooks/useAutoRefresh";
 import NewQtnPicker from "../components/NewQtnPicker";
 import RedPriceAlert from "../components/RedPriceAlert";
+import Announcements from "../components/Announcements";
 import EstimatorEvaluation from "./EstimatorEvaluation";
 
 /** Post-login home: profile, weekly performance, QTN history, and quick actions
@@ -21,6 +23,7 @@ export default function HomeDashboard() {
   const [query, setQuery] = useState("");
   const [chooser, setChooser] = useState(false);
   const [stale, setStale] = useState<StalePricedQtns | null>(null);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [reviewFilter, setReviewFilter] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
   // "Your performance" panel collapse — remembered across sessions.
@@ -40,6 +43,8 @@ export default function HomeDashboard() {
     await api.access.me().then(setAccess).catch(() => setAccess({ tier: "ENGINEER", perms: [], role: "USER" }));
     // Open QTNs that froze their prices on a superseded price list (silent on failure).
     await api.account.stalePrices().then(setStale).catch(() => {});
+    // Active announcements for the banner (silent on failure — never blocks the dashboard).
+    await api.announcements.active().then((r) => setAnnouncements(r.announcements)).catch(() => {});
   };
   useEffect(() => {
     void loadDashboard();
@@ -68,6 +73,9 @@ export default function HomeDashboard() {
 
   return (
     <div className="animate-fade-up">
+      {/* Owner-posted announcements — only renders when something is active */}
+      <Announcements items={announcements} />
+
       {/* Stale-price warning: open QTNs priced on an older list, review before submitting */}
       {staleCount > 0 && (
         <div className="mb-4">
