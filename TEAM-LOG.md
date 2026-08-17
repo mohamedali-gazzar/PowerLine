@@ -24,6 +24,38 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
+**Big change to how the Combinations tab handles Excel — please read before you next upload a combinations file.**
+
+- **A file you upload is now the source of truth.** The app no longer refuses a file for
+  "missing" something the previous version had. It loads what is actually in the file and
+  applies it: parts you add appear, parts you remove are dropped, parts you change take the
+  new value. **So anything you leave out of an uploaded file is removed from the app.**
+  (Quotations already saved keep the parts they were built with — nothing sent to a
+  customer changes.)
+- **One safety check kept:** if a file would drop a *whole* ATS arrangement (1-out-of-2 or
+  2-out-of-3) or a *whole* withdrawable-kit block (e.g. the E1.2 air-breaker kit), it asks
+  you once "this will remove X — load anyway?" instead of doing it silently. Everything
+  smaller loads with no prompt.
+- **Motorized breaker is now its own Excel file** — "Combinations Database - Motorized.xlsx".
+  Load and download it like the others. The app reads the motorised parts straight from
+  the file you load; there is no hidden hard-coded copy.
+- **P.F.C is now a section too.** Load / download "Combinations Database - P.F.C.xlsx". It
+  is kept as a **reference** — the app still works the capacitor bank out for itself, it
+  does not build the quotation from this file. (Cell colours/merged cells aren't stored,
+  only the values.)
+- **Fixed the P.F.C generator's Fan/Filter.** The "Generate combination" P.F.C tool was
+  outputting "Fan 25*25" / "Filter 25*25", which showed "no price"; it now outputs "Fan" /
+  "Filter" to match the price list and the P.F.C workbook.
+- **Combinations tab looks different:** a list of the combinations down the left, the
+  selected one on the right with its Load / Download buttons. Removed the "Reset all to the
+  app's version" button and the paragraph of explanation.
+
+⚠️ **HEADS-UP for whoever edits the workbooks:** each download now carries ONLY its own
+combination (the MCC file no longer also carries the withdrawable kits, etc.). Load the
+file that matches what you want to change, and don't expect one file to carry everything.
+
+## 2026-08-17 · Mohamed's side · Claude
+
 **A batch of history / send / offer tidy-ups.**
 
 - **Missing-item warnings now show when you press "Send for approval."** The same checks
