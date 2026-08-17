@@ -355,7 +355,9 @@ export function buildPfc(i: PfcInput, cb?: DbComponent): ComboLine[] {
   else if (varSteps > 12) ctl.push("Power Factor Controller 6 step RVC-6", "Power Factor Controller 12 step RVC-12");
   ctl.forEach((c) => out.push({ qty: 1, desc: c, comp: findByName(c), groupLabel: header }));
   // P.F.C. cubicle ventilation — always add 1 fan + 2 filters + 1 thermostat by default.
-  for (const [qty, name] of [[1, "Fan 25*25"], [2, "Filter 25*25"], [1, "Thermostat"]] as const)
+  // Names match the P.F.C combinations workbook ("Fan", "Filter", "Thermostat"); the
+  // price list must carry the same names for these to price (see the "no price" flag).
+  for (const [qty, name] of [[1, "Fan"], [2, "Filter"], [1, "Thermostat"]] as const)
     out.push({ qty, desc: name, comp: findByName(name), groupLabel: header });
   return out;
 }
