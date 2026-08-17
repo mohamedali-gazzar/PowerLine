@@ -109,88 +109,199 @@ export function generateOfferPdf(
 
 // ------------------------------------------------------------------ COVER
 
-function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, g: GeneratedOffer) {
-  // Top brand bar
-  doc.rect(0, 0, PAGE_W, 6).fill(ORANGE);
+function fmtCoverDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+  if (!m) return iso || "";
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${parseInt(m[3], 10)} ${months[parseInt(m[2], 10) - 1]} ${m[1]}`;
+}
 
-  // Logo (top-left) + website (top-right)
-  safeImage(doc, asset("logo.png"), MARGIN, 28, { width: 140 });
-  doc.font(BODY).fontSize(9).fillColor(GREY)
-    .text("www.powerline.com.eg", PAGE_W - MARGIN - 200, 44, { width: 200, align: "right" });
+// The RMU cover mirrors the LV "Technical Offer" cover so both product lines hand
+// the customer the same front page: brand spine, big two-line title, an orange
+// rule, the offer identifiers and contacts, the Powerline product range, and an
+// ISO/ABB footer. Drawn with PDFKit (server-side) to match the React cover the LV
+// configurator renders client-side.
+function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOffer) {
+  // Palette tuned to the LV cover (TRED #F16722) rather than the RMU body orange.
+  const CO = "#F16722"; // cover orange
+  const CINK = "#2b2421"; // heading / dark text
+  const CMUT = "#7a736f"; // muted text
+  const CCHR = "#585859"; // charcoal — range titles + items
+  const CLINE = "#E7E7EB"; // hairline divider
+  const CPILL = "#F4F4F5"; // pill background
 
-  // Title block
-  let y = 140;
-  doc.font(BOLD).fontSize(30).fillColor(ORANGE)
-    .text("Ring Main Unit", MARGIN, y);
-  y += 38;
-  doc.font(BODY).fontSize(13).fillColor(GREY)
-    .text("The best solution for Power Distribution", MARGIN, y);
-  y += 24;
-  doc.moveTo(MARGIN, y).lineTo(MARGIN + 90, y).lineWidth(3).strokeColor(ORANGE).stroke();
+  const LX = 54; // left content edge (clears the brand spine)
+  const RX = PAGE_W - 40; // right content edge
+  const CW = RX - LX;
 
-  // Product photo (centered)
-  const imgW = 300;
-  const imgH = Math.round((imgW * 679) / 656);
-  safeImage(doc, asset("product-rmu.png"), (PAGE_W - imgW) / 2, y + 22, {
-    width: imgW,
-    height: imgH,
-  });
+  // Left brand spine (full height)
+  doc.rect(0, 0, 10, PAGE_H).fill(CO);
 
-  // Product identity card (orange) below the photo
-  let cardY = y + 22 + imgH + 18;
-  doc.roundedRect(MARGIN, cardY, CONTENT_W, 70, 8).fill(ORANGE);
-  // Title (left) auto-shrinks to fit its column so a long "… (Outdoor)" title
-  // never collides with the right-aligned product code.
-  const codeW = 150;
-  const titleW = CONTENT_W - 36 - codeW;
-  let tSize = 20;
-  doc.font(BOLD);
-  while (tSize > 12 && doc.fontSize(tSize).widthOfString(g.titleProduct) > titleW) tSize -= 1;
-  doc.fillColor("white").font(BOLD).fontSize(tSize)
-    .text(g.titleProduct, MARGIN + 18, cardY + 12 + (20 - tSize) / 2, {
-      width: titleW,
-      lineBreak: false,
-      ellipsis: true,
-    });
-  doc.font(BODY).fontSize(12).fillColor("white")
-    .text(g.titleFamily, MARGIN + 18, cardY + 38, { width: titleW, lineBreak: false, ellipsis: true });
-  doc.font(BOLD).fontSize(15).fillColor("white")
-    .text(g.panelCode, MARGIN, cardY + 16, { width: CONTENT_W - 18, align: "right" });
-  doc.font(BODY).fontSize(10).fillColor("white")
-    .text(g.configCode, MARGIN, cardY + 40, { width: CONTENT_W - 18, align: "right" });
-
-  // Subtitle line
-  cardY += 84;
-  doc.font(ITALIC).fontSize(10.5).fillColor(GREY)
-    .text("A Compact Switchgear Solution for Secondary Power Distribution Networks",
-      MARGIN, cardY, { width: CONTENT_W });
-
-  // Offer meta box (bottom)
-  const boxY = PAGE_H - 180;
-  doc.roundedRect(MARGIN, boxY, CONTENT_W, 110, 8).fillAndStroke(TINT, LIGHT);
-  doc.rect(MARGIN, boxY, 5, 110).fill(ORANGE); // accent stripe
-  const metaRows: [string, string][] = [
-    ["Offer No", offer.offerNumber],
-    ["Date", offer.offerDate || new Date(offer.createdAt).toISOString().slice(0, 10)],
-    ["Project", offer.projectName],
-    ["Customer", offer.customer],
-  ];
-  let my = boxY + 14;
-  for (const [k, v] of metaRows) {
-    doc.font(BOLD).fontSize(9).fillColor(GREY)
-      .text(k.toUpperCase(), MARGIN + 18, my, { width: 90 });
-    doc.font(BODY).fontSize(10).fillColor(INK)
-      .text(v, MARGIN + 115, my, { width: CONTENT_W - 130 });
-    my += 18;
+  // ---- Top row: logo (left) + date pill (right)
+  safeImage(doc, asset("logo.png"), LX, 40, { width: 150 });
+  const dateStr = fmtCoverDate(offer.offerDate || new Date(offer.createdAt).toISOString().slice(0, 10));
+  if (dateStr) {
+    doc.font(BOLD).fontSize(9.5);
+    const dw = doc.widthOfString(dateStr);
+    const pillW = dw + 26;
+    const pillX = RX - pillW;
+    const pillY = 44;
+    doc.roundedRect(pillX, pillY, pillW, 22, 11).fill(CPILL);
+    doc.fillColor(CINK).text(dateStr, pillX, pillY + 6.5, { width: pillW, align: "center" });
   }
 
-  // Cover footer
-  doc.rect(0, PAGE_H - 30, PAGE_W, 30).fill(ORANGE);
-  doc.fillColor("white").font(BODY).fontSize(9);
-  bottomText(doc, "powerline.com.eg   ·   Facebook   ·   LinkedIn", MARGIN, PAGE_H - 20, {
-    width: CONTENT_W,
-    align: "center",
+  // ---- Heading: "Technical" / "Offer"
+  let y = 150;
+  doc.font(BOLD).fontSize(46).fillColor(CINK).text("Technical", LX, y, { lineBreak: false });
+  y += 50;
+  doc.fillColor(CO).text("Offer", LX, y, { lineBreak: false });
+  y += 62;
+
+  // Orange rule under the title
+  doc.roundedRect(LX, y, 84, 5, 2.5).fill(CO);
+  y += 20;
+
+  // Subtitle
+  doc.font(BODY).fontSize(13).fillColor(CMUT)
+    .text("Egyptian electrification solutions · ABB-certified assembler", LX, y, { width: CW });
+  y += 32;
+
+  // Offer identifiers
+  if (offer.offerNumber) {
+    doc.font(BOLD).fontSize(13.5).fillColor(CO).text(offer.offerNumber, LX, y, { lineBreak: false });
+    y += 20;
+  }
+  if (offer.opportunityNo) {
+    doc.font(BOLD).fontSize(10).fillColor(CMUT).text(offer.opportunityNo, LX, y, { lineBreak: false });
+    y += 16;
+  }
+  if (offer.projectName) {
+    doc.font(BODY).fontSize(11.5).fillColor(CINK)
+      .text(offer.projectName, LX, y, { width: CW, lineBreak: false, ellipsis: true });
+    y += 16;
+  }
+  if (offer.customer) {
+    doc.font(BODY).fontSize(11.5).fillColor(CMUT)
+      .text(offer.customer, LX, y, { width: CW, lineBreak: false, ellipsis: true });
+    y += 16;
+  }
+
+  // ---- Contacts (only rows that have a name)
+  const contacts = [
+    { role: "Sales", name: offer.salesName, phone: offer.salesMobile, email: offer.salesEmail },
+    { role: "Manager", name: offer.salesManagerName, phone: offer.salesManagerMobile, email: offer.salesManagerEmail },
+    { role: "Support", name: offer.supportName, phone: offer.supportMobile, email: offer.supportEmail },
+  ].filter((c) => c.name);
+  let cy = y + 22;
+  for (const c of contacts) {
+    doc.font(BOLD).fontSize(9.5).fillColor(CINK).text(`${c.role}:`, LX, cy, { width: 56, lineBreak: false });
+    doc.font(BODY).fontSize(9.5).fillColor(CMUT)
+      .text(c.name || "", LX + 58, cy, { width: 132, lineBreak: false, ellipsis: true });
+    if (c.phone) doc.fillColor(CMUT).text(c.phone, LX + 196, cy, { width: 118, lineBreak: false, ellipsis: true });
+    if (c.email) doc.fillColor(CMUT).text(c.email, LX + 318, cy, { width: RX - (LX + 318), lineBreak: false, ellipsis: true });
+    cy += 16;
+  }
+
+  // ---- Powerline product range (5 hairline-ruled columns, matching the LV cover)
+  const RANGE: [string, string[]][] = [
+    ["LV Enclosures", ["PLP MAX", "PLP CORE", "PLP MINI"]],
+    ["Transformers", ["PDTR"]],
+    ["Secondary Switchgear", ["PRAL", "PSEC", "AEGIS PLUS"]],
+    ["Primary Switchgear", ["PLGEAR"]],
+    ["Kiosk", ["PCSS"]],
+  ];
+  const stripTop = Math.max(cy + 42, 486);
+  const colW = CW / 5;
+  // Simple monoline glyphs standing in for the React cover's per-category SVGs —
+  // charcoal outlines with an orange accent, so the five columns read as distinct
+  // product families rather than five identical tiles.
+  const drawIcon = (kind: number, x: number, y: number) => {
+    doc.lineWidth(1.1).strokeColor(CCHR);
+    if (kind === 0) {
+      // LV Enclosures — control panel: two meters, a rotary selector
+      doc.roundedRect(x + 1, y, 16, 18, 2).stroke();
+      doc.rect(x + 3.5, y + 3.5, 4, 3).fill(CCHR);
+      doc.rect(x + 10, y + 3.5, 4, 3).fill(CCHR);
+      doc.circle(x + 9, y + 13, 2).fill(CO);
+    } else if (kind === 1) {
+      // Transformers — clamping beam, three cast-resin coil limbs, base
+      doc.rect(x + 1, y + 1, 16, 2.4).fill(CCHR);
+      [3, 8, 13].forEach((dx) => doc.roundedRect(x + dx - 1.4, y + 5, 2.8, 9.5, 1.2).fill(CO));
+      doc.rect(x + 1, y + 15.6, 16, 2.4).fill(CCHR);
+    } else if (kind === 2) {
+      // Secondary Switchgear — cell with an open switch blade
+      doc.roundedRect(x + 1, y, 16, 18, 2).stroke();
+      doc.moveTo(x + 5, y + 13).lineTo(x + 12, y + 6).stroke();
+      doc.circle(x + 5, y + 13, 1.4).fill(CO);
+      doc.circle(x + 12, y + 6, 1.4).fill(CCHR);
+    } else if (kind === 3) {
+      // Primary Switchgear — tall cabinet with a breaker
+      doc.roundedRect(x + 2, y, 14, 18, 2).stroke();
+      doc.moveTo(x + 2, y + 9).lineTo(x + 16, y + 9).stroke();
+      doc.rect(x + 5, y + 11.5, 8, 4).fill(CO);
+    } else {
+      // Kiosk — housed substation with a roof and a door
+      doc.moveTo(x + 1, y + 6).lineTo(x + 9, y).lineTo(x + 17, y + 6).stroke();
+      doc.roundedRect(x + 2.5, y + 6, 13, 12, 1.5).stroke();
+      doc.rect(x + 7, y + 11, 4, 7).fill(CO);
+    }
+    doc.lineWidth(1);
+  };
+  RANGE.forEach(([title, items], i) => {
+    const x = LX + i * colW;
+    if (i > 0) {
+      doc.moveTo(x, stripTop).lineTo(x, stripTop + 112).lineWidth(0.7).strokeColor(CLINE).stroke();
+    }
+    const cx = x + (i === 0 ? 0 : 12);
+    const cwt = colW - (i === 0 ? 12 : 24);
+    drawIcon(i, cx, stripTop);
+    // Title box, bottom-aligned so every column's rule + items sit at one height.
+    const twoLine = title.length > 14;
+    doc.font(BOLD).fontSize(7.5).fillColor(CCHR)
+      .text(title.toUpperCase(), cx, twoLine ? stripTop + 28 : stripTop + 39, {
+        width: cwt, characterSpacing: 0.6, lineGap: 1,
+      });
+    doc.roundedRect(cx, stripTop + 56, 21, 2, 1).fill(CO);
+    let iy = stripTop + 64;
+    for (const it of items) {
+      doc.font(BODY).fontSize(9).fillColor(CCHR).text(it, cx, iy, { width: cwt, lineBreak: false });
+      iy += 13;
+    }
   });
+
+  // ---- Footer: orange rule, ISO + ABB pills, address + social marks
+  const footRuleY = PAGE_H - 118;
+  doc.rect(LX, footRuleY, PAGE_W - LX, 3).fill(CO); // bleeds to the right edge
+
+  const pills: [string, string, string][] = [
+    ["ISO 9001", CPILL, CINK],
+    ["ISO 14001", CPILL, CINK],
+    ["ISO 45001", CPILL, CINK],
+    ["ABB CERTIFIED", "#FEF3ED", CO],
+  ];
+  const pillY = footRuleY + 16;
+  let px = LX;
+  for (const [label, bg, fg] of pills) {
+    doc.font(BOLD).fontSize(9);
+    const w = doc.widthOfString(label) + 24;
+    doc.roundedRect(px, pillY, w, 22, 11).fill(bg);
+    doc.fillColor(fg).text(label, px, pillY + 6.5, { width: w, align: "center" });
+    px += w + 10;
+  }
+
+  const addrY = pillY + 40;
+  doc.font(BODY).fontSize(9.5).fillColor(CMUT)
+    .text("20 Ammar Ibn Yasser, Heliopolis, Cairo  ·  +2 02262215022  ·  info@powerline.com.eg",
+      LX, addrY, { width: CW - 110, lineBreak: false });
+  const marks = ["W", "f", "in"];
+  let sx = RX - marks.length * 26;
+  for (const m of marks) {
+    doc.circle(sx + 9, addrY + 4, 9).fill(CO);
+    doc.font(BOLD).fontSize(m.length > 1 ? 6.5 : 8).fillColor("white")
+      .text(m, sx, addrY + (m.length > 1 ? 1.5 : 0.5), { width: 18, align: "center" });
+    sx += 26;
+  }
+
   doc.fillColor(INK);
 }
 

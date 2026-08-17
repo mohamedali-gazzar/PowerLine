@@ -24,6 +24,21 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
+**The RMU (Ring Main Unit) offer now has the same cover page as the LV offer.**
+
+- The first page of an RMU technical offer used to look different from the LV one (it had
+  the "Ring Main Unit" title, a product photo and an orange product-code box).
+- It now uses the **exact same "Technical Offer" cover as the LV offer**: the big black-and-
+  orange "Technical / Offer" title, the orange line, the "Egyptian electrification
+  solutions · ABB-certified assembler" line, the offer number / project / customer, the
+  Sales / Manager / Support contacts, the five product-range columns, and the ISO + ABB
+  footer. So both product lines now hand the customer the same front page.
+- Nothing else in the RMU offer changed — the product details still appear from page 2
+  onward (General Data, Electrical Data, etc.) exactly as before.
+- This was a cover-page-only, backend-only change (the RMU PDF is built on the server).
+
+## 2026-08-17 · Mohamed's side · Claude
+
 **Big change to how the Combinations tab handles Excel — please read before you next upload a combinations file.**
 
 - **A file you upload is now the source of truth.** The app no longer refuses a file for
