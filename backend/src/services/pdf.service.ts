@@ -514,30 +514,31 @@ function cubicleBlock(doc: PDFKit.PDFDocument, c: Cubicle) {
     .text(heading, MARGIN + 8, hY + 4, { width: CONTENT_W - 16 });
   doc.y = hY + hH;
 
-  // table header
+  // table header (compact, so a full cubicle list fits on one page rather than
+  // spilling a single row onto a near-empty extra page)
   const qtyW = 42;
   let y = doc.y;
-  doc.rect(MARGIN, y, CONTENT_W, 15).fill(LIGHT);
+  doc.rect(MARGIN, y, CONTENT_W, 13).fill(LIGHT);
   doc.fillColor(ORANGE_DK).font(BOLD).fontSize(8.5);
-  doc.text("QTY", MARGIN + 6, y + 4, { width: qtyW - 8 });
-  doc.text("DESCRIPTION", MARGIN + qtyW + 4, y + 4);
-  y += 15;
+  doc.text("QTY", MARGIN + 6, y + 3, { width: qtyW - 8 });
+  doc.text("DESCRIPTION", MARGIN + qtyW + 4, y + 3);
+  y += 13;
   doc.font(BODY).fontSize(9).fillColor(INK);
 
   c.items.forEach((it, i) => {
     const descW = CONTENT_W - qtyW - 8;
-    const h = Math.max(16, doc.heightOfString(it.description, { width: descW }) + 6);
+    const h = Math.max(15, doc.heightOfString(it.description, { width: descW }) + 5);
     if (y + h > PAGE_H - 60) {
       doc.addPage();
       (doc as unknown as { __onBreak?: () => void }).__onBreak?.();
       y = doc.y;
     }
     if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, h).fill(TINT).fillColor(INK);
-    doc.fillColor(ORANGE).font(BOLD).text(String(it.qty), MARGIN + 6, y + 3, { width: qtyW - 8 });
-    doc.fillColor(INK).font(BODY).text(it.description, MARGIN + qtyW + 4, y + 3, { width: descW });
+    doc.fillColor(ORANGE).font(BOLD).text(String(it.qty), MARGIN + 6, y + 2.5, { width: qtyW - 8 });
+    doc.fillColor(INK).font(BODY).text(it.description, MARGIN + qtyW + 4, y + 2.5, { width: descW });
     y += h;
   });
-  doc.y = y + 8;
+  doc.y = y + 5;
 }
 
 // ---------------------------------------------------------------- FOOTERS

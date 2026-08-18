@@ -24,6 +24,15 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
+**RMU technical PDF: no more single-row orphan page in the structure.**
+
+- On offers with metering, one last row ("Selector 7 position") was spilling onto a nearly
+  empty extra page. The Ring Main Unit Structure table is now a little more compact (shorter
+  header row, slightly tighter rows), so a full cubicle list fits on its page and that row
+  stays with the rest. (A genuinely huge structure can still use a second page.)
+
+## 2026-08-17 · Mohamed's side · Claude
+
 **RMU technical PDF: the orange cubicle-header bars are no longer over-tall.**
 
 - On the Ring Main Unit Structure page, each orange bar (e.g. "QTY 2 Cubical: PCC …") was
