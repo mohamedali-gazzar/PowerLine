@@ -494,9 +494,14 @@ function cubicleBlock(doc: PDFKit.PDFDocument, c: Cubicle) {
       : c.code === "EXTRA"
       ? `${c.name}:` // e.g. "Supplied Complete With:" — not a cubicle, so no "QTY … Cubical"
       : `QTY ${c.qty} Cubical: ${c.name}, each consisting of:`;
-  const hH = Math.max(18, doc.heightOfString(heading, { width: CONTENT_W - 16 }) + 8);
+  // Measure at the SAME font the text is drawn in (heading = bold 9.5, item = body 9),
+  // or the bar is sized for a bigger/wrapped font than it renders and leaves a tall
+  // empty orange band above/below the one line of text.
+  doc.font(BOLD).fontSize(9.5);
+  const hH = Math.max(16, doc.heightOfString(heading, { width: CONTENT_W - 16 }) + 7);
   // Keep the cubicle header bar + the table header (15) + the first item row
   // together, so a cubicle never begins with only its title at the page bottom.
+  doc.font(BODY).fontSize(9);
   const firstItemH = c.items.length
     ? Math.max(16, doc.heightOfString(c.items[0].description, { width: CONTENT_W - 42 - 8 }) + 6)
     : 0;

@@ -24,6 +24,14 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
+**RMU technical PDF: the orange cubicle-header bars are no longer over-tall.**
+
+- On the Ring Main Unit Structure page, each orange bar (e.g. "QTY 2 Cubical: PCC …") was
+  leaving a big empty orange band above/below its one line of text. The bar height was being
+  measured with the wrong (bigger) font; it now matches the text, so the bars are tight.
+
+## 2026-08-17 · Mohamed's side · Claude
+
 **RMU exports: LV-style file names, and the technical PDF is re-paged.**
 
 - **File names now match the LV section.** Downloading an RMU offer now saves as
