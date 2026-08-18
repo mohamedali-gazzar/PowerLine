@@ -24,6 +24,17 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
+**RMU offer covers: the Commercial cover now matches the Technical/LV cover, and both show the QTN number.**
+
+- The RMU **Commercial Offer** cover is now the same clean cover as the Technical Offer (just
+  titled "Commercial Offer"). Both offers now use one shared cover, so they can't drift apart.
+- The orange number on the cover is now the **QTN number** (e.g. QTN-26-0043) instead of the
+  internal PL-2026-#### offer number.
+- (Still coming: matching the Commercial pricing table and Terms & Conditions to the LV
+  Commercial Offer — in progress.)
+
+## 2026-08-17 · Mohamed's side · Claude
+
 **RMU technical PDF: no more single-row orphan page in the structure.**
 
 - On offers with metering, one last row ("Selector 7 position") was spilling onto a nearly

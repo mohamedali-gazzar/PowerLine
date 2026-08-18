@@ -78,7 +78,15 @@ export function generateOfferPdf(
 
     try {
       setupFonts(doc);
-      coverPage(doc, offer, g);
+      drawCover(doc, { body: BODY, bold: BOLD }, {
+        kind: "Technical",
+        quotationNo: offer.quotationNo, offerNumber: offer.offerNumber,
+        opportunityNo: offer.opportunityNo, projectName: offer.projectName, customer: offer.customer,
+        offerDate: offer.offerDate, createdAt: offer.createdAt,
+        salesName: offer.salesName, salesMobile: offer.salesMobile, salesEmail: offer.salesEmail,
+        salesManagerName: offer.salesManagerName, salesManagerMobile: offer.salesManagerMobile, salesManagerEmail: offer.salesManagerEmail,
+        supportName: offer.supportName, supportMobile: offer.supportMobile, supportEmail: offer.supportEmail,
+      });
 
       // Deterministic page breaks: each new content page redraws the header.
       const onBreak = () => runningHeader(doc, g);
@@ -124,7 +132,25 @@ function fmtCoverDate(iso: string): string {
 // rule, the offer identifiers and contacts, the Powerline product range, and an
 // ISO/ABB footer. Drawn with PDFKit (server-side) to match the React cover the LV
 // configurator renders client-side.
-function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOffer) {
+export type CoverData = {
+  kind: "Technical" | "Commercial";
+  quotationNo?: string | null;
+  offerNumber?: string | null;
+  opportunityNo?: string | null;
+  projectName?: string | null;
+  customer?: string | null;
+  offerDate?: string | null;
+  createdAt?: Date | string | null;
+  salesName?: string | null; salesMobile?: string | null; salesEmail?: string | null;
+  salesManagerName?: string | null; salesManagerMobile?: string | null; salesManagerEmail?: string | null;
+  supportName?: string | null; supportMobile?: string | null; supportEmail?: string | null;
+};
+
+/** Shared LV-style offer cover — used by BOTH the Technical and Commercial RMU PDFs so
+ *  the two covers are identical (only the "Technical"/"Commercial" word differs). */
+export function drawCover(doc: PDFKit.PDFDocument, fonts: { body: string; bold: string }, data: CoverData) {
+  const BODY = fonts.body;
+  const BOLD = fonts.bold;
   // Palette tuned to the LV cover (TRED #F16722) rather than the RMU body orange.
   const CO = "#F16722"; // cover orange
   const CINK = "#2b2421"; // heading / dark text
@@ -144,7 +170,7 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOff
   const logoTop = 34;
   const logoW = 160; // logo-horizontal.png is 2:1 → ~80pt tall, matching the LV h-32
   safeImage(doc, asset("logo-horizontal.png"), LX, logoTop, { width: logoW });
-  const dateStr = fmtCoverDate(offer.offerDate || new Date(offer.createdAt).toISOString().slice(0, 10));
+  const dateStr = fmtCoverDate(data.offerDate || (data.createdAt ? new Date(data.createdAt).toISOString().slice(0, 10) : ""));
   if (dateStr) {
     doc.font(BOLD).fontSize(10);
     const pillH = 26;
@@ -157,7 +183,7 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOff
 
   // ---- Heading: "Technical" / "Offer"
   let y = 150;
-  doc.font(BOLD).fontSize(46).fillColor(CINK).text("Technical", LX, y, { lineBreak: false });
+  doc.font(BOLD).fontSize(46).fillColor(CINK).text(data.kind, LX, y, { lineBreak: false });
   y += 50;
   doc.fillColor(CO).text("Offer", LX, y, { lineBreak: false });
   y += 62;
@@ -171,31 +197,33 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOff
     .text("Egyptian electrification solutions · ABB-certified assembler", LX, y, { width: CW });
   y += 32;
 
-  // Offer identifiers
-  if (offer.offerNumber) {
-    doc.font(BOLD).fontSize(13.5).fillColor(CO).text(offer.offerNumber, LX, y, { lineBreak: false });
+  // Offer identifiers — show the QTN number (like the LV cover), not the internal
+  // PL-YYYY-#### offer number. Fall back to the offer number only if no QTN.
+  const coverRef = data.quotationNo || data.offerNumber;
+  if (coverRef) {
+    doc.font(BOLD).fontSize(13.5).fillColor(CO).text(coverRef, LX, y, { lineBreak: false });
     y += 20;
   }
-  if (offer.opportunityNo) {
-    doc.font(BOLD).fontSize(10).fillColor(CMUT).text(offer.opportunityNo, LX, y, { lineBreak: false });
+  if (data.opportunityNo) {
+    doc.font(BOLD).fontSize(10).fillColor(CMUT).text(data.opportunityNo, LX, y, { lineBreak: false });
     y += 16;
   }
-  if (offer.projectName) {
+  if (data.projectName) {
     doc.font(BODY).fontSize(11.5).fillColor(CINK)
-      .text(offer.projectName, LX, y, { width: CW, lineBreak: false, ellipsis: true });
+      .text(data.projectName, LX, y, { width: CW, lineBreak: false, ellipsis: true });
     y += 16;
   }
-  if (offer.customer) {
+  if (data.customer) {
     doc.font(BODY).fontSize(11.5).fillColor(CMUT)
-      .text(offer.customer, LX, y, { width: CW, lineBreak: false, ellipsis: true });
+      .text(data.customer, LX, y, { width: CW, lineBreak: false, ellipsis: true });
     y += 16;
   }
 
   // ---- Contacts (only rows that have a name)
   const contacts = [
-    { role: "Sales", name: offer.salesName, phone: offer.salesMobile, email: offer.salesEmail },
-    { role: "Manager", name: offer.salesManagerName, phone: offer.salesManagerMobile, email: offer.salesManagerEmail },
-    { role: "Support", name: offer.supportName, phone: offer.supportMobile, email: offer.supportEmail },
+    { role: "Sales", name: data.salesName, phone: data.salesMobile, email: data.salesEmail },
+    { role: "Manager", name: data.salesManagerName, phone: data.salesManagerMobile, email: data.salesManagerEmail },
+    { role: "Support", name: data.supportName, phone: data.supportMobile, email: data.supportEmail },
   ].filter((c) => c.name);
   let cy = y + 22;
   for (const c of contacts) {

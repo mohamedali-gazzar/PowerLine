@@ -2,6 +2,7 @@ import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
 import type { CommercialData } from "./commercial.service";
+import { drawCover } from "./pdf.service";
 import {
   INTRO_EN,
   PRODUCT_LABELS,
@@ -117,7 +118,16 @@ export function generateCommercialPdf(d: CommercialData): Promise<Buffer> {
       const onBreak = () => runningHeader(doc);
       (doc as unknown as { __onBreak: () => void }).__onBreak = onBreak;
 
-      coverPage(doc, d);
+      // Same LV-style cover as the technical offer (shared drawCover), titled "Commercial".
+      drawCover(doc, { body: BODY, bold: BOLD }, {
+        kind: "Commercial",
+        quotationNo: d.quotationNo, offerNumber: d.offerNumber,
+        opportunityNo: d.opportunityNo, projectName: d.project, customer: d.customer,
+        offerDate: d.date,
+        salesName: d.salesName, salesMobile: d.salesMobile, salesEmail: d.salesEmail,
+        salesManagerName: d.salesManagerName, salesManagerMobile: d.salesManagerMobile, salesManagerEmail: d.salesManagerEmail,
+        supportName: d.supportName, supportMobile: d.supportMobile, supportEmail: d.supportEmail,
+      });
 
       doc.addPage();
       onBreak();
