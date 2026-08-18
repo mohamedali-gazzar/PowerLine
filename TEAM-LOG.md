@@ -24,6 +24,21 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
+**Project name, Customer and QTN number are now required — in both LV and RMU. Plus the RMU "Panel" tab is renamed "RMU".**
+
+- On the **Project tab** of both the **LV quotation** and the **RMU offer**, the **Project
+  name**, **Customer** and **QTN number** fields now show a red **`*`** and turn red while
+  empty, and you **can't generate the offer until they're filled**:
+  - RMU shows *"Project name, customer and QTN number are required…"* and jumps you to the
+    Project tab.
+  - LV blocks the Technical / Commercial / Material tabs and lists exactly which of the three
+    is missing.
+- In the **RMU offer**, the middle tab that was called **"Panel"** is now called **"RMU"**
+  (the wording underneath and the card heading were updated to match). Nothing about how it
+  works changed.
+
+## 2026-08-17 · Mohamed's side · Claude
+
 **Panel step tidy-up — no more empty white box, and the two sides finish level.**
 
 - Fixed a problem where the **Smart / RTU** card was stretched into a tall empty white

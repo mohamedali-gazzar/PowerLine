@@ -44,7 +44,7 @@ const initialRmu: RmuConfigInput = {
 type Tab = "project" | "panel" | "technical" | "commercial";
 const TABS: { key: Tab; label: string }[] = [
   { key: "project", label: "Project" },
-  { key: "panel", label: "Panel" },
+  { key: "panel", label: "RMU" },
   { key: "technical", label: "Technical Offer" },
   { key: "commercial", label: "Commercial Offer" },
 ];
@@ -268,8 +268,8 @@ export default function NewOfferPage() {
 
   /** Generate + download the requested PDFs (Technical / Commercial). */
   async function download(outputs: ("Technical" | "Commercial")[]) {
-    if (!projectName.trim() || !customer.trim()) {
-      setError("Enter a project name and customer on the Project tab first.");
+    if (!projectName.trim() || !customer.trim() || !team.quotationNo.trim()) {
+      setError("Project name, customer and QTN number are required — fill them on the Project tab first.");
       setTab("project");
       return;
     }
@@ -305,7 +305,7 @@ export default function NewOfferPage() {
       <div className="mb-4 flex items-center justify-between animate-fade-up">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">New RMU Offer</h1>
-          <p className="text-sm text-muted">Configure the panel — the offer builds itself.</p>
+          <p className="text-sm text-muted">Configure the RMU — the offer builds itself.</p>
         </div>
         <button type="button" className="btn-primary" disabled={submitting} onClick={generateAll}>
           {submitting ? "Generating…" : "Generate & Download →"}
@@ -363,9 +363,9 @@ export default function NewOfferPage() {
             <h2 className="sec-head">Project</h2>
             <p className="mb-3 text-xs text-muted">Used to generate the Technical &amp; Commercial offer cover pages.</p>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div><L>Project name</L><input className="input" value={projectName} onChange={(e) => setProjectName(e.target.value)} /></div>
-              <div><L>Customer</L><input className="input" value={customer} onChange={(e) => setCustomer(e.target.value)} /></div>
-              <div><L>QTN No.</L><input className="input" value={team.quotationNo} onChange={(e) => upTeam({ quotationNo: e.target.value })} /></div>
+              <div><L>Project name <span className="text-red-500">*</span></L><input className={`input ${projectName.trim() ? "" : "ring-1 ring-red-400"}`} value={projectName} onChange={(e) => setProjectName(e.target.value)} /></div>
+              <div><L>Customer <span className="text-red-500">*</span></L><input className={`input ${customer.trim() ? "" : "ring-1 ring-red-400"}`} value={customer} onChange={(e) => setCustomer(e.target.value)} /></div>
+              <div><L>QTN No. <span className="text-red-500">*</span></L><input className={`input ${team.quotationNo.trim() ? "" : "ring-1 ring-red-400"}`} value={team.quotationNo} onChange={(e) => upTeam({ quotationNo: e.target.value })} /></div>
               <div><L>OPTY No.</L><input className="input" value={team.opportunityNo} onChange={(e) => upTeam({ opportunityNo: e.target.value })} /></div>
               <div>
                 <L>Sales support engineer</L>
@@ -432,7 +432,7 @@ export default function NewOfferPage() {
           </div>
 
           <div className="flex justify-end">
-            <button type="button" className="btn-primary" onClick={() => setTab("panel")}>Next: Panel →</button>
+            <button type="button" className="btn-primary" onClick={() => setTab("panel")}>Next: RMU →</button>
           </div>
         </div>
       )}
@@ -450,7 +450,7 @@ export default function NewOfferPage() {
               right instead of running past them. */}
           <section className="card px-5 py-3 animate-fade-up">
             <div className="mb-2 flex items-center justify-between">
-              <h2 className="sec-head !mb-0 !pb-0 after:hidden">Panel — RMU Code</h2>
+              <h2 className="sec-head !mb-0 !pb-0 after:hidden">RMU Code</h2>
               <div className="text-right">
                 <span key={panelCode} className="code-chip animate-pop">{panelCode}</span>
                 <div className="mt-1 text-xs text-muted">{code}</div>
@@ -673,7 +673,7 @@ export default function NewOfferPage() {
             )}
           </div>
           <div className="flex justify-between">
-            <button type="button" className="btn-ghost" onClick={() => setTab("panel")}>← Panel</button>
+            <button type="button" className="btn-ghost" onClick={() => setTab("panel")}>← RMU</button>
             <button type="button" className="btn-primary" onClick={() => setTab("commercial")}>
               Next: Commercial Offer →
             </button>

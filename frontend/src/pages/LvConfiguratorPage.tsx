@@ -880,6 +880,9 @@ export default function LvConfiguratorPage() {
     ...(blankSpares.length ? [blankSpareMessage(blankSpares, s.panels)] : []),
   ];
   const offerIssues = [
+    ...(s.project.name.trim() ? [] : ["Project name is required — fill it on the Project tab."]),
+    ...(s.project.customer.trim() ? [] : ["Customer is required — fill it on the Project tab."]),
+    ...(qtnNum.trim() ? [] : ["QTN number is required — set it on the Project tab."]),
     ...(s.project.supportEngineer.trim() ? [] : ["Sales support engineer is required — pick one on the Project tab."]),
     ...s.panels.flatMap((p, i) =>
       p.spare ? [] : panelInvalid(p).map((msg) => `${panelLabel(p, i)}: ${msg}`)),
@@ -3175,13 +3178,13 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
         <p className="mb-3 text-xs text-muted">Used to generate the Technical & Commercial offer cover pages.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           {/* Row 1: Project name | Customer */}
-          <div><L>Project name</L><input className="input" value={pr.name} onChange={(e) => upPr({ name: e.target.value })} /></div>
-          <div><L>Customer</L><input className="input" value={pr.customer} onChange={(e) => upPr({ customer: e.target.value })} /></div>
+          <div><L>Project name <span className="text-red-500">*</span></L><input className={`input ${pr.name.trim() ? "" : "ring-1 ring-red-400"}`} value={pr.name} onChange={(e) => upPr({ name: e.target.value })} /></div>
+          <div><L>Customer <span className="text-red-500">*</span></L><input className={`input ${pr.customer.trim() ? "" : "ring-1 ring-red-400"}`} value={pr.customer} onChange={(e) => upPr({ customer: e.target.value })} /></div>
           {/* Row 2 left (spans the Project-name column): QTN No. + Revision No. */}
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <L>QTN No.</L>
-              <input className="input" value={qtnDraft}
+              <L>QTN No. <span className="text-red-500">*</span></L>
+              <input className={`input ${qtnDraft.trim() ? "" : "ring-1 ring-red-400"}`} value={qtnDraft}
                 onChange={(e) => { setQtnDraft(e.target.value); setQtnErr(""); }}
                 onBlur={commitQtn}
                 onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setQtnDraft(qtnNum); setQtnErr(""); } }} />
