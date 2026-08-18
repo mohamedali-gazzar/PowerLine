@@ -24,6 +24,21 @@ closed off.
 
 ## 2026-08-18 · Mohamed's side · Claude
 
+**RMU Commercial Offer: pricing table + terms now match the LV Commercial Offer's exact look.**
+
+- Comparing the two commercials side by side showed the RMU pricing table had been styled with
+  bold orange bars (that's actually the RMU *technical* offer's look, not the LV commercial). Fixed:
+  the RMU pricing table is now the LV commercial's understated style — a thin orange underline under
+  grey column headings (no filled orange bar), plain numbers, and a totals block that closes with a
+  simple "Total" line under an orange rule (no orange grand-total bar). The discount line stays, since
+  RMU offers have one, but it's now a plain row.
+- Two small Terms details also aligned to the LV: the heading now reads "General Terms & Conditions"
+  (Arabic "الشروط والأحكام العامة"), and each section's title is dark like the LV instead of orange.
+- Net result: the RMU and LV commercial offers now look like one family across cover, pricing table,
+  and terms. Verified from a real generated RMU offer.
+
+## 2026-08-18 · Mohamed's side · Claude
+
 **RMU Commercial Offer now matches the LV Commercial Offer as the standard template.**
 
 - The RMU **Commercial Offer** now follows the LV Commercial Offer exactly: same cover, same

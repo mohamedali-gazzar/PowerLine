@@ -138,7 +138,7 @@ export function generateCommercialPdf(d: CommercialData): Promise<Buffer> {
       // Full Terms & Conditions — the LV commercial's standard terms (English, then Arabic)
       doc.addPage();
       onBreak();
-      sectionTitle(doc, "Terms & Conditions");
+      sectionTitle(doc, "General Terms & Conditions");
       termsList(doc, LV_TERMS_EN, false);
 
       doc.addPage();
@@ -247,68 +247,64 @@ function runningHeader(doc: PDFKit.PDFDocument) {
 function mainOffer(doc: PDFKit.PDFDocument, d: CommercialData) {
   sectionTitle(doc, "Main Offer");
   const money = (n: number) => `${d.currency} ${fmt(n)}`;
-  const numW = 26, qtyW = 40, unitW = 92, totalW = 100;
+  const numW = 30, qtyW = 40, unitW = 96, totalW = 96;
   const descX = MARGIN + numW;
   const descW = CONTENT_W - numW - qtyW - unitW - totalW;
   const qtyX = descX + descW, unitX = qtyX + qtyW, totalX = unitX + unitW;
 
-  // Header — solid orange bar, white uppercase (the LV commercial table header)
+  // Header — understated: grey uppercase labels over a thin orange underline (the LV commercial table header)
   let y = doc.y;
-  doc.rect(MARGIN, y, CONTENT_W, 20).fill(ORANGE);
-  doc.fillColor("white").font(BOLD).fontSize(8);
-  doc.text("#", MARGIN + 6, y + 6.5, { width: numW - 6 });
-  doc.text("DESCRIPTION", descX + 2, y + 6.5, { width: descW - 4 });
-  doc.text("QTY", qtyX, y + 6.5, { width: qtyW, align: "center" });
-  doc.text("UNIT", unitX, y + 6.5, { width: unitW - 8, align: "right" });
-  doc.text("TOTAL", totalX, y + 6.5, { width: totalW - 8, align: "right" });
-  y += 20;
+  doc.font(BOLD).fontSize(8).fillColor(GREY);
+  doc.text("ITEM", MARGIN, y, { width: numW });
+  doc.text("DESCRIPTION", descX + 2, y, { width: descW - 4 });
+  doc.text("QTY", qtyX, y, { width: qtyW, align: "center" });
+  doc.text(`UNIT PRICE (${d.currency})`, unitX, y, { width: unitW - 6, align: "right" });
+  doc.text(`TOTAL (${d.currency})`, totalX, y, { width: totalW - 6, align: "right" });
+  y += 13;
+  doc.moveTo(MARGIN, y).lineTo(MARGIN + CONTENT_W, y).lineWidth(1.6).strokeColor(ORANGE).stroke();
+  y += 6;
 
   d.items.forEach((it, i) => {
     doc.font(BODY).fontSize(9.5);
-    const h = Math.max(20, doc.heightOfString(it.description, { width: descW - 6 }) + 10);
+    const h = Math.max(18, doc.heightOfString(it.description, { width: descW - 6 }) + 9);
     if (y + h > PAGE_H - 150) {
       doc.addPage();
       (doc as unknown as { __onBreak?: () => void }).__onBreak?.();
       y = doc.y;
     }
-    doc.moveTo(MARGIN, y).lineTo(MARGIN + CONTENT_W, y).lineWidth(0.5).strokeColor(LIGHT).stroke();
-    doc.fillColor(GREY).font(BODY).fontSize(9.5).text(String(i + 1), MARGIN + 6, y + 5, { width: numW - 6 });
-    doc.fillColor(INK).text(it.description, descX + 2, y + 5, { width: descW - 4 });
-    doc.text(String(it.qty), qtyX, y + 5, { width: qtyW, align: "center" });
+    doc.fillColor(GREY).font(BODY).fontSize(9.5).text(String(i + 1), MARGIN, y + 2, { width: numW });
+    doc.fillColor(INK).font(BOLD).text(it.description, descX + 2, y + 2, { width: descW - 4 });
+    doc.font(BODY).text(String(it.qty), qtyX, y + 2, { width: qtyW, align: "center" });
     if (it.unitPrice > 0) {
-      doc.text(money(it.unitPrice), unitX, y + 5, { width: unitW - 8, align: "right" });
-      doc.font(BOLD).text(money(it.total), totalX, y + 5, { width: totalW - 8, align: "right" });
+      doc.text(fmt(it.unitPrice), unitX, y + 2, { width: unitW - 6, align: "right" });
+      doc.font(BOLD).text(fmt(it.total), totalX, y + 2, { width: totalW - 6, align: "right" });
     } else {
-      doc.fillColor("#B45309").font(BOLD).text("POA", unitX, y + 5, { width: unitW - 8, align: "right" });
-      doc.text("POA", totalX, y + 5, { width: totalW - 8, align: "right" });
+      doc.fillColor("#B45309").font(BOLD).text("POA", unitX, y + 2, { width: unitW - 6, align: "right" });
+      doc.text("POA", totalX, y + 2, { width: totalW - 6, align: "right" });
     }
     y += h;
+    doc.moveTo(MARGIN, y).lineTo(MARGIN + CONTENT_W, y).lineWidth(0.5).strokeColor(LIGHT).stroke();
   });
-  doc.moveTo(MARGIN, y).lineTo(MARGIN + CONTENT_W, y).lineWidth(0.5).strokeColor(LIGHT).stroke();
-  doc.y = y + 16;
+  doc.y = y + 14;
 
-  // Totals — right-aligned, ending in an orange "Total (incl. VAT)" bar (like the LV commercial)
-  const tW = 250, tX = MARGIN + CONTENT_W - tW, valW = 120;
+  // Totals — right-aligned plain rows, closed by an orange top rule + "Total" (the LV commercial)
+  const tW = 230, tX = MARGIN + CONTENT_W - tW, valW = 110;
   const totLine = (label: string, value: string) => {
     const yy = doc.y;
     doc.font(BODY).fontSize(9.5).fillColor(GREY).text(label, tX, yy, { width: tW - valW });
     doc.fillColor(INK).text(value, tX + tW - valW, yy, { width: valW, align: "right" });
-    doc.y = yy + 17;
+    doc.y = yy + 15;
   };
-  totLine("Total (excl. VAT)", money(d.totalExclVat));
+  totLine("Subtotal (excl. VAT)", money(d.totalExclVat));
   if (d.discountPct > 0) totLine(`Discount (${d.discountPct}%)`, `− ${money(d.discountAmount)}`);
   totLine(`VAT (${d.vatPct}%)`, money(d.vatAmount));
   const gy = doc.y + 2;
-  doc.roundedRect(tX, gy, tW, 26, 5).fill(ORANGE);
-  doc.fillColor("white").font(BOLD).fontSize(11).text("Total (incl. VAT)", tX + 12, gy + 8, { width: tW - valW - 12 });
-  doc.fillColor("white").text(money(d.totalInclVat), tX + tW - valW, gy + 8, { width: valW - 12, align: "right" });
+  doc.moveTo(tX, gy).lineTo(tX + tW, gy).lineWidth(2).strokeColor(ORANGE).stroke();
+  const ty = gy + 6;
+  doc.font(BOLD).fontSize(11).fillColor(INK).text(`Total (${d.currency})`, tX, ty, { width: tW - valW });
+  doc.fillColor(ORANGE_DK).text(money(d.totalInclVat), tX + tW - valW, ty, { width: valW, align: "right" });
   doc.fillColor(INK);
-  doc.y = gy + 26 + 14;
-
-  // Price note (the LV commercial's line)
-  doc.font(BODY).fontSize(8.5).fillColor(GREY)
-    .text("Prices are linked to the US Dollar exchange rate at the Central Bank until the date of receipt.",
-      MARGIN, doc.y, { width: CONTENT_W });
+  doc.y = ty + 20;
 }
 
 // Terms summary (Validity / Delivery / Payment / Warranty) — like the LV commercial.
@@ -343,7 +339,7 @@ function termsList(doc: PDFKit.PDFDocument, sections: LvTermSection[], ar: boole
     doc.font(ar ? AR : BODY).fontSize(9);
     const bh = doc.heightOfString(ar ? shapeAr(s.body) : s.body, { width: CONTENT_W });
     ensure(doc, th + bh + 12);
-    doc.font(ar ? AR_BOLD : BOLD).fontSize(10).fillColor(ORANGE_DK)
+    doc.font(ar ? AR_BOLD : BOLD).fontSize(10).fillColor(INK)
       .text(ar ? shapeAr(s.title) : s.title, MARGIN, doc.y, { width: CONTENT_W, align: ar ? "right" : "left", features: ar ? [] : undefined });
     doc.font(ar ? AR : BODY).fontSize(9).fillColor(INK)
       .text(ar ? shapeAr(s.body) : s.body, MARGIN, doc.y + 1, { width: CONTENT_W, align: ar ? "right" : "justify", features: ar ? [] : undefined });
