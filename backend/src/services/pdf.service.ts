@@ -110,10 +110,9 @@ export function generateOfferPdf(
 // ------------------------------------------------------------------ COVER
 
 function fmtCoverDate(iso: string): string {
+  // DD/MM/YYYY, matching the LV cover's date pill.
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
-  if (!m) return iso || "";
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${parseInt(m[3], 10)} ${months[parseInt(m[2], 10) - 1]} ${m[1]}`;
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso || "";
 }
 
 // The RMU cover mirrors the LV "Technical Offer" cover so both product lines hand
@@ -137,17 +136,19 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOff
   // Left brand spine (full height)
   doc.rect(0, 0, 10, PAGE_H).fill(CO);
 
-  // ---- Top row: logo (left) + date pill (right)
-  safeImage(doc, asset("logo.png"), LX, 40, { width: 150 });
+  // ---- Top row: horizontal logo (left) + date pill (right), like the LV cover
+  const logoTop = 34;
+  const logoW = 160; // logo-horizontal.png is 2:1 → ~80pt tall, matching the LV h-32
+  safeImage(doc, asset("logo-horizontal.png"), LX, logoTop, { width: logoW });
   const dateStr = fmtCoverDate(offer.offerDate || new Date(offer.createdAt).toISOString().slice(0, 10));
   if (dateStr) {
-    doc.font(BOLD).fontSize(9.5);
-    const dw = doc.widthOfString(dateStr);
-    const pillW = dw + 26;
+    doc.font(BOLD).fontSize(10);
+    const pillH = 26;
+    const pillW = doc.widthOfString(dateStr) + 32;
     const pillX = RX - pillW;
-    const pillY = 44;
-    doc.roundedRect(pillX, pillY, pillW, 22, 11).fill(CPILL);
-    doc.fillColor(CINK).text(dateStr, pillX, pillY + 6.5, { width: pillW, align: "center" });
+    const pillY = logoTop + logoW / 4 - pillH / 2; // centre the pill on the logo (logo height ≈ logoW/2)
+    doc.roundedRect(pillX, pillY, pillW, pillH, pillH / 2).fill(CPILL);
+    doc.fillColor(CINK).text(dateStr, pillX, pillY + 8, { width: pillW, align: "center" });
   }
 
   // ---- Heading: "Technical" / "Offer"

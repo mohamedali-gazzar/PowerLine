@@ -24,6 +24,14 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
+**RMU cover: the logo and date now match the LV cover.**
+
+- The RMU offer cover now uses the **same PowerLine logo** image as the LV cover (it was a
+  slightly different version before), and the **date** now shows as **DD/MM/YYYY** (e.g.
+  17/08/2026) in the same light-grey rounded pill — exactly like the LV cover.
+
+## 2026-08-17 · Mohamed's side · Claude
+
 **RMU cover: the Website / Facebook / LinkedIn icons are now the real logos, like the LV cover.**
 
 - The three round social icons at the bottom of the RMU offer cover were plain letters; they
