@@ -24,6 +24,14 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
+**RMU cover: the Website / Facebook / LinkedIn icons are now the real logos, like the LV cover.**
+
+- The three round social icons at the bottom of the RMU offer cover were plain letters; they
+  are now the proper **globe (website), Facebook, and LinkedIn** logos in the orange circles —
+  exactly like the LV cover. Their links are unchanged.
+
+## 2026-08-17 · Mohamed's side · Claude
+
 **RMU offer cover is now fully clickable — identical to the LV cover.**
 
 - On the RMU technical-offer **cover page**, everything is now a working link, exactly like

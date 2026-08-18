@@ -373,16 +373,35 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOff
   sepSeg();
   seg("info@powerline.com.eg", "mailto:info@powerline.com.eg");
 
-  const marks: [string, string][] = [
-    ["W", "https://powerlinei.com/"],
-    ["f", "https://www.facebook.com/Powerline.ABB"],
-    ["in", "https://www.linkedin.com/login/?session_redirect=%2Fcompany%2F9288669"],
+  // Website / Facebook / LinkedIn — the real glyphs (same SVG paths as the LV cover),
+  // drawn white inside the orange circle instead of plain letters.
+  const FB = "M279.14 288l14.22-92.66h-88.91v-60.13c0-25.35 12.42-49.84 52.24-49.84h40.42V6.26S260.43 0 225.36 0c-73.22 0-121.08 44.38-121.08 124.72v70.62H22.89V288h81.39v224h100.17V288z";
+  const LI = "M100.28 448H7.4V148.9h92.88zM53.79 108.1C24.09 108.1 0 83.5 0 53.8a53.79 53.79 0 0 1 107.58 0c0 29.7-24.1 54.3-53.79 54.3zM447.9 448h-92.68V302.4c0-34.7-.7-79.2-48.29-79.2-48.29 0-55.69 37.7-55.69 76.7V448h-92.78V148.9h89.08v40.8h1.3c12.4-23.5 42.69-48.3 87.88-48.3 94 0 111.28 61.9 111.28 142.3V448z";
+  const GLOBE_MERIDIAN = "M12 3c2.5 2.6 3.8 5.7 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z";
+  const socials: [string, "globe" | "fb" | "li"][] = [
+    ["https://powerlinei.com/", "globe"],
+    ["https://www.facebook.com/Powerline.ABB", "fb"],
+    ["https://www.linkedin.com/login/?session_redirect=%2Fcompany%2F9288669", "li"],
   ];
-  let sx = RX - marks.length * 26;
-  for (const [m, url] of marks) {
-    doc.circle(sx + 9, addrY + 4, 9).fill(CO);
-    doc.font(BOLD).fontSize(m.length > 1 ? 6.5 : 8).fillColor("white")
-      .text(m, sx, addrY + (m.length > 1 ? 1.5 : 0.5), { width: 18, align: "center" });
+  let sx = RX - socials.length * 26;
+  for (const [url, kind] of socials) {
+    const ccx = sx + 9, ccy = addrY + 4;
+    doc.circle(ccx, ccy, 9).fill(CO);
+    doc.save();
+    if (kind === "globe") {
+      doc.translate(ccx, ccy).scale(13 / 24).translate(-12, -12);
+      doc.lineWidth(2).lineCap("round").lineJoin("round");
+      doc.circle(12, 12, 9).stroke("white");
+      doc.moveTo(3, 12).lineTo(21, 12).stroke("white");
+      doc.path(GLOBE_MERIDIAN).stroke("white");
+    } else if (kind === "fb") {
+      doc.translate(ccx, ccy).scale(10 / 512).translate(-160, -256);
+      doc.path(FB).fill("white");
+    } else {
+      doc.translate(ccx, ccy).scale(9 / 512).translate(-224, -256);
+      doc.path(LI).fill("white");
+    }
+    doc.restore();
     doc.link(sx, addrY - 5, 18, 18, url);
     sx += 26;
   }
