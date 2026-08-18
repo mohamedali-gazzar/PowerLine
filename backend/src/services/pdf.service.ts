@@ -98,6 +98,10 @@ export function generateOfferPdf(
         doc.moveDown(0.6);
       }
       generalNotes(doc, g.generalNotes);
+      // Ring Main Unit Structure starts on its own page (page 1 = data + notes,
+      // page 2 = the cubicle structure).
+      doc.addPage();
+      onBreak();
       lineup(doc, g);
       pageFooters(doc);
       doc.end();

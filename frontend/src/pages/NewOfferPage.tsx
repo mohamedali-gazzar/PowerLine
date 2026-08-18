@@ -298,10 +298,12 @@ export default function NewOfferPage() {
       const payload = buildPayload();
       const rec = await ensureOffer(payload, JSON.stringify(payload));
       const jobs: { url: string; name: string; label: string }[] = [];
+      // Name exports like the LV section: "TO-<QTN> Rev 00" / "CO-<QTN> Rev 00".
+      const nameQtn = team.quotationNo.trim() || rec.offerNumber;
       if (outputs.includes("Technical"))
-        jobs.push({ url: api.pdfUrl(rec.id, true), name: `${rec.offerNumber}-Technical.pdf`, label: "Technical" });
+        jobs.push({ url: api.pdfUrl(rec.id, true), name: `TO-${nameQtn} Rev 00.pdf`, label: "Technical" });
       if (outputs.includes("Commercial"))
-        jobs.push({ url: api.commercialPdfUrl(rec.id, true), name: `${rec.offerNumber}-Commercial.pdf`, label: "Commercial" });
+        jobs.push({ url: api.commercialPdfUrl(rec.id, true), name: `CO-${nameQtn} Rev 00.pdf`, label: "Commercial" });
       jobs.forEach((j, i) => setTimeout(() => downloadFile(j.url, j.name), i * 700));
       setDone({ id: rec.id, offerNumber: rec.offerNumber, items: jobs.map((j) => j.label) });
     } catch (err) {

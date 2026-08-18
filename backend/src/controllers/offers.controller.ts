@@ -120,9 +120,11 @@ export async function getOfferPdf(req: Request, res: Response) {
     const generated = assembleOffer(toConfigInput(offer.rmu));
     const pdf = await generateOfferPdf(offer, generated);
     res.setHeader("Content-Type", "application/pdf");
+    // Name it like the LV section: "TO-<QTN> Rev 00.pdf".
+    const fileQtn = offer.quotationNo || offer.offerNumber;
     res.setHeader(
       "Content-Disposition",
-      `${req.query.dl ? "attachment" : "inline"}; filename="${offer.offerNumber}-${generated.panelCode}-technical.pdf"`
+      `${req.query.dl ? "attachment" : "inline"}; filename="TO-${fileQtn} Rev 00.pdf"`
     );
     res.send(pdf);
   } catch (err) {
@@ -144,9 +146,11 @@ export async function getCommercialPdf(req: Request, res: Response) {
     const data = buildCommercial(offer, generated, pricing, offerVatPct);
     const pdf = await generateCommercialPdf(data);
     res.setHeader("Content-Type", "application/pdf");
+    // Name it like the LV section: "CO-<QTN> Rev 00.pdf".
+    const fileQtn = offer.quotationNo || offer.offerNumber;
     res.setHeader(
       "Content-Disposition",
-      `${req.query.dl ? "attachment" : "inline"}; filename="${offer.offerNumber}-commercial.pdf"`
+      `${req.query.dl ? "attachment" : "inline"}; filename="CO-${fileQtn} Rev 00.pdf"`
     );
     res.send(pdf);
   } catch (err) {

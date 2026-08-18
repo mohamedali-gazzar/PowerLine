@@ -24,6 +24,17 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
+**RMU exports: LV-style file names, and the technical PDF is re-paged.**
+
+- **File names now match the LV section.** Downloading an RMU offer now saves as
+  **`TO-QTN-26-XXXX Rev 00.pdf`** (technical) and **`CO-QTN-26-XXXX Rev 00.pdf`** (commercial),
+  using the offer's QTN number — instead of the old `PL-2026-XXXX-Technical.pdf`.
+- **Technical PDF re-paged:** page 1 (after the cover) now carries **General Data / Type of
+  apparatus, Electrical Data and General Notes**; the **Ring Main Unit Structure** moves to its
+  own page 2.
+
+## 2026-08-17 · Mohamed's side · Claude
+
 **RMU cover: the logo and date now match the LV cover.**
 
 - The RMU offer cover now uses the **same PowerLine logo** image as the LV cover (it was a
