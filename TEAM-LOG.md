@@ -22,6 +22,21 @@ closed off.
 
 <!-- NEW ENTRIES GO HERE -->
 
+## 2026-08-18 · Mohamed's side · Claude
+
+**RMU Commercial Offer now matches the LV Commercial Offer as the standard template.**
+
+- The RMU **Commercial Offer** now follows the LV Commercial Offer exactly: same cover, same
+  orange pricing table (# / Description / Qty / Unit / Total), same right-aligned totals block
+  ending in the orange "Total (incl. VAT)" bar, and the same short Terms summary
+  (Validity / Delivery / Payment / Warranty).
+- The **Terms & Conditions** are now the company's standard LV terms — the same 13 sections in
+  **English and Arabic** — instead of the old RMU-only wording. The only change is the delivery
+  line, which reads "Ring Main Units: as stated in this commercial offer."
+- Result: an RMU Commercial Offer and an LV Commercial Offer now look like one family of
+  documents, so they can't drift apart. Verified from a real generated offer (5 pages: cover,
+  main offer + terms summary, English T&C, Arabic T&C, contacts).
+
 ## 2026-08-17 · Mohamed's side · Claude
 
 **RMU offer covers: the Commercial cover now matches the Technical/LV cover, and both show the QTN number.**
