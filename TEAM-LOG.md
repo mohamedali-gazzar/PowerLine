@@ -24,6 +24,18 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
+**RMU offer cover is now fully clickable — identical to the LV cover.**
+
+- On the RMU technical-offer **cover page**, everything is now a working link, exactly like
+  the LV cover: the **product icons** open their pages on powerlinei.com, the **phone numbers**
+  open to call, the **e-mails** open the mail app, the **address** opens Google Maps, and the
+  **ISO 9001 / 14001 / 45001 + ABB CERTIFIED** badges open the certificate files (plus the
+  Website / Facebook / LinkedIn marks). Same links and URLs as the LV cover.
+- Verified on a real offer built through the actual system (21 links, all correct). The two
+  covers are now identical in look and behaviour.
+
+## 2026-08-17 · Mohamed's side · Claude
+
 **RMU: the QTN number now fills itself in, and the offer cover's product icons now match the LV cover exactly.**
 
 - **QTN auto-generated:** opening a New RMU Offer now pre-fills the **QTN number** with the

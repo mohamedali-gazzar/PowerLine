@@ -197,18 +197,24 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOff
     doc.font(BOLD).fontSize(9.5).fillColor(CINK).text(`${c.role}:`, LX, cy, { width: 56, lineBreak: false });
     doc.font(BODY).fontSize(9.5).fillColor(CMUT)
       .text(c.name || "", LX + 58, cy, { width: 132, lineBreak: false, ellipsis: true });
-    if (c.phone) doc.fillColor(CMUT).text(c.phone, LX + 196, cy, { width: 118, lineBreak: false, ellipsis: true });
-    if (c.email) doc.fillColor(CMUT).text(c.email, LX + 318, cy, { width: RX - (LX + 318), lineBreak: false, ellipsis: true });
+    if (c.phone) {
+      doc.fillColor(CMUT).text(c.phone, LX + 196, cy, { width: 118, lineBreak: false, ellipsis: true });
+      doc.link(LX + 196, cy - 1, 118, 12, `tel:${c.phone.replace(/[^\d+]/g, "")}`); // call, like the LV cover
+    }
+    if (c.email) {
+      doc.fillColor(CMUT).text(c.email, LX + 318, cy, { width: RX - (LX + 318), lineBreak: false, ellipsis: true });
+      doc.link(LX + 318, cy - 1, RX - (LX + 318), 12, `mailto:${c.email}`); // opens the mail app
+    }
     cy += 16;
   }
 
   // ---- Powerline product range (5 hairline-ruled columns, matching the LV cover)
-  const RANGE: [string, string[]][] = [
-    ["LV Enclosures", ["PLP MAX", "PLP CORE", "PLP MINI"]],
-    ["Transformers", ["PDTR"]],
-    ["Secondary Switchgear", ["PRAL", "PSEC", "AEGIS PLUS"]],
-    ["Primary Switchgear", ["PLGEAR"]],
-    ["Kiosk", ["PCSS"]],
+  const RANGE: [string, string[], string][] = [
+    ["LV Enclosures", ["PLP MAX", "PLP CORE", "PLP MINI"], "https://www.powerlinei.com/low-voltage"],
+    ["Transformers", ["PDTR"], "https://www.powerlinei.com/products/dry-type-transformers"],
+    ["Secondary Switchgear", ["PRAL", "PSEC", "AEGIS PLUS"], "https://www.powerlinei.com/secondary-switchgear"],
+    ["Primary Switchgear", ["PLGEAR"], "https://www.powerlinei.com/primary-switchgear"],
+    ["Kiosk", ["PCSS"], "https://www.powerlinei.com/products/pcss"],
   ];
   const stripTop = Math.max(cy + 42, 486);
   const colW = CW / 5;
@@ -305,7 +311,7 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOff
     }
     doc.restore();
   };
-  RANGE.forEach(([title, items], i) => {
+  RANGE.forEach(([title, items, href], i) => {
     const x = LX + i * colW;
     if (i > 0) {
       doc.moveTo(x, stripTop).lineTo(x, stripTop + 122).lineWidth(0.7).strokeColor(CLINE).stroke();
@@ -313,6 +319,7 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOff
     const cx = x + (i === 0 ? 0 : 12);
     const cwt = colW - (i === 0 ? 12 : 24);
     drawIcon(i, cx, stripTop);
+    doc.link(cx, stripTop, cwt, 60, href); // icon + title → product page, like the LV cover
     // Title box, bottom-aligned so every column's rule + items sit at one height.
     const twoLine = title.length > 14;
     doc.font(BOLD).fontSize(7.5).fillColor(CCHR)
@@ -331,32 +338,52 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOff
   const footRuleY = PAGE_H - 118;
   doc.rect(LX, footRuleY, PAGE_W - LX, 3).fill(CO); // bleeds to the right edge
 
-  const pills: [string, string, string][] = [
-    ["ISO 9001", CPILL, CINK],
-    ["ISO 14001", CPILL, CINK],
-    ["ISO 45001", CPILL, CINK],
-    ["ABB CERTIFIED", "#FEF3ED", CO],
+  // ISO / ABB pills, each linking to its certificate (same URLs as the LV cover)
+  const pills: [string, string, string, string][] = [
+    ["ISO 9001", CPILL, CINK, "https://drive.google.com/file/d/1D2GThbsl9FDr7rnhdFl7jsnWKXyOc8KY/view"],
+    ["ISO 14001", CPILL, CINK, "https://drive.google.com/file/d/1yqz35dDFJDZ18X2fURFwufHtzg7c50rZ/view"],
+    ["ISO 45001", CPILL, CINK, "https://drive.google.com/file/d/1nzbbwg3CLKqUkYY6RBXhcFTI0PJpToMG/view"],
+    ["ABB CERTIFIED", "#FEF3ED", CO, "https://drive.google.com/file/d/16I86eVMca56UUUiMsLusKEb1G4R6iYD6/view"],
   ];
   const pillY = footRuleY + 16;
   let px = LX;
-  for (const [label, bg, fg] of pills) {
+  for (const [label, bg, fg, url] of pills) {
     doc.font(BOLD).fontSize(9);
     const w = doc.widthOfString(label) + 24;
     doc.roundedRect(px, pillY, w, 22, 11).fill(bg);
     doc.fillColor(fg).text(label, px, pillY + 6.5, { width: w, align: "center" });
+    doc.link(px, pillY, w, 22, url);
     px += w + 10;
   }
 
+  // Address · phone · email — three separate links (map / call / mail), like the LV cover
   const addrY = pillY + 40;
-  doc.font(BODY).fontSize(9.5).fillColor(CMUT)
-    .text("20 Ammar Ibn Yasser, Heliopolis, Cairo  ·  +2 02262215022  ·  info@powerline.com.eg",
-      LX, addrY, { width: CW - 110, lineBreak: false });
-  const marks = ["W", "f", "in"];
+  doc.font(BODY).fontSize(9.5).fillColor(CMUT);
+  let fx = LX;
+  const seg = (txt: string, url: string) => {
+    const w = doc.widthOfString(txt);
+    doc.fillColor(CMUT).text(txt, fx, addrY, { lineBreak: false });
+    doc.link(fx, addrY - 1, w, 12, url);
+    fx += w;
+  };
+  const sepSeg = () => { const s = "  ·  "; doc.fillColor(CMUT).text(s, fx, addrY, { lineBreak: false }); fx += doc.widthOfString(s); };
+  seg("20 Ammar Ibn Yasser, Heliopolis, Cairo", "https://maps.app.goo.gl/kqZBxFo286ps7qBP8");
+  sepSeg();
+  seg("+2 02262215022", "tel:+202262215022");
+  sepSeg();
+  seg("info@powerline.com.eg", "mailto:info@powerline.com.eg");
+
+  const marks: [string, string][] = [
+    ["W", "https://powerlinei.com/"],
+    ["f", "https://www.facebook.com/Powerline.ABB"],
+    ["in", "https://www.linkedin.com/login/?session_redirect=%2Fcompany%2F9288669"],
+  ];
   let sx = RX - marks.length * 26;
-  for (const m of marks) {
+  for (const [m, url] of marks) {
     doc.circle(sx + 9, addrY + 4, 9).fill(CO);
     doc.font(BOLD).fontSize(m.length > 1 ? 6.5 : 8).fillColor("white")
       .text(m, sx, addrY + (m.length > 1 ? 1.5 : 0.5), { width: 18, align: "center" });
+    doc.link(sx, addrY - 5, 18, 18, url);
     sx += 26;
   }
 
