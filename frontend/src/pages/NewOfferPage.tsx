@@ -72,7 +72,7 @@ export default function NewOfferPage() {
   const [priceTouched, setPriceTouched] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [discountPct, setDiscountPct] = useState(0);
-  const [validityDays, setValidityDays] = useState(7);
+  const [validityDays, setValidityDays] = useState(3);
   const [deliveryWeeks, setDeliveryWeeks] = useState(12);
   const [paymentTerms, setPaymentTerms] = useState("50% advance, 50% before delivery");
   const [warrantyMonths, setWarrantyMonths] = useState(12);

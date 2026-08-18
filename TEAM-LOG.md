@@ -24,6 +24,15 @@ closed off.
 
 ## 2026-08-18 · Mohamed's side · Claude
 
+**RMU Commercial Offer: roomier price-table rows, and validity now defaults to 3 days.**
+
+- The item rows in the RMU commercial pricing table now have a bit more vertical space, so a
+  multi-line item reads more comfortably.
+- New RMU offers now default to a validity of **3 days** (was 7), matching the standard terms wording.
+  It's still editable per offer, and existing offers keep whatever validity they were saved with.
+
+## 2026-08-18 · Mohamed's side · Claude
+
 **RMU Commercial Offer: pricing table + terms now match the LV Commercial Offer's exact look.**
 
 - Comparing the two commercials side by side showed the RMU pricing table had been styled with

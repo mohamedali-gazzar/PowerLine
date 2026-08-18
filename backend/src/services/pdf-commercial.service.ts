@@ -266,21 +266,21 @@ function mainOffer(doc: PDFKit.PDFDocument, d: CommercialData) {
 
   d.items.forEach((it, i) => {
     doc.font(BODY).fontSize(9.5);
-    const h = Math.max(18, doc.heightOfString(it.description, { width: descW - 6 }) + 9);
+    const h = Math.max(28, doc.heightOfString(it.description, { width: descW - 6 }) + 18);
     if (y + h > PAGE_H - 150) {
       doc.addPage();
       (doc as unknown as { __onBreak?: () => void }).__onBreak?.();
       y = doc.y;
     }
-    doc.fillColor(GREY).font(BODY).fontSize(9.5).text(String(i + 1), MARGIN, y + 2, { width: numW });
-    doc.fillColor(INK).font(BOLD).text(it.description, descX + 2, y + 2, { width: descW - 4 });
-    doc.font(BODY).text(String(it.qty), qtyX, y + 2, { width: qtyW, align: "center" });
+    doc.fillColor(GREY).font(BODY).fontSize(9.5).text(String(i + 1), MARGIN, y + 6, { width: numW });
+    doc.fillColor(INK).font(BOLD).text(it.description, descX + 2, y + 6, { width: descW - 4 });
+    doc.font(BODY).text(String(it.qty), qtyX, y + 6, { width: qtyW, align: "center" });
     if (it.unitPrice > 0) {
-      doc.text(fmt(it.unitPrice), unitX, y + 2, { width: unitW - 6, align: "right" });
-      doc.font(BOLD).text(fmt(it.total), totalX, y + 2, { width: totalW - 6, align: "right" });
+      doc.text(fmt(it.unitPrice), unitX, y + 6, { width: unitW - 6, align: "right" });
+      doc.font(BOLD).text(fmt(it.total), totalX, y + 6, { width: totalW - 6, align: "right" });
     } else {
-      doc.fillColor("#B45309").font(BOLD).text("POA", unitX, y + 2, { width: unitW - 6, align: "right" });
-      doc.text("POA", totalX, y + 2, { width: totalW - 6, align: "right" });
+      doc.fillColor("#B45309").font(BOLD).text("POA", unitX, y + 6, { width: unitW - 6, align: "right" });
+      doc.text("POA", totalX, y + 6, { width: totalW - 6, align: "right" });
     }
     y += h;
     doc.moveTo(MARGIN, y).lineTo(MARGIN + CONTENT_W, y).lineWidth(0.5).strokeColor(LIGHT).stroke();
