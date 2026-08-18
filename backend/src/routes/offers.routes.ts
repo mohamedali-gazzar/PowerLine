@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   postOffer,
   postPreview,
+  getNextQtn,
   getOffers,
   getOfferById,
   deleteOfferById,
@@ -15,6 +16,7 @@ const router = Router();
 router.get("/", getOffers);
 router.post("/", postOffer);
 router.post("/preview", postPreview);
+router.get("/next-qtn", getNextQtn); // must precede "/:id"
 router.get("/:id", getOfferById);
 router.delete("/:id", deleteOfferById);
 router.get("/:id/pdf", getOfferPdf);

@@ -53,6 +53,28 @@ export function postPreview(req: Request, res: Response) {
   }
 }
 
+// GET /api/offers/next-qtn — suggest the next RMU quotation number (QTN-YY-####),
+// one past the highest already used on an RMU offer this year. Suggestion only
+// (not reserved), mirroring the LV next-number behaviour.
+export async function getNextQtn(_req: Request, res: Response) {
+  try {
+    const yy = String(new Date().getFullYear() % 100).padStart(2, "0");
+    const prefix = `QTN-${yy}-`;
+    const rows = await prisma.offer.findMany({
+      where: { quotationNo: { startsWith: prefix } },
+      select: { quotationNo: true },
+    });
+    let max = 0;
+    for (const r of rows) {
+      const m = /(\d+)\s*$/.exec(r.quotationNo ?? "");
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    res.json({ suggestion: `${prefix}${String(max + 1).padStart(4, "0")}` });
+  } catch (err) {
+    handleError(err, res);
+  }
+}
+
 export async function getOffers(req: Request, res: Response) {
   try {
     res.json(await listOffers(req.userId));

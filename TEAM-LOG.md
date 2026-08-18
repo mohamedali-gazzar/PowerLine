@@ -24,6 +24,18 @@ closed off.
 
 ## 2026-08-17 · Mohamed's side · Claude
 
+**RMU: the QTN number now fills itself in, and the offer cover's product icons now match the LV cover exactly.**
+
+- **QTN auto-generated:** opening a New RMU Offer now pre-fills the **QTN number** with the
+  next number in the RMU series (QTN-YY-####). It's still editable, and still required. If you
+  came in from the New-QTN dialog with a number, that number is kept.
+- **Cover icons:** the five product-range icons on the RMU technical-offer **cover page** were
+  redrawn to look **exactly like the LV offer cover** (the control panel, transformer, secondary
+  and primary switchgear, and kiosk) — same style and colours. Only the cover picture changed;
+  nothing about the offer's content or numbers.
+
+## 2026-08-17 · Mohamed's side · Claude
+
 **Project name, Customer and QTN number are now required — in both LV and RMU. Plus the RMU "Panel" tab is renamed "RMU".**
 
 - On the **Project tab** of both the **LV quotation** and the **RMU offer**, the **Project

@@ -123,6 +123,19 @@ export default function NewOfferPage() {
   const removeEngineer = (name: string) =>
     setStaff({ ...staff, supportEngineers: staff.supportEngineers.filter((x) => x.name !== name) });
 
+  // Auto-generate the QTN number when the form opens without one (i.e. it wasn't
+  // seeded from the New-QTN dialog's ?qtn=…). Suggestion only — still editable, and
+  // still required before generating.
+  useEffect(() => {
+    if (team.quotationNo.trim()) return;
+    let alive = true;
+    api.nextRmuQtn()
+      .then((r) => { if (alive && r?.suggestion) upTeam({ quotationNo: r.suggestion }); })
+      .catch(() => { /* offline — leave it blank for the user to fill */ });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Keep the brand to one we actually have data for (PSEC: ABB/Murge, PRAL: ABB)
   // — reset to ABB if the current brand isn't available for the family.
   useEffect(() => {

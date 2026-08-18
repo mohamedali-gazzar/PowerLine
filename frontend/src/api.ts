@@ -490,6 +490,8 @@ export const api = {
   deleteOffer: (id: string) => request<void>(`/offers/${id}`, { method: "DELETE" }),
   previewConfig: (cfg: RmuConfigInput) =>
     request<GeneratedOffer>("/offers/preview", { method: "POST", body: JSON.stringify(cfg) }),
+  /** Suggested next RMU quotation number (QTN-YY-####). */
+  nextRmuQtn: () => request<{ suggestion: string }>("/offers/next-qtn"),
   // PDFs open as plain browser navigations (<a href> / anchor download), which
   // cannot send the Authorization header — so the token travels as ?t=. The
   // backend accepts it for GET only, and serves the file only to the owner.

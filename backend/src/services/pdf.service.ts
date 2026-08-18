@@ -212,45 +212,103 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOff
   ];
   const stripTop = Math.max(cy + 42, 486);
   const colW = CW / 5;
-  // Simple monoline glyphs standing in for the React cover's per-category SVGs —
-  // charcoal outlines with an orange accent, so the five columns read as distinct
-  // product families rather than five identical tiles.
+  // Faithful vector reproductions of the LV cover's per-category SVG icons (PDFKit
+  // can't render SVG). Each is authored in the source 32×32 viewBox and scaled into
+  // an S-px box, so it matches the LV cover 1:1 — charcoal line-art (rgba(88,88,89,·))
+  // with the orange accents and, on the enclosure, the real green/red/yellow lamps.
   const drawIcon = (kind: number, x: number, y: number) => {
-    doc.lineWidth(1.1).strokeColor(CCHR);
+    const S = 28;
+    const CH = "#585859"; // charcoal
+    const OR = "#F16722"; // brand orange
+    const fill = (color: string, a: number, build: () => void) => {
+      doc.save(); doc.fillOpacity(a); build(); doc.fill(color); doc.restore();
+    };
+    const line = (color: string, w: number, build: () => void) => {
+      doc.save(); doc.lineWidth(w).lineCap("round").lineJoin("round"); build(); doc.stroke(color); doc.restore();
+    };
+    const rr = (X: number, Y: number, W: number, H: number, R: number) =>
+      R > 0 ? doc.roundedRect(X, Y, W, H, R) : doc.rect(X, Y, W, H);
+
+    doc.save();
+    doc.translate(x, y).scale(S / 32);
+
     if (kind === 0) {
-      // LV Enclosures — control panel: two meters, a rotary selector
-      doc.roundedRect(x + 1, y, 16, 18, 2).stroke();
-      doc.rect(x + 3.5, y + 3.5, 4, 3).fill(CCHR);
-      doc.rect(x + 10, y + 3.5, 4, 3).fill(CCHR);
-      doc.circle(x + 9, y + 13, 2).fill(CO);
+      // LV Enclosures — control-panel door: three meters, three pilot lights, rotary
+      fill(CH, 0.06, () => rr(5.5, 2.5, 21, 27, 1.2));
+      line(CH, 1.25, () => rr(5.5, 2.5, 21, 27, 1.2));
+      for (const [mx, tip] of [[8, -1.15], [13.5, 0], [19, 1.15]] as [number, number][]) {
+        fill(CH, 0.5, () => rr(mx, 6.9, 5, 4.2, 0.5));
+        line("#ffffff", 0.9, () => doc.moveTo(mx + 2.5, 10.2).lineTo(mx + 2.5 + tip, 8.3));
+      }
+      ["#2FA84F", "#D64545", "#E8B93A"].forEach((c, i) => fill(c, 1, () => doc.circle(11 + i * 5, 15.4, 1.5)));
+      fill(OR, 1, () => doc.circle(16, 21.9, 2.5));
+      line("#ffffff", 1.1, () => doc.moveTo(16, 21.9).lineTo(16, 20.2));
     } else if (kind === 1) {
-      // Transformers — clamping beam, three cast-resin coil limbs, base
-      doc.rect(x + 1, y + 1, 16, 2.4).fill(CCHR);
-      [3, 8, 13].forEach((dx) => doc.roundedRect(x + dx - 1.4, y + 5, 2.8, 9.5, 1.2).fill(CO));
-      doc.rect(x + 1, y + 15.6, 16, 2.4).fill(CCHR);
+      // Transformers — clamping beam, three cast-resin coils, HV delta, base
+      doc.save(); doc.translate(-2.865, -2.57).scale(1.179);
+      fill(CH, 0.55, () => rr(3.6, 4.3, 24.8, 2.9, 0.5));
+      fill("#ffffff", 0.9, () => rr(12.4, 5.1, 7.2, 1.3, 0.25));
+      for (const cx of [5.4, 13.2, 21]) {
+        fill(OR, 1, () => rr(cx, 8.1, 5.6, 14.8, 2.4));
+        fill(CH, 0.7, () => rr(cx + 1.7, 7.2, 2.2, 1.5, 0.3));
+      }
+      line(CH, 1.19, () => { doc.moveTo(8.2, 11).lineTo(16, 20); doc.moveTo(16, 11).lineTo(23.8, 20); doc.moveTo(23.8, 11).lineTo(8.2, 20); });
+      for (const cx of [8.2, 16, 23.8]) for (const cy of [11, 20]) fill(CH, 0.9, () => doc.circle(cx, cy, 1));
+      fill(CH, 0.55, () => rr(3.6, 23, 24.8, 2.7, 0.5));
+      fill(CH, 0.35, () => rr(6.6, 25.7, 4.4, 1.5, 0.3));
+      fill(CH, 0.35, () => rr(21, 25.7, 4.4, 1.5, 0.3));
+      doc.restore();
     } else if (kind === 2) {
-      // Secondary Switchgear — cell with an open switch blade
-      doc.roundedRect(x + 1, y, 16, 18, 2).stroke();
-      doc.moveTo(x + 5, y + 13).lineTo(x + 12, y + 6).stroke();
-      doc.circle(x + 5, y + 13, 1.4).fill(CO);
-      doc.circle(x + 12, y + 6, 1.4).fill(CCHR);
+      // Secondary Switchgear — three cubicles with the signature orange mimic band
+      doc.save(); doc.translate(-1.28, -1.172).scale(1.08);
+      fill(CH, 0.06, () => rr(4.2, 3.4, 23.6, 25, 1));
+      line(CH, 1.157, () => rr(4.2, 3.4, 23.6, 25, 1));
+      for (const cx of [8.13, 16, 23.87]) fill(CH, 0.5, () => rr(cx - 1.7, 5.6, 3.4, 2.7, 0.4));
+      fill(OR, 1, () => rr(4.2, 10.6, 23.6, 5.6, 0));
+      for (const cx of [8.13, 16, 23.87]) {
+        line("#ffffff", 0.787, () => doc.circle(cx, 12.6, 0.85));
+        line("#ffffff", 0.787, () => doc.moveTo(cx, 13.45).lineTo(cx, 14.9));
+      }
+      line(CH, 1.157, () => doc.moveTo(12.07, 16.2).lineTo(12.07, 26.6));
+      line(CH, 1.157, () => doc.moveTo(19.93, 16.2).lineTo(19.93, 26.6));
+      for (const cx of [8.13, 16, 23.87]) fill(CH, 0.55, () => rr(cx - 1.5, 17.6, 3, 1.7, 0.3));
+      fill(CH, 0.5, () => rr(4.2, 26.6, 23.6, 1.8, 0.3));
+      doc.restore();
     } else if (kind === 3) {
-      // Primary Switchgear — tall cabinet with a breaker
-      doc.roundedRect(x + 2, y, 14, 18, 2).stroke();
-      doc.moveTo(x + 2, y + 9).lineTo(x + 16, y + 9).stroke();
-      doc.rect(x + 5, y + 11.5, 8, 4).fill(CO);
+      // Primary Switchgear — relay row, dark control plate + breaker, cable box
+      fill(CH, 0.06, () => rr(5.5, 2.5, 21, 27, 1.2));
+      line(CH, 1.25, () => rr(5.5, 2.5, 21, 27, 1.2));
+      fill(CH, 0.12, () => rr(7.6, 4.6, 16.8, 5, 0.7));
+      line(CH, 1.25, () => rr(7.6, 4.6, 16.8, 5, 0.7));
+      for (const rx of [9, 13.8, 18.6]) fill(OR, 1, () => rr(rx, 6.1, 3.4, 2, 0.4));
+      fill(CH, 0.82, () => rr(8.6, 12, 14.8, 9, 0.8));
+      line("#ffffff", 1, () => doc.circle(16, 15.4, 1.5));
+      line("#ffffff", 1, () => doc.moveTo(16, 16.9).lineTo(16, 18.9));
+      fill(CH, 0.12, () => rr(7.6, 23.4, 16.8, 4.6, 0.7));
+      line(CH, 1.25, () => rr(7.6, 23.4, 16.8, 4.6, 0.7));
+      fill(CH, 0.45, () => rr(13.6, 24.9, 4.8, 1.8, 0.3));
     } else {
-      // Kiosk — housed substation with a roof and a door
-      doc.moveTo(x + 1, y + 6).lineTo(x + 9, y).lineTo(x + 17, y + 6).stroke();
-      doc.roundedRect(x + 2.5, y + 6, 13, 12, 1.5).stroke();
-      doc.rect(x + 7, y + 11, 4, 7).fill(CO);
+      // Kiosk (PCSS) — gabled roof + orange nameplate, double doors, plinth
+      doc.save(); doc.translate(-2.383, -2.785).scale(1.149);
+      doc.save(); doc.fillOpacity(0.12); doc.lineWidth(1.088).lineCap("round").lineJoin("round");
+      doc.moveTo(3.8, 10.6).lineTo(16, 4.6).lineTo(28.2, 10.6).closePath();
+      doc.fillAndStroke(CH, CH); doc.restore();
+      fill(OR, 1, () => rr(12.6, 7.6, 6.8, 2.1, 0.35));
+      fill(CH, 0.06, () => rr(5.4, 10.6, 21.2, 15.2, 0.6));
+      line(CH, 1.088, () => rr(5.4, 10.6, 21.2, 15.2, 0.6));
+      line(CH, 1.088, () => doc.moveTo(16, 10.6).lineTo(16, 25.8));
+      fill(CH, 0.6, () => rr(15.2, 16.6, 1.6, 3, 0.4));
+      line(CH, 0.87, () => doc.moveTo(14.6, 13.4).lineTo(17.4, 13.4));
+      line(CH, 0.87, () => doc.moveTo(14.6, 22.6).lineTo(17.4, 22.6));
+      fill(CH, 0.5, () => rr(4.6, 25.8, 22.8, 2.3, 0.4));
+      doc.restore();
     }
-    doc.lineWidth(1);
+    doc.restore();
   };
   RANGE.forEach(([title, items], i) => {
     const x = LX + i * colW;
     if (i > 0) {
-      doc.moveTo(x, stripTop).lineTo(x, stripTop + 112).lineWidth(0.7).strokeColor(CLINE).stroke();
+      doc.moveTo(x, stripTop).lineTo(x, stripTop + 122).lineWidth(0.7).strokeColor(CLINE).stroke();
     }
     const cx = x + (i === 0 ? 0 : 12);
     const cwt = colW - (i === 0 ? 12 : 24);
@@ -258,11 +316,11 @@ function coverPage(doc: PDFKit.PDFDocument, offer: OfferRecord, _g: GeneratedOff
     // Title box, bottom-aligned so every column's rule + items sit at one height.
     const twoLine = title.length > 14;
     doc.font(BOLD).fontSize(7.5).fillColor(CCHR)
-      .text(title.toUpperCase(), cx, twoLine ? stripTop + 28 : stripTop + 39, {
+      .text(title.toUpperCase(), cx, twoLine ? stripTop + 34 : stripTop + 45, {
         width: cwt, characterSpacing: 0.6, lineGap: 1,
       });
-    doc.roundedRect(cx, stripTop + 56, 21, 2, 1).fill(CO);
-    let iy = stripTop + 64;
+    doc.roundedRect(cx, stripTop + 63, 21, 2, 1).fill(CO);
+    let iy = stripTop + 71;
     for (const it of items) {
       doc.font(BODY).fontSize(9).fillColor(CCHR).text(it, cx, iy, { width: cwt, lineBreak: false });
       iy += 13;
