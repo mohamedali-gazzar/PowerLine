@@ -1038,10 +1038,12 @@ export default function LvConfiguratorPage() {
           p.sizingMode = "cells";
           p.cellConfig = { type: cellType as CellType, depth, thickness: "1.5", ip, rows };
         } else if (fam) {
+          const isDouble = rec.layout === "Double";
           p.sizingMode = "panels";
-          p.panelsSizing = { ...p.panelsSizing, family: fam, layout: rec.layout === "Double" ? "Double" : "Single" };
+          p.panelsSizing = { ...p.panelsSizing, family: fam, layout: isDouble ? "Double" : "Single" };
           const item = enclosureItem(fam, rec.enclosureSize);
-          if (item) p.panelItems = [item];
+          // Double layout has a second enclosure slot — mirror the first box into it.
+          if (item) p.panelItems = isDouble ? [item, { ...item, id: uid(), slot: 2 }] : [item];
         }
         // Main-busbar copper from the Copper Tool sheet (cell panels) — sets the copper
         // lengths and the resulting busbar weight.

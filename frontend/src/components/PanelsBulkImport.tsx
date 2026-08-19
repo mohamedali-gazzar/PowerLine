@@ -246,7 +246,12 @@ function parseBlock(block: Row[], globalRefCol: number): ParsedPanel {
         fields.cellDepth = +dm[2];
         if (dm[3]) fields.cellIp = dm[3].toUpperCase();
       }
-      if (/^(c\.?c|cell|sides)/i.test(s) && /(x\s*\d{2,3}|_\d{2,3})\.?\s*$/i.test(s)) {
+      // Cell rows come two ways: Pro-E names ("Cell 60 x 70.", "C.C x 70.", "Sides_70.")
+      // and dimension names for PLP/IS2 ("2000x1000x700", "40x60"). The dimension form is
+      // only treated as a cell on a cell-type panel, so it never grabs an enclosure box.
+      const named = /^(c\.?c|cell|l?sides)/i.test(s) && /[x_]\s*\d/i.test(s);
+      const dimCell = !!fields.cellType && /^\d{2,4}\s*x\s*\d{2,4}(\s*x\s*\d{2,4})?\.?$/i.test(s);
+      if (named || dimCell) {
         const q = toNum(rr[c + 1]);
         if (q > 0) cells.push({ desc: s, qty: q });
       }
@@ -539,10 +544,12 @@ export default function PanelsBulkImport({ onImportPanels, knownComponentRefs = 
                   <div className="w-16 border-l border-white/40 px-3 py-1.5 text-center">{f.quantity ?? ""}</div>
                 </div>
                 {/* sizing summary — panel type · box size · layout (the tool's top-left enclosure) */}
-                {(f.panelType || f.enclosureSize || f.layout) && (
+                {(f.panelType || f.enclosureSize || f.layout || f.cellType) && (
                   <div className="border-b px-3 py-1.5 text-[12px]" style={{ borderColor: BORDER, background: "#faf9f7" }}>
                     <span className="font-bold" style={{ color: TRED }}>Sizing: </span>
-                    <span style={{ color: INK }}>{[f.panelType, f.enclosureSize, f.layout].filter(Boolean).join("  ·  ") || "—"}</span>
+                    <span style={{ color: INK }}>{(f.cellType
+                      ? [`${f.cellType} cells`, f.cellDepth ? `${f.cellDepth} cm` : "", f.layout]
+                      : [f.panelType, f.enclosureSize, f.layout]).filter(Boolean).join("  ·  ") || "—"}</span>
                   </div>
                 )}
                 {/* spec grid */}

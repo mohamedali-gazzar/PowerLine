@@ -24,6 +24,18 @@ closed off.
 
 ## 2026-08-19 · Mohamed's side · Claude
 
+**Panel import: PLP/IS2 cell quantities now import, and double panels get their second size.**
+
+- **Cell quantities for PLP/IS2**: those cells are named by their size ("2000x1000x700"), not
+  "Cell …", so the import was leaving their quantities blank. It now reads size-named cells too, so
+  a PLP panel comes in with the right cell counts (and its busbar copper from the Copper Tool).
+- **Double panels**: the second enclosure slot was empty on import. It now mirrors the first box
+  into the second slot, so a double panel imports with both sides sized.
+- Small polish: the preview's "Sizing" line shows cell panels as e.g. "PLP cells · 70 cm · Single"
+  instead of a stray box size.
+
+## 2026-08-19 · Mohamed's side · Claude
+
 **Panel import: the enclosure SIZE is now picked for Local (and SR-Basic) panels.**
 
 - The import was leaving the Sizing box empty for "Local (Sheet Metal)" panels because those box
