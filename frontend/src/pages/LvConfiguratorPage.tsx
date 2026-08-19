@@ -61,6 +61,7 @@ import {
 } from "../lv/copper";
 import { panelPoles, POLE_CM, POLE_KINDS, GROUP_LABEL, KIND_LABEL, type PoleGroup, type PoleKind } from "../lv/poles";
 import { stdPanel, applyStdPanel, STD_EDMS_KVA } from "../lv/standardEdms";
+import { stdAts, applyStdAts, STD_ATS_RATINGS, atsBreakersFor, type StdAtsVariant } from "../lv/standardAtsEdms";
 
 type Tab = "project" | "pricing" | "specs" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "summary";
 const TABS: Tab[] = ["project", "pricing", "specs", "panels", "technical", "commercial", "material", "spare", "selectivity"];
@@ -5012,6 +5013,74 @@ function StandardPanelsView({ p, u, panels }: {
   );
 }
 
+// ── Standard ATS view (inside the Components card, Standard EDMS) ────────────
+// Pick a rating (and breaker, where both MCCB and ACB exist) and the whole panel is
+// built from the house ATS standard: name, components, enclosure (PLP cells or an
+// SR-Basic box) and busbar copper. Every ATS is "1 out of 2".
+function StandardAtsView({ p, u, panels }: {
+  p: LvPanel; u: (patch: Partial<LvPanel>) => void; panels: LvPanel[];
+}) {
+  const { confirm, dialogs } = useDialogs();
+  const [ratingA, setRatingA] = useState<number>(STD_ATS_RATINGS[0]);
+  const breakers = atsBreakersFor(ratingA);
+  const [breaker, setBreaker] = useState<string>(breakers[0] ?? "MCCB");
+  // Keep the breaker valid when the rating changes (e.g. the ACB-only sizes).
+  useEffect(() => {
+    const opts = atsBreakersFor(ratingA);
+    if (!opts.includes(breaker as "MCCB" | "ACB")) setBreaker(opts[0] ?? "MCCB");
+  }, [ratingA]); // eslint-disable-line react-hooks/exhaustive-deps
+  const variant: StdAtsVariant | undefined = stdAts(ratingA, breaker);
+  const stdName = variant ? uniquePanelName(variant.name, panels, p.id) : "";
+  const renamed = !!variant && stdName !== variant.name;
+  const apply = async () => {
+    if (!variant) return;
+    if (
+      (p.components.length || renamed) &&
+      !(await confirm({
+        title: `Build "${variant.name}" from the standard`,
+        message: (p.components.length ? "This panel's components, enclosure and copper are all replaced by the standard ATS ones." : "")
+          + (renamed ? `${p.components.length ? "\n\n" : ""}Another panel is already called “${variant.name}”, so this one will be named “${stdName}”.` : ""),
+        confirmLabel: "Build it",
+        tone: p.components.length ? "danger" : "brand",
+      }))
+    )
+      return;
+    u({ ...applyStdAts(p, variant), name: stdName, edmsEdited: false });
+  };
+  return (
+    <div className="space-y-2">
+      {dialogs}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <L>Rating (A)</L>
+          <Sel value={String(ratingA)} options={STD_ATS_RATINGS.map(String)}
+            onChange={(v) => setRatingA(parseInt(v, 10))} />
+        </div>
+        <div>
+          <L>Breaker</L>
+          <Sel value={breaker} options={breakers} onChange={(v) => setBreaker(v)} />
+        </div>
+      </div>
+
+      {!variant ? (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1">
+          <p className="text-xs font-semibold text-amber-800">
+            No standard ATS for <b>{ratingA} A · {breaker}</b>.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-brand/40 bg-white px-2.5 py-1">
+          <p className="text-xs font-bold text-ink">{variant.name}</p>
+          <button type="button" onClick={apply}
+            className="shrink-0 rounded-md bg-brand px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-brand-dark">
+            Build this ATS
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Components card ──────────────────────────────────────────────────────────
 function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void; replaceComponent: (matchRef: string, matchName: string, nc: DbComponent, panelIds: Set<string>) => void; comboKind: ComboKind | null; setComboKind: (k: ComboKind | null) => void }) {
   const { confirm, notify, dialogs } = useDialogs();
@@ -5023,6 +5092,8 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   const [replaceOpen, setReplaceOpen] = useState(false); // "Replace component" (across panels) window
   // The Standard Panels picker is a Standard EDMS feature only.
   const isEdmsPanel = s.kind === "edms";
+  // Standard EDMS builds either a standard Panel or a standard ATS (toggle above the picker).
+  const [edmsMode, setEdmsMode] = useState<"panel" | "ats">("panel");
   const hits = useMemo(() => searchComponents(q, 40), [q]);
   const effGroup = effectiveGroups(p.components); // combination grouping incl. inherited groups
   // Current combination multiplier for a group (from an item's qty ÷ its base qty).
@@ -5772,7 +5843,19 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
           continuous orange header rather than a white gap between them. */}
       {isEdmsPanel && (
         <div className="-mx-5 bg-brand-tint px-5 py-3">
-          <StandardPanelsView p={p} u={u} panels={s.panels} />
+          <div className="mb-3 inline-flex rounded-lg border border-line bg-white p-0.5">
+            {([["panel", "Standard Panel"], ["ats", "Standard ATS"]] as const).map(([m, label]) => (
+              <button key={m} type="button" onClick={() => setEdmsMode(m)}
+                className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${
+                  edmsMode === m ? "bg-brand text-white" : "text-muted hover:text-brand"
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {edmsMode === "panel"
+            ? <StandardPanelsView p={p} u={u} panels={s.panels} />
+            : <StandardAtsView p={p} u={u} panels={s.panels} />}
         </div>
       )}
 
@@ -5852,7 +5935,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       {/* Row 2 — circuit combinations (smaller, secondary). Each is inserted as a GROUP inside the active section. */}
       <div className="mb-3 flex flex-wrap items-center gap-1">
         <span className="mr-1 text-[12px] font-bold uppercase tracking-wide text-brand">Combinations</span>
-        {COMBOS.map(([k, label]) => (
+        {/* Standard EDMS uses the dedicated "Standard ATS" builder above, so the generic
+            ATS combination is hidden there (it stays for normal, non-EDMS panels). */}
+        {COMBOS.filter(([k]) => !(isEdmsPanel && k === "ats")).map(([k, label]) => (
           <button key={k} type="button" title={`Add a ${label} combination as a group inside “${p.activeSection}”`}
             onClick={() => { setComboKind(comboKind === k ? null : k); setPreview([]); setTag(""); setAddTarget(null); }}
             className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${

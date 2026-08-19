@@ -22,6 +22,21 @@ closed off.
 
 <!-- NEW ENTRIES GO HERE -->
 
+## 2026-08-19 · Mohamed's side · Claude
+
+**Standard EDMS: new "Standard ATS" builder beside "Standard Panels".**
+
+- In a Standard EDMS quotation, the Components card now has a toggle at the top:
+  **Standard Panel** / **Standard ATS**.
+- **Standard ATS** lets you pick a rating (630, 800, 1000, 1250, 1600, 2000, 2500, 3200,
+  4000 A) and a breaker (MCCB or ACB, only where both exist), then "Build this ATS" fills
+  the whole panel — name, full "1 out of 2" transfer-switch parts list, enclosure and
+  busbar copper — from the "Standard ATS EDMS" workbook. 630 A uses an SR-Basic box; the
+  rest use PLP.
+- The old generic **"+ ATS"** button was removed from the Combinations row in Standard EDMS
+  (the proper Standard ATS replaces it). It still appears for normal, non-EDMS panels.
+- Checked against the live price list: every ATS part matched a priced catalogue item.
+
 ## 2026-08-18 · Mohamed's side · Claude
 
 **RMU Commercial Offer: roomier price-table rows, and validity now defaults to 3 days.**
