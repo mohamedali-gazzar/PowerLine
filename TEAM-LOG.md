@@ -24,6 +24,16 @@ closed off.
 
 ## 2026-08-19 · Mohamed's side · Claude
 
+**Panel import: the enclosure SIZE is now picked for Local (and SR-Basic) panels.**
+
+- The import was leaving the Sizing box empty for "Local (Sheet Metal)" panels because those box
+  sizes are written with an "L" prefix (e.g. "L700x500x200") and the reader only recognised sizes
+  that start with a digit. It now accepts that prefix (and SR-Basic's "new" prefix), so the box is
+  read and selected. Verified: a Local panel imports as Panels · Local (Sheet Metal) · Single ·
+  L700x500x200 with the box filled in.
+
+## 2026-08-19 · Mohamed's side · Claude
+
 **New: import many panels at once from a quote Excel (on the LV Panels tab).**
 
 - On an LV quotation's **Panels** tab there's now **Import panels from Excel** + **Download template**.

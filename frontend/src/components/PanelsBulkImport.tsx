@@ -222,7 +222,9 @@ function parseBlock(block: Row[], globalRefCol: number): ParsedPanel {
     const rr = block[r] || [];
     for (const cell of rr) {
       const s = clean(cell);
-      if (!fields.enclosureSize && /^\d{2,4}\s*[x×*]\s*\d{2,4}\s*[x×*]\s*\d{2,4}$/i.test(s)) fields.enclosureSize = s;
+      // Allow a leading prefix on the box size — Local boxes read "L700x500x200",
+      // SR-Basic can read "new1400x800x300"; parseEnclDims strips those on lookup.
+      if (!fields.enclosureSize && /^[a-z]*\s*\d{2,4}\s*[x×*]\s*\d{2,4}\s*[x×*]\s*\d{2,4}$/i.test(s)) fields.enclosureSize = s;
       const n = normLabel(cell);
       if (!fields.layout && (n === "single" || n === "double")) fields.layout = s;
     }
