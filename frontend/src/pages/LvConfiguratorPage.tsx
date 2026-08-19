@@ -6,6 +6,7 @@ import ReassignQtnModal from "../components/ReassignQtnModal";
 import CoWorkModal from "../components/CoWorkModal";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { useStaff, SALES_MANAGER } from "../staff";
+import PanelsBulkImport, { type ImportedPanel } from "../components/PanelsBulkImport";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
   PANEL_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
@@ -16,7 +17,7 @@ import {
 import {
   newPanel, newSparePanel, duplicatePanel, nextDuplicateName, uniquePanelName, panelNameOwner, panelNameClashMessage, blankSpareNames, blankSpareMessage, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
-  lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp,
+  lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
@@ -54,7 +55,7 @@ const WD_ACC_IMG: Record<string, string> = { fld: wdFldImg, rhd: wdRhdImg, rhe: 
 import * as XLSX from "xlsx";
 import {
   PRO_E_DEPTHS, PRO_E_THICKNESS, PRO_E_IPS, IS2_DEPTHS, PLP_DEPTHS,
-  proEIp31Disabled, retable, defaultCellConfig, type CellType,
+  proEIp31Disabled, retable, defaultCellConfig, cellTable, type CellType,
 } from "../lv/cells";
 import {
   COPPER_RATINGS, csaFor, copperWeight, copperTotal,
@@ -950,6 +951,137 @@ export default function LvConfiguratorPage() {
     apply((old) => ({ ...old, panels: [...old.panels, p], selectedId: p.id }));
     setTab("panels");
   };
+
+  // Bulk import from Excel: map each parsed record to a real panel (a fresh
+  // newPanel with the project-wide specs, then the imported fields on top) and
+  // APPEND them all in one write. Existing panels are untouched. A dropdown value
+  // is snapped to its canonical option when it matches; otherwise the raw text is
+  // kept (it shows on the panel and can be fixed there). Components aren't built
+  // here — an imported panel comes in with its details, then its parts are added.
+  const importPanels = (imported: ImportedPanel[]) => {
+    if (readOnly || !imported.length) return;
+    const norm = (x: string) => x.toLowerCase().replace(/[°˚º]/g, "°").replace(/\s+/g, "");
+    const toOption = (raw: unknown, opts: readonly string[]): string => {
+      const v = String(raw ?? "").trim();
+      if (!v) return "";
+      return opts.find((o) => norm(o) === norm(v)) ?? v;
+    };
+    const toFamily = (raw?: string): string | null => {
+      const v = String(raw ?? "").trim();
+      if (!v) return null;
+      const key = v.toLowerCase();
+      if (/^local(\s*\(sheet metal\))?$/.test(key) || key === "sheet metal") return "Local (Sheet Metal)";
+      return PANEL_SYSTEMS.find((f) => f.toLowerCase() === key) ?? null;
+    };
+    // Resolve components by REFERENCE (descriptions vary and can't be matched).
+    const byRef = new Map<string, DbComponent>();
+    for (const c of COMPONENTS) if (c.ref) byRef.set(c.ref.trim().toLowerCase(), c);
+    // The chosen enclosure box, as a Panels-mode item — found in the catalogue by
+    // family + dimensions (e.g. SR-Basic 1400×800×300). Null if the size isn't given
+    // or doesn't resolve (the family is still selected; only the box is left unpicked).
+    const enclosureItem = (fam: string, sizeStr?: string): PanelTypeItem | null => {
+      const dims = parseEnclDims(String(sizeStr ?? ""));
+      if (!dims) return null;
+      let best: DbEnclosure | undefined;
+      for (const e of ENCLOSURES) {
+        if (e.fam !== fam) continue;
+        const d = parseEnclDims(e.name);
+        if (!d || d.H !== dims.H || d.W !== dims.W || d.D !== dims.D) continue;
+        if (!best || /^\d/.test((e.name || "").trim())) best = e;
+      }
+      if (!best) return null;
+      return { id: uid(), slot: 1, fam: best.fam, name: best.name, ref: best.ref, ip: String((best as { ip?: unknown }).ip ?? ""), eur: best.eur, egp: best.egp, qty: 1 };
+    };
+    apply((old) => {
+      const panels = [...old.panels];
+      let selectedId = old.selectedId;
+      for (const rec of imported) {
+        const p = withProjectSpecs(newPanel(), old.projectSpecs);
+        if (rec.panelName) p.name = uniquePanelName(String(rec.panelName), panels);
+        if (rec.quantity !== undefined && String(rec.quantity) !== "") {
+          const q = Number(String(rec.quantity).replace(/[^\d.]/g, ""));
+          if (Number.isFinite(q) && q > 0) p.qty = q;
+        }
+        if (rec.fedFrom) p.fedFrom = String(rec.fedFrom);
+        if (rec.shortCircuit) p.shortCircuit = String(rec.shortCircuit);
+        if (rec.copper) p.copperType = toOption(rec.copper, COPPER_TYPES);
+        if (rec.incomingCables) p.incomingCables = toOption(rec.incomingCables, INCOMING_CABLES);
+        if (rec.outgoingCables) p.outgoingCables = toOption(rec.outgoingCables, OUTGOING_CABLES);
+        if (rec.ambTemp) p.ambTemp = toOption(rec.ambTemp, AMB_TEMPS);
+        if (rec.neutral) p.neutral = toOption(rec.neutral, NEUTRAL_EARTH);
+        if (rec.earth) p.earth = toOption(rec.earth, NEUTRAL_EARTH);
+        if (rec.form) p.form = toOption(rec.form, FORMS);
+        if (rec.busbarRating) {
+          const amps = (String(rec.busbarRating).match(/(\d[\d,]*)\s*a\b/i) || [])[1];
+          if (amps) { const n = Number(amps.replace(/,/g, "")); if (Number.isFinite(n) && n > 0) p.ratingA = n; }
+        }
+        // Panel type / enclosure — select it, so the panel isn't left "unsized".
+        // A Panels-mode family (SR-Basic, Unikit, Local …) sets sizingMode "panels"
+        // + family + layout, and the chosen box if it resolves. A cell type
+        // (Pro-E / IS2 / PLP) switches to Cells with that type.
+        const famRaw = String(rec.panelType ?? "").trim();
+        const fam = toFamily(famRaw);
+        const cellTypeRaw = String(rec.cellType || famRaw).trim();
+        const cellType = CELL_SYSTEMS.find((t) => t.toLowerCase() === cellTypeRaw.toLowerCase());
+        if (cellType) {
+          // Cells mode: build the cell table for the type/depth/IP and fill the
+          // quantities from the file (matched by cell-size label, spacing-tolerant).
+          const depth = rec.cellDepth ?? (cellType === "IS2" ? 60 : 70);
+          const ip = rec.cellIp || (cellType === "Pro-E" ? "IP65" : "IP54");
+          const normDesc = (s: string) => s.toLowerCase().replace(/\s+/g, "").replace(/\.$/, "");
+          const qtyByDesc = new Map((rec.cells ?? []).map((c) => [normDesc(c.desc), c.qty]));
+          const rows = cellTable(cellType as CellType, depth, "1.5", ip).map((r) => {
+            if (r.locked) return { ...r };
+            const q = qtyByDesc.get(normDesc(r.desc));
+            return q != null ? { ...r, qty: q } : r;
+          });
+          p.sizingMode = "cells";
+          p.cellConfig = { type: cellType as CellType, depth, thickness: "1.5", ip, rows };
+        } else if (fam) {
+          p.sizingMode = "panels";
+          p.panelsSizing = { ...p.panelsSizing, family: fam, layout: rec.layout === "Double" ? "Double" : "Single" };
+          const item = enclosureItem(fam, rec.enclosureSize);
+          if (item) p.panelItems = [item];
+        }
+        // Main-busbar copper from the Copper Tool sheet (cell panels) — sets the copper
+        // lengths and the resulting busbar weight.
+        if (cellType && rec.busbarCopper && Object.keys(rec.busbarCopper).length) {
+          p.copperTool = { ...rec.busbarCopper };
+          p.mainBusbarKg = Math.round(copperTotal(cellType as CellType, rec.busbarCopper) * 10) / 10;
+          p.mainBusbarOverride = false;
+        }
+        // Component list: resolve each by reference (price/brand from the catalogue);
+        // an unknown or blank reference becomes a free line — kept, never dropped.
+        if (rec.components && rec.components.length) {
+          const secs = [...p.sections];
+          const comps: PanelComponent[] = [];
+          for (const ic of rec.components) {
+            const sec = String(ic.section ?? "").trim() || "Main Incoming";
+            if (!secs.includes(sec)) secs.push(sec);
+            const q = Number(String(ic.qty).replace(/[^\d.]/g, "")) || 1;
+            const ref = String(ic.reference ?? "").trim().toLowerCase();
+            const db = ref ? byRef.get(ref) : undefined;
+            comps.push(db ? toPanelComponent(db, sec, q) : freeComponent(String(ic.description || ic.reference || "(component)"), sec, q));
+          }
+          if (comps.length) { p.sections = secs; p.components = comps; p.activeSection = comps[0].section; }
+        }
+        if (coWork && user?.id) p.ownerId = user.id;
+        panels.push(p);
+        selectedId = p.id;
+      }
+      return { ...old, panels, selectedId };
+    });
+    setTab("panels");
+  };
+
+  // Known component REFERENCES for the import's unknown-component check (matched by
+  // reference, not description — descriptions vary and can't be matched reliably).
+  const knownComponentRefs = useMemo(() => {
+    const s = new Set<string>();
+    for (const c of COMPONENTS) if (c.ref) s.add(c.ref);
+    return [...s];
+  }, []);
+
   // Add a "Spare parts" cell — both from a spare QTN's list and from a panels QTN
   // ("+ Add spare parts"). It selects the new cell so its Spare editor shows at once,
   // staying on whichever list tab is active.
@@ -1378,7 +1510,8 @@ export default function LvConfiguratorPage() {
         {activeTab === "panels" && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} panelBadge={panelBadge} freshIds={freshPanels}
             onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
-            onAddSpare={isEdmsQtn ? undefined : addSpareCell} />
+            onAddSpare={isEdmsQtn ? undefined : addSpareCell}
+            onImport={readOnly ? undefined : importPanels} knownComponentRefs={knownComponentRefs} />
         )}
         {activeTab === "spare" && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} panelBadge={panelBadge} freshIds={freshPanels}
@@ -4403,13 +4536,16 @@ function AddSpareMenu({ onAddSpare, trigger, wrap = "" }: { onAddSpare: (kind: s
   );
 }
 
-function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, panelBadge, freshIds, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
+function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, onImport, knownComponentRefs, panelBadge, freshIds, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
   s: LvState; sel: LvPanel | null;
   up: (p: Partial<LvState>) => void;
   upPanel: (id: string, p: Partial<LvPanel>) => void;
   onAdd: () => void; onDel: (id: string) => void; onClone: (id: string) => void;
   onOpenInOffer: (id: string) => void;
   onAddSpare?: (kind: string) => void;
+  /** Bulk import from Excel — appends parsed panels to the quote (panels QTNs only). */
+  onImport?: (panels: ImportedPanel[]) => void;
+  knownComponentRefs?: string[];
   /** Co-Work: owner tag for a panel row (initials + whether it's the current user's). */
   panelBadge?: (p: LvPanel) => { text: string; title: string; mine: boolean };
   /** Co-Work: panels that just arrived/changed from the other owner — flashed briefly. */
@@ -4431,6 +4567,12 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
               trigger="rounded-lg border border-dashed border-brand/40 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-tint" />
           )}
         </div>
+        {onImport && (
+          <div className="mx-auto mt-5 max-w-xs">
+            <p className="mb-2 text-xs text-muted">…or bring several in at once from a quote workbook:</p>
+            <PanelsBulkImport onImportPanels={onImport} knownComponentRefs={knownComponentRefs} />
+          </div>
+        )}
       </div>
     );
   }
@@ -4530,6 +4672,11 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
         {onAddSpare && (
           <AddSpareMenu onAddSpare={onAddSpare} wrap="mt-1 w-full"
             trigger="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-brand/40 px-3 py-1.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-tint" />
+        )}
+        {onImport && (
+          <div className="mt-2 border-t border-line pt-2">
+            <PanelsBulkImport onImportPanels={onImport} knownComponentRefs={knownComponentRefs} />
+          </div>
         )}
       </div>
 

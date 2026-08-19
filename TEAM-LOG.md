@@ -24,6 +24,27 @@ closed off.
 
 ## 2026-08-19 · Mohamed's side · Claude
 
+**New: import many panels at once from a quote Excel (on the LV Panels tab).**
+
+- On an LV quotation's **Panels** tab there's now **Import panels from Excel** + **Download template**.
+  Point it at a quote workbook and it reads **every "Item No." block as one panel** and adds them all,
+  after a preview. Existing panels are left alone; Confirm is the go-live (it saves through the backend).
+- Each panel comes in pre-filled: name, quantity, panel type + **sizing** (family/box/layout for SR-Basic-
+  type boards, or the **cell type, depth and per-cell quantities** for Pro-E/IS2/PLP), rating, amb. temp,
+  neutral/earth, form, fed-from, short-circuit — and its **component list** grouped by section
+  (Main Incoming / Outgoings …). Components are matched to the price list **by reference**; the busbar
+  **copper is read from the workbook's "Copper Tool" sheet** (per-rating phase/neutral/earth lengths) and
+  the busbar weight is computed from it.
+- The preview shows each panel the way the tool draws it (orange item bar + spec grid + component table),
+  a **Sizing** line, and a warning that names **which panels** have components not in the price list (by
+  reference; a blank reference is flagged "no reference"). Blocks with no name, and blank "0" template
+  cells, are ignored.
+- Also: on **localhost only**, the login screen now **auto-skips sign-in** (dev convenience; the live site
+  is unchanged — that code is stripped from the production build).
+- Frontend only; no database change.
+
+## 2026-08-19 · Mohamed's side · Claude
+
 **Combinations screen: "Standard ATS EDMS" is now a Download/Upload database — and the app builds from it.**
 
 - Added a **Standard ATS EDMS** row on the Combinations tab (Price list), beside "Standard LV EDMS":

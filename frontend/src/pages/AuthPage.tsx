@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 
@@ -51,6 +51,19 @@ export default function AuthPage() {
       setBusy(false);
     }
   };
+
+  // Localhost: skip the login wall automatically (dev only). Signs in as the first
+  // account the moment the wall would appear, so no click is needed. Stripped from
+  // the production build — import.meta.env.DEV is statically false there.
+  const autoDev = useRef(false);
+  useEffect(() => {
+    if (!import.meta.env.DEV || autoDev.current) return;
+    autoDev.current = true;
+    run(async () => {
+      const r = await api.auth.devLogin();
+      signIn(r.token, r.user);
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // LOGIN
   const doLogin = () =>
