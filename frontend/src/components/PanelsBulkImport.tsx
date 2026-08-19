@@ -225,6 +225,10 @@ function parseBlock(block: Row[], globalRefCol: number): ParsedPanel {
       // Allow a leading prefix on the box size — Local boxes read "L700x500x200",
       // SR-Basic can read "new1400x800x300"; parseEnclDims strips those on lookup.
       if (!fields.enclosureSize && /^[a-z]*\s*\d{2,4}\s*[x×*]\s*\d{2,4}\s*[x×*]\s*\d{2,4}$/i.test(s)) fields.enclosureSize = s;
+      // Reference-named families (Minicenter / Primo / Pillars) have no dimensions —
+      // their box reads like "24 line" or "24 line - 160A RAL 7035". Capture that, and
+      // the import resolves it to the catalogue box by name (not by dimensions).
+      if (!fields.enclosureSize && /^\d+\s*lines?\b/i.test(s)) fields.enclosureSize = s;
       const n = normLabel(cell);
       if (!fields.layout && (n === "single" || n === "double")) fields.layout = s;
     }

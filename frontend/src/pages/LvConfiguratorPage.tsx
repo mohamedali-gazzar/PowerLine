@@ -976,18 +976,30 @@ export default function LvConfiguratorPage() {
     // Resolve components by REFERENCE (descriptions vary and can't be matched).
     const byRef = new Map<string, DbComponent>();
     for (const c of COMPONENTS) if (c.ref) byRef.set(c.ref.trim().toLowerCase(), c);
-    // The chosen enclosure box, as a Panels-mode item — found in the catalogue by
-    // family + dimensions (e.g. SR-Basic 1400×800×300). Null if the size isn't given
-    // or doesn't resolve (the family is still selected; only the box is left unpicked).
+    // The chosen enclosure box, as a Panels-mode item. Dimension-named families
+    // (SR-Basic / Unikit / Local, e.g. 1400×800×300) match on H×W×D. Reference-named
+    // families (Minicenter / Primo / Pillars) carry no dimensions, so their box is
+    // matched by NAME instead ("24 line" → "24 line - 160A RAL 7035"). Null if the
+    // size isn't given or doesn't resolve (the family stays selected, box left unpicked).
     const enclosureItem = (fam: string, sizeStr?: string): PanelTypeItem | null => {
-      const dims = parseEnclDims(String(sizeStr ?? ""));
-      if (!dims) return null;
+      const raw = String(sizeStr ?? "").trim();
+      if (!raw) return null;
+      const famEnc = ENCLOSURES.filter((e) => e.fam === fam);
       let best: DbEnclosure | undefined;
-      for (const e of ENCLOSURES) {
-        if (e.fam !== fam) continue;
-        const d = parseEnclDims(e.name);
-        if (!d || d.H !== dims.H || d.W !== dims.W || d.D !== dims.D) continue;
-        if (!best || /^\d/.test((e.name || "").trim())) best = e;
+      const dims = parseEnclDims(raw);
+      if (dims) {
+        for (const e of famEnc) {
+          const d = parseEnclDims(e.name);
+          if (!d || d.H !== dims.H || d.W !== dims.W || d.D !== dims.D) continue;
+          if (!best || /^\d/.test((e.name || "").trim())) best = e;
+        }
+      }
+      if (!best) {
+        // No dimensions — match the box name (spacing-insensitive), exact first then
+        // by prefix, so a short "24 line" still finds "24 line - 160A RAL 7035".
+        const q = raw.toLowerCase().replace(/\s+/g, "");
+        best = famEnc.find((e) => (e.name || "").toLowerCase().replace(/\s+/g, "") === q)
+            ?? famEnc.find((e) => (e.name || "").toLowerCase().replace(/\s+/g, "").startsWith(q));
       }
       if (!best) return null;
       return { id: uid(), slot: 1, fam: best.fam, name: best.name, ref: best.ref, ip: String((best as { ip?: unknown }).ip ?? ""), eur: best.eur, egp: best.egp, qty: 1 };

@@ -24,6 +24,22 @@ closed off.
 
 ## 2026-08-19 · Mohamed's side · Claude
 
+**Panel import: Primo & Minicenter panels now pick their box (full recheck of every family).**
+
+- Rechecked the Excel import end-to-end across **every enclosure family, Single and Double, plus all
+  three cell types** (Pro-E / IS2 / PLP). Everything was already correct except two families:
+  **Primo and Minicenter imported with an empty Sizing box.** Those two name their boxes like
+  "24 line" / "24 line - 160A RAL 7035" (not by dimensions like SR-Basic/Unikit/Local), and the
+  reader only understood dimension names. It now reads and matches those names too, so Primo and
+  Minicenter come in with the right box selected.
+- Confirmed unchanged & correct: SR-Basic / Unikit / Local (Single **and** Double, with the second
+  slot filled), and Pro-E / IS2 / PLP cell **quantities** and **busbar copper** (17.1 kg in the test).
+- Note for reference: busbar copper is a **cells-only** figure in the tool — panel-type boards
+  (SR-Basic/Unikit/Primo/Minicenter…) have no copper field, so the import correctly fills copper only
+  for Pro-E/IS2/PLP. That is by design, not a missing feature.
+
+## 2026-08-19 · Mohamed's side · Claude
+
 **Panel import: PLP/IS2 cell quantities now import, and double panels get their second size.**
 
 - **Cell quantities for PLP/IS2**: those cells are named by their size ("2000x1000x700"), not
