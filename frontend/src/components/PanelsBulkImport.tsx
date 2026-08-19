@@ -110,6 +110,12 @@ const MATCHERS: Matcher[] = FIELD_MAP.map((f) => ({
 }));
 const keysFor = (field: keyof ImportedPanel) => MATCHERS.find((m) => m.field === field)!.keys;
 
+// Known enclosure families + cell types. In the real quote workbook the family sits in
+// the panel's TOP-LEFT corner ("SR-Basic"), while the "Panel Type" field beside it holds
+// the switchgear brand ("ABB"). We spot the family by matching a corner cell against this
+// set, so the brand in "Panel Type" is never mistaken for the enclosure family.
+const FAMILY_KEYS = new Set(DROPDOWN_OPTIONS.panelType.map(normVal));
+
 // Component-table header column keys.
 const QTY_KEYS = new Set(["qty", "quantity", "qnty", "no"].map(normLabel));
 const DESC_KEYS = new Set(["description", "desc", "item", "component"].map(normLabel));
@@ -215,9 +221,11 @@ function parseBlock(block: Row[], globalRefCol: number): ParsedPanel {
     }
   }
 
-  // Enclosure box size ("1400x800x300") and layout (Single/Double) — usually in the
-  // panel's top-left summary, not the label grid, so scan the whole detail area
-  // (the header row included).
+  // Enclosure FAMILY ("SR-Basic"), box size ("1400x800x300") and layout (Single/Double)
+  // sit in the panel's top-left summary, not the label grid, so scan the whole detail
+  // area (the header row included). The family named in the corner WINS over the
+  // "Panel Type" field, which on the real workbook holds the switchgear brand ("ABB").
+  let familyCorner = "";
   for (let r = 0; r < detailEnd; r++) {
     const rr = block[r] || [];
     for (const cell of rr) {
@@ -231,8 +239,10 @@ function parseBlock(block: Row[], globalRefCol: number): ParsedPanel {
       if (!fields.enclosureSize && /^\d+\s*lines?\b/i.test(s)) fields.enclosureSize = s;
       const n = normLabel(cell);
       if (!fields.layout && (n === "single" || n === "double")) fields.layout = s;
+      if (!familyCorner && FAMILY_KEYS.has(normVal(cell))) familyCorner = s;
     }
   }
+  if (familyCorner) fields.panelType = familyCorner;
 
   // Cell panels (Pro-E / IS2 / PLP): the "Pro-E_70_IP65" descriptor gives type/depth/IP,
   // and the cell table (a cell-size label with its quantity in the next cell) gives the

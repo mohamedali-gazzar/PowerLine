@@ -24,6 +24,20 @@ closed off.
 
 ## 2026-08-19 · Mohamed's side · Claude
 
+**Panel import: the ENCLOSURE now selects — it was reading the wrong cell for the family.**
+
+- On the real quote workbook the enclosure family (e.g. "SR-Basic") sits in the panel's
+  **top-left corner**, while the **"Panel Type"** field beside it holds the switchgear **brand**
+  ("ABB"). The import was taking the family from "Panel Type", so it read "ABB" — not a real
+  family — and picked **no enclosure**. That's why Enclosure and Kits showed **0 EGP** even though
+  the box (1800x800x300) was written in the file.
+- Fixed: the family is now read from the corner (any known family / cell type), and the brand in
+  "Panel Type" is ignored. Verified on the exact case from the screenshot — SR-Basic 1800x800x300
+  Single now imports with the box selected (priced), plus Unikit (double), Primo, and a Pro-E cell
+  board with its copper. Enclosure and Kits are no longer zero.
+
+## 2026-08-19 · Mohamed's side · Claude
+
 **Panel import: Primo & Minicenter panels now pick their box (full recheck of every family).**
 
 - Rechecked the Excel import end-to-end across **every enclosure family, Single and Double, plus all
