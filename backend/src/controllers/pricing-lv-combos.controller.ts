@@ -85,6 +85,19 @@ const REFERENCE: Record<string, { label: string; schema: z.ZodTypeAny; summary: 
       return Array.isArray(sh) ? `reference · ${sh.length} sheet${sh.length === 1 ? "" : "s"}` : "reference";
     },
   },
+  // Standard ATS EDMS is stored verbatim here (one sheet per rating/breaker), the
+  // same as Standard LV EDMS. UNLIKE the others, the CLIENT does consume it — the
+  // Standard ATS builder reads these sheets and builds from them (see
+  // frontend/src/lv/standardAtsEdms.ts). The backend still only stores it, so it
+  // stays a reference here and needs no modelled shape.
+  stdatsedms: {
+    label: "Standard ATS EDMS",
+    schema: z.object({ sheets: z.array(z.object({ name: z.string(), grid: grid2d })) }),
+    summary: (v) => {
+      const sh = (v as { sheets?: unknown[] } | null)?.sheets;
+      return Array.isArray(sh) ? `reference · ${sh.length} sheet${sh.length === 1 ? "" : "s"}` : "reference";
+    },
+  },
 };
 const REFERENCE_SECTIONS = Object.keys(REFERENCE);
 const isReference = (s: string): boolean => s in REFERENCE;

@@ -639,7 +639,14 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
   const nameSaysStdLvEdms = /(standard|std)\s*lv\s*edms/i.test(file.name);
   const hasStdLvData = nameSaysStdLvEdms && !otherKnown && !motorizedSheet && names.some((n) => !isReadMeSheet(n));
 
-  const recognised = otherKnown || Boolean(motorizedSheet) || hasStdLvData;
+  // Standard ATS EDMS — recognised by its file name (tabs are ratings, "630A", "800A",
+  // "MCCB-1000A" …, which match no combination tab and no LV EDMS tab). Its "lv" and
+  // "ats" name checks are mutually exclusive, so the two never collide.
+  const nameSaysStdAtsEdms = /(standard|std)\s*ats\s*edms/i.test(file.name);
+  const hasStdAtsData =
+    nameSaysStdAtsEdms && !otherKnown && !motorizedSheet && !hasStdLvData && names.some((n) => !isReadMeSheet(n));
+
+  const recognised = otherKnown || Boolean(motorizedSheet) || hasStdLvData || hasStdAtsData;
 
   // ── Refusals ────────────────────────────────────────────────────────────
   // Each of these stops the upload rather than saving something the app would
@@ -707,6 +714,12 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
   if (hasStdLvData) {
     // Every sheet stored cell for cell — a reference, not consumed by the builder.
     out.push({ section: "stdlvedms", value: parseStdLvEdms(names, rowsOf) });
+  }
+
+  if (hasStdAtsData) {
+    // Stored cell for cell like Standard LV EDMS — but the Standard ATS builder DOES
+    // read these sheets back (frontend/src/lv/standardAtsEdms.ts parses them).
+    out.push({ section: "stdatsedms", value: parseStdLvEdms(names, rowsOf) });
   }
 
   return { sections: out, removals };
@@ -800,7 +813,7 @@ export async function parseCombosWorkbook(file: File): Promise<{ sections: Parse
 
 /** The combinations that have a workbook of their own, in the order the screen
  *  offers them. Anything not on this list has no Excel shape at all. */
-export const COMBOS_WORKBOOK_SECTIONS = ["mcc", "ats", "photocell", "wd", "motorized", "pfc", "stdlvedms"] as const;
+export const COMBOS_WORKBOOK_SECTIONS = ["mcc", "ats", "photocell", "wd", "motorized", "pfc", "stdlvedms", "stdatsedms"] as const;
 
 /** True when this combination can be downloaded as a file — so the caller can
  *  grey the button out instead of finding out by catching an error. */
@@ -1099,6 +1112,7 @@ const SECTION_FILE_NAME: Record<string, string> = {
   motorized: "Combinations Database - Motorized.xlsx",
   pfc: "Combinations Database - P.F.C.xlsx",
   stdlvedms: "Standard LV EDMS.xlsx",
+  stdatsedms: "Standard ATS EDMS.xlsx",
 };
 
 /** What each file is, in one line, for the top of its Read me tab. */
@@ -1110,6 +1124,7 @@ const SECTION_BLURB: Record<string, string> = {
   motorized: "the motorised breaker parts, listed down a column per breaker frame",
   pfc: "the power-factor-correction sizing sheet — kept as a reference, cell for cell",
   stdlvedms: "the standard LV EDMS panels, one sheet per transformer size — a reference",
+  stdatsedms: "the standard ATS panels for EDMS, one sheet per rating and breaker — the app builds from these",
 };
 
 /** The line every file except WD carries, so nobody goes looking for the kits
@@ -1171,13 +1186,24 @@ const SECTION_NOTES: Record<string, string[]> = {
     "sheet is kept as-is. Cell formatting (colours, merged cells) is not stored —",
     "only the values in the cells are.",
   ],
+  stdatsedms: [
+    "The app BUILDS the standard ATS panels from this file — one sheet per rating",
+    "and breaker (630A, 800A, MCCB-1000A, ACB-1000A, …). Editing a sheet and loading",
+    "it back changes what the Standard ATS builder produces: the parts list, the",
+    "enclosure and the busbar copper all come from here.",
+    "",
+    "Keep each sheet's layout: row 1 names it (\"ATS 1000A 3P MCCB 1 out of 2\") and",
+    "says the enclosure (SR-Basic + a box size, or PLP + a depth); the parts run down",
+    "with a quantity in the first column; the PLP cell sizes and the copper lengths sit",
+    "in their own columns to the right. Cell formatting is not stored — only the values.",
+  ],
 };
 
 /** Written when the app is asked for a file it has no layout for. Same voice as
  *  the refusals above: say what is wrong, not what threw. */
 function noWorkbookFor(section: string): Error {
   return new Error(
-    `There is no Excel file for the "${section}" list. The combinations that have one are MCC, ATS, photocell, WD, Motorized, P.F.C and Standard LV EDMS. Nothing was changed.`,
+    `There is no Excel file for the "${section}" list. The combinations that have one are MCC, ATS, photocell, WD, Motorized, P.F.C, Standard LV EDMS and Standard ATS EDMS. Nothing was changed.`,
   );
 }
 
@@ -1232,6 +1258,8 @@ function sectionSheets(section: string, value: unknown): Sheet[] {
       return [{ name: "PFC", grid: pfcGrid(value) }];
     case "stdlvedms":
       return stdLvEdmsSheets(value);
+    case "stdatsedms":
+      return stdLvEdmsSheets(value); // same shape: sheets written back cell for cell
     default:
       throw noWorkbookFor(section);
   }

@@ -10,7 +10,7 @@
 // source of truth now — edit it here if a sheet changes; there is no live Excel link.
 // The apply logic below mirrors standardEdms.ts (partToComponent / PLP cell table / copper).
 
-import { findByName, ENCLOSURES, type DbEnclosure } from "./catalog";
+import { findByName, ENCLOSURES, COMBOS, type DbEnclosure } from "./catalog";
 import { cellTable, type CellConfig } from "./cells";
 import { copperTotal, type CopperTool } from "./copper";
 import {
@@ -33,7 +33,10 @@ export interface StdAtsVariant {
   parts: StdAtsPart[];
 }
 
-export const STD_ATS: StdAtsVariant[] = [
+/** The version shipped with the app — the fallback used until the owner uploads a
+ *  "Standard ATS EDMS" workbook on the Combinations tab, and again if an upload is
+ *  malformed. Transcribed once from the workbook. */
+const STD_ATS_BUNDLED: StdAtsVariant[] = [
   {
     "name": "ATS 630A 3P MCCB 1 out of 2",
     "ratingA": 630,
@@ -1369,19 +1372,94 @@ export const STD_ATS: StdAtsVariant[] = [
   }
 ];
 
-/** ATS ratings offered, small → large. */
-export const STD_ATS_RATINGS: number[] = [630,800,1000,1250,1600,2000,2500,3200,4000];
+// ── Live source: the uploaded workbook (Combinations tab) → parsed variants ──
+// The owner uploads "Standard ATS EDMS.xlsx" on the Combinations tab; it is served
+// in the catalogue as COMBOS.stdatsedms (one sheet per rating/breaker, cell for
+// cell). The builder reads THAT, so editing the workbook changes what it builds —
+// no code change. Until one is uploaded, STD_ATS_BUNDLED is used; a malformed
+// upload also falls back, so a bad sheet can never empty the builder.
 
-/** The breaker options for a rating (MCCB / ACB), in that order — only those the
- *  workbook actually has a sheet for. */
-export function atsBreakersFor(ratingA: number): AtsBreaker[] {
-  const order: AtsBreaker[] = ["MCCB", "ACB"];
-  return order.filter((b) => STD_ATS.some((v) => v.ratingA === ratingA && v.breaker === b));
+const numOf = (v: unknown): number => {
+  const n = parseInt(String(v ?? "").replace(/[^\d]/g, ""), 10);
+  return Number.isNaN(n) ? 0 : n;
+};
+
+/** One stored sheet grid → a variant, or null if row 1 is not an ATS title. The
+ *  column layout mirrors the workbook the download writes and the engineers keep. */
+function parseAtsSheet(grid: unknown[][]): StdAtsVariant | null {
+  if (!Array.isArray(grid) || !grid.length) return null;
+  const H = (grid[0] ?? []).map((c) => String(c ?? "").trim());
+  const m = /ATS\s+(\d+)A\s+3P\s+(MCCB|ACB)\s+(.+)/i.exec(H[0] ?? "");
+  if (!m) return null;
+  const ratingA = numOf(m[1]);
+  const breaker = m[2].toUpperCase() as AtsBreaker;
+  const atsType = m[3].trim();
+
+  let enclosure: StdAtsEnclosure;
+  const copper: CopperTool = {};
+  if (/SR-?Basic/i.test(H[3] ?? "")) {
+    const d = /(\d+)\s*[xX]\s*(\d+)\s*[xX]\s*(\d+)/.exec(H[4] ?? "");
+    if (!d) return null;
+    enclosure = { kind: "sr", box: { H: +d[1], W: +d[2], D: +d[3] } };
+  } else {
+    const depth = numOf(H[4]);
+    const cells: Record<string, number> = {};
+    for (let i = 1; i < grid.length; i++) {
+      const cm = /^2000x(\d+)x\d+$/i.exec(String((grid[i] ?? [])[3] ?? "").trim());
+      if (cm) { const q = numOf((grid[i] ?? [])[4]); if (q > 0) cells[cm[1]] = (cells[cm[1]] || 0) + q; }
+    }
+    enclosure = { kind: "plp", depth, cells };
+    for (let i = 1; i < grid.length; i++) {
+      const rate = numOf((grid[i] ?? [])[7]);
+      if (rate > 0) copper[String(rate)] = { p: numOf((grid[i] ?? [])[9]), n: numOf((grid[i] ?? [])[10]), e: numOf((grid[i] ?? [])[11]) };
+    }
+  }
+
+  const parts: StdAtsPart[] = [];
+  for (let i = 1; i < grid.length; i++) {
+    const qty = numOf((grid[i] ?? [])[0]);
+    const desc = String((grid[i] ?? [])[1] ?? "").trim();
+    if (qty > 0 && desc) parts.push({ qty, desc });
+  }
+  if (!parts.length) return null;
+  return { name: H[0], ratingA, breaker, atsType, enclosure, copper, parts };
 }
 
-/** The ATS variant for a rating + breaker, or undefined when that pair has no sheet. */
+// Memoised by the served object's identity: COMBOS is replaced in place on every
+// catalogue install, so COMBOS.stdatsedms is a fresh reference exactly when the
+// data changes — and stays identical otherwise.
+let _atsKey: unknown = Symbol("uninit");
+let _atsVariants: StdAtsVariant[] = STD_ATS_BUNDLED;
+function atsVariants(): StdAtsVariant[] {
+  const served = COMBOS.stdatsedms;
+  if (served === _atsKey) return _atsVariants;
+  _atsKey = served;
+  const next: StdAtsVariant[] = [];
+  if (served && Array.isArray(served.sheets)) {
+    for (const sh of served.sheets) {
+      const v = parseAtsSheet((sh?.grid ?? []) as unknown[][]);
+      if (v) next.push(v);
+    }
+  }
+  _atsVariants = next.length ? next : STD_ATS_BUNDLED;
+  return _atsVariants;
+}
+
+/** ATS ratings offered, small → large. */
+export function stdAtsRatings(): number[] {
+  return [...new Set(atsVariants().map((v) => v.ratingA))].sort((a, b) => a - b);
+}
+
+/** The breaker options for a rating (MCCB / ACB), in that order — only those the
+ *  loaded set actually has a sheet for. */
+export function atsBreakersFor(ratingA: number): AtsBreaker[] {
+  const order: AtsBreaker[] = ["MCCB", "ACB"];
+  return order.filter((b) => atsVariants().some((v) => v.ratingA === ratingA && v.breaker === b));
+}
+
+/** The ATS variant for a rating + breaker, or undefined when that pair has none. */
 export function stdAts(ratingA: number, breaker: string): StdAtsVariant | undefined {
-  return STD_ATS.find((v) => v.ratingA === ratingA && v.breaker === breaker);
+  return atsVariants().find((v) => v.ratingA === ratingA && v.breaker === breaker);
 }
 
 // ── Apply ────────────────────────────────────────────────────────────────────

@@ -61,7 +61,7 @@ import {
 } from "../lv/copper";
 import { panelPoles, POLE_CM, POLE_KINDS, GROUP_LABEL, KIND_LABEL, type PoleGroup, type PoleKind } from "../lv/poles";
 import { stdPanel, applyStdPanel, STD_EDMS_KVA } from "../lv/standardEdms";
-import { stdAts, applyStdAts, STD_ATS_RATINGS, atsBreakersFor, type StdAtsVariant } from "../lv/standardAtsEdms";
+import { stdAts, applyStdAts, stdAtsRatings, atsBreakersFor, type StdAtsVariant } from "../lv/standardAtsEdms";
 
 type Tab = "project" | "pricing" | "specs" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "summary";
 const TABS: Tab[] = ["project", "pricing", "specs", "panels", "technical", "commercial", "material", "spare", "selectivity"];
@@ -5021,7 +5021,7 @@ function StandardAtsView({ p, u, panels }: {
   p: LvPanel; u: (patch: Partial<LvPanel>) => void; panels: LvPanel[];
 }) {
   const { confirm, dialogs } = useDialogs();
-  const [ratingA, setRatingA] = useState<number>(STD_ATS_RATINGS[0]);
+  const [ratingA, setRatingA] = useState<number>(stdAtsRatings()[0] ?? 630);
   const breakers = atsBreakersFor(ratingA);
   const [breaker, setBreaker] = useState<string>(breakers[0] ?? "MCCB");
   // Keep the breaker valid when the rating changes (e.g. the ACB-only sizes).
@@ -5053,7 +5053,7 @@ function StandardAtsView({ p, u, panels }: {
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <L>Rating (A)</L>
-          <Sel value={String(ratingA)} options={STD_ATS_RATINGS.map(String)}
+          <Sel value={String(ratingA)} options={stdAtsRatings().map(String)}
             onChange={(v) => setRatingA(parseInt(v, 10))} />
         </div>
         <div>

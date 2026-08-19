@@ -70,6 +70,11 @@ export interface CombosData {
   mcc: { combos: { kind: string; kw: string; type: number; parts: string[] }[]; control: { qty: number; desc: string }[] };
   wd: { frame: string; poles: string; fp: string; mp: string }[];
   motorized: Record<string, string[]>;
+  // Standard ATS EDMS — stored as the uploaded workbook's sheets (cell for cell) and
+  // consumed by standardAtsEdms.ts, which parses them into the ATS variants. Absent
+  // until the workbook is uploaded on the Combinations tab (then the built-in default
+  // in standardAtsEdms.ts is the fallback).
+  stdatsedms?: { sheets: { name: string; grid: unknown[][] }[] };
 }
 
 /// The combination templates. Owner-editable on the Price list screen and served

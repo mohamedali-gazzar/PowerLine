@@ -24,6 +24,24 @@ closed off.
 
 ## 2026-08-19 · Mohamed's side · Claude
 
+**Combinations screen: "Standard ATS EDMS" is now a Download/Upload database — and the app builds from it.**
+
+- Added a **Standard ATS EDMS** row on the Combinations tab (Price list), beside "Standard LV EDMS":
+  Download the current workbook, edit it, Upload it back.
+- Unlike Standard LV EDMS (which is just a stored reference), **the Standard ATS builder actually reads
+  this file**. Upload a changed "Standard ATS EDMS.xlsx" and the ratings, parts, enclosures and busbar
+  copper it builds change straight away — no new app version needed.
+- Until the workbook is uploaded once, the ATS standard already built into the app is used, so nothing
+  is ever empty; a bad file also falls back to it safely.
+- One small gap for now: on upload it does not pre-warn if an edited part name no longer matches the
+  price list (the other combinations do). An unmatched part instead shows as an unpriced line on the
+  panel, so it is still visible. Can add the up-front warning later.
+- No database change (uses the existing combinations store). Verified end to end: stored the real
+  12-sheet workbook, the app parsed it back, an edited re-upload changed the result, and the
+  download re-parsed cleanly.
+
+## 2026-08-19 · Mohamed's side · Claude
+
 **Standard EDMS: new "Standard ATS" builder beside "Standard Panels".**
 
 - In a Standard EDMS quotation, the Components card now has a toggle at the top:
