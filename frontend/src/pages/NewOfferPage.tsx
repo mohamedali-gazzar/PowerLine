@@ -10,6 +10,7 @@ import {
   Toggle,
 } from "../components/fields";
 import OfferView from "../components/OfferView";
+import OfferCover from "../components/OfferCover";
 import { useStaff, findPerson, SALES_MANAGER } from "../staff";
 import {
   RTU_TYPES,
@@ -740,14 +741,28 @@ export default function NewOfferPage() {
           {previewErr && (
             <p className="rounded bg-red-50 p-2 text-sm text-red-600">{previewErr}</p>
           )}
-          {/* One technical section per RMU — exactly what the combined PDF prints. */}
+          {/* Branded cover — the same title page the PDF prints and the LV section shows. */}
+          <OfferCover
+            kind="Technical"
+            date={date}
+            qtnRef={team.quotationNo}
+            optyNo={team.opportunityNo}
+            projectName={projectName}
+            customer={customer}
+            contacts={[
+              { role: "Sales", name: team.salesName, phone: team.salesMobile, email: team.salesEmail },
+              { role: "Manager", name: manager.name, phone: manager.mobile, email: manager.email },
+              { role: "Support", name: team.supportName, phone: team.supportMobile, email: team.supportEmail },
+            ]}
+          />
+          {/* One technical section per RMU, each an A4 page like the printed PDF. */}
           <div className="space-y-5">
             {rows.map((r, i) => {
               const g = previewOf(r.config);
               const c = r.config;
               const codeI = `${c.productType}${c.voltageKv}(${c.nalCount}+${c.nalfCount}${c.hasMetering ? "+M" : ""})`;
               return (
-                <div key={i} className="card p-5">
+                <div key={i} className="a4-sheet px-12 py-10">
                   {rows.length > 1 && (
                     <div className="mb-4 flex items-center gap-2 border-b border-line pb-2">
                       <span className="grid h-6 w-6 place-items-center rounded-full bg-brand text-xs font-bold text-white">{i + 1}</span>
@@ -780,6 +795,20 @@ export default function NewOfferPage() {
       {/* ── Commercial Offer tab ────────────────────────────────────────── */}
       {tab === "commercial" && (
         <div className="space-y-4 animate-fade-up">
+          {/* Branded cover — the same title page the Commercial PDF prints. */}
+          <OfferCover
+            kind="Commercial"
+            date={date}
+            qtnRef={team.quotationNo}
+            optyNo={team.opportunityNo}
+            projectName={projectName}
+            customer={customer}
+            contacts={[
+              { role: "Sales", name: team.salesName, phone: team.salesMobile, email: team.salesEmail },
+              { role: "Manager", name: manager.name, phone: manager.mobile, email: manager.email },
+              { role: "Support", name: team.supportName, phone: team.supportMobile, email: team.supportEmail },
+            ]}
+          />
           {/* Offer-level commercial settings — shared by every RMU on the offer. */}
           <section className="card p-5">
             <h2 className="sec-head">Commercial settings</h2>

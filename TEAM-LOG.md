@@ -24,6 +24,19 @@ closed off.
 
 ## 2026-08-20 · Mohamed's side · Claude
 
+**RMU offer tabs now show the branded cover page on screen (Technical & Commercial).**
+
+- The RMU offer's **Technical Offer** and **Commercial Offer** tabs now show the branded cover page
+  at the top — PowerLine logo, the big "Technical / Commercial Offer" title, the QTN / OPTY / project /
+  customer, the contacts, the product-range strip and the ISO / ABB footer — the same cover the LV
+  section shows and the PDFs already print. This is on-screen only; the downloaded PDFs were unchanged.
+- The Technical tab's per-RMU sections now render as **A4 pages** (real A4 width, like the printed
+  PDF and the LV preview) instead of full-width cards, so the on-screen preview matches the document.
+- Under the hood the cover is now a shared component drawn by both the LV and RMU pages, so they stay
+  identical. The LV page itself is unchanged. Frontend-only — no database or pricing change.
+
+## 2026-08-20 · Mohamed's side · Claude
+
 **RMU offers can now hold more than one RMU — one offer, one combined price, one set of PDFs.**
 
 - On the RMU offer page there is now an **"RMUs in this offer"** list on the RMU tab: **＋ Add RMU**,
