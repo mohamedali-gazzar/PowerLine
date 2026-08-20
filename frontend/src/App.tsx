@@ -54,6 +54,14 @@ const megaphoneIcon = (
     <path d="M8 15v3a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-2" />
   </svg>
 );
+// A document with a pencil — the draft the user is currently working on.
+const draftIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h6" />
+    <path d="M14 2v6h6" />
+    <path d="M18.4 14.6a1.5 1.5 0 0 1 2.1 2.1L16 21l-3 .8.8-3z" />
+  </svg>
+);
 
 export default function App() {
   const { user, signOut } = useAuth();
@@ -67,6 +75,26 @@ export default function App() {
     if (user) api.access.me().then(setAccess).catch(() => {});
   }, [user]);
   const can = (perm: string) => Boolean(access?.perms.includes(perm));
+
+  // The draft the user is currently working on — the most-recently-updated DRAFT
+  // quotation — offered as a one-click "resume" shortcut in the sidebar (after Home).
+  // Refreshed on navigation so it follows whatever they last opened or edited.
+  const [activeDraft, setActiveDraft] = useState<{ id: string; number: string } | null>(null);
+  useEffect(() => {
+    if (!user) { setActiveDraft(null); return; }
+    let alive = true;
+    api.qtns
+      .list()
+      .then((qs) => {
+        if (!alive) return;
+        const draft = qs
+          .filter((q) => q.status === "DRAFT" && !q.removedAt)
+          .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))[0];
+        setActiveDraft(draft ? { id: draft.id, number: draft.number } : null);
+      })
+      .catch(() => { /* offline / not signed in — just no shortcut */ });
+    return () => { alive = false; };
+  }, [user, pathname]);
 
   // Sidebar pin cycle (persisted). Each click on the pin advances the state:
   //   "off"  — auto-hide rail: thin, expands on hover, overlays the content.
@@ -121,6 +149,18 @@ export default function App() {
               <span className="shrink-0">{homeIcon}</span>
               <span className={lbl}>Home</span>
             </NavLink>
+
+            {/* Resume the draft the user is working on — the most-recent DRAFT quotation. */}
+            {activeDraft && (
+              <NavLink
+                to={`/lv/qtn/${activeDraft.id}`}
+                title={`Resume draft ${activeDraft.number}`}
+                className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}
+              >
+                <span className="shrink-0">{draftIcon}</span>
+                <span className={`${lbl} truncate`}>{activeDraft.number}</span>
+              </NavLink>
+            )}
 
             <NotificationBell pinMode={pinMode} />
 

@@ -24,6 +24,16 @@ closed off.
 
 ## 2026-08-20 · Mohamed's side · Claude
 
+**Sidebar: a quick "resume draft" shortcut right after Home.**
+
+- The left sidebar now shows, directly under **Home**, a one-click link to the quotation you're
+  working on — your most-recently-edited **draft**. Its label is the QTN number; clicking it reopens
+  that draft.
+- It appears only when you have a draft, and it refreshes as you move around so it always points at
+  the latest one. (Draft LV quotations, which autosave as you build them.) Frontend-only.
+
+## 2026-08-20 · Mohamed's side · Claude
+
 **RMU offer reorganised: a new "Settings" tab, and the Commercial tab is now the priced offer document.**
 
 - New **Settings** tab between **Project** and **RMU**. It holds the commercial settings (currency,
