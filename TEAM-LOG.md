@@ -24,6 +24,23 @@ closed off.
 
 ## 2026-08-20 · Mohamed's side · Claude
 
+**RMU offers can now hold more than one RMU — one offer, one combined price, one set of PDFs.**
+
+- On the RMU offer page there is now an **"RMUs in this offer"** list on the RMU tab: **＋ Add RMU**,
+  click one to open it, **✕** to remove. Each RMU keeps its own configuration.
+- **Technical Offer** shows every RMU one after another, each under a clear **"RMU 1 of 3 …"** heading.
+  The downloaded PDF is a single document — one shared cover, then each RMU's full technical pages.
+- **Commercial Offer** now has **one price line per RMU** (each with its own unit price — pre-filled
+  from the price list — and quantity) and **one combined total** at the bottom. Discount and VAT apply
+  to the whole offer. The Commercial PDF prints one line per RMU and one total.
+- A normal **single-RMU** offer is completely unchanged — same numbers, same PDFs as before. Prices
+  stay **frozen per offer** exactly as they were (changing the price list never rewrites a sent quote).
+- It saves as **one** offer in Offer History (with a small "3 RMUs" count).
+- ⚠️ HEADS-UP: this deploy added **one new, empty database column** used only by offers that have more
+  than one RMU. Every existing offer is untouched — this is a safe, additive change.
+
+## 2026-08-20 · Mohamed's side · Claude
+
 **Panels tab: removed the "Download template" button from the Excel import.**
 
 - The "⬇ Download template" button under "Import panels from Excel" is gone. Importing still works

@@ -14,12 +14,14 @@ import {
   duplicateOffer,
   toConfigInput,
   resolvePricing,
+  parseRmuLines,
+  pricingFromSnap,
 } from "../services/offer.service";
-import { assembleOffer, type RmuConfigInput } from "../domain/assembly";
+import { assembleOffer, type RmuConfigInput, type GeneratedOffer } from "../domain/assembly";
 import { priceForConfig } from "../domain/priceList";
 import { vatPct } from "../domain/pricing-data";
 import { generateOfferPdf } from "../services/pdf.service";
-import { buildCommercial } from "../services/commercial.service";
+import { buildCommercial, buildCommercialMulti, type CommercialUnit } from "../services/commercial.service";
 import { generateCommercialPdf } from "../services/pdf-commercial.service";
 import { generateSldPdf } from "../services/pdf-sld.service";
 
@@ -136,7 +138,12 @@ export async function getOfferPdf(req: Request, res: Response) {
     if (!offer || !offer.rmu || !req.userId || offer.ownerId !== req.userId) {
       return res.status(404).json({ error: "Offer not found" });
     }
-    const generated = assembleOffer(toConfigInput(offer.rmu));
+    // Multi-RMU offers assemble one technical section per stored RMU; a single
+    // RMU (rmusJson null) assembles just the `rmu` relation, exactly as before.
+    const lines = parseRmuLines(offer.rmusJson);
+    const generated: GeneratedOffer[] = lines
+      ? lines.map((l) => assembleOffer(l.config))
+      : [assembleOffer(toConfigInput(offer.rmu))];
     const pdf = await generateOfferPdf(offer, generated);
     res.setHeader("Content-Type", "application/pdf");
     // Name it like the LV section: "TO-<QTN> Rev 00.pdf".
@@ -158,11 +165,27 @@ export async function getCommercialPdf(req: Request, res: Response) {
       return res.status(404).json({ error: "Offer not found" });
     }
     const config = toConfigInput(offer.rmu);
-    const generated = assembleOffer(config);
     // Same frozen prices the offer screen shows — never a fresh lookup, or a
     // re-downloaded PDF could disagree with the quotation already sent.
     const { pricing, vatPct: offerVatPct } = resolvePricing(offer, config);
-    const data = buildCommercial(offer, generated, pricing, offerVatPct);
+    const lines = parseRmuLines(offer.rmusJson);
+    let data;
+    if (lines && lines.length > 1) {
+      // One priced line per RMU, each from its own frozen snapshot.
+      const units: CommercialUnit[] = lines.map((l) => {
+        const g = assembleOffer(l.config);
+        return {
+          description: g.commercialDescription,
+          pricing: pricingFromSnap(l, l.config),
+          unitPrice: l.unitPrice,
+          quantity: l.quantity,
+        };
+      });
+      data = buildCommercialMulti(offer, units, offerVatPct);
+    } else {
+      const generated = assembleOffer(config);
+      data = buildCommercial(offer, generated, pricing, offerVatPct);
+    }
     const pdf = await generateCommercialPdf(data);
     res.setHeader("Content-Type", "application/pdf");
     // Name it like the LV section: "CO-<QTN> Rev 00.pdf".

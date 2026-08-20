@@ -62,6 +62,10 @@ export interface OfferInput {
   notes?: string | null;
   offerDate?: string | null;
   rmu: RmuConfigInput;
+  // Multi-RMU: the full list of RMUs on this offer, each with its own unit price +
+  // quantity. When present, `rmu` mirrors rmus[0].config for backward compatibility.
+  // Omitted for a classic single-RMU offer.
+  rmus?: { config: RmuConfigInput; unitPrice: number; quantity: number }[];
 }
 
 // ---- Assembled technical offer (computed by the backend) ----
@@ -206,4 +210,6 @@ export interface Offer {
   generated: GeneratedOffer;
   listPricing: ConfigPricing | null;
   commercial: CommercialData | null;
+  // Number of RMUs on the offer (1 for a classic single-RMU offer).
+  rmuCount?: number;
 }

@@ -3,7 +3,7 @@ import type { CreateOfferInput } from "../validation/offer.schema";
 import { computePricing } from "./pricing";
 import { priceForConfig, type ConfigPricing } from "../domain/priceList";
 import { vatPct } from "../domain/pricing-data";
-import { buildCommercial } from "./commercial.service";
+import { buildCommercial, buildCommercialMulti, type CommercialUnit } from "./commercial.service";
 import {
   assembleOffer,
   buildCode,
@@ -61,6 +61,49 @@ export function toConfigInput(rmu: StoredRmu): RmuConfigInput {
     vtBurdenVa: rmu.vtBurdenVa,
     vtClass: rmu.vtClass,
     meteringWithFuse: rmu.meteringWithFuse,
+  };
+}
+
+/** One RMU as frozen onto a multi-RMU offer (Offer.rmusJson). Its config drives
+ *  the technical content; `snap` freezes the list prices (USD) exactly like the
+ *  offer-level snap* columns do for a single-RMU offer; unitPrice/quantity are its
+ *  own commercial line. */
+export type StoredRmuLine = {
+  config: RmuConfigInput;
+  unitPrice: number;
+  quantity: number;
+  snap: {
+    priceKey: string;
+    basePriceUsd: number | null;
+    listPriceUsd: number | null;
+    addOns: { name: string; price: number }[];
+    priceFound: boolean;
+  };
+};
+
+/** Parse Offer.rmusJson → the stored RMU lines, or null for a single-RMU offer
+ *  (column unset, empty, or corrupt → caller falls back to the `rmu` relation). */
+export function parseRmuLines(rmusJson: string | null | undefined): StoredRmuLine[] | null {
+  if (!rmusJson) return null;
+  try {
+    const arr = JSON.parse(rmusJson);
+    if (Array.isArray(arr) && arr.length) return arr as StoredRmuLine[];
+  } catch {
+    /* corrupt snapshot → treat as single-RMU rather than 500 */
+  }
+  return null;
+}
+
+/** Rebuild a ConfigPricing from a line's frozen snapshot (never a live lookup),
+ *  so a re-generated multi-RMU offer keeps the exact numbers it was quoted at. */
+export function pricingFromSnap(line: StoredRmuLine, config: RmuConfigInput): ConfigPricing {
+  return {
+    panelCode: buildProductCode(config),
+    priceKey: line.snap.priceKey,
+    basePrice: line.snap.basePriceUsd ?? null,
+    addOns: Array.isArray(line.snap.addOns) ? line.snap.addOns : [],
+    listPrice: line.snap.listPriceUsd ?? null,
+    found: line.snap.priceFound ?? false,
   };
 }
 
@@ -146,12 +189,39 @@ async function nextOfferNumber(): Promise<string> {
 
 export async function createOffer(input: CreateOfferInput) {
   const offerNumber = input.offerNumber?.trim() || (await nextOfferNumber());
-  const cfg = input.rmu as RmuConfigInput;
-  const configCode = buildCode(cfg);
 
-  // Freeze the list prices and VAT rate this offer is quoted at. From here on the
-  // offer prints these numbers forever, whatever happens to the price list.
-  const snap = priceForConfig(cfg);
+  // One offer can carry many RMUs. Normalise to a list: an explicit `rmus` array
+  // when the client sends one, otherwise the single `rmu` (classic offer). Each
+  // line freezes its own list-price snapshot — the same freeze the single-RMU
+  // path has always done, now once per RMU.
+  const inputLines: { config: RmuConfigInput; unitPrice: number; quantity: number }[] =
+    input.rmus?.length
+      ? input.rmus.map((u) => ({ config: u.config as RmuConfigInput, unitPrice: u.unitPrice, quantity: u.quantity }))
+      : [{ config: input.rmu as RmuConfigInput, unitPrice: input.unitPrice, quantity: input.quantity }];
+  const isMulti = inputLines.length > 1;
+
+  const storedLines: StoredRmuLine[] = inputLines.map((u) => {
+    const s = priceForConfig(u.config);
+    return {
+      config: u.config,
+      unitPrice: u.unitPrice ?? 0,
+      quantity: u.quantity ?? 1,
+      snap: {
+        priceKey: s.priceKey,
+        basePriceUsd: s.basePrice,
+        listPriceUsd: s.listPrice,
+        addOns: s.addOns,
+        priceFound: s.found,
+      },
+    };
+  });
+
+  // The FIRST RMU mirrors into the legacy `rmu` relation + snap* columns + the
+  // offer-level unit price / quantity, so single-RMU readers keep working.
+  const primary = storedLines[0];
+  const cfg = primary.config;
+  const configCode = buildCode(cfg);
+  const snap = primary.snap;
   const snapVat = vatPct();
 
   const offer = await prisma.offer.create({
@@ -159,12 +229,15 @@ export async function createOffer(input: CreateOfferInput) {
       offerNumber,
       category: input.category,
       pricedAt: new Date(),
+      // Only genuine multi-RMU offers store the list; a single RMU stays null so
+      // its code path is byte-for-byte what it was before this feature existed.
+      rmusJson: isMulti ? JSON.stringify(storedLines) : null,
       snapPriceKey: snap.priceKey,
-      snapBasePriceUsd: snap.basePrice,
-      snapListPriceUsd: snap.listPrice,
+      snapBasePriceUsd: snap.basePriceUsd,
+      snapListPriceUsd: snap.listPriceUsd,
       snapAddOnsJson: JSON.stringify(snap.addOns),
       snapVatPct: snapVat,
-      snapPriceFound: snap.found,
+      snapPriceFound: snap.priceFound,
       salesNumber: input.salesNumber ?? null,
       orderNumber: input.orderNumber ?? null,
       quotationNo: input.quotationNo ?? null,
@@ -183,8 +256,8 @@ export async function createOffer(input: CreateOfferInput) {
       status: input.status,
       currency: input.currency,
       usdToEgpRate: input.usdToEgpRate ?? null,
-      unitPrice: input.unitPrice,
-      quantity: input.quantity,
+      unitPrice: primary.unitPrice,
+      quantity: primary.quantity,
       discountPct: input.discountPct,
       validityDays: input.validityDays,
       deliveryWeeks: input.deliveryWeeks ?? null,
@@ -194,23 +267,23 @@ export async function createOffer(input: CreateOfferInput) {
       offerDate: input.offerDate ?? null,
       rmu: {
         create: {
-          productType: input.rmu.productType,
-          lbsBrand: input.rmu.lbsBrand ?? "ABB",
-          clientSpec: input.rmu.clientSpec ?? "EECH",
-          voltageKv: input.rmu.voltageKv,
-          nalCount: input.rmu.nalCount,
-          nalfCount: input.rmu.nalfCount,
-          hasMetering: input.rmu.hasMetering,
-          rtuType: input.rmu.rtuType,
-          installation: input.rmu.installation,
-          busbarCurrentA: input.rmu.busbarCurrentA,
-          fuseRatingA: input.rmu.fuseRatingA ?? null,
-          meteringCtPrimaryA: input.rmu.meteringCtPrimaryA ?? null,
-          ctClass: input.rmu.ctClass ?? null,
-          vtCores: input.rmu.vtCores ?? 1,
-          vtBurdenVa: input.rmu.vtBurdenVa ?? null,
-          vtClass: input.rmu.vtClass ?? null,
-          meteringWithFuse: input.rmu.meteringWithFuse ?? false,
+          productType: cfg.productType,
+          lbsBrand: cfg.lbsBrand ?? "ABB",
+          clientSpec: cfg.clientSpec ?? "EECH",
+          voltageKv: cfg.voltageKv,
+          nalCount: cfg.nalCount,
+          nalfCount: cfg.nalfCount,
+          hasMetering: cfg.hasMetering,
+          rtuType: cfg.rtuType,
+          installation: cfg.installation,
+          busbarCurrentA: cfg.busbarCurrentA,
+          fuseRatingA: cfg.fuseRatingA ?? null,
+          meteringCtPrimaryA: cfg.meteringCtPrimaryA ?? null,
+          ctClass: cfg.ctClass ?? null,
+          vtCores: cfg.vtCores ?? 1,
+          vtBurdenVa: cfg.vtBurdenVa ?? null,
+          vtClass: cfg.vtClass ?? null,
+          meteringWithFuse: cfg.meteringWithFuse ?? false,
           configCode,
         },
       },
@@ -293,7 +366,9 @@ export async function duplicateOffer(
       offerDate: src.offerDate,
       ownerId: opts.ownerId ?? null,
       submittedAt: opts.ownerId ? new Date() : null,
-      // Frozen price snapshot — copied as-is, deliberately NOT recomputed.
+      // Frozen price snapshot — copied as-is, deliberately NOT recomputed. The
+      // multi-RMU list carries its own per-line snapshots, so it copies verbatim too.
+      rmusJson: src.rmusJson,
       priceBookVersion: src.priceBookVersion,
       pricedAt: src.pricedAt,
       pricedFromStale: src.pricedFromStale,
@@ -341,20 +416,45 @@ function decorate<
     unitPrice: number;
     quantity: number;
     rmu: StoredRmu | null;
+    rmusJson?: string | null;
   }
 >(offer: T) {
+  const config = offer.rmu ? toConfigInput(offer.rmu) : null;
+  const generated = config ? assembleOffer(config) : null;
+  // Frozen prices when the offer has them, live lookup only for legacy offers.
+  const { pricing: listPricing, vatPct: offerVatPct } = resolvePricing(offer, config);
+  const lines = parseRmuLines(offer.rmusJson);
+
+  // Multi-RMU: the commercial is one line per RMU, each priced from its own frozen
+  // snapshot, summed. The offer-level `pricing` mirrors those combined totals so
+  // the history's money column (which reads commercial.totalInclVat) is correct.
+  if (lines && lines.length > 1 && "offerNumber" in offer) {
+    const units: CommercialUnit[] = lines.map((l) => {
+      const g = assembleOffer(l.config);
+      return {
+        description: g.commercialDescription,
+        pricing: pricingFromSnap(l, l.config),
+        unitPrice: l.unitPrice,
+        quantity: l.quantity,
+      };
+    });
+    const commercial = buildCommercialMulti(offer as never, units, offerVatPct);
+    const pricing = {
+      subtotal: commercial.subtotal,
+      discountAmount: commercial.discountAmount,
+      total: commercial.totalExclVat,
+    };
+    return { ...offer, pricing, generated, listPricing, commercial, rmuCount: lines.length };
+  }
+
   const pricing = computePricing({
     quantity: offer.quantity,
     unitPrice: offer.unitPrice,
     discountPct: offer.discountPct,
   });
-  const config = offer.rmu ? toConfigInput(offer.rmu) : null;
-  const generated = config ? assembleOffer(config) : null;
-  // Frozen prices when the offer has them, live lookup only for legacy offers.
-  const { pricing: listPricing, vatPct: offerVatPct } = resolvePricing(offer, config);
   const commercial =
     generated && offer && "offerNumber" in offer
       ? buildCommercial(offer as never, generated, listPricing, offerVatPct)
       : null;
-  return { ...offer, pricing, generated, listPricing, commercial };
+  return { ...offer, pricing, generated, listPricing, commercial, rmuCount: 1 };
 }

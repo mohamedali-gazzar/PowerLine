@@ -68,9 +68,6 @@ export default function NewOfferPage() {
   const [currency, setCurrency] = useState<"USD" | "EGP">("USD");
   const [usdRate, setUsdRate] = useState(0); // USD→EGP rate (used when currency = EGP)
   const [rateLoading, setRateLoading] = useState(false);
-  const [unitPrice, setUnitPrice] = useState(0);
-  const [priceTouched, setPriceTouched] = useState(false);
-  const [quantity, setQuantity] = useState(1);
   const [discountPct, setDiscountPct] = useState(0);
   const [validityDays, setValidityDays] = useState(3);
   const [deliveryWeeks, setDeliveryWeeks] = useState(12);
@@ -78,9 +75,27 @@ export default function NewOfferPage() {
   const [warrantyMonths, setWarrantyMonths] = useState(12);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
 
-  const [rmu, setRmu] = useState<RmuConfigInput>(initialRmu);
+  // An offer can hold more than one RMU. Each row is a full RMU: its config plus
+  // its OWN unit price + quantity (the commercial offer lists one line per RMU and
+  // sums them; discount / VAT / terms stay offer-level). `rmu` is the currently
+  // selected config — the RMU-tab form, its live preview and its chip all act on it.
+  type RmuRow = { config: RmuConfigInput; unitPrice: number; quantity: number; priceTouched: boolean };
+  const newRow = (): RmuRow => ({ config: { ...initialRmu }, unitPrice: 0, quantity: 1, priceTouched: false });
+  const [rows, setRows] = useState<RmuRow[]>([newRow()]);
+  const [sel, setSel] = useState(0);
+  const selIdx = Math.min(sel, rows.length - 1);
+  const cur = rows[selIdx] ?? rows[0];
+  const rmu = cur.config;
   const setR = <K extends keyof RmuConfigInput>(k: K, v: RmuConfigInput[K]) =>
-    setRmu((c) => ({ ...c, [k]: v }));
+    setRows((arr) => arr.map((r, i) => (i === selIdx ? { ...r, config: { ...r.config, [k]: v } } : r)));
+  const setRowPrice = (i: number, patch: Partial<RmuRow>) =>
+    setRows((arr) => arr.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const addRmu = () => { setRows((arr) => [...arr, newRow()]); setSel(rows.length); };
+  const removeRmu = (i: number) => {
+    if (rows.length <= 1) return; // always keep at least one RMU
+    setRows((arr) => arr.filter((_, j) => j !== i));
+    setSel((s) => Math.max(0, Math.min(s >= i ? s - 1 : s, rows.length - 2)));
+  };
   const isLucy = rmu.productType === "LUCY";
 
   // Offer cover-page team — sales lists are the SHARED registry (also used by LV)
@@ -142,31 +157,39 @@ export default function NewOfferPage() {
     if (rmu.productType === "LUCY") return; // Lucy has no LBS brand
     const available = AVAILABLE_BRANDS_BY_FAMILY[rmu.productType];
     if (rmu.lbsBrand && !available.includes(rmu.lbsBrand)) {
-      setRmu((c) => ({ ...c, lbsBrand: "ABB" }));
+      setR("lbsBrand", "ABB");
     }
   }, [rmu.productType, rmu.lbsBrand]);
 
   // Client spec: only EECH has data — reset to EECH if KAHRABA somehow set.
   useEffect(() => {
     if (rmu.clientSpec && !AVAILABLE_CLIENT_SPECS.includes(rmu.clientSpec)) {
-      setRmu((c) => ({ ...c, clientSpec: "EECH" }));
+      setR("clientSpec", "EECH");
     }
   }, [rmu.clientSpec]);
 
   // PRAL has no smart option — force it off (standard) whenever PRAL is selected.
   useEffect(() => {
     if (rmu.productType === "PRAL" && rmu.rtuType !== "NONE") {
-      setRmu((c) => ({ ...c, rtuType: "NONE" }));
+      setR("rtuType", "NONE");
     }
   }, [rmu.productType, rmu.rtuType]);
 
-  const [preview, setPreview] = useState<GeneratedOffer | null>(null);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ id: string; offerNumber: string; items: string[] } | null>(null);
   // Reuse a created offer across per-tab downloads until an input changes.
   const [created, setCreated] = useState<{ id: string; offerNumber: string; sig: string } | null>(null);
+
+  // Per-RMU technical previews, cached by config signature: identical configs fetch
+  // once, and adding/removing/reordering RMUs never re-fetches the unchanged ones.
+  const [previewCache, setPreviewCache] = useState<Record<string, GeneratedOffer>>({});
+  const cfgSig = (c: RmuConfigInput) => JSON.stringify(c);
+  const previewCacheRef = useRef(previewCache);
+  previewCacheRef.current = previewCache;
+  const previewOf = (c: RmuConfigInput): GeneratedOffer | null => previewCache[cfgSig(c)] ?? null;
+  const preview = previewOf(rmu); // the selected RMU's preview (drives the RMU-tab chips)
 
   const code = useMemo(
     () =>
@@ -176,43 +199,51 @@ export default function NewOfferPage() {
     [rmu]
   );
   const panelCode = preview?.panelCode || preview?.configCode || "…";
-  const basePriceUsd = preview?.listPricing?.basePrice ?? null;
-  const addOns = preview?.listPricing?.addOns ?? [];
   const rate = currency === "EGP" ? usdRate || 1 : 1;
-  const basePrice = basePriceUsd == null ? null : basePriceUsd * rate; // in the selected currency
-  const effUnit = unitPrice > 0 ? unitPrice : basePrice ?? 0;
-  const addOnsUnit = addOns.reduce((s, a) => s + a.price, 0) * rate;
-  const vatPct = preview?.vatPct ?? 14; // from the pricing master via the preview
-  const totals = useMemo(() => {
-    const qty = quantity || 0;
-    const panelSubtotal = effUnit * qty;
-    const addOnsTotal = addOnsUnit * qty;
-    const subtotal = panelSubtotal + addOnsTotal;
-    const discount = subtotal * (discountPct / 100);
-    const exVat = subtotal - discount;
-    const vat = exVat * (vatPct / 100);
-    return { panelSubtotal, addOnsTotal, subtotal, discount, exVat, vat, incVat: exVat + vat };
-  }, [effUnit, addOnsUnit, quantity, discountPct, vatPct]);
+  const vatPct = previewOf(rows[0].config)?.vatPct ?? 14; // one VAT rate for the whole offer
 
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  // One commercial line per RMU: base (floor) price, effective unit price (the
+  // typed price if any, else the base), add-ons and subtotals — selected currency.
+  const lines = rows.map((r) => {
+    const p = previewOf(r.config);
+    const baseUsd = p?.listPricing?.basePrice ?? null;
+    const base = baseUsd == null ? null : baseUsd * rate;
+    const eff = r.priceTouched && r.unitPrice > 0 ? r.unitPrice : base ?? 0;
+    const addOns = p?.listPricing?.addOns ?? [];
+    const addUnit = addOns.reduce((s, a) => s + a.price, 0) * rate;
+    const qty = r.quantity || 1;
+    return { row: r, preview: p, base, eff, addOns, addUnit, qty, panelSub: eff * qty, addSub: addUnit * qty };
+  });
+  const subtotalAll = lines.reduce((s, l) => s + l.panelSub + l.addSub, 0);
+  const discountAll = subtotalAll * (discountPct / 100);
+  const exVatAll = subtotalAll - discountAll;
+  const vatAll = exVatAll * (vatPct / 100);
+  const totals = { subtotal: subtotalAll, discount: discountAll, exVat: exVatAll, vat: vatAll, incVat: exVatAll + vatAll };
+  // An RMU with no catalogue price AND no manual price blocks the Commercial PDF.
+  const priceMissing = lines.some((l) => l.base == null && !(l.row.priceTouched && l.row.unitPrice > 0));
+
+  // Fetch previews for every DISTINCT config currently in the list (debounced).
+  const sigsKey = rows.map((r) => cfgSig(r.config)).join("§");
   useEffect(() => {
-    clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const uniq = Array.from(new Set(rows.map((r) => cfgSig(r.config))));
+      const need = uniq.filter((s) => !previewCacheRef.current[s]);
+      if (!need.length) return;
       try {
-        setPreview(await api.previewConfig(rmu));
+        const fetched = await Promise.all(
+          need.map(async (s) => [s, await api.previewConfig(JSON.parse(s) as RmuConfigInput)] as const)
+        );
+        if (cancelled) return;
+        setPreviewCache((c) => ({ ...c, ...Object.fromEntries(fetched) }));
         setPreviewErr(null);
       } catch (e) {
-        setPreviewErr((e as Error).message);
+        if (!cancelled) setPreviewErr((e as Error).message);
       }
     }, 200);
-    return () => clearTimeout(timer.current);
-  }, [rmu]);
-
-  // Default the unit price from the price-list DB; once the user edits it we stop
-  // auto-filling so their manual value sticks.
-  useEffect(() => {
-    if (!priceTouched) setUnitPrice(basePrice ?? 0);
-  }, [basePrice, priceTouched]);
+    return () => { cancelled = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sigsKey]);
 
   // USD→EGP exchange rate — auto-fetched when EGP is selected, but editable.
   async function fetchRate() {
@@ -233,10 +264,14 @@ export default function NewOfferPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currency]);
 
-  // No catalogue price for this config and no manual price entered.
-  const priceMissing = basePrice == null && unitPrice <= 0;
-
   function buildPayload(): OfferInput {
+    // The full RMU list, each with its effective unit price (manual or base) and
+    // quantity. rmus[0] also mirrors into the legacy single-RMU fields.
+    const rmusOut = rows.map((r, i) => ({
+      config: r.config,
+      unitPrice: lines[i].eff,
+      quantity: r.quantity || 1,
+    }));
     return {
       category: "RMU",
       salesNumber: null,
@@ -258,15 +293,16 @@ export default function NewOfferPage() {
       notes: null,
       currency,
       usdToEgpRate: currency === "EGP" ? usdRate || null : null,
-      unitPrice,
-      quantity,
+      unitPrice: rmusOut[0].unitPrice,
+      quantity: rmusOut[0].quantity,
       discountPct,
       validityDays,
       deliveryWeeks,
       paymentTerms: paymentTerms || null,
       warrantyMonths,
       offerDate: date || null,
-      rmu,
+      rmu: rmusOut[0].config,
+      rmus: rmusOut,
     };
   }
 
@@ -287,7 +323,8 @@ export default function NewOfferPage() {
       return;
     }
     if (outputs.includes("Commercial") && priceMissing) {
-      setError(`No catalogue price for ${panelCode} — enter a unit price on the Commercial tab.`);
+      const miss = lines.findIndex((l) => l.base == null && !(l.row.priceTouched && l.row.unitPrice > 0));
+      setError(`RMU ${miss + 1} has no catalogue price — enter its unit price on the Commercial tab.`);
       setTab("commercial");
       return;
     }
@@ -454,7 +491,32 @@ export default function NewOfferPage() {
 
       {/* ── Panel tab ───────────────────────────────────────────────────── */}
       {tab === "panel" && (
-        <div className="space-y-5">
+        <div className="grid items-start gap-5 lg:grid-cols-[220px_1fr]">
+          {/* RMUs in this offer — add / select / remove (like the LV panels list) */}
+          <div className="card p-3 lg:sticky lg:top-16">
+            <div className="mb-2 px-1 text-[11px] font-extrabold uppercase tracking-wide text-muted">RMUs in this offer</div>
+            {rows.map((r, i) => {
+              const active = i === sel;
+              const c = r.config;
+              const codeI = `${c.productType}${c.voltageKv}(${c.nalCount}+${c.nalfCount}${c.hasMetering ? "+M" : ""})`;
+              return (
+                <div key={i} className={`mb-1.5 flex items-center gap-1 rounded-lg border px-2 py-1.5 transition-colors ${active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"}`}>
+                  <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{i + 1}</span>
+                  <button type="button" onClick={() => setSel(i)} className="min-w-0 flex-1 text-left">
+                    <div className={`truncate text-sm font-bold ${active ? "text-brand-dark" : "text-ink"}`}>RMU {i + 1}</div>
+                    <div className="truncate text-[10px] text-muted">{codeI}</div>
+                  </button>
+                  {rows.length > 1 && (
+                    <button type="button" onClick={() => removeRmu(i)} title="Remove this RMU" className="shrink-0 rounded p-0.5 text-sm text-red-500 transition-colors hover:bg-white">✕</button>
+                  )}
+                </div>
+              );
+            })}
+            <button type="button" onClick={addRmu} className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-brand/40 px-3 py-1.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-tint">
+              <span className="text-sm leading-none">＋</span> Add RMU
+            </button>
+          </div>
+          <div className="space-y-5">
           {/* Two columns: the panel card (half width) on the left, Metering and
               Smart/RTU on the right. `items-start` keeps every card at its natural
               height — the left card's rows are tightened so the two sides come out
@@ -661,6 +723,7 @@ export default function NewOfferPage() {
             </button>
           </div>
         </div>
+        </div>
       )}
 
       {/* ── Technical Offer tab ─────────────────────────────────────────── */}
@@ -674,18 +737,36 @@ export default function NewOfferPage() {
               {submitting ? "Generating…" : "⬇ Download Technical PDF"}
             </button>
           </div>
-          <div className="card p-5">
-            {previewErr ? (
-              <p className="rounded bg-red-50 p-2 text-sm text-red-600">{previewErr}</p>
-            ) : preview ? (
-              <OfferView g={preview} />
-            ) : (
-              <div className="space-y-3">
-                <div className="skeleton h-24" />
-                <div className="skeleton h-32" />
-                <div className="skeleton h-40" />
-              </div>
-            )}
+          {previewErr && (
+            <p className="rounded bg-red-50 p-2 text-sm text-red-600">{previewErr}</p>
+          )}
+          {/* One technical section per RMU — exactly what the combined PDF prints. */}
+          <div className="space-y-5">
+            {rows.map((r, i) => {
+              const g = previewOf(r.config);
+              const c = r.config;
+              const codeI = `${c.productType}${c.voltageKv}(${c.nalCount}+${c.nalfCount}${c.hasMetering ? "+M" : ""})`;
+              return (
+                <div key={i} className="card p-5">
+                  {rows.length > 1 && (
+                    <div className="mb-4 flex items-center gap-2 border-b border-line pb-2">
+                      <span className="grid h-6 w-6 place-items-center rounded-full bg-brand text-xs font-bold text-white">{i + 1}</span>
+                      <span className="text-sm font-extrabold text-ink">RMU {i + 1} of {rows.length}</span>
+                      <span className="code-chip ml-auto">{g?.panelCode || codeI}</span>
+                    </div>
+                  )}
+                  {g ? (
+                    <OfferView g={g} />
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="skeleton h-24" />
+                      <div className="skeleton h-32" />
+                      <div className="skeleton h-40" />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div className="flex justify-between">
             <button type="button" className="btn-ghost" onClick={() => setTab("panel")}>← RMU</button>
@@ -699,23 +780,9 @@ export default function NewOfferPage() {
       {/* ── Commercial Offer tab ────────────────────────────────────────── */}
       {tab === "commercial" && (
         <div className="space-y-4 animate-fade-up">
+          {/* Offer-level commercial settings — shared by every RMU on the offer. */}
           <section className="card p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="sec-head !mb-0 !pb-0 after:hidden">Commercial</h2>
-              {basePrice != null ? (
-                <span className="chip bg-brand-light text-brand-dark">
-                  Panel list (min): {currency} {basePrice.toLocaleString()}
-                </span>
-              ) : (
-                <span className="chip bg-amber-100 text-amber-700">No catalogue price</span>
-              )}
-            </div>
-            {basePrice == null && (
-              <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                ⚠ <b>{panelCode}</b> isn’t in the price list, so it has no automatic price.
-                Enter the <b>unit price</b> manually below.
-              </div>
-            )}
+            <h2 className="sec-head">Commercial settings</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label="Currency">
                 <Segmented value={currency} onChange={(v) => setCurrency(v)} options={["USD", "EGP"] as const} />
@@ -730,20 +797,6 @@ export default function NewOfferPage() {
                   </div>
                 </Field>
               )}
-              <Field
-                label={basePrice == null ? "Unit price *" : "Unit price"}
-                hint={basePrice != null ? "From price list — editable" : "Required — no catalogue price"}
-              >
-                <NumberInput
-                  value={unitPrice || NaN}
-                  step={0.01}
-                  placeholder={basePrice != null ? String(basePrice) : "0"}
-                  onChange={(v) => { setPriceTouched(true); setUnitPrice(Number.isNaN(v) ? 0 : v); }}
-                />
-              </Field>
-              <Field label="Quantity">
-                <NumberInput value={quantity} min={1} suffix="pcs" onChange={setQuantity} />
-              </Field>
               <Field label="Discount (%)">
                 <NumberInput value={discountPct} step={0.5} onChange={setDiscountPct} />
               </Field>
@@ -756,28 +809,74 @@ export default function NewOfferPage() {
               <Field label="Warranty (months)">
                 <NumberInput value={warrantyMonths} onChange={setWarrantyMonths} />
               </Field>
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-3">
                 <Field label="Payment terms">
                   <TextInput value={paymentTerms} onChange={setPaymentTerms} placeholder="50% advance, 50% before delivery" />
                 </Field>
               </div>
             </div>
-            {/* Live commercial totals */}
+          </section>
+
+          {/* Price per RMU — one priced line per RMU, exactly what the PDF prints. */}
+          <section className="card p-5">
+            <h2 className="sec-head">Price per RMU</h2>
+            <div className="space-y-3">
+              {rows.map((r, i) => {
+                const l = lines[i];
+                const c = r.config;
+                const codeI = l.preview?.panelCode || `${c.productType}${c.voltageKv}(${c.nalCount}+${c.nalfCount}${c.hasMetering ? "+M" : ""})`;
+                const lineTotal = l.panelSub + l.addSub;
+                return (
+                  <div key={i} className="rounded-lg border border-line p-3">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand text-[11px] font-bold text-white">{i + 1}</span>
+                      <span className="text-sm font-bold text-ink">RMU {i + 1}</span>
+                      <span className="code-chip ml-1">{codeI}</span>
+                      {l.base != null ? (
+                        <span className="ml-auto chip bg-brand-light text-brand-dark">List (min): {currency} {l.base.toLocaleString()}</span>
+                      ) : (
+                        <span className="ml-auto chip bg-amber-100 text-amber-700">No catalogue price — enter unit price</span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <Field
+                        label={l.base == null ? "Unit price *" : "Unit price"}
+                        hint={l.base != null ? "From price list — editable" : "Required — no catalogue price"}
+                      >
+                        <NumberInput
+                          value={r.priceTouched ? (r.unitPrice || NaN) : (l.base ?? NaN)}
+                          step={0.01}
+                          placeholder={l.base != null ? String(l.base) : "0"}
+                          onChange={(v) => setRowPrice(i, { priceTouched: true, unitPrice: Number.isNaN(v) ? 0 : v })}
+                        />
+                      </Field>
+                      <Field label="Quantity">
+                        <NumberInput value={r.quantity} min={1} suffix="pcs" onChange={(v) => setRowPrice(i, { quantity: Number.isNaN(v) ? 1 : v })} />
+                      </Field>
+                      <Field label="Line total">
+                        <div className="flex h-[38px] items-center px-1 text-sm font-extrabold text-ink">
+                          {currency} {lineTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </div>
+                      </Field>
+                    </div>
+                    {l.addOns.length > 0 && (
+                      <div className="mt-1 text-[11px] text-muted">+ {l.addOns.map((a) => a.name).join(", ")} (each priced into the line above)</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Combined totals across all RMUs */}
             <div className="mt-4 rounded-lg bg-brand-tint p-4 text-sm">
               <div className="flex justify-between text-muted">
-                <span>Panel · {quantity} × {currency} {effUnit.toLocaleString()}</span>
-                <span>{currency} {totals.panelSubtotal.toLocaleString()}</span>
+                <span>Subtotal · {rows.length} RMU{rows.length > 1 ? "s" : ""}</span>
+                <span>{currency} {totals.subtotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
               </div>
-              {addOns.map((a) => (
-                <div key={a.name} className="flex justify-between text-muted">
-                  <span>{a.name} · {quantity} × {currency} {(a.price * rate).toLocaleString()}</span>
-                  <span>{currency} {(a.price * rate * quantity).toLocaleString()}</span>
-                </div>
-              ))}
               {discountPct > 0 && (
                 <div className="flex justify-between text-muted">
                   <span>Discount ({discountPct}%)</span>
-                  <span>− {currency} {totals.discount.toLocaleString()}</span>
+                  <span>− {currency} {totals.discount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 </div>
               )}
               <div className="flex justify-between text-muted">

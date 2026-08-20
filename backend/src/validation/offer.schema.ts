@@ -99,6 +99,22 @@ export const createOfferSchema = z.object({
   offerDate: z.string().trim().max(40).optional().nullable(),
 
   rmu: rmuConfigSchema,
+
+  // Multi-RMU: the full list of RMUs on this offer, each with its own unit price +
+  // quantity. Optional and backward-compatible — when omitted the offer is the
+  // classic single RMU (`rmu` above). When present, `rmu` MUST equal rmus[0].config
+  // (the client sends both; the first entry drives the legacy relation + snapshot).
+  rmus: z
+    .array(
+      z.object({
+        config: rmuConfigSchema,
+        unitPrice: z.number().min(0).default(0),
+        quantity: z.number().int().positive().default(1),
+      })
+    )
+    .min(1)
+    .max(20)
+    .optional(),
 });
 
 export type CreateOfferInput = z.infer<typeof createOfferSchema>;

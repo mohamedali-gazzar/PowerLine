@@ -66,6 +66,16 @@ model Offer {
 
   rmu RmuConfig?
 
+  /// Multi-RMU offers: the FULL list of RMUs on this offer, each with its own
+  /// frozen price snapshot + unit price + quantity, stored as JSON (same
+  /// string-holds-JSON precedent as LvQtn.state / snapAddOnsJson). NULL / absent =
+  /// a classic single-RMU offer (the `rmu` relation + snap* columns), so every
+  /// existing offer is untouched. When present, the technical PDF prints one
+  /// section per entry and the commercial PDF one line per entry; the `rmu`
+  /// relation + snap* columns mirror the FIRST entry for backward compatibility.
+  /// Additive + nullable — safe for the deploy's `prisma db push`.
+  rmusJson String?
+
   // Accounts system: the signed-in user who created this offer, and when it was
   // "submitted" (RMU offers are generated on creation, so set on create).
   owner       User?     @relation(fields: [ownerId], references: [id], onDelete: SetNull)

@@ -60,11 +60,14 @@ function setupFonts(doc: PDFKit.PDFDocument) {
   }
 }
 
-/** Render the assembled RMU technical offer as a PDF buffer. */
+/** Render the assembled RMU technical offer as a PDF buffer. Accepts one RMU or
+ *  many: with many, the single cover is followed by one technical section per RMU
+ *  (each labelled with a banner), all under continuous page numbering. */
 export function generateOfferPdf(
   offer: OfferRecord,
-  g: GeneratedOffer
+  g: GeneratedOffer | GeneratedOffer[]
 ): Promise<Buffer> {
+  const offers = Array.isArray(g) ? g : [g];
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: "A4",
@@ -88,35 +91,56 @@ export function generateOfferPdf(
         supportName: offer.supportName, supportMobile: offer.supportMobile, supportEmail: offer.supportEmail,
       });
 
-      // Deterministic page breaks: each new content page redraws the header.
-      const onBreak = () => runningHeader(doc, g);
-      (doc as unknown as { __onBreak: () => void }).__onBreak = onBreak;
-      doc.addPage();
-      onBreak();
+      offers.forEach((go, idx) => {
+        // Deterministic page breaks: each new content page redraws the header for
+        // the CURRENT RMU (its own product code in the top-right).
+        const onBreak = () => runningHeader(doc, go);
+        (doc as unknown as { __onBreak: () => void }).__onBreak = onBreak;
+        doc.addPage();
+        onBreak();
 
-      dataTable(doc, "General Data / Type of apparatus", g.generalData);
-      dataTable(doc, "Electrical Data", g.electricalData);
-      if (g.additionalData.length) dataTable(doc, "Additional Data", g.additionalData);
-      if (g.installationNote) {
-        doc.moveDown(0.2);
-        doc.roundedRect(MARGIN, doc.y, CONTENT_W, 22, 4).fill(LIGHT);
-        doc.fillColor(ORANGE_DK).font(BOLD).fontSize(9.5)
-          .text(g.installationNote, MARGIN + 8, doc.y - 16, { width: CONTENT_W - 16 });
-        doc.fillColor(INK);
-        doc.moveDown(0.6);
-      }
-      generalNotes(doc, g.generalNotes);
-      // Ring Main Unit Structure starts on its own page (page 1 = data + notes,
-      // page 2 = the cubicle structure).
-      doc.addPage();
-      onBreak();
-      lineup(doc, g);
+        // Label each RMU when the offer carries more than one, so the pages read
+        // as "RMU 1 of 3", "RMU 2 of 3", … rather than three lookalike sections.
+        if (offers.length > 1) rmuBanner(doc, idx + 1, offers.length, go);
+
+        dataTable(doc, "General Data / Type of apparatus", go.generalData);
+        dataTable(doc, "Electrical Data", go.electricalData);
+        if (go.additionalData.length) dataTable(doc, "Additional Data", go.additionalData);
+        if (go.installationNote) {
+          doc.moveDown(0.2);
+          doc.roundedRect(MARGIN, doc.y, CONTENT_W, 22, 4).fill(LIGHT);
+          doc.fillColor(ORANGE_DK).font(BOLD).fontSize(9.5)
+            .text(go.installationNote, MARGIN + 8, doc.y - 16, { width: CONTENT_W - 16 });
+          doc.fillColor(INK);
+          doc.moveDown(0.6);
+        }
+        generalNotes(doc, go.generalNotes);
+        // Ring Main Unit Structure starts on its own page (page 1 = data + notes,
+        // page 2 = the cubicle structure).
+        doc.addPage();
+        onBreak();
+        lineup(doc, go);
+      });
       pageFooters(doc);
       doc.end();
     } catch (err) {
       reject(err);
     }
   });
+}
+
+/** Orange banner introducing one RMU inside a multi-RMU technical offer. */
+function rmuBanner(doc: PDFKit.PDFDocument, n: number, total: number, g: GeneratedOffer) {
+  const h = 24;
+  ensure(doc, h + 8);
+  const y = doc.y;
+  doc.roundedRect(MARGIN, y, CONTENT_W, h, 4).fill(ORANGE);
+  doc.fillColor("white").font(BOLD).fontSize(12)
+    .text(`RMU ${n} of ${total}`, MARGIN + 10, y + 6, { width: 140, lineBreak: false });
+  doc.font(BOLD).fontSize(11)
+    .text(g.panelCode, MARGIN + 150, y + 7, { width: CONTENT_W - 160, align: "right", lineBreak: false });
+  doc.fillColor(INK);
+  doc.y = y + h + 8;
 }
 
 // ------------------------------------------------------------------ COVER
