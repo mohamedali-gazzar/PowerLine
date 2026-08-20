@@ -24,14 +24,28 @@ closed off.
 
 ## 2026-08-20 · Mohamed's side · Claude
 
+**RMU offer reorganised: a new "Settings" tab, and the Commercial tab is now the priced offer document.**
+
+- New **Settings** tab between **Project** and **RMU**. It holds the commercial settings (currency,
+  discount, validity, delivery, payment, warranty) and the per-RMU unit price + quantity that used to
+  sit on the Commercial tab.
+- The **Commercial Offer** tab now shows the actual **priced offer document** on an A4 page — the
+  "Main Offer" table (one line per RMU: description, qty, unit price, total), the subtotal / VAT /
+  total, and the Terms — matching the downloaded Commercial PDF. There are no input boxes there now.
+- Flow is now Project → Settings → RMU → Technical Offer → Commercial Offer. Frontend-only — no
+  database or pricing change.
+
+## 2026-08-20 · Mohamed's side · Claude
+
 **RMU offer tabs now show the branded cover page on screen (Technical & Commercial).**
 
 - The RMU offer's **Technical Offer** and **Commercial Offer** tabs now show the branded cover page
   at the top — PowerLine logo, the big "Technical / Commercial Offer" title, the QTN / OPTY / project /
   customer, the contacts, the product-range strip and the ISO / ABB footer — the same cover the LV
   section shows and the PDFs already print. This is on-screen only; the downloaded PDFs were unchanged.
-- The Technical tab's per-RMU sections now render as **A4 pages** (real A4 width, like the printed
-  PDF and the LV preview) instead of full-width cards, so the on-screen preview matches the document.
+- The **Technical** tab's per-RMU sections and the **Commercial** tab's offer content now render as
+  **A4 pages** (real A4 width, like the printed PDF and the LV preview) instead of full-width cards,
+  so the on-screen preview matches the document.
 - Under the hood the cover is now a shared component drawn by both the LV and RMU pages, so they stay
   identical. The LV page itself is unchanged. Frontend-only — no database or pricing change.
 

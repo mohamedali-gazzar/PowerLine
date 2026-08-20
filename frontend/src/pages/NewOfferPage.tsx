@@ -42,9 +42,10 @@ const initialRmu: RmuConfigInput = {
 };
 
 // Tabbed workflow, mirroring the LV section (Project → Panel → Technical → Commercial).
-type Tab = "project" | "panel" | "technical" | "commercial";
+type Tab = "project" | "settings" | "panel" | "technical" | "commercial";
 const TABS: { key: Tab; label: string }[] = [
   { key: "project", label: "Project" },
+  { key: "settings", label: "Settings" },
   { key: "panel", label: "RMU" },
   { key: "technical", label: "Technical Offer" },
   { key: "commercial", label: "Commercial Offer" },
@@ -325,8 +326,8 @@ export default function NewOfferPage() {
     }
     if (outputs.includes("Commercial") && priceMissing) {
       const miss = lines.findIndex((l) => l.base == null && !(l.row.priceTouched && l.row.unitPrice > 0));
-      setError(`RMU ${miss + 1} has no catalogue price — enter its unit price on the Commercial tab.`);
-      setTab("commercial");
+      setError(`RMU ${miss + 1} has no catalogue price — enter its unit price on the Settings tab.`);
+      setTab("settings");
       return;
     }
     setSubmitting(true);
@@ -485,7 +486,7 @@ export default function NewOfferPage() {
           </div>
 
           <div className="flex justify-end">
-            <button type="button" className="btn-primary" onClick={() => setTab("panel")}>Next: RMU →</button>
+            <button type="button" className="btn-primary" onClick={() => setTab("settings")}>Next: Settings →</button>
           </div>
         </div>
       )}
@@ -718,7 +719,7 @@ export default function NewOfferPage() {
           </div>
 
           <div className="flex justify-between">
-            <button type="button" className="btn-ghost" onClick={() => setTab("project")}>← Project</button>
+            <button type="button" className="btn-ghost" onClick={() => setTab("settings")}>← Settings</button>
             <button type="button" className="btn-primary" onClick={() => setTab("technical")}>
               Next: Technical Offer →
             </button>
@@ -792,23 +793,9 @@ export default function NewOfferPage() {
         </div>
       )}
 
-      {/* ── Commercial Offer tab ────────────────────────────────────────── */}
-      {tab === "commercial" && (
+      {/* ── Settings tab — offer-level commercial settings + per-RMU pricing ── */}
+      {tab === "settings" && (
         <div className="space-y-4 animate-fade-up">
-          {/* Branded cover — the same title page the Commercial PDF prints. */}
-          <OfferCover
-            kind="Commercial"
-            date={date}
-            qtnRef={team.quotationNo}
-            optyNo={team.opportunityNo}
-            projectName={projectName}
-            customer={customer}
-            contacts={[
-              { role: "Sales", name: team.salesName, phone: team.salesMobile, email: team.salesEmail },
-              { role: "Manager", name: manager.name, phone: manager.mobile, email: manager.email },
-              { role: "Support", name: team.supportName, phone: team.supportMobile, email: team.supportEmail },
-            ]}
-          />
           {/* Offer-level commercial settings — shared by every RMU on the offer. */}
           <section className="card p-5">
             <h2 className="sec-head">Commercial settings</h2>
@@ -846,7 +833,7 @@ export default function NewOfferPage() {
             </div>
           </section>
 
-          {/* Price per RMU — one priced line per RMU, exactly what the PDF prints. */}
+          {/* Price per RMU — one priced line per RMU, exactly what the Commercial offer prints. */}
           <section className="card p-5">
             <h2 className="sec-head">Price per RMU</h2>
             <div className="space-y-3">
@@ -918,6 +905,98 @@ export default function NewOfferPage() {
               </div>
             </div>
           </section>
+
+          <div className="flex items-center justify-between">
+            <button type="button" className="btn-ghost" onClick={() => setTab("project")}>← Project</button>
+            <button type="button" className="btn-primary" onClick={() => setTab("panel")}>Next: RMU →</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Commercial Offer tab — the priced offer document, like the printed PDF ── */}
+      {tab === "commercial" && (
+        <div className="space-y-4 animate-fade-up">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
+              <span className="h-2 w-2 rounded-full bg-green-500" /> Live commercial offer
+            </div>
+            <button type="button" className="btn-primary" disabled={submitting} onClick={() => download(["Commercial"])}>
+              {submitting ? "Generating…" : "⬇ Download Commercial PDF"}
+            </button>
+          </div>
+          {/* Branded cover — the same title page the Commercial PDF prints. */}
+          <OfferCover
+            kind="Commercial"
+            date={date}
+            qtnRef={team.quotationNo}
+            optyNo={team.opportunityNo}
+            projectName={projectName}
+            customer={customer}
+            contacts={[
+              { role: "Sales", name: team.salesName, phone: team.salesMobile, email: team.salesEmail },
+              { role: "Manager", name: manager.name, phone: manager.mobile, email: manager.email },
+              { role: "Support", name: team.supportName, phone: team.supportMobile, email: team.supportEmail },
+            ]}
+          />
+          {/* Main Offer — the priced line-item document (A4), exactly what the PDF prints. */}
+          <div className="a4-sheet px-12 py-10 text-ink">
+            <h2 className="mb-5 text-3xl font-extrabold" style={{ color: "#F16722" }}>Main Offer</h2>
+            <div className="grid grid-cols-[2rem_1fr_3rem_6.5rem_6.5rem] gap-x-3 border-b-2 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted" style={{ borderColor: "#F16722" }}>
+              <span>Item</span>
+              <span>Description</span>
+              <span className="text-center">Qty</span>
+              <span className="text-right">Unit ({currency})</span>
+              <span className="text-right">Total ({currency})</span>
+            </div>
+            {(() => {
+              const items: { desc: string; qty: number; unit: number; total: number }[] = [];
+              lines.forEach((l) => {
+                const desc = l.preview?.commercialDescription || `${l.preview?.panelCode || "RMU"} — Ring Main Unit`;
+                items.push({ desc, qty: l.qty, unit: l.eff, total: l.panelSub });
+                l.addOns.forEach((a) => items.push({ desc: a.name, qty: l.qty, unit: a.price * rate, total: a.price * rate * l.qty }));
+              });
+              return items.map((it, i) => (
+                <div key={i} className="grid grid-cols-[2rem_1fr_3rem_6.5rem_6.5rem] gap-x-3 border-b border-line py-3 text-sm">
+                  <span className="text-muted">{i + 1}</span>
+                  <span className="font-bold">{it.desc}</span>
+                  <span className="text-center">{it.qty}</span>
+                  <span className="text-right">{it.unit > 0 ? it.unit.toLocaleString(undefined, { maximumFractionDigits: 0 }) : <span className="font-bold text-amber-600">POA</span>}</span>
+                  <span className="text-right font-bold">{it.unit > 0 ? it.total.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "POA"}</span>
+                </div>
+              ));
+            })()}
+            <div className="mt-6 flex justify-end">
+              <div className="w-72 text-sm">
+                <div className="flex justify-between py-1 text-muted">
+                  <span>Subtotal (excl. VAT)</span>
+                  <span>{currency} {totals.exVat.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
+                {discountPct > 0 && (
+                  <div className="flex justify-between py-1 text-muted">
+                    <span>Discount ({discountPct}%)</span>
+                    <span>− {currency} {totals.discount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  </div>
+                )}
+                <div className="flex justify-between py-1 text-muted">
+                  <span>VAT ({vatPct}%)</span>
+                  <span>{currency} {totals.vat.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
+                <div className="mt-1 flex justify-between border-t-2 pt-2 text-lg font-extrabold" style={{ borderColor: "#F16722" }}>
+                  <span>Total ({currency})</span>
+                  <span style={{ color: "#F16722" }}>{currency} {totals.incVat.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Terms — mirrors the PDF's Terms block. */}
+            <h3 className="mb-3 mt-8 text-xl font-extrabold" style={{ color: "#F16722" }}>Terms</h3>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+              <div className="flex gap-2"><span className="w-20 font-bold text-muted">Validity:</span><span>{validityDays} days</span></div>
+              <div className="flex gap-2"><span className="w-20 font-bold text-muted">Delivery:</span><span>{deliveryWeeks ? `${deliveryWeeks} weeks` : "To be confirmed"}</span></div>
+              <div className="flex gap-2"><span className="w-20 font-bold text-muted">Payment:</span><span>{paymentTerms || "To be agreed"}</span></div>
+              <div className="flex gap-2"><span className="w-20 font-bold text-muted">Warranty:</span><span>{warrantyMonths ? `${warrantyMonths} months` : "Standard"}</span></div>
+            </div>
+          </div>
 
           <div className="flex items-center justify-between">
             <button type="button" className="btn-ghost" onClick={() => setTab("technical")}>← Technical Offer</button>
