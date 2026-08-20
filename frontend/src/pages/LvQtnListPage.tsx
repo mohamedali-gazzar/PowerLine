@@ -7,7 +7,6 @@ import type { Offer } from "../types";
 import { useAuth } from "../auth/AuthContext";
 import { useAutoRefresh, useChangedKeys } from "../hooks/useAutoRefresh";
 import { fmtEgp, DEFAULT_FACTORS } from "../lv/catalog";
-import NewQtnPicker from "../components/NewQtnPicker";
 
 /** Deleting an LV quotation is refused (409) once it has entered the approval flow,
  *  so the button is only active on the two stages the server still accepts. */
@@ -122,7 +121,6 @@ export default function LvQtnListPage() {
   const [showRemoved, setShowRemoved] = useState(false);
   const [loadErr, setLoadErr] = useState("");
   const [actionErr, setActionErr] = useState("");
-  const [picker, setPicker] = useState(false);
   const [q, setQ] = useState("");
   const [type, setType] = useState<"" | Kind>("");
   const [status, setStatus] = useState<string>("");
@@ -302,7 +300,6 @@ export default function LvQtnListPage() {
       ? myPerms.includes("qtn.amendOwn") || myPerms.includes("qtn.amendAll")
       : myPerms.includes("qtn.amendAll"));
 
-  const onNew = () => setPicker(true);
   const rowHref = (x: UniRow) => (x.kind === "RMU" ? `/offers/${x.id}` : `/lv/qtn/${x.id}`);
 
   // ── LV actions ──────────────────────────────────────────────────────────────
@@ -383,7 +380,6 @@ export default function LvQtnListPage() {
             </p>
           )}
         </div>
-        <button className="btn-primary shrink-0" onClick={onNew}>+ New QTN</button>
       </div>
 
       {loadErr && (
@@ -406,9 +402,8 @@ export default function LvQtnListPage() {
           <p className="text-muted">No offers yet.</p>
           <p className="mx-auto mt-1 max-w-md text-xs text-muted">
             An offer holds the whole job — its project data, pricing, panels/configuration, and the
-            Technical / Commercial offers it generates.
+            Technical / Commercial offers it generates. Start one from the Home page.
           </p>
-          <button className="btn-primary mt-4" onClick={onNew}>Create your first QTN</button>
         </div>
       ) : (
         <>
@@ -561,8 +556,6 @@ export default function LvQtnListPage() {
           )}
         </>
       )}
-
-      {picker && <NewQtnPicker desk="all" onClose={() => setPicker(false)} />}
     </div>
   );
 }

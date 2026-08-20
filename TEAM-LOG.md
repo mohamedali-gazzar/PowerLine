@@ -24,6 +24,14 @@ closed off.
 
 ## 2026-08-20 · Mohamed's side · Claude
 
+**Offer History is now history-only — the "+ New QTN" button was removed from it.**
+
+- The Offer History page no longer has a "+ New QTN" button (header and empty-state both). It is
+  purely for browsing/searching saved offers now. Creating a new offer still lives on the **Home**
+  page (its "+ New QTN" covers LV and RMU), and the empty-state text points there.
+
+## 2026-08-20 · Mohamed's side · Claude
+
 **One "Offer History" for everything — LV quotations and RMU offers together.**
 
 - The old split (separate "LV Offers" and "RMU Offers" screens) is gone. The sidebar now has a
