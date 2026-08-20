@@ -383,72 +383,6 @@ function evaluate(panel: ParsedPanel): Evaluated {
   return { rows, matchedCount, checkCount, name, problem: !name || panel.matchedFields.length === 0 };
 }
 
-// ── Template download ────────────────────────────────────────────────────────
-interface TmplComp { qty: number; desc: string; brand: string; ref: string }
-interface TmplSection { section: string; rows: TmplComp[] }
-function buildTemplateBlocks(): Cell[][] {
-  const g: Cell[][] = [];
-  let r = 0;
-  const put = (row: number, col: number, v: Cell) => { while (g.length <= row) g.push([]); const rr = g[row]; while (rr.length <= col) rr.push(null); rr[col] = v; };
-  const fieldsFor = (rating: string, fedFrom: string): [string, string][] => [
-    ["Panel Type", "Local"], ["IP / Rating", rating],
-    ["Mounting", "Floor Standing"], ["Amb. Temp.", "35°C"],
-    ["RAL", "7035"], ["Neutral", "50% Phase"],
-    ["Copper", "Bare"], ["Earth", "25% Phase"],
-    ["Incoming Cables", "Bottom"], ["Form", "1"],
-    ["Outgoing Cables", "Bottom"], ["Fed From", fedFrom],
-    ["Short Circuit", "50kA"],
-  ];
-  const block = (no: number, name: string, qty: number, fields: [string, string][], comps: TmplSection[]) => {
-    put(r, 0, `Item No. ${no}`); put(r, 1, name); put(r, 3, "Item Qty."); put(r, 4, qty); r++;
-    for (let i = 0; i < fields.length; i += 2) {
-      put(r, 0, fields[i][0]); put(r, 1, fields[i][1]);
-      if (fields[i + 1]) { put(r, 3, fields[i + 1][0]); put(r, 4, fields[i + 1][1]); }
-      r++;
-    }
-    r++; // blank spacer before the component table
-    put(r, 0, "Qty"); put(r, 1, "Description"); put(r, 2, "Brand"); put(r, 3, "Reference"); r++;
-    for (const sec of comps) {
-      put(r, 1, sec.section); r++; // section label: text in Description column only
-      for (const c of sec.rows) { put(r, 0, c.qty); put(r, 1, c.desc); put(r, 2, c.brand); put(r, 3, c.ref); r++; }
-    }
-    r++; // blank spacer between panels
-  };
-  block(1, "MDB-01 Main Distribution", 1, fieldsFor("IP54 / 2000A", "Transformer 1"), [
-    { section: "Main Incoming", rows: [
-      { qty: 1, desc: "ACB 2000A 3P Fixed", brand: "ABB", ref: "ACB-E2.2-2000" },
-      { qty: 3, desc: "Current Transformer 2000/5A", brand: "ABB", ref: "CT-2000-5" },
-    ] },
-    { section: "Outgoings", rows: [
-      { qty: 2, desc: "MCCB 250A 3P", brand: "ABB", ref: "XT4-250-3P" },
-      { qty: 1, desc: "MCCB 100A 4P (leave Reference blank if unknown)", brand: "ABB", ref: "" },
-    ] },
-  ]);
-  block(2, "SMDB-02 Sub Main", 2, fieldsFor("IP42 / 630A", "MDB-01"), [
-    { section: "Main Incoming", rows: [
-      { qty: 1, desc: "MCCB 630A 3P", brand: "ABB", ref: "XT5-630-3P" },
-    ] },
-    { section: "Outgoings", rows: [
-      { qty: 4, desc: "MCCB 160A 3P", brand: "ABB", ref: "XT2-160-3P" },
-      { qty: 6, desc: "MCB 63A 4P", brand: "ABB", ref: "XT1-100-4P" },
-    ] },
-  ]);
-  return g;
-}
-function downloadTemplate() {
-  const ws = XLSX.utils.aoa_to_sheet(buildTemplateBlocks());
-  ws["!cols"] = [{ wch: 18 }, { wch: 42 }, { wch: 16 }, { wch: 20 }, { wch: 18 }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Panels");
-  const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
-  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  const a = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  a.href = url; a.download = "Panels import template.xlsx";
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
-}
-
 // ── Component ────────────────────────────────────────────────────────────────
 interface Props {
   onImportPanels: (panels: ImportedPanel[]) => void;
@@ -478,7 +412,7 @@ export default function PanelsBulkImport({ onImportPanels, knownComponentRefs = 
     try {
       const { sheet, panels } = parseWorkbook(await f.arrayBuffer());
       if (!panels.length) {
-        setError(`No panels found in "${f.name}". Each panel block must start with a row containing "Item No." plus "Item Qty.". Try Download template for a known-good file.`);
+        setError(`No panels found in "${f.name}". Each panel block must start with a row containing "Item No." plus "Item Qty.".`);
         return;
       }
       setPreview({ fileName: f.name, sheet, panels: panels.map((p) => ({ parsed: p, ev: evaluate(p) })) });
@@ -648,7 +582,6 @@ export default function PanelsBulkImport({ onImportPanels, knownComponentRefs = 
     <div className="space-y-2">
       <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={onFile} />
       <button className="btn-primary w-full" onClick={() => fileRef.current?.click()}>Import panels from Excel</button>
-      <button className="btn-ghost w-full" onClick={downloadTemplate}>⬇ Download template</button>
       {error && (
         <div className="rounded-lg border border-red-300 bg-red-50 p-2 text-xs font-semibold text-red-700 dark:bg-red-950/30">{error}</div>
       )}

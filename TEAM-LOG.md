@@ -24,6 +24,14 @@ closed off.
 
 ## 2026-08-20 · Mohamed's side · Claude
 
+**Panels tab: removed the "Download template" button from the Excel import.**
+
+- The "⬇ Download template" button under "Import panels from Excel" is gone. Importing still works
+  exactly as before; only the sample-template download was removed. (The unused template-builder
+  code behind it was cleaned up too.)
+
+## 2026-08-20 · Mohamed's side · Claude
+
 **Offer History is now history-only — the "+ New QTN" button was removed from it.**
 
 - The Offer History page no longer has a "+ New QTN" button (header and empty-state both). It is
