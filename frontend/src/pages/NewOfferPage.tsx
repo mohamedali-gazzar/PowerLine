@@ -853,6 +853,17 @@ export default function NewOfferPage() {
                       ) : (
                         <span className="ml-auto chip bg-amber-100 text-amber-700">No catalogue price — enter unit price</span>
                       )}
+                      {l.base != null && (
+                        <button
+                          type="button"
+                          onClick={() => setRowPrice(i, { priceTouched: false, unitPrice: 0 })}
+                          disabled={!r.priceTouched}
+                          title="Reset the unit price back to the price-list value"
+                          className="rounded-md border border-line px-2 py-0.5 text-xs font-semibold text-brand-dark transition-colors hover:bg-brand-tint disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          ↺ Reset
+                        </button>
+                      )}
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <Field

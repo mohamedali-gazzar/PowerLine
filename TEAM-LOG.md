@@ -24,6 +24,14 @@ closed off.
 
 ## 2026-08-20 · Mohamed's side · Claude
 
+**RMU pricing: a "Reset" button per RMU to snap the unit price back to the price list.**
+
+- On the **Settings** tab's "Price per RMU", each RMU now has a **↺ Reset** button. If you've typed a
+  manual unit price, Reset puts it back to the catalogue (list) price. It's greyed out when the price
+  already equals the list price (nothing to reset). Frontend-only.
+
+## 2026-08-20 · Mohamed's side · Claude
+
 **RMU offer reorganised: a new "Settings" tab, and the Commercial tab is now the priced offer document.**
 
 - New **Settings** tab between **Project** and **RMU**. It holds the commercial settings (currency,
