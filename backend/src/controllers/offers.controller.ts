@@ -11,6 +11,7 @@ import {
   getOffer,
   getOfferRaw,
   deleteOffer,
+  duplicateOffer,
   toConfigInput,
   resolvePricing,
 } from "../services/offer.service";
@@ -91,6 +92,24 @@ export async function getOfferById(req: Request, res: Response) {
       return res.status(404).json({ error: "Offer not found" });
     }
     res.json(offer);
+  } catch (err) {
+    handleError(err, res);
+  }
+}
+
+// POST /api/offers/:id/duplicate — clone an offer into a fresh DRAFT (Duplicate /
+// Amend in the unified history). Owner-only, like get/delete. An optional ?number=
+// sets the new offer number; otherwise the next PL-YYYY-#### is assigned.
+export async function duplicateOfferById(req: Request, res: Response) {
+  try {
+    const src = await getOfferRaw(req.params.id);
+    if (!src || src.ownerId !== req.userId) {
+      return res.status(404).json({ error: "Offer not found" });
+    }
+    const number = typeof req.query.number === "string" ? req.query.number : undefined;
+    const dup = await duplicateOffer(req.params.id, { offerNumber: number, ownerId: req.userId });
+    if (!dup) return res.status(404).json({ error: "Offer not found" });
+    res.status(201).json(dup);
   } catch (err) {
     handleError(err, res);
   }

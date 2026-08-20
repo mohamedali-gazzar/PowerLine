@@ -6,6 +6,7 @@ import {
   getOffers,
   getOfferById,
   deleteOfferById,
+  duplicateOfferById,
   getOfferPdf,
   getCommercialPdf,
   getSldPdf,
@@ -18,6 +19,7 @@ router.post("/", postOffer);
 router.post("/preview", postPreview);
 router.get("/next-qtn", getNextQtn); // must precede "/:id"
 router.get("/:id", getOfferById);
+router.post("/:id/duplicate", duplicateOfferById);
 router.delete("/:id", deleteOfferById);
 router.get("/:id/pdf", getOfferPdf);
 router.get("/:id/commercial-pdf", getCommercialPdf);

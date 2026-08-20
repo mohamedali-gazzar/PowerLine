@@ -7,7 +7,6 @@ import { installCachedCatalog, refreshCatalog, onCatalogChange } from "./lv/cata
 import { getToken } from "./api";
 import AuthPage from "./pages/AuthPage";
 import HomeDashboard from "./pages/HomeDashboard";
-import OffersListPage from "./pages/OffersListPage";
 import NewOfferPage from "./pages/NewOfferPage";
 import OfferDetailPage from "./pages/OfferDetailPage";
 import LvQtnListPage from "./pages/LvQtnListPage";
@@ -61,7 +60,8 @@ function Gate() {
     <Routes>
       <Route path="/" element={<App />}>
         <Route index element={<HomeDashboard />} />
-        <Route path="rmu" element={<OffersListPage />} />
+        {/* RMU offers now live in the one unified history — keep the old link working. */}
+        <Route path="rmu" element={<Navigate to="/lv" replace />} />
         <Route
           path="kiosks"
           element={

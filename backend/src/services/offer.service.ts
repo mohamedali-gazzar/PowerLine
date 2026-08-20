@@ -247,6 +247,92 @@ export async function deleteOffer(id: string) {
   return prisma.offer.delete({ where: { id } });
 }
 
+/** Clone an offer into a fresh DRAFT (used by Duplicate / Amend). The price
+ *  snapshot (snap* columns) is copied VERBATIM — never re-priced — so a copy of a
+ *  quotation already sent to a customer keeps the exact numbers it was quoted at,
+ *  the same rule createOffer freezes on. A new offer number is assigned; the RMU
+ *  sub-config is copied too. `ownerId` attributes the copy to the signed-in user. */
+export async function duplicateOffer(
+  id: string,
+  opts: { offerNumber?: string; ownerId?: string | null } = {}
+) {
+  const src = await prisma.offer.findUnique({ where: { id }, include: includeRmu });
+  if (!src) return null;
+  const offerNumber = opts.offerNumber?.trim() || (await nextOfferNumber());
+  const r = src.rmu;
+  const created = await prisma.offer.create({
+    data: {
+      offerNumber,
+      category: src.category,
+      projectName: src.projectName,
+      customer: src.customer,
+      status: "DRAFT", // a copy always starts as a draft
+      salesNumber: src.salesNumber,
+      orderNumber: src.orderNumber,
+      quotationNo: src.quotationNo,
+      opportunityNo: src.opportunityNo,
+      salesName: src.salesName,
+      salesMobile: src.salesMobile,
+      salesEmail: src.salesEmail,
+      salesManagerName: src.salesManagerName,
+      salesManagerMobile: src.salesManagerMobile,
+      salesManagerEmail: src.salesManagerEmail,
+      supportName: src.supportName,
+      supportMobile: src.supportMobile,
+      supportEmail: src.supportEmail,
+      currency: src.currency,
+      usdToEgpRate: src.usdToEgpRate,
+      unitPrice: src.unitPrice,
+      quantity: src.quantity,
+      discountPct: src.discountPct,
+      validityDays: src.validityDays,
+      deliveryWeeks: src.deliveryWeeks,
+      paymentTerms: src.paymentTerms,
+      warrantyMonths: src.warrantyMonths,
+      notes: src.notes,
+      offerDate: src.offerDate,
+      ownerId: opts.ownerId ?? null,
+      submittedAt: opts.ownerId ? new Date() : null,
+      // Frozen price snapshot — copied as-is, deliberately NOT recomputed.
+      priceBookVersion: src.priceBookVersion,
+      pricedAt: src.pricedAt,
+      pricedFromStale: src.pricedFromStale,
+      snapPriceKey: src.snapPriceKey,
+      snapBasePriceUsd: src.snapBasePriceUsd,
+      snapListPriceUsd: src.snapListPriceUsd,
+      snapAddOnsJson: src.snapAddOnsJson,
+      snapVatPct: src.snapVatPct,
+      snapPriceFound: src.snapPriceFound,
+      rmu: r
+        ? {
+            create: {
+              productType: r.productType,
+              lbsBrand: r.lbsBrand,
+              clientSpec: r.clientSpec,
+              voltageKv: r.voltageKv,
+              nalCount: r.nalCount,
+              nalfCount: r.nalfCount,
+              hasMetering: r.hasMetering,
+              rtuType: r.rtuType,
+              installation: r.installation,
+              busbarCurrentA: r.busbarCurrentA,
+              fuseRatingA: r.fuseRatingA,
+              meteringCtPrimaryA: r.meteringCtPrimaryA,
+              ctClass: r.ctClass,
+              vtCores: r.vtCores,
+              vtBurdenVa: r.vtBurdenVa,
+              vtClass: r.vtClass,
+              meteringWithFuse: r.meteringWithFuse,
+              configCode: r.configCode,
+            },
+          }
+        : undefined,
+    },
+    include: includeRmu,
+  });
+  return decorate(created);
+}
+
 // Attach the assembled technical offer + computed commercial totals.
 function decorate<
   T extends PriceSnapshotFields & {

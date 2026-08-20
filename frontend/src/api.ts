@@ -488,6 +488,11 @@ export const api = {
   createOffer: (data: OfferInput) =>
     request<Offer>("/offers", { method: "POST", body: JSON.stringify(data) }),
   deleteOffer: (id: string) => request<void>(`/offers/${id}`, { method: "DELETE" }),
+  /** Clone an RMU offer into a fresh DRAFT (Duplicate / Amend). Prices stay frozen. */
+  duplicateOffer: (id: string, number?: string) =>
+    request<Offer>(`/offers/${id}/duplicate${number ? `?number=${encodeURIComponent(number)}` : ""}`, {
+      method: "POST",
+    }),
   previewConfig: (cfg: RmuConfigInput) =>
     request<GeneratedOffer>("/offers/preview", { method: "POST", body: JSON.stringify(cfg) }),
   /** Suggested next RMU quotation number (QTN-YY-####). */

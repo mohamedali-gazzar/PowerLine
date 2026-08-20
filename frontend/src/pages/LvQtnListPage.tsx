@@ -3,47 +3,136 @@ import { useNavigate } from "react-router-dom";
 import { listQtns, listAllQtns, deleteQtn, restoreQtn, duplicateQtn, amendQtn, supersededNumbers, parseRevision, type QtnListItem } from "../lv/qtns";
 import { useDialogs } from "../components/ConfirmModal";
 import { api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE, type QtnStatus } from "../api";
+import type { Offer } from "../types";
 import { useAuth } from "../auth/AuthContext";
 import { useAutoRefresh, useChangedKeys } from "../hooks/useAutoRefresh";
 import { fmtEgp, DEFAULT_FACTORS } from "../lv/catalog";
 import NewQtnPicker from "../components/NewQtnPicker";
 
-/** Deleting is refused (409) once a quotation has entered the approval flow, so
- *  the button is only offered on the two stages the server still accepts. */
+/** Deleting an LV quotation is refused (409) once it has entered the approval flow,
+ *  so the button is only active on the two stages the server still accepts. */
 const DELETABLE = new Set<QtnStatus>(["DRAFT", "RETURNED"]);
-// Status-filter value for superseded revisions. "Cancelled" is derived from the
+// Status-filter value for superseded LV revisions. "Cancelled" is derived from the
 // revision numbers, not a stored status, so it needs a sentinel that can never collide
-// with a real QtnStatus.
+// with a real status.
 const CANCELLED_FILTER = "__cancelled__";
 
-/** LV landing page — the offers history. "+ New QTN" opens a fresh workspace
- *  (Project / Pricing / Panels / Technical / Commercial / Material). */
+// RMU offers carry their own small lifecycle, separate from the LV approval workflow.
+const RMU_STATUS_LABEL: Record<string, string> = { DRAFT: "Draft", SENT: "Sent", WON: "Won", LOST: "Lost" };
+const RMU_STATUS_STYLE: Record<string, string> = {
+  DRAFT: "bg-slate-100 text-slate-600",
+  SENT: "bg-blue-100 text-blue-700",
+  WON: "bg-green-100 text-green-700",
+  LOST: "bg-red-100 text-red-700",
+};
+const RMU_STATUSES = ["SENT", "WON", "LOST"] as const; // DRAFT is shared with the LV list
+
+/** RMU offer total as USD incl. VAT, to sit in the same column as the LV total.
+ *  Uses the offer's own frozen commercial figure; converts from EGP with the offer's
+ *  stored rate. Returns null when it can't be determined (shown as "—"). */
+function rmuTotalUsd(o: Offer): number | null {
+  const incl = o.commercial?.totalInclVat ?? null;
+  if (incl == null || !Number.isFinite(incl)) return null;
+  const cur = (o.currency || "").toUpperCase();
+  if (cur === "USD") return incl;
+  if (o.usdToEgpRate && o.usdToEgpRate > 0) return incl / o.usdToEgpRate; // stored in EGP
+  return null;
+}
+
+type Kind = "LV" | "RMU";
+/** One row of the unified history — an LV quotation or an RMU offer, normalised to
+ *  a shared shape so both render in the same table. `lv` / `rmu` keep the raw record
+ *  for the row's actions. */
+interface UniRow {
+  kind: Kind;
+  id: string;
+  number: string;
+  updatedAt: string;
+  projectName: string;
+  customer: string;
+  units: string; // LV: panel count · RMU: "N ways"
+  totalUsd: number | null;
+  statusKey: string;
+  statusLabel: string;
+  statusStyle: string;
+  ownerEmail?: string;
+  ownerName?: string;
+  approverEmail?: string;
+  removedAt?: string | null;
+  removedBy?: string;
+  cancelled?: boolean; // LV superseded revision
+  lv?: QtnListItem;
+  rmu?: Offer;
+}
+
+// ── Action icons (16px, stroke = currentColor) ────────────────────────────────
+const AmendIcon = (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+);
+const DuplicateIcon = (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+);
+const TrashIcon = (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M6 6v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6" /></svg>
+);
+const RestoreIcon = (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
+);
+
+function Act({ title, onClick, disabled, danger, children }: {
+  title: string;
+  onClick: (e: React.MouseEvent) => void;
+  disabled?: boolean;
+  danger?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+      className={`grid h-8 w-8 place-items-center rounded-md border transition ${
+        disabled
+          ? "cursor-not-allowed border-line text-muted/30"
+          : danger
+          ? "border-line text-muted hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+          : "border-line text-muted hover:border-brand/40 hover:bg-brand-tint hover:text-brand-dark"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Offer History — every LV quotation and RMU offer in one list. "+ New QTN" opens
+ *  the picker for any product (LV panels, EDMS, RMU, P-CSS). */
 export default function LvQtnListPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { confirm, dialogs } = useDialogs();
   const [qtns, setQtns] = useState<QtnListItem[] | null>(null); // null = first load in flight
-  /** True when the list holds every user's quotations, not just the signed-in one's. */
+  const [offers, setOffers] = useState<Offer[] | null>(null);
+  /** True when the LV list holds every user's quotations, not just the signed-in one's. */
   const [scopeAll, setScopeAll] = useState(false);
   const [myPerms, setMyPerms] = useState<string[]>([]);
-  /** Owner-only: also list the quotations that have been removed, so they can be
+  /** Owner-only: also list the LV quotations that have been removed, so they can be
    *  reviewed and restored. Off by default — removed means out of the way. */
   const [showRemoved, setShowRemoved] = useState(false);
-  /** History leaves out work in progress. This brings drafts in, which is what
-   *  makes them reachable for tidying up. Off by default. */
-  const [showDrafts, setShowDrafts] = useState(false);
   const [loadErr, setLoadErr] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [picker, setPicker] = useState(false);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<QtnStatus | "" | typeof CANCELLED_FILTER>("");
+  const [type, setType] = useState<"" | Kind>("");
+  const [status, setStatus] = useState<string>("");
   const [owner, setOwner] = useState("");
   const [approver, setApprover] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
   const reload = async () => {
-    // Which list this page may show is the server's call, so ask before fetching:
+    // Which LV list this page may show is the server's call, so ask before fetching:
     // /qtns/all 403s for everyone without qtn.viewAll and would blank the page.
     let all = false;
     try {
@@ -53,70 +142,49 @@ export default function LvQtnListPage() {
     } catch {
       /* unreadable access record — fall back to the personal list */
     }
+    // LV quotations. Drafts are now always included (history shows work in progress
+    // too); removed ones only when the owner asks.
     try {
-      // Hidden quotations are only fetched when the owner asks for them; the
-      // server ignores the flag for everyone else, so this cannot leak anything.
       const rows = all
-        ? await listAllQtns({ includeRemoved: showRemoved, includeDrafts: showDrafts })
+        ? await listAllQtns({ includeRemoved: showRemoved, includeDrafts: true })
         : await listQtns();
       setScopeAll(all);
       setQtns(rows);
       setLoadErr("");
     } catch (e) {
       const msg = (e as Error).message || "Could not load the quotations.";
-      // A refused cross-user read still leaves the user's own list readable.
       if (all) {
         try {
           setQtns(await listQtns());
           setScopeAll(false);
           setLoadErr(`${msg} — showing your own quotations instead.`);
-          return;
         } catch {
-          /* both calls failed — report the first message below */
+          setQtns([]);
+          setScopeAll(false);
+          setLoadErr(msg);
         }
+      } else {
+        setQtns([]);
+        setScopeAll(false);
+        setLoadErr(msg);
       }
-      setQtns([]);
-      setScopeAll(false);
-      setLoadErr(msg);
+    }
+    // RMU offers (always the signed-in user's own — the server scopes them). A failure
+    // here must not blank the LV list, so it is swallowed to an empty RMU set.
+    try {
+      setOffers(await api.listOffers());
+    } catch {
+      setOffers([]);
     }
   };
   useEffect(() => {
     reload();
-    // Re-fetches when either toggle changes — the extra rows come from the server,
-    // not from filtering what is already on screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showRemoved, showDrafts]);
-  // Quotations added or edited by other people appear on their own — and right away
-  // when you come back to the tab. Rows that changed flash briefly (see `justChanged`).
+  }, [showRemoved]);
   useAutoRefresh(() => reload(), 30_000);
 
-  // Which rows arrived/changed since the last refresh — flashed briefly in the table.
-  const justChanged = useChangedKeys(qtns, (q) => q.id, (q) => `${q.updatedAt}|${q.status}`);
-
-  const rows = qtns ?? [];
-  // A quotation saved before the workflow shipped carries no status; read it as a
-  // draft so the badge and the delete guard both have something to work with.
-  const statusOf = (x: QtnListItem): QtnStatus => x.status ?? "DRAFT";
-
-  // Filter options come from the fetched rows — there is no facets endpoint for
-  // quotations, and the lists are short enough to derive client-side.
-  const owners = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const x of qtns ?? []) if (x.ownerEmail) m.set(x.ownerEmail, x.ownerName || x.ownerEmail);
-    return [...m].map(([email, name]) => ({ email, name })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [qtns]);
-  const approvers = useMemo(
-    () => [...new Set((qtns ?? []).map((x) => x.approverEmail).filter(Boolean))].sort(),
-    [qtns]
-  );
-
-  const filtersOn = Boolean(q || status || owner || approver || from || to);
-  const clearFilters = () => { setQ(""); setStatus(""); setOwner(""); setApprover(""); setFrom(""); setTo(""); };
-
-  // QTN numbers superseded by a higher revision — shown as "Cancelled". Numbers
-  // repeat across users, so revisions are matched within one owner's numbering
-  // only; otherwise one user's "-2" would cancel another user's original.
-  // Defined before `filtered` so the "Cancelled" filter choice can use it.
+  // LV QTN numbers superseded by a higher revision — shown as "Cancelled". Numbers
+  // repeat across users, so revisions are matched within one owner's numbering only.
   const cancelledIds = useMemo(() => {
     const byOwner = new Map<string, QtnListItem[]>();
     for (const x of qtns ?? []) {
@@ -131,16 +199,57 @@ export default function LvQtnListPage() {
     return out;
   }, [qtns]);
 
+  // Normalise both sources into one recency-ordered list.
+  const rows = useMemo<UniRow[]>(() => {
+    const lv: UniRow[] = (qtns ?? []).map((x) => {
+      const st = (x.status ?? "DRAFT") as QtnStatus;
+      return {
+        kind: "LV", id: x.id, number: x.number, updatedAt: x.updatedAt,
+        projectName: x.projectName, customer: x.customer,
+        units: String(x.panels ?? 0),
+        totalUsd: Number.isFinite(x.totalEgp) ? x.totalEgp / DEFAULT_FACTORS.usd : null,
+        statusKey: st, statusLabel: QTN_STATUS_LABEL[st], statusStyle: QTN_STATUS_STYLE[st],
+        ownerEmail: x.ownerEmail, ownerName: x.ownerName, approverEmail: x.approverEmail,
+        removedAt: x.removedAt, removedBy: x.removedBy, cancelled: cancelledIds.has(x.id), lv: x,
+      };
+    });
+    const rmu: UniRow[] = (offers ?? []).map((o) => ({
+      kind: "RMU", id: o.id, number: o.offerNumber, updatedAt: o.updatedAt,
+      projectName: o.projectName, customer: o.customer,
+      units: `${o.generated?.summary?.totalCubicles ?? 0} ways`,
+      totalUsd: rmuTotalUsd(o),
+      statusKey: o.status, statusLabel: RMU_STATUS_LABEL[o.status] ?? o.status,
+      statusStyle: RMU_STATUS_STYLE[o.status] ?? "bg-slate-100 text-slate-600",
+      rmu: o,
+    }));
+    return [...lv, ...rmu].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }, [qtns, offers, cancelledIds]);
+
+  const loading = qtns === null && offers === null;
+  const justChanged = useChangedKeys(rows, (r) => r.id, (r) => `${r.updatedAt}|${r.statusKey}`);
+
+  // Filter options derived from the fetched LV rows (RMU offers carry no owner/approver).
+  const owners = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const x of qtns ?? []) if (x.ownerEmail) m.set(x.ownerEmail, x.ownerName || x.ownerEmail);
+    return [...m].map(([email, name]) => ({ email, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [qtns]);
+  const approvers = useMemo(
+    () => [...new Set((qtns ?? []).map((x) => x.approverEmail).filter(Boolean))].sort(),
+    [qtns]
+  );
+
+  const filtersOn = Boolean(q || type || status || owner || approver || from || to);
+  const clearFilters = () => { setQ(""); setType(""); setStatus(""); setOwner(""); setApprover(""); setFrom(""); setTo(""); };
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    // The pickers give a calendar day, so the "to" bound has to cover its whole day.
     const fromMs = from ? new Date(`${from}T00:00:00`).getTime() : null;
     const toMs = to ? new Date(`${to}T23:59:59.999`).getTime() : null;
-    return (qtns ?? []).filter((x) => {
-      // "Cancelled" is not a stored status — it is a superseded revision — so it is a
-      // filter choice of its own rather than one of the workflow statuses.
-      if (status === CANCELLED_FILTER) { if (!cancelledIds.has(x.id)) return false; }
-      else if (status && (x.status ?? "DRAFT") !== status) return false;
+    return rows.filter((x) => {
+      if (type && x.kind !== type) return false;
+      if (status === CANCELLED_FILTER) { if (!x.cancelled) return false; }
+      else if (status && x.statusKey !== status) return false;
       if (owner && x.ownerEmail !== owner) return false;
       if (approver && x.approverEmail !== approver) return false;
       if (fromMs !== null || toMs !== null) {
@@ -152,19 +261,15 @@ export default function LvQtnListPage() {
         return false;
       return true;
     });
-  }, [qtns, q, status, owner, approver, from, to, cancelledIds]);
+  }, [rows, q, type, status, owner, approver, from, to]);
 
-  // Keep the revisions of one quotation together. The overall order stays exactly as
-  // it is now (recency, as the server returns it) — but the moment a base number has
-  // more than one revision, they are shown one after the other instead of scattered by
-  // date. A group takes the position where its first row already appears in the list,
-  // and inside the group the newest revision leads with the older ones beneath it.
-  // Grouped per owner because QTN numbers repeat across users (same reason as
-  // `cancelledIds`); when nothing has been amended every group is one row, so the list
-  // is identical to before.
+  // Keep the revisions of one LV quotation together (newest first), where they sit in
+  // the recency order. RMU offers are each their own group, so they stay by date.
   const ordered = useMemo(() => {
-    const keyOf = (x: QtnListItem) => `${(x.ownerEmail || "").toLowerCase()}|${parseRevision(x.number).base}`;
-    const groups = new Map<string, QtnListItem[]>();
+    const keyOf = (x: UniRow) => x.kind === "RMU"
+      ? `rmu|${x.id}`
+      : `${(x.ownerEmail || "").toLowerCase()}|${parseRevision(x.number).base}`;
+    const groups = new Map<string, UniRow[]>();
     for (const x of filtered) {
       const k = keyOf(x);
       const g = groups.get(k);
@@ -173,7 +278,7 @@ export default function LvQtnListPage() {
     for (const g of groups.values())
       if (g.length > 1) g.sort((a, b) => parseRevision(b.number).rev - parseRevision(a.number).rev);
     const seen = new Set<string>();
-    const out: QtnListItem[] = [];
+    const out: UniRow[] = [];
     for (const x of filtered) {
       const k = keyOf(x);
       if (seen.has(k)) continue;
@@ -185,86 +290,96 @@ export default function LvQtnListPage() {
 
   const myEmail = (user?.email || "").toLowerCase();
   const mayManage = myPerms.includes("access.manage");
-  // Removing HIDES a quotation — it is kept and can be restored, so this is not a
-  // destructive action. Still only drafts and returned ones: anything approved or
-  // submitted is the record of an offer that went to a customer.
-  // Owners may remove anyone's; everyone else only their own, as before.
-  const canDelete = (x: QtnListItem) =>
-    !x.removedAt &&
-    DELETABLE.has(statusOf(x)) &&
+  // LV: removing HIDES a quotation (kept, restorable) — only drafts and returned ones;
+  // anything approved/submitted is the record of an offer that went to a customer.
+  const canDeleteLv = (x: UniRow) =>
+    x.kind === "LV" && !x.removedAt &&
+    DELETABLE.has((x.statusKey as QtnStatus)) &&
     (mayManage || !scopeAll || (x.ownerEmail || "").toLowerCase() === myEmail);
+  const canAmendLv = (x: UniRow) =>
+    x.kind === "LV" && !x.cancelled &&
+    ((!scopeAll || x.ownerEmail === user?.email)
+      ? myPerms.includes("qtn.amendOwn") || myPerms.includes("qtn.amendAll")
+      : myPerms.includes("qtn.amendAll"));
 
   const onNew = () => setPicker(true);
-  const onDelete = async (e: React.MouseEvent, x: QtnListItem) => {
+  const rowHref = (x: UniRow) => (x.kind === "RMU" ? `/offers/${x.id}` : `/lv/qtn/${x.id}`);
+
+  // ── LV actions ──────────────────────────────────────────────────────────────
+  const onDeleteLv = async (e: React.MouseEvent, x: UniRow) => {
     e.stopPropagation();
-    if (
-      !(await confirm({
-        title: `Remove ${x.number}`,
-        message:
-          "It is hidden from the lists, not deleted. Its number stays reserved, and " +
-          'you can bring it back at any time with "Show removed".',
-        confirmLabel: "Remove",
-      }))
-    )
-      return;
+    if (!(await confirm({
+      title: `Remove ${x.number}`,
+      message: "It is hidden from the lists, not deleted. Its number stays reserved, and " +
+        'you can bring it back at any time with "Show removed".',
+      confirmLabel: "Remove",
+    }))) return;
     setActionErr("");
-    try {
-      await deleteQtn(x.id);
-      await reload();
-    } catch (e2) {
-      setActionErr((e2 as Error).message || `Could not remove ${x.number}.`);
-    }
+    try { await deleteQtn(x.id); await reload(); }
+    catch (e2) { setActionErr((e2 as Error).message || `Could not remove ${x.number}.`); }
   };
-  const onRestore = async (e: React.MouseEvent, x: QtnListItem) => {
+  const onRestore = async (e: React.MouseEvent, x: UniRow) => {
     e.stopPropagation();
     setActionErr("");
-    try {
-      await restoreQtn(x.id);
-      await reload();
-    } catch (e2) {
-      setActionErr((e2 as Error).message || `Could not restore ${x.number}.`);
-    }
+    try { await restoreQtn(x.id); await reload(); }
+    catch (e2) { setActionErr((e2 as Error).message || `Could not restore ${x.number}.`); }
   };
-  const onDuplicate = async (e: React.MouseEvent, id: string) => {
+  const onDuplicateLv = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     setActionErr("");
     const rec = await duplicateQtn(id);
     if (rec) navigate(`/lv/qtn/${rec.id}`);
     else setActionErr("Could not duplicate that quotation.");
   };
-  // Amend = open a new revision (QTN-…-N+1); the current revision is thereby cancelled.
-  const onAmend = async (e: React.MouseEvent, id: string, number: string) => {
+  const onAmendLv = async (e: React.MouseEvent, id: string, number: string) => {
     e.stopPropagation();
-    if (
-      !(await confirm({
-        title: `Amend ${number}`,
-        message: `This opens a new revision to work on, and cancels ${number}.`,
-        confirmLabel: "Open a revision",
-      }))
-    )
-      return;
+    if (!(await confirm({
+      title: `Amend ${number}`,
+      message: `This opens a new revision to work on, and cancels ${number}.`,
+      confirmLabel: "Open a revision",
+    }))) return;
     setActionErr("");
     const rec = await amendQtn(id, number);
     if (rec) navigate(`/lv/qtn/${rec.id}`);
     else setActionErr(`Could not amend ${number}.`);
   };
 
-  const count = filtered.length === rows.length
-    ? `${rows.length} saved`
-    : `${filtered.length} of ${rows.length} shown`;
+  // ── RMU actions ───────────────────────────────────────────────────────────────
+  // Amend = open the offer to work on it. Duplicate = an independent copy (prices stay
+  // frozen — the server clones the snapshot). Delete = permanent (RMU has no hide/restore).
+  const onDuplicateRmu = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setActionErr("");
+    try { const dup = await api.duplicateOffer(id); navigate(`/offers/${dup.id}`); }
+    catch (e2) { setActionErr((e2 as Error).message || "Could not duplicate that offer."); }
+  };
+  const onDeleteRmu = async (e: React.MouseEvent, x: UniRow) => {
+    e.stopPropagation();
+    if (!(await confirm({
+      title: `Delete ${x.number}`,
+      message: "It is removed for good — this one cannot be undone.",
+      confirmLabel: "Delete offer",
+      tone: "danger",
+    }))) return;
+    setActionErr("");
+    try { await api.deleteOffer(x.id); await reload(); }
+    catch (e2) { setActionErr((e2 as Error).message || `Could not delete ${x.number}.`); }
+  };
+
+  const count = filtered.length === rows.length ? `${rows.length} saved` : `${filtered.length} of ${rows.length} shown`;
 
   return (
     <div>
       {dialogs}
       <div className="mb-5 flex items-start justify-between gap-4 animate-fade-up">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">LV — Offers History</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight">Offer History</h1>
           <p className="text-sm text-muted">
-            {qtns === null ? "Loading…" : count} · {scopeAll ? "all users" : "your quotations"}
+            {loading ? "Loading…" : count} · {scopeAll ? "all users" : "your offers"}
           </p>
-          {qtns !== null && !scopeAll && (
+          {!loading && !scopeAll && (
             <p className="mt-1 text-xs text-muted">
-              You are seeing only your own quotations — viewing everyone&apos;s needs the view-all permission.
+              You are seeing only your own offers — viewing everyone&apos;s LV quotations needs the view-all permission.
             </p>
           )}
         </div>
@@ -281,41 +396,28 @@ export default function LvQtnListPage() {
         </div>
       )}
 
-      {qtns === null ? (
+      {loading ? (
         <div className="space-y-2">
           {[0, 1, 2].map((i) => <div key={i} className="skeleton h-14" />)}
         </div>
       ) : rows.length === 0 ? (
         <div className="card p-12 text-center animate-fade-up">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-brand-tint text-2xl">⚡</div>
-          <p className="text-muted">{scopeAll ? "No quotations have been sent for approval yet." : "No quotations yet."}</p>
+          <p className="text-muted">No offers yet.</p>
           <p className="mx-auto mt-1 max-w-md text-xs text-muted">
-            A QTN holds the whole job — project data, pricing settings, panels &amp; components,
-            and generates the Technical / Commercial offers and Material List.
+            An offer holds the whole job — its project data, pricing, panels/configuration, and the
+            Technical / Commercial offers it generates.
           </p>
           <button className="btn-primary mt-4" onClick={onNew}>Create your first QTN</button>
         </div>
       ) : (
         <>
-          {/* Filters run over the rows already fetched — no round trip per keystroke. */}
           <div className="card mb-3 flex flex-wrap items-end gap-2 p-3 animate-fade-up">
             <div className="min-w-[200px] flex-1">
               <label className="label" htmlFor="qtn-search">Search</label>
               <input id="qtn-search" className="input" placeholder="QTN number, project or customer…"
                 value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
-            {/* History leaves drafts out by default — it is the record of work that
-                has gone somewhere. Ticking this brings work in progress in, which is
-                what makes a draft reachable to tidy up. */}
-            {scopeAll && (
-              <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm" title="Work in progress is normally left out of History">
-                <input type="checkbox" className="h-4 w-4 cursor-pointer accent-brand"
-                  checked={showDrafts} onChange={(e) => setShowDrafts(e.target.checked)} />
-                Show drafts
-              </label>
-            )}
-            {/* Owner-only. Removed quotations are kept, so this is how they are
-                reviewed and brought back. */}
             {mayManage && scopeAll && (
               <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm" title="Removed quotations are kept, never deleted">
                 <input type="checkbox" className="h-4 w-4 cursor-pointer accent-brand"
@@ -324,12 +426,20 @@ export default function LvQtnListPage() {
               </label>
             )}
             <div>
+              <label className="label" htmlFor="qtn-type">Type</label>
+              <select id="qtn-type" className="input w-32" value={type} onChange={(e) => setType(e.target.value as "" | Kind)}>
+                <option value="">All types</option>
+                <option value="LV">LV</option>
+                <option value="RMU">RMU</option>
+              </select>
+            </div>
+            <div>
               <label className="label" htmlFor="qtn-status">Status</label>
-              <select id="qtn-status" className="input w-56" value={status}
-                onChange={(e) => setStatus(e.target.value as QtnStatus | "" | typeof CANCELLED_FILTER)}>
+              <select id="qtn-status" className="input w-56" value={status} onChange={(e) => setStatus(e.target.value)}>
                 <option value="">All statuses</option>
                 {QTN_STATUSES.map((s) => <option key={s} value={s}>{QTN_STATUS_LABEL[s]}</option>)}
                 <option value={CANCELLED_FILTER}>Cancelled (old revisions)</option>
+                {RMU_STATUSES.map((s) => <option key={s} value={s}>{RMU_STATUS_LABEL[s]} (RMU)</option>)}
               </select>
             </div>
             {owners.length > 1 && (
@@ -365,7 +475,7 @@ export default function LvQtnListPage() {
 
           {filtered.length === 0 ? (
             <div className="card p-10 text-center animate-fade-up">
-              <p className="text-muted">No quotations match these filters.</p>
+              <p className="text-muted">No offers match these filters.</p>
               <button className="btn-ghost mt-4" onClick={clearFilters}>Clear filters</button>
             </div>
           ) : (
@@ -373,12 +483,13 @@ export default function LvQtnListPage() {
               <table className="w-full text-sm">
                 <thead className="bg-brand-tint text-left text-[11px] uppercase tracking-wide text-brand-dark">
                   <tr>
+                    <th className="px-4 py-3">Type</th>
                     <th className="px-4 py-3">QTN No</th>
                     <th className="px-4 py-3">Status</th>
                     {scopeAll && <th className="px-4 py-3">Owner</th>}
                     <th className="px-4 py-3">Project</th>
                     <th className="px-4 py-3">Customer</th>
-                    <th className="px-4 py-3">Panels</th>
+                    <th className="px-4 py-3">Panels / Ways</th>
                     <th className="px-4 py-3">Total (USD incl. VAT)</th>
                     <th className="px-4 py-3">Updated</th>
                     <th className="px-4 py-3 text-right">Actions</th>
@@ -386,15 +497,17 @@ export default function LvQtnListPage() {
                 </thead>
                 <tbody>
                   {ordered.map((x, i) => {
-                    const st = statusOf(x);
-                    const dead = cancelledIds.has(x.id);
+                    const dead = !!x.cancelled;
                     return (
-                      <tr key={x.id}
+                      <tr key={`${x.kind}-${x.id}`}
                         className={`cursor-pointer border-t border-line transition-colors hover:bg-brand-tint ${
                           justChanged.has(x.id) ? "animate-flash-new" : "animate-fade-up"
                         }`}
                         style={justChanged.has(x.id) ? undefined : { animationDelay: `${i * 0.04}s` }}
-                        onClick={() => navigate(`/lv/qtn/${x.id}`)}>
+                        onClick={() => navigate(rowHref(x))}>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${x.kind === "RMU" ? "bg-violet-100 text-violet-700" : "bg-brand-light text-brand-dark"}`}>{x.kind}</span>
+                        </td>
                         <td className="px-4 py-3 font-bold text-ink">
                           <span className={`rounded-md px-2 py-0.5 font-mono text-xs font-bold ${dead ? "bg-surface text-muted line-through" : "bg-brand-light text-brand-dark"}`}>{x.number}</span>
                           {dead && (
@@ -402,9 +515,9 @@ export default function LvQtnListPage() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${QTN_STATUS_STYLE[st]}`}
-                            title={x.approverEmail ? `${QTN_STATUS_LABEL[st]} · approver ${x.approverEmail}` : QTN_STATUS_LABEL[st]}>
-                            {QTN_STATUS_LABEL[st]}
+                          <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${x.statusStyle}`}
+                            title={x.approverEmail ? `${x.statusLabel} · approver ${x.approverEmail}` : x.statusLabel}>
+                            {x.statusLabel}
                           </span>
                         </td>
                         {scopeAll && (
@@ -412,22 +525,30 @@ export default function LvQtnListPage() {
                         )}
                         <td className="px-4 py-3">{x.projectName || <span className="text-muted">—</span>}</td>
                         <td className="px-4 py-3 text-muted">{x.customer || "—"}</td>
-                        <td className="px-4 py-3 text-muted">{x.panels}</td>
-                        <td className="px-4 py-3 font-semibold" title={`${fmtEgp(x.totalEgp)} EGP · @ ${DEFAULT_FACTORS.usd} EGP/USD`}>{"$" + fmtEgp(x.totalEgp / DEFAULT_FACTORS.usd)}</td>
+                        <td className="px-4 py-3 text-muted">{x.units}</td>
+                        <td className="px-4 py-3 font-semibold">{x.totalUsd == null ? <span className="text-muted">—</span> : "$" + fmtEgp(x.totalUsd)}</td>
                         <td className="px-4 py-3 text-xs text-muted">{new Date(x.updatedAt).toLocaleDateString()}</td>
                         <td className="px-4 py-3">
-                          <div className="flex justify-end gap-3" onClick={(e) => e.stopPropagation()}>
-                            {!dead && ((!scopeAll || x.ownerEmail === user?.email)
-                              ? (myPerms.includes("qtn.amendOwn") || myPerms.includes("qtn.amendAll"))
-                              : myPerms.includes("qtn.amendAll")) && (
-                              <button onClick={(e) => onAmend(e, x.id, x.number)} className="font-semibold text-brand-dark hover:underline" title="Open a new revision — cancels this one">Amend</button>
-                            )}
-                            <button onClick={(e) => onDuplicate(e, x.id)} className="font-semibold text-brand hover:underline">Duplicate</button>
-                            {canDelete(x) && (
-                              <button onClick={(e) => onDelete(e, x)} className="text-red-500 hover:underline" title="Hide it from the lists — it is kept and can be brought back">Remove</button>
-                            )}
-                            {x.removedAt && mayManage && (
-                              <button onClick={(e) => onRestore(e, x)} className="font-semibold text-green-700 hover:underline" title={`Removed ${new Date(x.removedAt).toLocaleDateString()}${x.removedBy ? ` by ${x.removedBy}` : ""}`}>Restore</button>
+                          <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            {x.kind === "LV" ? (
+                              <>
+                                <Act title={canAmendLv(x) ? "Amend — open a new revision (cancels this one)" : "You can't amend this one"}
+                                  disabled={!canAmendLv(x)} onClick={(e) => onAmendLv(e, x.id, x.number)}>{AmendIcon}</Act>
+                                <Act title="Duplicate — an independent copy" onClick={(e) => onDuplicateLv(e, x.id)}>{DuplicateIcon}</Act>
+                                {x.removedAt && mayManage ? (
+                                  <Act title={`Restore — removed ${new Date(x.removedAt).toLocaleDateString()}${x.removedBy ? ` by ${x.removedBy}` : ""}`}
+                                    onClick={(e) => onRestore(e, x)}>{RestoreIcon}</Act>
+                                ) : (
+                                  <Act title={canDeleteLv(x) ? "Remove — hidden, can be restored" : "Only drafts & returned quotations can be removed"}
+                                    danger disabled={!canDeleteLv(x)} onClick={(e) => onDeleteLv(e, x)}>{TrashIcon}</Act>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <Act title="Amend — open this offer to work on it" onClick={(e) => { e.stopPropagation(); navigate(`/offers/${x.id}`); }}>{AmendIcon}</Act>
+                                <Act title="Duplicate — an independent copy (prices stay frozen)" onClick={(e) => onDuplicateRmu(e, x.id)}>{DuplicateIcon}</Act>
+                                <Act title="Delete — permanent" danger onClick={(e) => onDeleteRmu(e, x)}>{TrashIcon}</Act>
+                              </>
                             )}
                           </div>
                         </td>
@@ -441,7 +562,7 @@ export default function LvQtnListPage() {
         </>
       )}
 
-      {picker && <NewQtnPicker desk="lv" onClose={() => setPicker(false)} />}
+      {picker && <NewQtnPicker desk="all" onClose={() => setPicker(false)} />}
     </div>
   );
 }

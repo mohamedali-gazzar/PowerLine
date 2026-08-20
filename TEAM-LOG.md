@@ -22,6 +22,24 @@ closed off.
 
 <!-- NEW ENTRIES GO HERE -->
 
+## 2026-08-20 · Mohamed's side · Claude
+
+**One "Offer History" for everything — LV quotations and RMU offers together.**
+
+- The old split (separate "LV Offers" and "RMU Offers" screens) is gone. The sidebar now has a
+  single **Offers** entry that opens **Offer History**, listing every LV quotation *and* every RMU
+  offer in one table. The old RMU link still works — it lands on the same page. A **Type** column
+  (and a Type filter) tells LV and RMU apart.
+- **Drafts now show by default** — the "Show drafts" tick is gone. **Show removed** stays (owner-only).
+- **Actions are now icons**, and all three appear on every row: **Amend · Duplicate · Delete**.
+  - LV: Amend opens a new revision, Duplicate makes an independent copy, Delete hides it (reversible).
+  - RMU: Amend opens the offer, Duplicate makes a copy, Delete removes it.
+- **RMU duplicate keeps its prices frozen** — a new server-side copy carries the exact prices the
+  original was quoted at (never re-priced against today's list), just like LV. A copy always starts
+  as a Draft.
+- Safety kept as-is: an LV quotation already in the approval flow (submitted/approved/waiting) still
+  can't be removed — its Delete icon is shown greyed. Amend/Duplicate still work on it.
+
 ## 2026-08-19 · Mohamed's side · Claude
 
 **Panel import: the ENCLOSURE now selects — it was reading the wrong cell for the family.**

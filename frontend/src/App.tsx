@@ -41,11 +41,6 @@ const barsIcon = (
     <line x1="6" y1="20" x2="6" y2="14" />
   </svg>
 );
-const zapIcon = (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-  </svg>
-);
 const priceIcon = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
@@ -129,15 +124,10 @@ export default function App() {
 
             <NotificationBell pinMode={pinMode} />
 
-            {can("qtn.viewAll") && (
-              <NavLink to="/lv" title="LV Offers History" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>
-                <span className="shrink-0">{barsIcon}</span>
-                <span className={lbl}>LV Offers</span>
-              </NavLink>
-            )}
-            <NavLink to="/rmu" title="RMU Offers History" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>
-              <span className="shrink-0">{zapIcon}</span>
-              <span className={lbl}>RMU Offers</span>
+            {/* One history for everything — LV quotations and RMU offers together. */}
+            <NavLink to="/lv" title="Offer History" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>
+              <span className="shrink-0">{barsIcon}</span>
+              <span className={lbl}>Offers</span>
             </NavLink>
             <NavLink to="/pricing" title="Price list" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>
               <span className="shrink-0">{priceIcon}</span>
