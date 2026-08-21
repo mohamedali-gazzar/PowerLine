@@ -3,7 +3,7 @@ import cors from "cors";
 import offersRouter from "./routes/offers.routes";
 import authRouter from "./routes/auth.routes";
 import qtnsRouter from "./routes/qtns.routes";
-import { requireAuth, optionalAuth } from "./middleware/auth";
+import { requireAuth } from "./middleware/auth";
 import {
   updateProfile,
   history,
@@ -206,9 +206,15 @@ export function createApp() {
   app.get("/api/pricing/pending", requireAuth, requirePriceViewer, getPending);
   app.post("/api/pricing/publish", requireAuth, requirePriceAdmin, postPublish);
 
-  // RMU offers — optionalAuth records a signed-in user as the offer's owner.
+  // RMU offers. requireAuth, NOT optionalAuth (which this used to use): signed out,
+  // POST /offers/preview returned the real floor prices to anyone on the internet — base
+  // price, add-ons and list price — and POST /offers created a permanent owner-less row
+  // while consuming a number from the PL-YYYY-#### sequence, because createOffer() runs
+  // before ownership is attributed. Every handler here already needs req.userId for its
+  // ownership check, and PDF links carry the token as ?t= (GET/HEAD only), so nothing
+  // legitimate loses access.
   // withPriceBook ensures an offer is priced against the current published list.
-  app.use("/api/offers", optionalAuth, withPriceBook, offersRouter);
+  app.use("/api/offers", requireAuth, withPriceBook, offersRouter);
 
   return app;
 }
