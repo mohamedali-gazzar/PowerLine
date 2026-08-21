@@ -122,6 +122,25 @@ answer it in your entry.
 
 ---
 
+## 4a. Tests exist now — treat a failure as a business event
+
+Vitest on both halves. Run them; they take under three seconds:
+
+
+
+Most of them are CHARACTERIZATION tests: they record what the app does TODAY, not what it
+ought to do. They cover the LV cost formula term by term, the RMU price-key derivation
+(including a round-trip over every real price key), the QTN approval state machine, and
+the fact that every protected route refuses an anonymous caller.
+
+**If one fails, do NOT update the test to match your change.** A failure means a price, a
+permission or a workflow rule moved. Find out why. If the change was intended, say so
+plainly to the owner and let them confirm before you touch the expectation — those numbers
+go on customer paper.
+
+Add a test when you fix a real fault, and prefer pure functions that need no database and
+no browser. Test files live beside the code and are excluded from the backend build.
+
 ## 5. Pushing and deploying
 
 **Pushing to `main` deploys to the live site automatically** — this is verified and
