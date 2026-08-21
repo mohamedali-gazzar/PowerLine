@@ -1045,7 +1045,10 @@ export function panelHeightMm(p: LvPanel): number {
   // Pillars have no dimensions in the enclosure name ("7 Lines") — use the fixed pillar height.
   if (p.panelsSizing?.family === "Pillars") return PILLAR_HEIGHT_MM;
   const slot1 = (p.panelItems ?? []).find((it) => (it.slot ?? 1) === 1);
-  const m = slot1?.name.match(/(\d+)/);
+  // Saved state is read back from JSON with no schema, so an older or imported item can
+  // arrive with no name. Coerce instead of trusting the type: throwing here blanks the
+  // entire configurator, and a missing height already means "no auto busbar".
+  const m = String(slot1?.name ?? "").match(/(\d+)/);
   return m ? parseInt(m[1], 10) : 0;
 }
 /** Auto main-busbar copper weight (kg), or null when the rule doesn't apply / inputs missing. */
