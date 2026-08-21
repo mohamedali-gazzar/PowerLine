@@ -21,6 +21,44 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-08-20 · Mohamed's side · Claude
+
+**The 47 "duplicate" names: checked properly. Nothing is duplicated, and nothing needs deleting.**
+
+Investigated the duplicate-name warning end to end, grouping by **order code** rather than by name.
+The earlier read of this — including mine — was wrong, so here is the checked version:
+
+- **No two items share an ABB order code. Zero.** In the catalogue file *and* in the database. So
+  there are **no true duplicates**, and no row should be removed.
+- The 5% pairs (TruONE ATS, MCCB XT1 125A) are **not** an old price list left behind. Each pair
+  carries **two different ABB codes**, one digit apart — so they are two real part numbers, and which
+  one we supply is a business call, not a cleanup.
+- All **47** clashes are "same name, two different codes". **18** of them also differ in price.
+  Worst: `Change over switch 160A 3P` — **€81.85** (`1SCA105008R1001`) against **€179.91**
+  (`1SCA022767R0030`), 120% apart.
+- **Enclosures are completely clean** — no repeated codes, no repeated names.
+
+⛔ **DO NOT rename, merge or delete any of these 47 while Mohamed decides.** He has the full list as
+an Excel sheet (`PowerLine-price-list-name-clashes.xlsx`, on his Desktop, worst-first with both codes
+and both prices) and is choosing which of each pair is real. Nothing in the code or the price list was
+changed.
+
+**"Same code must update, not duplicate" — already true, and now proven, not assumed.** Tested live
+against a running server:
+
+| Test | Result |
+| --- | --- |
+| Add an item with an order code already in use | **refused, 409** — "Reference … already exists — edit that item instead." |
+| Add an item with a name already in use (new code) | **refused, 409** — names the clashing item and its code |
+| Same code twice inside one uploaded sheet | first occurrence wins, second counted as a duplicate |
+| Import "add" re-checked at apply time | re-checks the code *and* the name in the database |
+
+Neither test left a row behind. So new clashes cannot be created through the price screen or through a
+spreadsheet upload — the 47 are historical, from before those guards existed.
+
+👏 Also confirmed fixed while looking: the **22 items whose copper cost nothing** (no pole count) are
+**all corrected** — none remain. No item is priced in two currencies, no `ABB.` brand typos, and only
+one item has no price at all.
 
 ## 2026-08-20 · Mohamed's side · Claude
 
