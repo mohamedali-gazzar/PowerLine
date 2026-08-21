@@ -126,7 +126,10 @@ answer it in your entry.
 
 Vitest on both halves. Run them; they take under three seconds:
 
-
+```
+cd backend  && npm test
+cd frontend && npm test
+```
 
 Most of them are CHARACTERIZATION tests: they record what the app does TODAY, not what it
 ought to do. They cover the LV cost formula term by term, the RMU price-key derivation
@@ -140,6 +143,8 @@ go on customer paper.
 
 Add a test when you fix a real fault, and prefer pure functions that need no database and
 no browser. Test files live beside the code and are excluded from the backend build.
+
+---
 
 ## 5. Pushing and deploying
 
