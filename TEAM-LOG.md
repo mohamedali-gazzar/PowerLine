@@ -21,6 +21,125 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-08-22 · Mohamed's side · Claude
+
+**Security audit and hardening. Please read the first two boxes before you next pull.**
+
+### ⚠️ DO THIS FIRST after you pull
+
+`package.json` changed on both halves (a test framework was added). Run this once, or you
+will get a wall of TypeScript errors in code that is perfectly fine:
+
+    cd backend  && npm install && npx prisma generate && npx prisma db push
+    cd frontend && npm install
+
+This is the trap already written up in `CLAUDE.md` §3a. Nothing is broken — it is just a
+stale generated client.
+
+### ⚠️ Two things behave differently now
+
+- **Attachments that are not PDFs or images now download instead of previewing** in the
+  browser (a `.txt` or `.xlsx` used to open in a tab). That is deliberate — see below.
+- **A correct sign-up / reset code now uses one of its six attempts.** The normal flow
+  spends two of six, so there is plenty of room.
+
+### The serious one: our price list was readable by anyone on the internet
+
+`POST /api/offers/preview` needed **no login**. Tested against the live site: it returned
+real floor prices — base 13,190, outdoor enclosure 2,000, smart RTU 14,000, list 29,190 —
+plus the full technical content. Anyone with the URL could step through configurations and
+read the whole RMU price list from outside the company.
+
+Cause: the offers routes were mounted with `optionalAuth`, which attaches a user if one is
+present but never rejects. The same mount also left `POST /api/offers` open, and because
+`Offer.ownerId` is nullable and `createOffer()` runs before ownership is attributed, an
+anonymous call created a permanent row nobody can see or delete, while consuming a number
+from the `PL-YYYY-####` sequence.
+
+Fixed: `requireAuth`. Nothing legitimate lost access — the app is behind a login wall,
+`api.ts` attaches the token to every request, every handler already needed the user id for
+its ownership check, and PDF links carry the token as `?t=`.
+
+### Nine more real faults fixed
+
+1. **Configuration failed OPEN.** Five security controls each read `process.env.NODE_ENV`
+   directly and every one defaulted to permissive when it was missing: a forgeable
+   hardcoded JWT secret, the `dev-login` bypass, one-time codes echoed in API responses,
+   `CORS: *`, and mail failures logged with the codes in cleartext but reported as sent.
+   One unset variable opened all five. New `backend/src/config.ts` decides it once, and
+   also trusts the platform's own `VERCEL` flag, which cannot be forgotten or mistyped.
+2. **Stored XSS through attachments.** The uploader's own MIME string was echoed back as
+   `Content-Type` with `inline`, on our own origin, with no CSP. Attaching an `.html` ran
+   script as whoever opened it, with the 30-day session token and the Outlook Graph token
+   both sitting in `localStorage`. Only PDFs and raster images render inline now, plus
+   `nosniff`. SVG is deliberately excluded — it can carry script.
+3. **Sign-in had no rate limit** — the only credential endpoint without one.
+4. **The six-try cap on codes was bypassable** by firing requests in parallel.
+5. **One malformed save erased a whole quotation.** The update endpoint accepted anything,
+   including `null`, and wrote it over the stored content. Irreversibly.
+6. **All three RMU PDF endpoints returned 500 forever** for any offer with an Arabic
+   quotation number. The document simply could not be produced.
+7. **A declined price publish was invisible** — price saved, snapshot not, endpoint said
+   success, quoting carried on at the old price. Now logged with the reason.
+8. **A second blank-page crash**, same family as the one you fixed: an enclosure row with
+   no name threw inside the cost calculation and blanked the configurator.
+9. **`DEPLOY.md` said the opposite of the truth** about data loss — see the risk box below.
+
+### There are now tests. 203 of them, from zero.
+
+Vitest on both halves: `npm test` in `backend/` or `frontend/`.
+
+| Suite | What it protects |
+| --- | --- |
+| `panelCost` (29) | The LV money formula, term by term, with hand-checkable numbers |
+| `rmuCoding` (68) | Price-key derivation, including a round-trip over **all 46 real price keys** |
+| `qtnStatus` (29) | The approval state machine — 9 legal moves, all 16 illegal ones |
+| `authBoundary` (45) | All 39 protected routes refuse anonymous callers |
+| `config` (14) + `schemas` (18) | The new guards and the sign-up domain rule |
+
+**If one of these fails, do not update the test.** They record what the app does today. A
+failure means a price, a permission or a workflow rule moved, and that needs Mohamed.
+
+Writing the cost tests is what found fault 8 — they earned their keep immediately.
+
+### ⛔ The biggest risk is not code, and I cannot fix it
+
+**There is no database backup and no restore procedure anywhere in this project**, while
+every deploy runs `prisma db push --accept-data-loss`. `DEPLOY.md` previously claimed the
+build would stop to protect you; it does the opposite. That section is rewritten with the
+rules that actually follow: new columns must be nullable or defaulted, renaming is a drop
+plus an add, and `LvQtn.status` must never be given a default or the next deploy resets
+live submitted quotations to Draft.
+
+Someone needs to turn on Neon point-in-time restore. Nothing in the repo does it.
+
+### Still to do — please do not duplicate this
+
+A full audit ran across security, scalability, database, error handling, architecture,
+performance, background work, configuration and code quality: **206 findings, 18 of them
+serious.** Ten are fixed. The ten still open, worst first:
+
+1. **LV autosave discards every failure** — no indicator, no retry, and an invalid summary
+   (a negative total, an over-long project name) makes it fail *forever*, silently. This is
+   how someone loses an afternoon of work.
+2. **Co-Work overwrites.** The per-panel merge is an unguarded read-modify-write, so two
+   people editing one quotation silently lose each other's work. Needs an additive
+   `stateVersion` column.
+3. **Quotation lists load every quotation's full content** just to draw a table row.
+4. **The spreadsheet import does around 60,000 sequential database round trips**, in no
+   transaction, so a timeout leaves it half applied.
+5. Offers are hard-deleted, so `PL-YYYY-####` numbers get reused.
+6. `xlsx` sits in the main bundle for two export-only buttons.
+7. The two heaviest screens are the only ones not code-split.
+8. The SLD drawing covers only the first RMU on a multi-RMU offer.
+9. Offers History renders every row with a delay proportional to its position.
+10. The eight price-write endpoints still report success on a declined publish (it is now
+    logged, but not shown to the user).
+
+**Not attempted on purpose:** splitting up `LvConfiguratorPage.tsx`. It is 7,500 lines and
+you pushed 70 commits into it in five days — moving it now would hand you unresolvable
+conflicts and prove nothing. Extracting testable pure functions from it is the right first
+step, and the audit produced a concrete plan for that.
 ## 2026-08-20 · Mohamed's side · Claude
 
 **The 47 "duplicate" names: checked properly. Nothing is duplicated, and nothing needs deleting.**
