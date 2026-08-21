@@ -513,7 +513,17 @@ async function pruneSnapshots(): Promise<void> {
  * publish half had a problem — the list can always be published by hand.
  */
 export async function publishCurrentPrices(actorEmail: string, note: string): Promise<number | null> {
-  return (await publishCurrentPricesDetailed(actorEmail, note)).version;
+  const { version, blockers } = await publishCurrentPricesDetailed(actorEmail, note);
+  // Callers that ignore the result used to make a declined publish completely invisible:
+  // the price edit saved, the snapshot did not, and quoting carried on serving the old
+  // number with nothing recorded anywhere. At minimum it must be diagnosable.
+  if (version === null) {
+    console.error(
+      `[pricing] publish DECLINED after "${note}" — prices were saved but are NOT live. ` +
+        `Reason: ${blockers.length ? blockers.join("; ") : "unknown"}`,
+    );
+  }
+  return version;
 }
 
 /**

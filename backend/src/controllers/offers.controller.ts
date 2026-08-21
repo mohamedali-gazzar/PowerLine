@@ -130,6 +130,22 @@ export async function deleteOfferById(req: Request, res: Response) {
   }
 }
 
+/**
+ * Content-Disposition for a generated PDF.
+ *
+ * A quotation number can contain Arabic or any other non-Latin-1 character, and Node
+ * throws ERR_INVALID_CHAR when such a byte reaches a header value — so all three PDF
+ * endpoints returned 500 permanently for that offer, with no way to get the document out.
+ * Send an ASCII-safe name in `filename` and the real one in RFC 5987 `filename*`, exactly
+ * as the attachment download already does.
+ */
+function pdfDisposition(download: unknown, name: string): string {
+  // [^ -~] is every character outside printable ASCII (space through tilde).
+  const ascii = name.replace(/[^ -~]/g, "_").replace(/"/g, "'");
+  const disp = download ? "attachment" : "inline";
+  return `${disp}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}
+
 export async function getOfferPdf(req: Request, res: Response) {
   try {
     const offer = await getOfferRaw(req.params.id);
@@ -148,10 +164,7 @@ export async function getOfferPdf(req: Request, res: Response) {
     res.setHeader("Content-Type", "application/pdf");
     // Name it like the LV section: "TO-<QTN> Rev 00.pdf".
     const fileQtn = offer.quotationNo || offer.offerNumber;
-    res.setHeader(
-      "Content-Disposition",
-      `${req.query.dl ? "attachment" : "inline"}; filename="TO-${fileQtn} Rev 00.pdf"`
-    );
+    res.setHeader("Content-Disposition", pdfDisposition(req.query.dl, `TO-${fileQtn} Rev 00.pdf`));
     res.send(pdf);
   } catch (err) {
     handleError(err, res);
@@ -190,10 +203,7 @@ export async function getCommercialPdf(req: Request, res: Response) {
     res.setHeader("Content-Type", "application/pdf");
     // Name it like the LV section: "CO-<QTN> Rev 00.pdf".
     const fileQtn = offer.quotationNo || offer.offerNumber;
-    res.setHeader(
-      "Content-Disposition",
-      `${req.query.dl ? "attachment" : "inline"}; filename="CO-${fileQtn} Rev 00.pdf"`
-    );
+    res.setHeader("Content-Disposition", pdfDisposition(req.query.dl, `CO-${fileQtn} Rev 00.pdf`));
     res.send(pdf);
   } catch (err) {
     handleError(err, res);
@@ -211,7 +221,7 @@ export async function getSldPdf(req: Request, res: Response) {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `${req.query.dl ? "attachment" : "inline"}; filename="${offer.offerNumber}-${generated.panelCode}-SLD.pdf"`
+      pdfDisposition(req.query.dl, `${offer.offerNumber}-${generated.panelCode}-SLD.pdf`),
     );
     res.send(pdf);
   } catch (err) {

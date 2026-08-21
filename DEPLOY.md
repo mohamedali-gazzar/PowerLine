@@ -81,8 +81,23 @@ That's it — you get a live URL.
 - **Arabic in the commercial PDF** is rendered with the bundled Amiri font
   (`backend/src/assets/fonts/`), so it works on Vercel's Linux runtime where
   Windows Arial is unavailable.
-- **Destructive schema changes** (dropping/renaming columns) make the build's
-  `prisma db push` stop to avoid data loss. If you intend the change, run
-  `npx prisma db push --accept-data-loss` against Neon once, then redeploy.
+- **Destructive schema changes are applied SILENTLY, and there is no backup.**
+  Every deploy runs `npx prisma db push --skip-generate --accept-data-loss`
+  (`backend/scripts/db-push-vercel.js`). There are no migrations and no data step, so
+  **dropping or renaming a column deletes that column's live data on the next push,**
+  with no prompt and nothing to roll back to. This file previously claimed the build
+  would stop to protect you; it does the opposite.
+
+  Therefore, in `schema.prisma`:
+
+  - a new column must be **nullable or defaulted**, or the push fails on existing rows;
+  - **renaming** a column is a drop plus an add — copy the data yourself first, or don't;
+  - never add `@default` to `LvQtn.status`: the push would stamp it onto every existing
+    row and reset live submitted quotations to Draft;
+  - `LvQtn.coOwnerId` and the `submitted` / `submittedAt` mirror columns are kept
+    deliberately — removing them destroys co-work links and the submissions history.
+
+  Before any schema change that is not purely additive, take a Neon backup or
+  point-in-time restore point first. Nothing in this repository does that for you.
 - **Prisma "query engine not found":** covered by the `rhel-openssl-3.0.x`
   binary target in `schema.prisma` + `includeFiles` in `vercel.json`.
