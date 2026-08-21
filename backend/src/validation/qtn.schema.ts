@@ -13,9 +13,19 @@ const summary = z
   })
   .optional();
 
-// `state` is the whole LvState object — validated structurally on the client.
+// `state` is the whole LvState object — its inner shape is validated on the client.
+//
+// But `z.unknown()` accepted ANYTHING on update, including null, a string or a number,
+// and the handler then wrote JSON.stringify(that) over the stored quotation. One
+// malformed PUT — a truncated body, a client bug — irreversibly erased every panel in a
+// live quotation. Require at minimum that it IS an object, so a wipe cannot be encoded.
+// Create stays permissive: a brand-new quotation legitimately starts empty.
+const stateObject = z.custom<Record<string, unknown>>(
+  (v) => typeof v === "object" && v !== null && !Array.isArray(v),
+  { message: "The quotation content was missing or malformed — nothing was saved." },
+);
 export const createQtnSchema = z.object({ number, state: z.unknown(), summary });
-export const updateQtnSchema = z.object({ state: z.unknown(), summary });
+export const updateQtnSchema = z.object({ state: stateObject, summary });
 export const numberSchema = z.object({ number });
 
 // Hand a quotation over to another user (transfer ownership).

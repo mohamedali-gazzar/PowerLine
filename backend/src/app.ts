@@ -1,4 +1,5 @@
 import express from "express";
+import { IS_PROD, checkConfig, describeConfig } from "./config";
 import cors from "cors";
 import offersRouter from "./routes/offers.routes";
 import authRouter from "./routes/auth.routes";
@@ -83,6 +84,21 @@ import {
 } from "./domain/standards";
 
 export function createApp() {
+  // Validate configuration once, here, because BOTH entry points build the app this way
+  // (src/index.ts for local, api/index.ts for the serverless function). In production a
+  // missing required variable stops the app instead of letting it run insecurely or fail
+  // one request at a time; locally the same problems are warnings so development still
+  // works offline. Never logs a value.
+  const { errors, warnings } = checkConfig();
+  for (const w of warnings) console.warn(`[config] ${w}`);
+  if (errors.length) {
+    console.error(describeConfig());
+    for (const e of errors) console.error(`[config] ${e}`);
+    throw new Error(
+      `Refusing to start — configuration is incomplete: ${errors.join("; ")}`,
+    );
+  }
+
   const app = express();
 
   // CORS: use the configured allowlist. If none is set, allow all in dev but
@@ -90,7 +106,7 @@ export function createApp() {
   // it still works) rather than defaulting to "*".
   const corsOrigin = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(",")
-    : process.env.NODE_ENV === "production"
+    : IS_PROD
     ? false
     : "*";
   app.use(cors({ origin: corsOrigin }));

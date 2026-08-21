@@ -3,13 +3,14 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { randomInt } from "crypto";
+import { IS_PROD } from "../config";
 
 // Fail fast in production if the secret isn't configured (a hardcoded fallback
 // would let anyone forge tokens); allow a dev default locally only.
 const JWT_SECRET = (() => {
   const s = process.env.JWT_SECRET;
   if (s) return s;
-  if (process.env.NODE_ENV === "production")
+  if (IS_PROD)
     throw new Error("JWT_SECRET is not set — configure a long random secret in production.");
   return "powerline-dev-secret-change-me"; // dev / local only
 })();

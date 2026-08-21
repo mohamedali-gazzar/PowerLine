@@ -7,6 +7,7 @@
 // has no effect until the process (or the serverless lambda) is recycled — which is
 // why an env change always needs a redeploy, never just a save.
 import nodemailer from "nodemailer";
+import { IS_PROD } from "../config";
 
 const host = process.env.SMTP_HOST;
 const user = process.env.SMTP_USER;
@@ -70,7 +71,7 @@ export async function sendMail(opts: {
   // the API reported success for mail that was never sent and the codes sat in the
   // platform logs. Fail loudly instead: a 500 with a real reason is far easier to
   // diagnose than a silent success, and no secret is written anywhere.
-  if (process.env.NODE_ENV === "production") {
+  if (IS_PROD) {
     throw new Error(
       "Email is not configured (set SMTP_HOST, SMTP_USER and SMTP_PASS) — cannot send mail."
     );

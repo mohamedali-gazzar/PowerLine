@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { timingSafeEqual } from "crypto";
 import { prisma } from "../lib/prisma";
+import { IS_DEV } from "../config";
 import { pub, fail } from "../lib/http";
 import {
   hashPassword,
@@ -29,7 +30,7 @@ const CODE_TTL_MIN = Math.max(1, parseInt(process.env.OTP_TTL_MINUTES || "10", 1
 const MAX_ATTEMPTS = 6;
 // The code is only echoed back in the response when there's no real email AND we
 // aren't in production — so production never leaks codes even if misconfigured.
-const DEV = process.env.NODE_ENV !== "production";
+const DEV = IS_DEV;
 
 // ── Rate limiting ───────────────────────────────────────────────────────────
 // Without this, /forgot and /register are free code-generation endpoints: each call
@@ -44,7 +45,7 @@ const RATE_MAX = 5; // requests per key per window
 const RATE_WINDOW_MS = 15 * 60_000;
 const rateHits = new Map<string, number[]>();
 
-function rateLimited(key: string): boolean {
+function rateLimited(key: string, max = RATE_MAX): boolean {
   const now = Date.now();
   const hits = (rateHits.get(key) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
   hits.push(now);
@@ -55,15 +56,19 @@ function rateLimited(key: string): boolean {
       if (!v.some((t) => now - t < RATE_WINDOW_MS)) rateHits.delete(k);
     }
   }
-  return hits.length > RATE_MAX;
+  return hits.length > max;
 }
 
 /** Same limit keyed by both the address and the caller, so one noisy client cannot
  *  lock out an address and one address cannot be hammered from many clients. */
-function tooManyRequests(req: Request, email: string): boolean {
+function tooManyRequests(req: Request, email: string, max = RATE_MAX): boolean {
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "";
-  return rateLimited(`email:${email}`) || (ip ? rateLimited(`ip:${ip}`) : false);
+  return rateLimited(`email:${email}`, max) || (ip ? rateLimited(`ip:${ip}`, max) : false);
 }
+
+/** Sign-in gets a larger budget than code requests: a real person mistyping their own
+ *  password must not be locked out, but unlimited guessing must not be free either. */
+const LOGIN_RATE_MAX = 15;
 
 /** Create + "send" a fresh code, replacing any prior one for this email+purpose. */
 async function issueCode(email: string, purpose: "signup" | "reset"): Promise<string> {
@@ -111,17 +116,24 @@ async function checkCode(
     await prisma.emailCode.delete({ where: { id: rec.id } });
     return { ok: false, reason: "Code expired — request a new one." };
   }
-  if (rec.attempts >= MAX_ATTEMPTS) {
+  // Count this attempt in the DATABASE before comparing, and gate on the number the
+  // database hands back. Reading rec.attempts and writing rec.attempts + 1 let parallel
+  // requests all read the same value and write the same one back, so the six-try cap on a
+  // 6-digit code could be walked straight past by firing requests concurrently.
+  // A correct code now also costs one attempt; the normal flow (verify, then complete)
+  // spends two of six, so there is ample headroom.
+  const bumped = await prisma.emailCode.update({
+    where: { id: rec.id },
+    data: { attempts: { increment: 1 } },
+    select: { attempts: true },
+  });
+  if (bumped.attempts > MAX_ATTEMPTS) {
     await prisma.emailCode.delete({ where: { id: rec.id } });
     return { ok: false, reason: "Too many attempts — request a new code." };
   }
   const expected = Buffer.from(rec.code);
   const given = Buffer.from(code);
   if (expected.length !== given.length || !timingSafeEqual(expected, given)) {
-    await prisma.emailCode.update({
-      where: { id: rec.id },
-      data: { attempts: rec.attempts + 1 },
-    });
     return { ok: false, reason: "Incorrect code." };
   }
   return { ok: true };
@@ -196,6 +208,14 @@ export async function complete(req: Request, res: Response) {
 export async function login(req: Request, res: Response) {
   try {
     const { email, password } = loginSchema.parse(req.body);
+    // Sign-in was the only credential endpoint with no limit, so password guessing was free
+    // apart from bcrypt, which also makes every guess cost around 250ms of serverless CPU
+    // on an unauthenticated route. Every account sits on one known company domain.
+    if (tooManyRequests(req, email, LOGIN_RATE_MAX)) {
+      return res
+        .status(429)
+        .json({ error: "Too many sign-in attempts. Please wait a few minutes and try again." });
+    }
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user || !(await comparePassword(password, user.passwordHash))) {
       return res.status(401).json({ error: "Incorrect email or password." });
@@ -208,7 +228,9 @@ export async function login(req: Request, res: Response) {
 
 // POST /api/auth/dev-login  — DEV ONLY. Skips the login wall by minting a token for the
 // first (oldest) account, creating a throwaway dev user if the DB is empty. Returns 404 in
-// production (NODE_ENV=production → DEV=false), so it can never bypass auth on the deploy.
+// production, so it can never bypass auth on a deploy. IS_DEV is false whenever NODE_ENV
+// is "production" OR the platform-injected VERCEL is present, so a missing NODE_ENV
+// cannot re-open this door (see config.ts).
 export async function devLogin(_req: Request, res: Response) {
   if (!DEV) return res.status(404).json({ error: "Not found." });
   try {

@@ -970,10 +970,28 @@ export async function downloadAttachment(req: Request, res: Response) {
     const f = await prisma.lvAttachment.findFirst({ where: { id: req.params.fileId, qtnId: q.id } });
     if (!f) return res.status(404).json({ error: "File not found." });
     const buf = Buffer.from(f.data, "base64");
-    res.setHeader("Content-Type", f.mime || "application/octet-stream");
+    // The stored MIME comes from the uploader's browser and was echoed straight back as
+    // Content-Type with `inline` disposition, on the SAME origin as the app. Attaching an
+    // .html (or an SVG through the API) therefore ran script on the PowerLine origin when
+    // a colleague opened it, with the 30-day session token and the Outlook Graph token
+    // both sitting in localStorage. Only render inline what cannot carry script; anything
+    // else downloads instead. image/svg+xml is deliberately absent — SVG executes script,
+    // which is the same reason account.schema.ts excludes it from profile photos.
+    const INLINE_OK = new Set([
+      "application/pdf",
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+    ]);
+    const mime = INLINE_OK.has(f.mime) ? f.mime : "application/octet-stream";
+    res.setHeader("Content-Type", mime);
     res.setHeader("Content-Length", String(buf.length));
-    // ?dl=1 forces a download; otherwise the browser may preview it (PDFs, images).
-    const disp = req.query.dl === "1" ? "attachment" : "inline";
+    // Without nosniff the browser may sniff the real type back and undo the above.
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    // ?dl=1 forces a download; a previewable type may render inline, nothing else may.
+    const disp =
+      req.query.dl === "1" || mime === "application/octet-stream" ? "attachment" : "inline";
     // RFC 5987 filename* carries non-ASCII names (Arabic file names) intact.
     const ascii = f.name.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "'");
     res.setHeader(
