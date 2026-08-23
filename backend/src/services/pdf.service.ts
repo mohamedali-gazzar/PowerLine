@@ -586,14 +586,13 @@ function generalNotes(doc: PDFKit.PDFDocument, notes: string[]) {
   const radius = 6;
   const numW = 34;
   const padX = 10;
-  const padY = 6;
+  const padY = 4;
   const headerH = 22;
-  const PEACH = "#fcebe1"; // zebra fill
   const HAIR2 = "#e7e7eb"; // row separators
   const rowHs = notes.map((n) => {
     doc.font(BODY).fontSize(9.5);
     const th = doc.heightOfString(n, { width: CONTENT_W - numW - padX });
-    return Math.max(21, th + padY * 2);
+    return Math.max(18, th + padY * 2);
   });
   const bodyH = rowHs.reduce((a, b) => a + b, 0);
   const totalH = headerH + bodyH;
@@ -604,14 +603,10 @@ function generalNotes(doc: PDFKit.PDFDocument, notes: string[]) {
   doc.moveDown(0.15);
   const x = MARGIN;
   const yTop = doc.y;
-  // Rounded orange header + zebra rows, clipped to round the corners. No outer frame.
+  // Rounded orange header over plain white rows (no shading), clipped to round the
+  // header corners. No outer frame.
   doc.save();
   doc.roundedRect(x, yTop, CONTENT_W, totalH, radius).clip();
-  let yz = yTop + headerH;
-  notes.forEach((_, i) => {
-    if (i % 2 === 1) doc.rect(x, yz, CONTENT_W, rowHs[i]).fill(PEACH);
-    yz += rowHs[i];
-  });
   doc.rect(x, yTop, CONTENT_W, headerH).fill(ORANGE);
   doc.restore();
   doc.fillColor("white").font(BOLD).fontSize(10.5)
