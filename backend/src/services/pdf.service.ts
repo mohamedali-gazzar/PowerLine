@@ -521,7 +521,7 @@ function sectionTitle(doc: PDFKit.PDFDocument, title: string, keepWith = 24) {
   // Reserve the heading (~26) PLUS the first chunk of its content, so a heading
   // never lands alone at the bottom of a page (orphaned from its rows).
   ensure(doc, 26 + keepWith);
-  doc.font(BOLD).fontSize(13).fillColor(ORANGE_DK).text(title, MARGIN, doc.y);
+  doc.font(BOLD).fontSize(13).fillColor(INK).text(title, MARGIN, doc.y);
   doc.moveTo(MARGIN, doc.y + 2).lineTo(MARGIN + 50, doc.y + 2).lineWidth(3).strokeColor(ORANGE).stroke();
   doc.fillColor(INK).moveDown(0.5);
 }
@@ -641,7 +641,8 @@ function cubicleBlock(doc: PDFKit.PDFDocument, c: Cubicle) {
   const padX = 8;
   const padY = 5;
   const headerH = 20;
-  const PEACH = "#fcebe1"; // group row + zebra fill
+  const SHADE = "#ededed"; // group row + zebra fill (neutral grey)
+  const DESC = "#454545"; // item description text (neutral dark grey)
   const HAIR2 = "#e7e7eb"; // row separators
   const descX = MARGIN + qtyW + padX;
   const descW = CONTENT_W - qtyW - padX * 2;
@@ -672,10 +673,10 @@ function cubicleBlock(doc: PDFKit.PDFDocument, c: Cubicle) {
   // corners. No outer frame.
   doc.save();
   doc.roundedRect(x, yTop, CONTENT_W, totalH, radius).clip();
-  doc.rect(x, yTop + headerH, CONTENT_W, groupH).fill(PEACH);
+  doc.rect(x, yTop + headerH, CONTENT_W, groupH).fill(SHADE);
   let yz = yTop + headerH + groupH;
   c.items.forEach((_, i) => {
-    if (i % 2 === 1) doc.rect(x, yz, CONTENT_W, itemHs[i]).fill(PEACH);
+    if (i % 2 === 1) doc.rect(x, yz, CONTENT_W, itemHs[i]).fill(SHADE);
     yz += itemHs[i];
   });
   doc.rect(x, yTop, CONTENT_W, headerH).fill(ORANGE);
@@ -695,7 +696,7 @@ function cubicleBlock(doc: PDFKit.PDFDocument, c: Cubicle) {
     doc.moveTo(x, yy).lineTo(x + CONTENT_W, yy).lineWidth(0.5).strokeColor(HAIR2).stroke();
     doc.fillColor(INK).font(BOLD).fontSize(9)
       .text(String(it.qty), x + qtyPad, yy + padY, { lineBreak: false });
-    doc.fillColor(INK).font(BODY).fontSize(9)
+    doc.fillColor(DESC).font(BODY).fontSize(9)
       .text(it.description, descX, yy + padY, { width: descW });
     yy += itemHs[i];
   });

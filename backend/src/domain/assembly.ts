@@ -404,16 +404,16 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
 
 function nalItems(insul: string, switchName: string, brand: string, rtu: boolean): CubicleItem[] {
   const items: CubicleItem[] = [
-    { qty: 1, description: `Cubical type: ${insul} LBS LSC2A – load break Switch disconnector unit` },
-    { qty: 1, description: "Cable entry for 1-phase cables up to 300 mm2 (Single core)" },
+    { qty: 1, description: `Cubicle type: ${insul} LBS LSC2A – load break switch-disconnector unit` },
+    { qty: 1, description: "Cable entry for 1-phase cables up to 300 mm² (single core)" },
     { qty: 1, description: "Voltage presence indicator with fixed lamps type VPIS" },
-    { qty: 1, description: "Anti-condensation heater for cable compartment 230VAC with MCB" },
+    { qty: 1, description: "Anti-condensation heater for cable compartment 230 VAC with MCB" },
     { qty: 1, description: "Internal light" },
     { qty: 1, description: "Insulated bar" },
-    { qty: 1, description: `${switchName} – ${brand} Three position switch-disconnector with earthing switch and 1-spring operating device` },
+    { qty: 1, description: `${switchName} – ${brand} three-position switch-disconnector with earthing switch and 1-spring operating device` },
   ];
   if (rtu) items.push({ qty: 1, description: "Auxiliary contacts for G-Sec" });
-  items.push({ qty: 1, description: "low voltage compartment" });
+  items.push({ qty: 1, description: "Low voltage compartment" });
   items.push({ qty: 1, description: "Earth fault indicator" });
   if (rtu) items.push({ qty: 1, description: "Fault passage indicator" });
   return items;
@@ -429,14 +429,14 @@ function nalfItems(
   fuseOverride: boolean
 ): CubicleItem[] {
   const items: CubicleItem[] = [
-    { qty: 1, description: `Cubical type: ${insul} LBS.F, LSC2A- Load break Switch with fuse combination unit with cable` },
-    { qty: 1, description: "Cable entry for 1-phase cables up to 95 mm2 (Single core)" },
+    { qty: 1, description: `Cubicle type: ${insul} LBS.F, LSC2A – load break switch with fuse combination unit with cable` },
+    { qty: 1, description: "Cable entry for 1-phase cables up to 95 mm² (single core)" },
     { qty: 1, description: "Voltage presence indicator with fixed lamps type VPIS" },
-    { qty: 1, description: "Operating Handle for Switch-disconnector and Earthing switch" },
-    { qty: 1, description: "Anti-condensation heater for cable compartment 230VAC with MCB" },
+    { qty: 1, description: "Operating handle for switch-disconnector and earthing switch" },
+    { qty: 1, description: "Anti-condensation heater for cable compartment 230 VAC with MCB" },
     { qty: 1, description: "Internal light" },
     { qty: 1, description: "Insulated bar" },
-    { qty: 1, description: `${switchName} – ABB Three position switch-disconnector with earthing switch and 2-spring operating device` },
+    { qty: 1, description: `${switchName} – ABB three-position switch-disconnector with earthing switch and 2-spring operating device` },
   ];
   if (rtu) items.push({ qty: 1, description: "Auxiliary contacts for G-Sec" });
   // When the user enters an exact fuse rating we drop "up to"; the standard
@@ -446,7 +446,7 @@ function nalfItems(
     : `3 MV fuse ${voltageKv} kV – up to ${fuseA} A – P&C`;
   items.push(
     { qty: 1, description: fuseDesc },
-    { qty: 1, description: "Downstream earthing switch with limited making capacity (2kA)" },
+    { qty: 1, description: "Downstream earthing switch with limited making capacity (2 kA)" },
     { qty: 1, description: "Fuse base" },
     { qty: 1, description: "Fuse tripping" },
     { qty: 1, description: "Indication of fuse status" },

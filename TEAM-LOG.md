@@ -23,6 +23,24 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**✅ RMU offer: structure table recoloured (grey, ink title) + cubicle wording tidied.**
+
+Matched the structure table to the approved look:
+- "Ring Main Unit Structure" title is now dark (was orange); its orange underline stays.
+- The row shading changed from the light-orange (peach) to a neutral **grey**, and the
+  part descriptions are a slightly softer grey.
+- Cubicle part wording tidied to the cleaner form (`assembly.ts`): "Cubical type →
+  Cubicle type", "Switch disconnector → switch-disconnector", "mm2 → mm²", "(Single core)
+  → (single core)", "230VAC → 230 VAC", "Three position → three-position", "low voltage →
+  Low voltage", "(2kA) → (2 kA)". Spelling/format only — no parts, quantities or ratings
+  changed. The cubicle NAME line ("Cubical: PCC …") is unchanged.
+
+Also earlier today: General Notes rows made plain white + slightly shorter.
+
+Builds; 270 tests pass.
+
+## 2026-08-23 · Mohamed's side · Claude
+
 **✅ RMU offer: page header + structure tables restyled to match the approved look.**
 
 Two more visual tweaks to the RMU offer PDF (`pdf.service.ts`, look only):
