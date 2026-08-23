@@ -179,6 +179,15 @@ spreadsheet upload — the 47 are historical, from before those guards existed.
 **all corrected** — none remain. No item is priced in two currencies, no `ABB.` brand typos, and only
 one item has no price at all.
 
+## 2026-08-23 · Mohamed's side · Claude
+
+**Offer History: a green "online" dot shows which drafts are being worked on right now.**
+
+- In Offer History, a draft that's being actively edited — its autosave fired within the last minute —
+  now shows a small pulsing **green dot** next to "Draft". It clears on its own about a minute after
+  editing stops. The list already refreshes every 30 seconds, so the dot tracks live activity across
+  the team. Frontend-only.
+
 ## 2026-08-20 · Mohamed's side · Claude
 
 **Sidebar: a quick "resume draft" shortcut right after Home.**

@@ -181,6 +181,14 @@ export default function LvQtnListPage() {
   }, [showRemoved]);
   useAutoRefresh(() => reload(), 30_000);
 
+  // Ticks so the green "being edited now" dot appears/clears on its own between the
+  // 30s data refreshes (a draft goes idle a minute after its last autosave).
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 15_000);
+    return () => clearInterval(t);
+  }, []);
+
   // LV QTN numbers superseded by a higher revision — shown as "Cancelled". Numbers
   // repeat across users, so revisions are matched within one owner's numbering only.
   const cancelledIds = useMemo(() => {
@@ -493,6 +501,10 @@ export default function LvQtnListPage() {
                 <tbody>
                   {ordered.map((x, i) => {
                     const dead = !!x.cancelled;
+                    // "Live" = a draft whose autosave fired in the last minute → someone is
+                    // working on it right now. The list auto-refreshes every 30s, so this
+                    // turns on/off on its own as people start and stop editing.
+                    const live = x.statusKey === "DRAFT" && !dead && nowTick - new Date(x.updatedAt).getTime() < 60_000;
                     return (
                       <tr key={`${x.kind}-${x.id}`}
                         className={`cursor-pointer border-t border-line transition-colors hover:bg-brand-tint ${
@@ -510,8 +522,14 @@ export default function LvQtnListPage() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${x.statusStyle}`}
-                            title={x.approverEmail ? `${x.statusLabel} · approver ${x.approverEmail}` : x.statusLabel}>
+                          <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${x.statusStyle}`}
+                            title={live ? "Being worked on right now" : x.approverEmail ? `${x.statusLabel} · approver ${x.approverEmail}` : x.statusLabel}>
+                            {live && (
+                              <span className="relative flex h-2 w-2" aria-label="online">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-75" />
+                                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                              </span>
+                            )}
                             {x.statusLabel}
                           </span>
                         </td>
