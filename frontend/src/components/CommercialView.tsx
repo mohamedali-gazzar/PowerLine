@@ -1,11 +1,21 @@
 import type { CommercialData } from "../types";
 
-const money = (n: number, cur: string) =>
-  `${cur} ${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+// Styled to match the commercial PDF (backend/src/services/pdf-commercial.service.ts):
+// an understated "Main Offer" table (grey labels over an orange rule), a plain totals
+// block closed by an orange rule, and the terms summary.
+const ORANGE = "#ff6600";
+const ORANGE_DK = "#d95500";
+const INK = "#2b2421";
+const MUTED = "#767070";
+const HAIR = "#e7e7eb";
+
+const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 
 export default function CommercialView({ c }: { c: CommercialData }) {
+  const money = (n: number) => `${c.currency} ${fmt(n)}`;
+  const lbl = "text-[11px] font-bold uppercase tracking-wide";
   return (
-    <div className="space-y-5 animate-fade-up">
+    <div className="space-y-6" style={{ color: INK }}>
       {!c.priceFound && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
           This configuration isn’t in the price list — the unit price was entered manually
@@ -13,62 +23,72 @@ export default function CommercialView({ c }: { c: CommercialData }) {
         </p>
       )}
 
+      {/* Main Offer */}
       <div>
-        <h3 className="sec-head">Main Offer</h3>
-        <div className="overflow-hidden rounded-lg border border-line">
-          <table className="w-full text-sm">
-            <thead className="bg-brand text-left text-xs uppercase text-white">
-              <tr>
-                <th className="px-3 py-2">#</th>
-                <th className="px-3 py-2">Description</th>
-                <th className="px-3 py-2 text-center">QTY</th>
-                <th className="px-3 py-2 text-right">Unit</th>
-                <th className="px-3 py-2 text-right">Total</th>
+        <h3 className="text-xl font-extrabold" style={{ color: INK }}>Main Offer</h3>
+        <div className="mt-1 h-[3px] w-16 rounded-full" style={{ background: ORANGE }} />
+        <table className="mt-4 w-full" style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
+          <colgroup>
+            <col style={{ width: "34px" }} />
+            <col />
+            <col style={{ width: "48px" }} />
+            <col style={{ width: "112px" }} />
+            <col style={{ width: "112px" }} />
+          </colgroup>
+          <thead>
+            <tr style={{ borderBottom: `2px solid ${ORANGE}` }}>
+              <th className={`pb-1.5 text-left ${lbl}`} style={{ color: MUTED }}>Item</th>
+              <th className={`pb-1.5 text-left ${lbl}`} style={{ color: MUTED }}>Description</th>
+              <th className={`pb-1.5 text-center ${lbl}`} style={{ color: MUTED }}>Qty</th>
+              <th className={`pb-1.5 text-right ${lbl}`} style={{ color: MUTED }}>Unit ({c.currency})</th>
+              <th className={`pb-1.5 text-right ${lbl}`} style={{ color: MUTED }}>Total ({c.currency})</th>
+            </tr>
+          </thead>
+          <tbody>
+            {c.items.map((it, i) => (
+              <tr key={i} style={{ borderBottom: `1px solid ${HAIR}` }}>
+                <td className="py-2.5 align-middle text-sm" style={{ color: MUTED }}>{i + 1}</td>
+                <td className="py-2.5 pr-3 align-middle text-sm font-bold" style={{ color: INK }}>{it.description}</td>
+                <td className="py-2.5 text-center align-middle text-sm">{it.qty}</td>
+                <td className="py-2.5 text-right align-middle text-sm">
+                  {it.unitPrice > 0 ? fmt(it.unitPrice) : <span className="font-bold text-amber-600">POA</span>}
+                </td>
+                <td className="py-2.5 text-right align-middle text-sm font-bold">
+                  {it.unitPrice > 0 ? fmt(it.total) : <span className="text-amber-600">POA</span>}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {c.items.map((it, i) => (
-                <tr key={i} className="border-t border-line align-top">
-                  <td className="px-3 py-2 text-muted">{i + 1}</td>
-                  <td className="px-3 py-2 text-ink">{it.description}</td>
-                  <td className="px-3 py-2 text-center">{it.qty}</td>
-                  <td className="px-3 py-2 text-right">
-                    {it.unitPrice > 0 ? money(it.unitPrice, c.currency) : <span className="text-amber-600 font-semibold">POA</span>}
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold">
-                    {it.unitPrice > 0 ? money(it.total, c.currency) : <span className="text-amber-600">POA</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Totals — plain rows closed by an orange rule + bold Total */}
+        <div className="mt-5 flex justify-end">
+          <div className="w-72 text-sm">
+            <TRow label="Subtotal (excl. VAT)" value={money(c.totalExclVat)} />
+            {c.discountPct > 0 && <TRow label={`Discount (${c.discountPct}%)`} value={`− ${money(c.discountAmount)}`} />}
+            <TRow label={`VAT (${c.vatPct}%)`} value={money(c.vatAmount)} />
+            <div className="mt-1 flex justify-between border-t-2 pt-2 text-lg font-extrabold" style={{ borderColor: ORANGE }}>
+              <span style={{ color: INK }}>Total ({c.currency})</span>
+              <span style={{ color: ORANGE_DK }}>{money(c.totalInclVat)}</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="ml-auto max-w-sm space-y-1 text-sm">
-        <Row label="Total (excl. VAT)" value={money(c.totalExclVat, c.currency)} />
-        {c.discountPct > 0 && (
-          <Row label={`Discount (${c.discountPct}%)`} value={`− ${money(c.discountAmount, c.currency)}`} />
-        )}
-        <Row label={`VAT (${c.vatPct}%)`} value={money(c.vatAmount, c.currency)} />
-        <div className="flex items-center justify-between rounded-lg bg-brand px-3 py-2 text-base font-extrabold text-white">
-          <span>Total (incl. VAT)</span>
-          <span>{money(c.totalInclVat, c.currency)}</span>
-        </div>
-      </div>
-
+      {/* Terms summary */}
       <div>
-        <h3 className="sec-head">Terms</h3>
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+        <h3 className="text-xl font-extrabold" style={{ color: INK }}>Terms</h3>
+        <div className="mt-1 h-[3px] w-16 rounded-full" style={{ background: ORANGE }} />
+        <div className="mt-3 grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
           <Term k="Validity" v={`${c.validityDays} days`} />
           <Term k="Delivery" v={c.deliveryWeeks ? `${c.deliveryWeeks} weeks` : "To be confirmed"} />
           <Term k="Payment" v={c.paymentTerms || "To be agreed"} />
           <Term k="Warranty" v={c.warrantyMonths ? `${c.warrantyMonths} months` : "Standard"} />
-        </dl>
-        <p className="mt-3 text-xs text-muted">
+        </div>
+        <p className="mt-3 text-xs" style={{ color: MUTED }}>
           Prices are linked to the US Dollar exchange rate at the Central Bank until the date of receipt.
         </p>
-        <p className="mt-1 text-xs text-muted">
+        <p className="mt-1 text-xs" style={{ color: MUTED }}>
           The downloadable PDF includes the full General &amp; Special Terms &amp; Conditions and contact details.
         </p>
       </div>
@@ -76,11 +96,11 @@ export default function CommercialView({ c }: { c: CommercialData }) {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function TRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between text-muted">
+    <div className="flex justify-between py-1" style={{ color: MUTED }}>
       <span>{label}</span>
-      <span className="font-medium text-ink">{value}</span>
+      <span style={{ color: INK, fontWeight: 500 }}>{value}</span>
     </div>
   );
 }
@@ -88,8 +108,8 @@ function Row({ label, value }: { label: string; value: string }) {
 function Term({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex gap-2">
-      <dt className="font-semibold text-muted">{k}:</dt>
-      <dd className="text-ink">{v}</dd>
+      <span className="w-20 font-bold" style={{ color: MUTED }}>{k}:</span>
+      <span style={{ color: INK }}>{v}</span>
     </div>
   );
 }

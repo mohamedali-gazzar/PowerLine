@@ -23,6 +23,21 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**✅ On-screen commercial offer matches the PDF; saved offers now show the cover + A4.**
+
+Follow-up to the on-screen technical work below:
+- The on-screen **Commercial** offer (`CommercialView`) now matches the commercial PDF —
+  an understated "Main Offer" table (grey column labels over an orange rule, thin lines
+  between rows), a plain totals block closed by an orange rule with the Total in orange,
+  and the terms summary — instead of the old solid-orange table header and orange total bar.
+- The **saved-offer page** (opening a quotation from Offer History) now shows the branded
+  **cover** and lays the technical/commercial document out on an **A4 sheet**, the same as the
+  create screen and the exported PDF. Previously it showed the bare tables with no cover.
+
+The create screen already showed covers + A4 on both tabs. Frontend builds; all tests pass.
+
+## 2026-08-23 · Mohamed's side · Claude
+
 **✅ On-screen RMU offer now looks like the exported PDF.**
 
 The RMU technical offer you see while creating/opening a quotation (`OfferView`, used on

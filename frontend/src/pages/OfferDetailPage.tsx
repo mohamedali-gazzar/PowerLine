@@ -4,6 +4,7 @@ import { api, QTN_STATUS_STYLE, type QtnStatus } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import OfferView from "../components/OfferView";
 import CommercialView from "../components/CommercialView";
+import OfferCover from "../components/OfferCover";
 import type { Offer } from "../types";
 
 export default function OfferDetailPage() {
@@ -161,14 +162,32 @@ export default function OfferDetailPage() {
         ))}
       </div>
 
-      <div className="card mt-4 p-6">
-        {tab === "technical" ? (
-          <OfferView g={offer.generated} />
-        ) : offer.commercial ? (
-          <CommercialView c={offer.commercial} />
-        ) : (
-          <p className="text-muted">No commercial data.</p>
-        )}
+      {/* Branded cover + A4 document, exactly like the exported PDF. */}
+      <div className="mt-4 overflow-x-auto">
+        <div className="mx-auto w-fit space-y-5">
+          <OfferCover
+            kind={tab === "technical" ? "Technical" : "Commercial"}
+            date={offer.offerDate ?? offer.createdAt.slice(0, 10)}
+            qtnRef={offer.quotationNo ?? offer.offerNumber}
+            optyNo={offer.opportunityNo}
+            projectName={offer.projectName}
+            customer={offer.customer}
+            contacts={[
+              { role: "Sales", name: offer.salesName, phone: offer.salesMobile, email: offer.salesEmail },
+              { role: "Manager", name: offer.salesManagerName, phone: offer.salesManagerMobile, email: offer.salesManagerEmail },
+              { role: "Support", name: offer.supportName, phone: offer.supportMobile, email: offer.supportEmail },
+            ]}
+          />
+          <div className="a4-sheet px-12 py-10">
+            {tab === "technical" ? (
+              <OfferView g={offer.generated} />
+            ) : offer.commercial ? (
+              <CommercialView c={offer.commercial} />
+            ) : (
+              <p className="text-muted">No commercial data.</p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
