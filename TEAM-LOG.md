@@ -23,6 +23,22 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**✅ RMU offer: page header + structure tables restyled to match the approved look.**
+
+Two more visual tweaks to the RMU offer PDF (`pdf.service.ts`, look only):
+- **Header** on each content page: bigger PowerLine logo; the system code (e.g.
+  PRAL10AB12R2T1W) is now black/bold (was orange); the config code shows with a space,
+  "PRAL12 (2+1)"; and the thin line under the logo row is gone, leaving one line under the
+  "RMU NO. 1 … QTY 1" row.
+- **Structure tables**: now an orange "Qty | Description" header, a shaded row for each
+  cubicle ("2  Cubical: PCC …, each consisting of:"), and its parts listed below with
+  every-other-row shading — no box around the table.
+
+The "PRAL12 (2+1)" spacing is display-only; the underlying code buildCode() produces is
+unchanged. Builds; 270 tests pass.
+
+## 2026-08-23 · Mohamed's side · Claude
+
 **✅ RMU offer: General Notes restyled + outer frame removed from the data cards.**
 
 Small visual follow-up. The **General Notes** on the RMU offer are now a numbered table

@@ -151,7 +151,7 @@ function dividerPage(doc: PDFKit.PDFDocument, n: number, g: GeneratedOffer) {
   const ry = baseY + 18;
   doc.rect(MARGIN, ry, 80, 5).fill(ORANGE);
   doc.font(BOLD).fontSize(20).fillColor(INK).text(g.panelCode, MARGIN, ry + 20, { lineBreak: false });
-  const fam = [g.configCode, g.titleFamily].filter(Boolean).join("  ·  ");
+  const fam = [g.configCode.replace("(", " ("), g.titleFamily].filter(Boolean).join("  ·  ");
   doc.font(BODY).fontSize(12).fillColor(GREY).text(fam, MARGIN, ry + 48, { lineBreak: false });
   doc.fillColor(INK);
 }
@@ -499,16 +499,17 @@ export function drawCover(doc: PDFKit.PDFDocument, fonts: { body: string; bold: 
 }
 
 function runningHeader(doc: PDFKit.PDFDocument, g: GeneratedOffer) {
-  safeImage(doc, asset("logo.png"), MARGIN, 22, { width: 74 });
-  // Right-aligned product identity: the system code (bold) over its config code —
-  // the panel's own reference, rather than the readable product name.
-  doc.font(BOLD).fontSize(11).fillColor(ORANGE_DK)
+  safeImage(doc, asset("logo.png"), MARGIN, 24, { width: 104 });
+  // Right-aligned product identity: the system code (bold, ink) over its config
+  // code (grey) — the panel's own reference, rather than the readable product name.
+  doc.font(BOLD).fontSize(12.5).fillColor(INK)
     .text(g.panelCode, MARGIN, 30, { width: CONTENT_W, align: "right", lineBreak: false });
   if (g.configCode) {
-    doc.font(BODY).fontSize(8.5).fillColor(GREY)
-      .text(g.configCode, MARGIN, 46, { width: CONTENT_W, align: "right", lineBreak: false });
+    // Display with a space before the "(" — "PRAL12 (2+1)" — without changing the
+    // semantic code that buildCode() produces.
+    doc.font(BODY).fontSize(9.5).fillColor(GREY)
+      .text(g.configCode.replace("(", " ("), MARGIN, 49, { width: CONTENT_W, align: "right", lineBreak: false });
   }
-  doc.moveTo(MARGIN, 74).lineTo(PAGE_W - MARGIN, 74).lineWidth(1).strokeColor(LIGHT).stroke();
   doc.fillColor(INK);
   doc.x = MARGIN;
   doc.y = 84;
@@ -639,57 +640,73 @@ function lineup(doc: PDFKit.PDFDocument, g: GeneratedOffer) {
 }
 
 function cubicleBlock(doc: PDFKit.PDFDocument, c: Cubicle) {
-  const heading =
-    c.code === "RTU"
-      ? "Communication:"
-      : c.code === "EXTRA"
-      ? `${c.name}:` // e.g. "Supplied Complete With:" — not a cubicle, so no "QTY … Cubical"
-      : `QTY ${c.qty} Cubical: ${c.name}, each consisting of:`;
-  // Measure at the SAME font the text is drawn in (heading = bold 9.5, item = body 9),
-  // or the bar is sized for a bigger/wrapped font than it renders and leaves a tall
-  // empty orange band above/below the one line of text.
+  const radius = 6;
+  const qtyW = 56;
+  const qtyPad = 12;
+  const padX = 8;
+  const padY = 5;
+  const headerH = 20;
+  const PEACH = "#fcebe1"; // group row + zebra fill
+  const HAIR2 = "#e7e7eb"; // row separators
+  const descX = MARGIN + qtyW + padX;
+  const descW = CONTENT_W - qtyW - padX * 2;
+  const isCubicle = c.code !== "RTU" && c.code !== "EXTRA";
+  const groupText =
+    c.code === "RTU" ? "Communication:"
+    : c.code === "EXTRA" ? `${c.name}:`
+    : `Cubical: ${c.name}, each consisting of:`;
+  const groupQty = isCubicle ? String(c.qty) : "";
+  // Measure the shaded group row + each item row so wrapped text never overlaps.
   doc.font(BOLD).fontSize(9.5);
-  const hH = Math.max(16, doc.heightOfString(heading, { width: CONTENT_W - 16 }) + 7);
-  // Keep the cubicle header bar + the table header (15) + the first item row
-  // together, so a cubicle never begins with only its title at the page bottom.
-  doc.font(BODY).fontSize(9);
-  const firstItemH = c.items.length
-    ? Math.max(16, doc.heightOfString(c.items[0].description, { width: CONTENT_W - 42 - 8 }) + 6)
-    : 0;
-  ensure(doc, hH + 15 + firstItemH + 10);
-  doc.moveDown(0.2);
-  // gradient-like header (solid orange bar)
-  const hY = doc.y;
-  doc.roundedRect(MARGIN, hY, CONTENT_W, hH, 3).fill(ORANGE_DK);
-  doc.fillColor("white").font(BOLD).fontSize(9.5)
-    .text(heading, MARGIN + 8, hY + 4, { width: CONTENT_W - 16 });
-  doc.y = hY + hH;
-
-  // table header (compact, so a full cubicle list fits on one page rather than
-  // spilling a single row onto a near-empty extra page)
-  const qtyW = 42;
-  let y = doc.y;
-  doc.rect(MARGIN, y, CONTENT_W, 13).fill(LIGHT);
-  doc.fillColor(ORANGE_DK).font(BOLD).fontSize(8.5);
-  doc.text("QTY", MARGIN + 6, y + 3, { width: qtyW - 8 });
-  doc.text("DESCRIPTION", MARGIN + qtyW + 4, y + 3);
-  y += 13;
-  doc.font(BODY).fontSize(9).fillColor(INK);
-
-  c.items.forEach((it, i) => {
-    const descW = CONTENT_W - qtyW - 8;
-    const h = Math.max(15, doc.heightOfString(it.description, { width: descW }) + 5);
-    if (y + h > PAGE_H - 60) {
-      doc.addPage();
-      (doc as unknown as { __onBreak?: () => void }).__onBreak?.();
-      y = doc.y;
-    }
-    if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, h).fill(TINT).fillColor(INK);
-    doc.fillColor(ORANGE).font(BOLD).text(String(it.qty), MARGIN + 6, y + 2.5, { width: qtyW - 8 });
-    doc.fillColor(INK).font(BODY).text(it.description, MARGIN + qtyW + 4, y + 2.5, { width: descW });
-    y += h;
+  const groupH = Math.max(20, doc.heightOfString(groupText, { width: descW }) + padY * 2);
+  const itemHs = c.items.map((it) => {
+    doc.font(BODY).fontSize(9);
+    return Math.max(17, doc.heightOfString(it.description, { width: descW }) + padY * 2);
   });
-  doc.y = y + 5;
+  const totalH = headerH + groupH + itemHs.reduce((a, b) => a + b, 0);
+  // Keep the whole cubicle table on one page (RMU lists are short) — break before it
+  // rather than splitting the rounded header / zebra across a page edge.
+  if (doc.y + totalH > PAGE_H - 55) {
+    doc.addPage();
+    (doc as unknown as { __onBreak?: () => void }).__onBreak?.();
+  }
+  doc.moveDown(0.25);
+  const x = MARGIN;
+  const yTop = doc.y;
+  // Fills (shaded group row + zebra items + orange header), clipped to round the
+  // corners. No outer frame.
+  doc.save();
+  doc.roundedRect(x, yTop, CONTENT_W, totalH, radius).clip();
+  doc.rect(x, yTop + headerH, CONTENT_W, groupH).fill(PEACH);
+  let yz = yTop + headerH + groupH;
+  c.items.forEach((_, i) => {
+    if (i % 2 === 1) doc.rect(x, yz, CONTENT_W, itemHs[i]).fill(PEACH);
+    yz += itemHs[i];
+  });
+  doc.rect(x, yTop, CONTENT_W, headerH).fill(ORANGE);
+  doc.restore();
+  // Header: "Qty" | "Description".
+  doc.fillColor("white").font(BOLD).fontSize(9.5);
+  doc.text("Qty", x + qtyPad, yTop + 5, { lineBreak: false });
+  doc.text("Description", descX, yTop + 5, { lineBreak: false });
+  // Shaded group row (cubicle name + its quantity).
+  let yy = yTop + headerH;
+  doc.fillColor(INK).font(BOLD).fontSize(9.5);
+  if (groupQty) doc.text(groupQty, x + qtyPad, yy + padY, { lineBreak: false });
+  doc.text(groupText, descX, yy + padY, { width: descW });
+  yy += groupH;
+  // Item rows (qty + description), faint separators between them.
+  c.items.forEach((it, i) => {
+    doc.moveTo(x, yy).lineTo(x + CONTENT_W, yy).lineWidth(0.5).strokeColor(HAIR2).stroke();
+    doc.fillColor(INK).font(BOLD).fontSize(9)
+      .text(String(it.qty), x + qtyPad, yy + padY, { lineBreak: false });
+    doc.fillColor(INK).font(BODY).fontSize(9)
+      .text(it.description, descX, yy + padY, { width: descW });
+    yy += itemHs[i];
+  });
+  doc.y = yTop + totalH;
+  doc.fillColor(INK);
+  doc.moveDown(0.3);
 }
 
 // ---------------------------------------------------------------- FOOTERS
