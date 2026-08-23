@@ -117,6 +117,27 @@ export async function getOfferById(req: Request, res: Response) {
   }
 }
 
+// GET /api/offers/:id/events — the offer's audit trail (create / send / approve /
+// return / submit …), so every "Return for revision" comment is kept as history.
+// Same access as viewing the offer: the owner or an approver (qtn.viewAll).
+export async function getOfferEvents(req: Request, res: Response) {
+  try {
+    const offer = await getOfferRaw(req.params.id);
+    if (!offer) return res.status(404).json({ error: "Offer not found" });
+    const canViewAll = req.userId ? (await accessOf(req.userId)).perms.has("qtn.viewAll") : false;
+    if (offer.ownerId !== req.userId && !canViewAll) {
+      return res.status(404).json({ error: "Offer not found" });
+    }
+    const rows = await prisma.qtnEvent.findMany({
+      where: { qtnId: offer.id },
+      orderBy: { createdAt: "asc" },
+    });
+    res.json(rows);
+  } catch (err) {
+    handleError(err, res);
+  }
+}
+
 // POST /api/offers/:id/duplicate — clone an offer into a fresh DRAFT (Duplicate /
 // Amend in the unified history). Owner-only, like get/delete. An optional ?number=
 // sets the new offer number; otherwise the next PL-YYYY-#### is assigned.

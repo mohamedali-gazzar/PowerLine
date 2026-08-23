@@ -41,6 +41,7 @@ import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
 import {
   getToken, api, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type CatalogChanges, type CatalogChangeItem, type QtnAttachmentDto, type QtnStatus,
+  type QtnEventDto,
 } from "../api";
 import { checkCatalogUpdates, catalogVersion } from "../lv/catalogSource";
 import ReturnForRevisionModal, { type ReturnComment } from "../components/ReturnForRevisionModal";
@@ -316,6 +317,9 @@ export default function LvConfiguratorPage() {
   // The missing-copper / empty-panel / no-cells etc. warnings, surfaced when sending for
   // approval so the approver sees them before the quotation is locked. Null = no modal.
   const [approvalWarns, setApprovalWarns] = useState<ExportCheck[] | null>(null);
+  // Every "Return for revision" is kept as an audit event; this is the saved history
+  // of those comments (newest first), shown on the quotation.
+  const [returnHistory, setReturnHistory] = useState<QtnEventDto[]>([]);
   const [returnOpen, setReturnOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
   const [coWorkOpen, setCoWorkOpen] = useState(false);
@@ -357,6 +361,17 @@ export default function LvConfiguratorPage() {
       .catch(() => { if (alive) navigate("/lv", { replace: true }); });
     return () => { alive = false; };
   }, [id, navigate, tabKey]);
+  // Load the saved revision-comment history (all "Return for revision" events), and
+  // refresh it whenever the workflow status changes so a new return shows up at once.
+  // The endpoint is owner/approver-gated; a 403 just leaves the history empty.
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    api.qtns.events(id)
+      .then((evs) => { if (alive) setReturnHistory(evs.filter((e) => e.action === "RETURN")); })
+      .catch(() => { if (alive) setReturnHistory([]); });
+    return () => { alive = false; };
+  }, [id, status]);
   // A revision is cancelled once a higher revision of the same base exists.
   useEffect(() => {
     if (!qtnNum) return;
@@ -1510,6 +1525,23 @@ export default function LvConfiguratorPage() {
           <p className="text-sm font-bold text-red-800">↩ Returned for revision</p>
           <p className="mt-0.5 whitespace-pre-wrap text-sm text-red-800">{wf.returnReason}</p>
           {wf.approverEmail && <p className="mt-1 text-[11px] text-red-700">— {wf.approverEmail}</p>}
+        </div>
+      )}
+      {returnHistory.length > 0 && (
+        <div className="mb-4 rounded-xl border border-line bg-white px-4 py-3 no-print animate-fade-up">
+          <p className="text-xs font-bold uppercase tracking-wide text-muted">
+            ↩ Revision history · {returnHistory.length} return{returnHistory.length === 1 ? "" : "s"} for revision
+          </p>
+          <ol className="mt-2 space-y-2">
+            {[...returnHistory].reverse().map((e) => (
+              <li key={e.id} className="rounded-lg border border-red-200 bg-red-50/70 px-3 py-2">
+                <p className="whitespace-pre-wrap text-sm text-red-900">{e.note || "(no comment)"}</p>
+                <p className="mt-1 text-[11px] text-red-700">
+                  — {e.actorEmail || "unknown"} · {new Date(e.createdAt).toLocaleString()}
+                </p>
+              </li>
+            ))}
+          </ol>
         </div>
       )}
       {status === "WAITING_APPROVAL" && (

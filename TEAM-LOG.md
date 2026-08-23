@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**✅ Return-for-revision comments are now shown as a saved history (LV + RMU).**
+
+Every "Return for revision" was already recorded in the audit trail, but the screen only
+ever showed the *latest* comment. Both the LV quotation and the RMU offer now show a
+**Revision history** panel listing every return comment — the full text, who returned it,
+and when — newest first, and it stays visible after the quotation is re-sent or approved.
+Because the data was already being saved, returns from before today show up too. Added a
+read-only `/api/offers/:id/events` endpoint for the RMU side (the LV one already existed),
+owner/approver-gated. Both halves build; all tests pass.
+
+## 2026-08-23 · Mohamed's side · Claude
+
 **✅ LV Copper Tool cells now accept formulas (like a spreadsheet).**
 
 In the Copper Tool (cell panels), the Phase L / Neutral L / Earth L boxes now accept a

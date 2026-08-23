@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, QTN_STATUS_STYLE, type QtnStatus } from "../api";
+import { api, QTN_STATUS_STYLE, type QtnStatus, type QtnEventDto } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import OfferView from "../components/OfferView";
 import CommercialView from "../components/CommercialView";
@@ -16,6 +16,8 @@ export default function OfferDetailPage() {
   const [actionErr, setActionErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"technical" | "commercial">("technical");
+  // Saved history of every "Return for revision" (from the offer's audit trail).
+  const [returnHistory, setReturnHistory] = useState<QtnEventDto[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -24,6 +26,16 @@ export default function OfferDetailPage() {
   useEffect(() => {
     api.access.me().then((a) => setPerms(a.perms)).catch(() => {});
   }, []);
+  // Load the return-for-revision history; refresh whenever the status changes so a
+  // new return appears immediately. Endpoint is owner/approver-gated → 403 = empty.
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    api.offerEvents(id)
+      .then((evs) => { if (alive) setReturnHistory(evs.filter((e) => e.action === "RETURN")); })
+      .catch(() => { if (alive) setReturnHistory([]); });
+    return () => { alive = false; };
+  }, [id, offer?.status]);
 
   if (error)
     return <div className="card border-red-200 bg-red-50 p-4 text-red-700">{error}</div>;
@@ -144,6 +156,25 @@ export default function OfferDetailPage() {
         </div>
       </div>
       {actionErr && <p className="mt-2 text-sm font-semibold text-red-600">{actionErr}</p>}
+
+      {/* Saved revision history — every "Return for revision" comment, newest first. */}
+      {returnHistory.length > 0 && (
+        <div className="mt-3 rounded-xl2 border border-line bg-white p-4 shadow-soft">
+          <p className="text-xs font-bold uppercase tracking-wide text-muted">
+            ↩ Revision history · {returnHistory.length} return{returnHistory.length === 1 ? "" : "s"} for revision
+          </p>
+          <ol className="mt-2 space-y-2">
+            {[...returnHistory].reverse().map((e) => (
+              <li key={e.id} className="rounded-lg border border-red-200 bg-red-50/70 px-3 py-2">
+                <p className="whitespace-pre-wrap text-sm text-red-900">{e.note || "(no comment)"}</p>
+                <p className="mt-1 text-[11px] text-red-700">
+                  — {e.actorEmail || "unknown"} · {new Date(e.createdAt).toLocaleString()}
+                </p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="mt-4 flex gap-1 border-b border-line">

@@ -485,6 +485,8 @@ export const api = {
   // ── RMU offers ─────────────────────────────────────────────────────────────
   listOffers: () => request<Offer[]>("/offers"),
   getOffer: (id: string) => request<Offer>(`/offers/${id}`),
+  /** An RMU offer's audit trail (return-for-revision history, etc.). */
+  offerEvents: (id: string) => request<QtnEventDto[]>(`/offers/${id}/events`),
   createOffer: (data: OfferInput) =>
     request<Offer>("/offers", { method: "POST", body: JSON.stringify(data) }),
   deleteOffer: (id: string) => request<void>(`/offers/${id}`, { method: "DELETE" }),
