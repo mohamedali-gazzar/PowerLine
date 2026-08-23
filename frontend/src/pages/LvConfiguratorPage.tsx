@@ -7945,6 +7945,78 @@ function PolesSummary({ p }: { p: LvPanel }) {
   );
 }
 
+// Evaluate a simple arithmetic expression (+ - * / and parentheses) with shunting-yard.
+// Returns NaN if the string is not a valid expression. No eval/Function — safe on any input.
+function evalArithmetic(expr: string): number {
+  const tokens = expr.match(/\d*\.?\d+|[+\-*/()]/g);
+  if (!tokens || tokens.join("") !== expr.replace(/\s+/g, "")) return NaN;
+  const prec: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2 };
+  const out: (number | string)[] = [];
+  const ops: string[] = [];
+  let prevNum = false;
+  for (const t of tokens) {
+    if (/\d/.test(t)) { out.push(parseFloat(t)); prevNum = true; }
+    else if (t === "(") { ops.push(t); prevNum = false; }
+    else if (t === ")") {
+      while (ops.length && ops[ops.length - 1] !== "(") out.push(ops.pop()!);
+      if (!ops.length) return NaN;
+      ops.pop(); prevNum = true;
+    } else {
+      if ((t === "-" || t === "+") && !prevNum) out.push(0); // unary +/-
+      while (ops.length && ops[ops.length - 1] !== "(" && prec[ops[ops.length - 1]] >= prec[t]) out.push(ops.pop()!);
+      ops.push(t); prevNum = false;
+    }
+  }
+  while (ops.length) { const o = ops.pop()!; if (o === "(") return NaN; out.push(o); }
+  const st: number[] = [];
+  for (const t of out) {
+    if (typeof t === "number") { st.push(t); continue; }
+    const b = st.pop(), a = st.pop();
+    if (a === undefined || b === undefined) return NaN;
+    st.push(t === "+" ? a + b : t === "-" ? a - b : t === "*" ? a * b : a / b);
+  }
+  return st.length === 1 ? st[0] : NaN;
+}
+
+// A number, or a spreadsheet-style formula ("=1000+1000+500" → 2500). The leading "=" is
+// optional. Returns 0 for empty / invalid input.
+function evalNum(raw: string): number {
+  let s = raw.trim();
+  if (s.startsWith("=")) s = s.slice(1).trim();
+  if (s === "") return 0;
+  if (/^\d*\.?\d+$/.test(s)) return parseFloat(s);
+  const n = evalArithmetic(s);
+  return isNaN(n) || !isFinite(n) ? 0 : Math.round(n * 1000) / 1000;
+}
+
+// A Copper-Tool length cell that also accepts a formula, e.g. "=1000+1000+500" (→ 2500).
+// It keeps a text draft while editing; plain numbers commit live, a formula evaluates on
+// Enter or blur. Enter still moves down the column (copperEnterNav).
+function CopperCell({ value, colKey, onCommit }: {
+  value: number; colKey: "p" | "n" | "e"; onCommit: (n: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const shown = draft !== null ? draft : value ? String(value) : "";
+  return (
+    <input
+      className="input h-8 w-16 px-1 text-center text-sm"
+      inputMode="text"
+      value={shown}
+      placeholder="0"
+      data-coppercol={colKey}
+      title="Type a number, or a formula like =1000+1000+500"
+      onKeyDown={copperEnterNav}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setDraft(raw);
+        // Plain numbers update the weight live; leave formulas to evaluate on Enter/blur.
+        if (/^\d*\.?\d*$/.test(raw.trim())) onCommit(parseFloat(raw) || 0);
+      }}
+      onBlur={(e) => { onCommit(evalNum(e.target.value)); setDraft(null); }}
+    />
+  );
+}
+
 // RPT-1: Copper Tool (Cells) — free-text copper lengths per standard rating, with
 // live weight (kg) and P/N/E rows highlighted as recommendations from the incomer.
 function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void }) {
@@ -7957,14 +8029,13 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
     u({ copperTool: next, mainBusbarKg: Math.round(copperTotal(type, next) * 10) / 10 });
   };
   const total = copperTotal(type, tool);
-  const cell = (rating: number, key: "p" | "n" | "e") => {
-    const v = tool[String(rating)]?.[key] ?? 0;
-    return (
-      <input className="input h-8 w-16 px-1 text-center text-sm" inputMode="decimal" value={v || ""} placeholder="0"
-        data-coppercol={key} onKeyDown={copperEnterNav}
-        onChange={(e) => setLen(rating, key, parseFloat(e.target.value.replace(/[^\d.]/g, "")) || 0)} />
-    );
-  };
+  const cell = (rating: number, key: "p" | "n" | "e") => (
+    <CopperCell
+      value={tool[String(rating)]?.[key] ?? 0}
+      colKey={key}
+      onCommit={(n) => setLen(rating, key, n)}
+    />
+  );
   return (
     <div className="flex h-full flex-col rounded-lg border border-line p-3">
       <div className="-mx-3 -mt-3 mb-3 flex items-center justify-between rounded-t-lg border-b border-brand/20 bg-brand-light px-3 py-2">

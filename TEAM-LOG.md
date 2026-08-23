@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**✅ LV Copper Tool cells now accept formulas (like a spreadsheet).**
+
+In the Copper Tool (cell panels), the Phase L / Neutral L / Earth L boxes now accept a
+formula. Type e.g. `=1000+1000+500` and on Enter (or clicking away) it works it out and
+writes **2500**. It understands + − × ÷ and brackets (`=2*(3+4)-1` → 13), spaces are fine,
+and the leading `=` is optional. Plain numbers still work and update the weight as you
+type; anything that isn't a valid sum just becomes 0. No change to the copper-weight
+formula itself. Frontend builds; all tests pass.
+
+## 2026-08-23 · Mohamed's side · Claude
+
 **✅ LV: the per-panel selling Factor box is now freely editable.**
 
 The Factor field on an LV panel (Panels tab, and the LCP/KWHM auxiliary editors) was hard
