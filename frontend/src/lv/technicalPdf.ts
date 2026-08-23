@@ -199,6 +199,59 @@ function paginatePanel(host: HTMLElement, headerEl: HTMLElement | null, panelEl:
   return pages;
 }
 
+// Paginate the Commercial "Main Offer" table: the running header + the column header
+// (thead) repeat on every page, rows flow across pages without ever being cut, and the
+// totals block is placed after the last row (or a fresh page if it doesn't fit).
+function paginateCommercialMain(
+  host: HTMLElement,
+  headerEl: HTMLElement | null,
+  table: HTMLElement,
+  totalsEl: HTMLElement | null,
+): HTMLElement[] {
+  const colgroup = table.querySelector("colgroup");
+  const thead = table.querySelector("thead");
+  const rows = Array.from(table.querySelectorAll<HTMLElement>(":scope > tbody > tr"));
+  const pages: HTMLElement[] = [];
+  let lastContent: HTMLElement | null = null;
+  let ri = 0;
+  do {
+    const { page, content } = contentPage(headerEl);
+    host.appendChild(page);
+    const t = document.createElement("table");
+    t.className = table.className;
+    t.style.width = "100%";
+    if (colgroup) t.appendChild(colgroup.cloneNode(true));
+    if (thead) t.appendChild(thead.cloneNode(true));
+    const tb = document.createElement("tbody");
+    t.appendChild(tb);
+    content.appendChild(t);
+    while (ri < rows.length) {
+      tb.appendChild(rows[ri].cloneNode(true));
+      if (content.scrollHeight > content.clientHeight + 1) {
+        if (tb.childElementCount > 1) { tb.removeChild(tb.lastElementChild!); break; }
+        ri++; break; // a single row taller than a page — keep it and move on
+      }
+      ri++;
+    }
+    pages.push(page);
+    lastContent = content;
+  } while (ri < rows.length);
+  // Totals: after the last row if it fits, otherwise a new page.
+  if (totalsEl && lastContent) {
+    const tot = totalsEl.cloneNode(true) as HTMLElement;
+    neutralize(tot);
+    lastContent.appendChild(tot);
+    if (lastContent.scrollHeight > lastContent.clientHeight + 1) {
+      lastContent.removeChild(tot);
+      const { page, content } = contentPage(headerEl);
+      host.appendChild(page);
+      content.appendChild(tot);
+      pages.push(page);
+    }
+  }
+  return pages;
+}
+
 /**
  * Re-attach hyperlinks after a page has been rasterised.
  *
@@ -286,6 +339,91 @@ export async function exportSheetsPdf(opts: ExportOpts): Promise<Blob | void> {
         if (!firstPage) pdf.addPage();
         firstPage = false;
         pdf.addImage(img, "JPEG", 0, -i * PH, PW, imgHmm); // page bounds clip to this slice
+      }
+    }
+    if (opts.asBlob) return pdf.output("blob");
+    pdf.save(filename.toLowerCase().endsWith(".pdf") ? filename : `${filename}.pdf`);
+  } finally {
+    document.body.removeChild(host);
+  }
+}
+
+// Commercial Offer export. The cover and the "Main Offer" table are laid out as real
+// A4 page-blocks (so the header + column header repeat on every page and rows never get
+// cut); the Terms & Conditions sheets keep the whole-sheet capture (one page each in
+// normal use).
+export async function exportCommercialPdf(opts: ExportOpts): Promise<Blob | void> {
+  const { printArea, filename } = opts;
+  const cover = printArea.querySelector<HTMLElement>("[data-pdf-cover]");
+  const header = printArea.querySelector<HTMLElement>("[data-pdf-header]");
+  const mainTable = printArea.querySelector<HTMLElement>("[data-pdf-cotable]");
+  const totals = printArea.querySelector<HTMLElement>("[data-pdf-totals]");
+  const mainSheet = mainTable ? (mainTable.closest(".a4-sheet") as HTMLElement | null) : null;
+  const termSheets = Array.from(printArea.querySelectorAll<HTMLElement>(":scope > .a4-sheet"))
+    .filter((s) => s !== cover && s !== mainSheet);
+
+  const host = document.createElement("div");
+  host.style.cssText = "position:fixed;left:-10000px;top:0;z-index:-1;background:#fff;";
+  document.body.appendChild(host);
+  try {
+    // Cover + paginated Main Offer, as A4 page-blocks.
+    const blockPages: HTMLElement[] = [];
+    if (cover) blockPages.push(makeCoverPage(cover));
+    if (mainTable) blockPages.push(...paginateCommercialMain(host, header, mainTable, totals));
+    host.append(...blockPages);
+    // Drop the reserved "Page X of Y" footer — the commercial offer has no page footer.
+    for (const p of blockPages) {
+      p.querySelectorAll<HTMLElement>(".pdf-footer").forEach((f) => f.remove());
+      for (const el of p.querySelectorAll<HTMLElement>(".no-print")) el.remove();
+    }
+
+    // Terms & Conditions sheets, captured whole (values baked in), sliced if taller than A4.
+    const termClones = termSheets.map((ts) => {
+      const c = ts.cloneNode(true) as HTMLElement;
+      neutralize(c);
+      inlineInputs(ts, c);
+      const ot = Array.from(ts.querySelectorAll("textarea"));
+      const ct = Array.from(c.querySelectorAll("textarea"));
+      ct.forEach((cta, i) => {
+        const d = document.createElement("div");
+        d.textContent = ot[i]?.value || "";
+        d.className = cta.className;
+        d.style.whiteSpace = "pre-wrap";
+        cta.replaceWith(d);
+      });
+      c.style.width = "210mm";
+      c.style.margin = "0";
+      c.style.boxShadow = "none";
+      for (const el of c.querySelectorAll<HTMLElement>(".no-print")) el.remove();
+      host.appendChild(c);
+      return c;
+    });
+
+    if (!blockPages.length && !termClones.length) return;
+    await new Promise((r) => setTimeout(r, 40));
+    await document.fonts.ready;
+
+    const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
+    let fontEmbedCSS: string | undefined;
+    try { fontEmbedCSS = await htmlToImage.getFontEmbedCSS(host); } catch { /* per-call embedding */ }
+
+    let firstPage = true;
+    for (const p of blockPages) {
+      const img = await htmlToImage.toJpeg(p, { quality: 0.92, backgroundColor: "#ffffff", pixelRatio: 2, fontEmbedCSS });
+      if (!firstPage) pdf.addPage();
+      firstPage = false;
+      pdf.addImage(img, "JPEG", 0, 0, PW, PH);
+      addPageLinks(pdf, p);
+    }
+    for (const c of termClones) {
+      const rect = c.getBoundingClientRect();
+      const imgHmm = rect.width ? (PW * rect.height) / rect.width : PH;
+      const img = await htmlToImage.toJpeg(c, { quality: 0.92, backgroundColor: "#ffffff", pixelRatio: 2, fontEmbedCSS });
+      const nPages = Math.max(1, Math.ceil((imgHmm - 0.5) / PH));
+      for (let i = 0; i < nPages; i++) {
+        if (!firstPage) pdf.addPage();
+        firstPage = false;
+        pdf.addImage(img, "JPEG", 0, -i * PH, PW, imgHmm);
       }
     }
     if (opts.asBlob) return pdf.output("blob");

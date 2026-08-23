@@ -544,13 +544,13 @@ export default function LvConfiguratorPage() {
     const rev = s.project.revisionNo;
     const toName = `${offerTitle("TO", qtnNum, rev)}.pdf`;
     const coName = `${offerTitle("CO", qtnNum, rev)}.pdf`;
-    const { exportTechnicalPdf, exportSheetsPdf } = await import("../lv/technicalPdf");
+    const { exportTechnicalPdf, exportCommercialPdf } = await import("../lv/technicalPdf");
     setTab("technical");
     const tArea = await waitFor("[data-pdf-root]");
     const toBlob = (tArea ? await exportTechnicalPdf({ printArea: tArea, filename: toName, asBlob: true }) : null) || null;
     setTab("commercial");
     const cArea = await waitFor("[data-co-root]");
-    const coBlob = (cArea ? await exportSheetsPdf({ printArea: cArea, filename: coName, asBlob: true }) : null) || null;
+    const coBlob = (cArea ? await exportCommercialPdf({ printArea: cArea, filename: coName, asBlob: true }) : null) || null;
     setTab(original);
     return { toBlob, coBlob, toName, coName };
   };
@@ -3268,8 +3268,8 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
   const exportPdf = async () => {
     const printArea = document.querySelector<HTMLElement>("[data-co-root]");
     if (!printArea) return;
-    const { exportSheetsPdf } = await import("../lv/technicalPdf");
-    await exportSheetsPdf({ printArea, filename: offerTitle("CO", qtnNo, s.project.revisionNo) });
+    const { exportCommercialPdf } = await import("../lv/technicalPdf");
+    await exportCommercialPdf({ printArea, filename: offerTitle("CO", qtnNo, s.project.revisionNo) });
   };
   return (
     <div className="animate-fade-up">
@@ -3291,7 +3291,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
         <OfferCover s={s} qtnNo={qtnNo} kind="Commercial" />
         <section className="a4-sheet flex flex-col space-y-5 px-10 pb-10 pt-12">
         <PageHeader s={s} qtnRef={qtnRef} />
-        <table className="w-full text-sm">
+        <table data-pdf-cotable className="w-full text-sm">
           <thead>
             <tr className="border-b-2 border-brand text-left text-[12px] uppercase tracking-wide text-muted">
               <th className="py-1.5 pr-2 w-10">Item</th>
@@ -3313,7 +3313,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
             ))}
           </tbody>
         </table>
-        <div className="ml-auto w-72 space-y-1 text-sm">
+        <div data-pdf-totals className="ml-auto w-72 space-y-1 text-sm">
           <div className="flex justify-between"><span className="text-muted">Subtotal (excl. VAT)</span><b>{m(subtotal)}</b></div>
           <div className="flex justify-between"><span className="text-muted">VAT {Math.round(s.factors.vat * 100)}%</span><b>{m(vat)}</b></div>
           <div className="flex justify-between border-t-2 border-brand pt-1 text-base"><span className="font-bold">Total ({cur})</span><b className="text-brand-dark">{m(subtotal + vat)}</b></div>

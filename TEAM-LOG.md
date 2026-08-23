@@ -23,6 +23,19 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**✅ LV Commercial PDF: header now repeats on every page and rows are never cut.**
+
+When a commercial offer had enough panels to run past one page, the exported PDF was
+snapshotting the whole priced table as one tall picture and slicing it at page height —
+so a line item got cut in half at the page break and the header disappeared on the later
+pages. The Main Offer table now paginates properly: the logo/project header **and** the
+"Item / Description / Qty / Unit / Total" column header repeat on **every** page, the line
+items flow across pages **without being cut**, and the totals sit after the last line. The
+Terms & Conditions pages are unchanged. Applies to the "Download Commercial PDF" button and
+the combined "send to sales" export. Frontend builds; all tests pass.
+
+## 2026-08-23 · Mohamed's side · Claude
+
 **✅ Return-for-revision comments are now shown as a saved history (LV + RMU).**
 
 Every "Return for revision" was already recorded in the audit trail, but the screen only
