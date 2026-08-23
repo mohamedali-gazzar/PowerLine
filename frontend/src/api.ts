@@ -493,6 +493,12 @@ export const api = {
     request<Offer>(`/offers/${id}/duplicate${number ? `?number=${encodeURIComponent(number)}` : ""}`, {
       method: "POST",
     }),
+  /** Move an RMU offer through the approval lifecycle (Send / Approve / Return / Submit / Withdraw). */
+  transitionOffer: (id: string, to: QtnStatus, note?: string) =>
+    request<{ ok: boolean; status: QtnStatus; statusLabel: string }>(`/offers/${id}/transition`, {
+      method: "POST",
+      body: JSON.stringify({ to, note: note ?? "" }),
+    }),
   previewConfig: (cfg: RmuConfigInput) =>
     request<GeneratedOffer>("/offers/preview", { method: "POST", body: JSON.stringify(cfg) }),
   /** Suggested next RMU quotation number (QTN-YY-####). */

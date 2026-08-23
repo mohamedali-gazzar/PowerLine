@@ -10,6 +10,7 @@ import {
   getOfferPdf,
   getCommercialPdf,
   getSldPdf,
+  transitionOffer,
 } from "../controllers/offers.controller";
 
 const router = Router();
@@ -20,6 +21,7 @@ router.post("/preview", postPreview);
 router.get("/next-qtn", getNextQtn); // must precede "/:id"
 router.get("/:id", getOfferById);
 router.post("/:id/duplicate", duplicateOfferById);
+router.post("/:id/transition", transitionOffer); // RMU approval lifecycle
 router.delete("/:id", deleteOfferById);
 router.get("/:id/pdf", getOfferPdf);
 router.get("/:id/commercial-pdf", getCommercialPdf);

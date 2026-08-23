@@ -4,7 +4,17 @@ export type ProductType = "PRAL" | "PSEC" | "LUCY";
 export type VoltageKv = 12 | 24;
 export type RtuType = "NONE" | "READY1" | "READY2" | "SMART1" | "SMART2";
 export type Installation = "INDOOR" | "OUTDOOR";
-export type OfferStatus = "DRAFT" | "SENT" | "WON" | "LOST";
+// RMU offers now use the same approval lifecycle as LV quotations. SENT/WON/LOST
+// are kept for legacy rows created before the workflow existed.
+export type OfferStatus =
+  | "DRAFT"
+  | "WAITING_APPROVAL"
+  | "RETURNED"
+  | "APPROVED"
+  | "SUBMITTED"
+  | "SENT"
+  | "WON"
+  | "LOST";
 export type ProductCategory = "RMU" | "KIOSK" | "LV";
 
 // The RMU "code", e.g. PSEC10AB12R3T1M (see RMU Coding System).
@@ -212,4 +222,15 @@ export interface Offer {
   commercial: CommercialData | null;
   // Number of RMUs on the offer (1 for a classic single-RMU offer).
   rmuCount?: number;
+  // Approval workflow (mirrors LV). Present on every offer the API returns.
+  statusLabel?: string;
+  locked?: boolean;
+  ownerId?: string | null;
+  ownerEmail?: string;
+  ownerName?: string;
+  approverEmail?: string;
+  approvedAt?: string | null;
+  submittedForApprovalAt?: string | null;
+  returnReason?: string;
+  submitted?: boolean;
 }

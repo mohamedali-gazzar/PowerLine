@@ -76,21 +76,30 @@ export default function App() {
   }, [user]);
   const can = (perm: string) => Boolean(access?.perms.includes(perm));
 
-  // The draft the user is currently working on — the most-recently-updated DRAFT
-  // quotation — offered as a one-click "resume" shortcut in the sidebar (after Home).
-  // Refreshed on navigation so it follows whatever they last opened or edited.
-  const [activeDraft, setActiveDraft] = useState<{ id: string; number: string } | null>(null);
+  // The draft the user is currently working on — the most-recently-updated DRAFT,
+  // whether an LV quotation or an RMU offer — offered as a one-click "resume"
+  // shortcut in the sidebar (after Home). Refreshed on navigation so it follows
+  // whatever they last opened or edited.
+  const [activeDraft, setActiveDraft] = useState<{ number: string; href: string } | null>(null);
   useEffect(() => {
     if (!user) { setActiveDraft(null); return; }
     let alive = true;
-    api.qtns
-      .list()
-      .then((qs) => {
+    Promise.all([
+      api.qtns.list().catch(() => [] as Awaited<ReturnType<typeof api.qtns.list>>),
+      api.listOffers().catch(() => [] as Awaited<ReturnType<typeof api.listOffers>>),
+    ])
+      .then(([qs, offers]) => {
         if (!alive) return;
-        const draft = qs
-          .filter((q) => q.status === "DRAFT" && !q.removedAt)
-          .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))[0];
-        setActiveDraft(draft ? { id: draft.id, number: draft.number } : null);
+        const drafts = [
+          ...qs
+            .filter((q) => q.status === "DRAFT" && !q.removedAt)
+            .map((q) => ({ number: q.number, updatedAt: q.updatedAt, href: `/lv/qtn/${q.id}` })),
+          ...offers
+            .filter((o) => o.status === "DRAFT")
+            .map((o) => ({ number: o.quotationNo || o.offerNumber, updatedAt: o.updatedAt, href: `/offers/${o.id}` })),
+        ].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+        const d = drafts[0];
+        setActiveDraft(d ? { number: d.number, href: d.href } : null);
       })
       .catch(() => { /* offline / not signed in — just no shortcut */ });
     return () => { alive = false; };
@@ -153,7 +162,7 @@ export default function App() {
             {/* Resume the draft the user is working on — the most-recent DRAFT quotation. */}
             {activeDraft && (
               <NavLink
-                to={`/lv/qtn/${activeDraft.id}`}
+                to={activeDraft.href}
                 title={`Resume draft ${activeDraft.number}`}
                 className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}
               >

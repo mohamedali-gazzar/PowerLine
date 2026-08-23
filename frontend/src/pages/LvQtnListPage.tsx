@@ -16,15 +16,8 @@ const DELETABLE = new Set<QtnStatus>(["DRAFT", "RETURNED"]);
 // with a real status.
 const CANCELLED_FILTER = "__cancelled__";
 
-// RMU offers carry their own small lifecycle, separate from the LV approval workflow.
-const RMU_STATUS_LABEL: Record<string, string> = { DRAFT: "Draft", SENT: "Sent", WON: "Won", LOST: "Lost" };
-const RMU_STATUS_STYLE: Record<string, string> = {
-  DRAFT: "bg-slate-100 text-slate-600",
-  SENT: "bg-blue-100 text-blue-700",
-  WON: "bg-green-100 text-green-700",
-  LOST: "bg-red-100 text-red-700",
-};
-const RMU_STATUSES = ["SENT", "WON", "LOST"] as const; // DRAFT is shared with the LV list
+// RMU offers now share the LV approval lifecycle (Draft → … → Submitted), so they
+// use the same QTN_STATUS_LABEL / QTN_STATUS_STYLE as LV — no separate RMU statuses.
 
 /** RMU offer total as USD incl. VAT, to sit in the same column as the LV total.
  *  Uses the offer's own frozen commercial figure; converts from EGP with the offer's
@@ -226,8 +219,13 @@ export default function LvQtnListPage() {
       projectName: o.projectName, customer: o.customer,
       units: `${o.generated?.summary?.totalCubicles ?? 0} ways`,
       totalUsd: rmuTotalUsd(o),
-      statusKey: o.status, statusLabel: RMU_STATUS_LABEL[o.status] ?? o.status,
-      statusStyle: RMU_STATUS_STYLE[o.status] ?? "bg-slate-100 text-slate-600",
+      // RMU offers now use the same 5-stage approval status as LV, so they share
+      // the LV labels/styles. (The API's offerStatus() maps any legacy SENT/WON/LOST
+      // to Draft/Submitted, so o.status is always one of the five.)
+      statusKey: o.status as QtnStatus,
+      statusLabel: o.statusLabel ?? QTN_STATUS_LABEL[o.status as QtnStatus] ?? o.status,
+      statusStyle: QTN_STATUS_STYLE[o.status as QtnStatus] ?? "bg-slate-100 text-slate-600",
+      ownerEmail: o.ownerEmail, ownerName: o.ownerName, approverEmail: o.approverEmail,
       rmu: o,
     }));
     return [...lv, ...rmu].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
@@ -444,7 +442,6 @@ export default function LvQtnListPage() {
                 <option value="">All statuses</option>
                 {QTN_STATUSES.map((s) => <option key={s} value={s}>{QTN_STATUS_LABEL[s]}</option>)}
                 <option value={CANCELLED_FILTER}>Cancelled (old revisions)</option>
-                {RMU_STATUSES.map((s) => <option key={s} value={s}>{RMU_STATUS_LABEL[s]} (RMU)</option>)}
               </select>
             </div>
             {owners.length > 1 && (

@@ -23,6 +23,24 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**RMU offers now go through the same approval process as LV quotations.**
+
+- An RMU offer moves through the same five stages as an LV quotation — **Draft → Waiting for approval
+  → Returned for revision → Approved → Submitted**. Open an offer (Offer History → the pencil/Amend,
+  or the sidebar "resume draft" shortcut) and use its buttons: **Send for approval**, then an approver
+  **Approves** or **Returns for revision** (a reason is required), then the owner **Submits**.
+- The **same people** approve RMU offers as approve LV quotations (same permission), they get the same
+  in-app / e-mail notifications, and an offer is **locked** while it is waiting or approved.
+- ⚠️ HEADS-UP: pressing **Generate & Download** no longer marks an RMU offer as "submitted". A new
+  offer now starts as a **Draft** and becomes submitted only at the end of the approval flow. Existing
+  RMU offers are unchanged (they show as Submitted).
+- Offer History shows RMU offers with the same status badges as LV; the sidebar "resume draft"
+  shortcut now points at your latest **RMU** draft too.
+- ⚠️ DB: this deploy adds several new, empty columns to the offers table (status timestamps, approver,
+  return reason). Additive and safe — every existing offer is untouched.
+
+## 2026-08-23 · Mohamed's side · Claude
+
 **History + Project tab: two small cleanups.**
 
 - **Offer History** now shows an RMU offer's **QTN number** (QTN-26-#####) in the QTN column, the same

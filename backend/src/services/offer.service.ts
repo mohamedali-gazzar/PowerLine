@@ -18,8 +18,25 @@ import type {
   RtuType,
   Installation,
 } from "../domain/standards";
+import { QTN_STATUSES, QTN_STATUS_LABEL, isLocked, type QtnStatus } from "../domain/qtnStatus";
 
-const includeRmu = { rmu: true } as const;
+// Pull the RMU config, and just enough of the owner to show/notify — never the
+// password hash (a full `owner: true` would leak it through the decorated JSON).
+const includeRmu = { rmu: true, owner: { select: { email: true, name: true } } } as const;
+
+/** An offer's effective approval status. Offers created before the workflow — and
+ *  new ones before their first transition — have `statusAt == null`, so we fall
+ *  back to the submitted mirror, exactly as qtnStatus() does for LV rows. */
+export function offerStatus(offer: {
+  status?: string | null;
+  statusAt?: Date | null;
+  submittedAt?: Date | null;
+}): QtnStatus {
+  if (offer.statusAt && offer.status && (QTN_STATUSES as readonly string[]).includes(offer.status)) {
+    return offer.status as QtnStatus;
+  }
+  return offer.submittedAt ? "SUBMITTED" : "DRAFT";
+}
 
 type StoredRmu = {
   productType: string;
@@ -293,11 +310,13 @@ export async function createOffer(input: CreateOfferInput) {
   return decorate(offer);
 }
 
-export async function listOffers(ownerId: string | undefined) {
-  // Per-user: only the signed-in owner's offers. Unauthenticated → none.
+export async function listOffers(ownerId: string | undefined, opts: { all?: boolean } = {}) {
+  // Per-user by default: only the signed-in owner's offers. An approver (qtn.viewAll)
+  // passes { all: true } so they can see and act on offers awaiting their approval —
+  // the same widening the LV list does. Unauthenticated → none.
   if (!ownerId) return [];
   const offers = await prisma.offer.findMany({
-    where: { ownerId },
+    where: opts.all ? {} : { ownerId },
     orderBy: { createdAt: "desc" },
     include: includeRmu,
   });
@@ -417,6 +436,10 @@ function decorate<
     quantity: number;
     rmu: StoredRmu | null;
     rmusJson?: string | null;
+    status?: string | null;
+    statusAt?: Date | null;
+    submittedAt?: Date | null;
+    owner?: { email: string; name: string } | null;
   }
 >(offer: T) {
   const config = offer.rmu ? toConfigInput(offer.rmu) : null;
@@ -424,6 +447,17 @@ function decorate<
   // Frozen prices when the offer has them, live lookup only for legacy offers.
   const { pricing: listPricing, vatPct: offerVatPct } = resolvePricing(offer, config);
   const lines = parseRmuLines(offer.rmusJson);
+
+  // Approval-workflow view fields, mirroring the LV list (status → label + lock,
+  // plus the owner's name/email for the history and notifications).
+  const st = offerStatus(offer);
+  const wf = {
+    status: st,
+    statusLabel: QTN_STATUS_LABEL[st],
+    locked: isLocked(st),
+    ownerEmail: offer.owner?.email ?? "",
+    ownerName: offer.owner?.name ?? "",
+  };
 
   // Multi-RMU: the commercial is one line per RMU, each priced from its own frozen
   // snapshot, summed. The offer-level `pricing` mirrors those combined totals so
@@ -444,7 +478,7 @@ function decorate<
       discountAmount: commercial.discountAmount,
       total: commercial.totalExclVat,
     };
-    return { ...offer, pricing, generated, listPricing, commercial, rmuCount: lines.length };
+    return { ...offer, pricing, generated, listPricing, commercial, rmuCount: lines.length, ...wf };
   }
 
   const pricing = computePricing({
@@ -456,5 +490,5 @@ function decorate<
     generated && offer && "offerNumber" in offer
       ? buildCommercial(offer as never, generated, listPricing, offerVatPct)
       : null;
-  return { ...offer, pricing, generated, listPricing, commercial, rmuCount: 1 };
+  return { ...offer, pricing, generated, listPricing, commercial, rmuCount: 1, ...wf };
 }

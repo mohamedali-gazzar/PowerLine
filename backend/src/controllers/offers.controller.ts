@@ -16,7 +16,18 @@ import {
   resolvePricing,
   parseRmuLines,
   pricingFromSnap,
+  offerStatus,
 } from "../services/offer.service";
+import { accessOf, type Perm } from "../middleware/roles";
+import { notify, notifyAll, approverIds } from "../services/notify.service";
+import {
+  QTN_STATUSES,
+  QTN_STATUS_LABEL,
+  canMove,
+  qtnAction,
+  statusWrite,
+  type QtnStatus,
+} from "../domain/qtnStatus";
 import { assembleOffer, type RmuConfigInput, type GeneratedOffer } from "../domain/assembly";
 import { priceForConfig } from "../domain/priceList";
 import { vatPct } from "../domain/pricing-data";
@@ -29,12 +40,13 @@ export async function postOffer(req: Request, res: Response) {
   try {
     const input = createOfferSchema.parse(req.body);
     const offer = await createOffer(input);
-    // Accounts system: attribute the offer to the signed-in user (optionalAuth)
-    // and treat generation as the submission moment (feeds the dashboard charts).
+    // Attribute the offer to the signed-in user (optionalAuth). It now starts as a
+    // DRAFT and reaches "submitted" only through the approval workflow — so, unlike
+    // before, generating no longer counts it as submitted for the dashboard.
     if (req.userId) {
       await prisma.offer.update({
         where: { id: offer.id },
-        data: { ownerId: req.userId, submittedAt: new Date() },
+        data: { ownerId: req.userId },
       });
     }
     res.status(201).json(offer);
@@ -80,7 +92,10 @@ export async function getNextQtn(_req: Request, res: Response) {
 
 export async function getOffers(req: Request, res: Response) {
   try {
-    res.json(await listOffers(req.userId));
+    // Approvers (qtn.viewAll) see every offer so they can act on ones awaiting
+    // approval — the same widening the LV list does. Everyone else: their own.
+    const all = req.userId ? (await accessOf(req.userId)).perms.has("qtn.viewAll") : false;
+    res.json(await listOffers(req.userId, { all }));
   } catch (err) {
     handleError(err, res);
   }
@@ -89,8 +104,11 @@ export async function getOffers(req: Request, res: Response) {
 export async function getOfferById(req: Request, res: Response) {
   try {
     const offer = await getOffer(req.params.id);
-    // Only the owner can view it (hides legacy/other-user offers).
-    if (!offer || offer.ownerId !== req.userId) {
+    if (!offer) return res.status(404).json({ error: "Offer not found" });
+    // The owner may view it, and so may an approver (qtn.viewAll) — they must be
+    // able to open an offer they were asked to approve.
+    const canViewAll = req.userId ? (await accessOf(req.userId)).perms.has("qtn.viewAll") : false;
+    if (offer.ownerId !== req.userId && !canViewAll) {
       return res.status(404).json({ error: "Offer not found" });
     }
     res.json(offer);
@@ -244,4 +262,172 @@ function handleError(err: unknown, res: Response) {
   }
   console.error(err);
   res.status(500).json({ error: "Internal server error" });
+}
+
+// ─── Approval workflow — mirrors the LV /qtns transition, on the Offer model ──
+
+type WorkflowOffer = {
+  id: string;
+  offerNumber: string;
+  ownerId: string | null;
+  projectName: string;
+  status: string | null;
+  statusAt: Date | null;
+  submittedAt: Date | null;
+  owner?: { email: string; name: string } | null;
+};
+
+/** The offer if the caller may act on it: the owner, or an approver (qtn.viewAll). */
+async function visibleOffer(req: Request, id: string): Promise<WorkflowOffer | null> {
+  const offer = await getOfferRaw(id);
+  if (!offer) return null;
+  const canViewAll = req.userId ? (await accessOf(req.userId)).perms.has("qtn.viewAll") : false;
+  if (offer.ownerId !== req.userId && !canViewAll) return null;
+  return offer as unknown as WorkflowOffer;
+}
+
+/** Who may perform a move, and why not. `null` = allowed. Mirrors the LV rules. */
+async function offerTransitionDenial(
+  req: Request,
+  offer: WorkflowOffer,
+  from: QtnStatus,
+  to: QtnStatus,
+  note: string,
+): Promise<string | null> {
+  const acc = await accessOf(req.userId);
+  const isOwner = offer.ownerId === req.userId;
+  const need = (p: Perm, msg: string) => (acc.perms.has(p) ? null : msg);
+
+  if (to === "WAITING_APPROVAL") {
+    return isOwner ? null : "Only the person who created this offer can send it for approval.";
+  }
+  if (to === "APPROVED") {
+    const denied = need("qtn.approve", "You do not have permission to approve offers.");
+    if (denied) return denied;
+    if (isOwner && !acc.perms.has("qtn.approveOwn")) {
+      return "You cannot approve your own offer — another approver must review it.";
+    }
+    return null;
+  }
+  if (to === "RETURNED") {
+    const denied =
+      need("qtn.return", "You do not have permission to return offers for revision.") &&
+      need("qtn.approve", "You do not have permission to return offers for revision.");
+    if (denied) return denied;
+    if (!note.trim()) return "A reason is required when returning an offer for revision.";
+    return null;
+  }
+  if (to === "SUBMITTED") {
+    if (isOwner) return null;
+    return need("qtn.submitApproved", "Only the offer's owner can submit it.");
+  }
+  if (to === "DRAFT") {
+    if (from === "SUBMITTED") {
+      return need("qtn.reopen", "You do not have permission to reopen a submitted offer.");
+    }
+    return isOwner ? null : "Only the offer's owner can withdraw it.";
+  }
+  return "Unsupported transition.";
+}
+
+/** Tell the right people. Never throws — mail must not fail an approval. */
+async function announceOffer(offer: WorkflowOffer, to: QtnStatus, actorEmail: string, note: string) {
+  const link = "/lv"; // the unified Offer History, where RMU offers are actioned
+  const when = new Date().toLocaleString("en-GB");
+  const details: [string, string][] = [
+    ["Offer", offer.offerNumber],
+    ["Project", offer.projectName || "—"],
+    ["Status", QTN_STATUS_LABEL[to]],
+    ["By", actorEmail || "—"],
+    ["When", when],
+  ];
+  const ownerId = offer.ownerId ?? "";
+  try {
+    if (to === "WAITING_APPROVAL") {
+      const ids = (await approverIds()).filter((id) => id !== ownerId);
+      await notifyAll(ids, {
+        kind: "QTN_WAITING",
+        title: `RMU offer ${offer.offerNumber} is waiting for approval`,
+        body: `${actorEmail} sent RMU offer ${offer.offerNumber} for approval.`,
+        link, qtnId: offer.id, details, note,
+      });
+    } else if (to === "APPROVED" && ownerId) {
+      await notify({
+        userId: ownerId, kind: "QTN_APPROVED",
+        title: `RMU offer ${offer.offerNumber} approved — ready to submit`,
+        body: `${actorEmail} approved RMU offer ${offer.offerNumber}. It is ready for final submission.`,
+        link, qtnId: offer.id, details, note,
+      });
+    } else if (to === "RETURNED" && ownerId) {
+      await notify({
+        userId: ownerId, kind: "QTN_RETURNED",
+        title: `RMU offer ${offer.offerNumber} returned for revision`,
+        body: `${actorEmail} returned RMU offer ${offer.offerNumber} for revision.`,
+        link, qtnId: offer.id, details, note,
+      });
+    } else if (to === "SUBMITTED") {
+      const ids = [...(await approverIds()), ownerId].filter(Boolean);
+      await notifyAll(ids, {
+        kind: "QTN_SUBMITTED",
+        title: `RMU offer ${offer.offerNumber} submitted`,
+        body: `${actorEmail} submitted RMU offer ${offer.offerNumber}.`,
+        link, qtnId: offer.id, details, note,
+      });
+    }
+  } catch (e) {
+    console.error("[offer] notification fan-out failed", e);
+  }
+}
+
+/** POST /api/offers/:id/transition  { to, note? } — RMU approval lifecycle. */
+export async function transitionOffer(req: Request, res: Response) {
+  try {
+    const to = String(req.body?.to ?? "") as QtnStatus;
+    const note = String(req.body?.note ?? "").trim().slice(0, 2000);
+    if (!(QTN_STATUSES as readonly string[]).includes(to)) {
+      return res.status(400).json({ error: "Unknown status." });
+    }
+    const offer = await visibleOffer(req, req.params.id);
+    if (!offer) return res.status(404).json({ error: "Offer not found." });
+
+    const from = offerStatus(offer);
+    if (from === to) return res.json({ ok: true, status: to });
+    if (!canMove(from, to)) {
+      return res.status(409).json({
+        error: `A ${QTN_STATUS_LABEL[from]} offer cannot be moved to ${QTN_STATUS_LABEL[to]}.`,
+        status: from,
+      });
+    }
+    const denial = await offerTransitionDenial(req, offer, from, to, note);
+    if (denial) return res.status(403).json({ error: denial, status: from });
+
+    const actorEmail = req.userEmail ?? "";
+    const action = qtnAction(from, to);
+    const approverFields =
+      to === "APPROVED"
+        ? { approverId: req.userId ?? null, approverEmail: actorEmail, returnReason: "" }
+        : to === "RETURNED"
+        ? { approverId: req.userId ?? null, approverEmail: actorEmail, returnReason: note }
+        : {};
+
+    // Status and audit row move together or not at all.
+    await prisma.$transaction([
+      prisma.offer.update({
+        where: { id: offer.id },
+        data: { ...statusWrite(to, offer.submittedAt), ...approverFields },
+      }),
+      prisma.qtnEvent.create({
+        data: {
+          qtnId: offer.id, qtnNumber: offer.offerNumber, ownerId: offer.ownerId,
+          ownerEmail: offer.owner?.email ?? "",
+          action, fromStatus: from, toStatus: to, note,
+          actorId: req.userId ?? null, actorEmail,
+        },
+      }),
+    ]);
+    await announceOffer(offer, to, actorEmail, note);
+    res.json({ ok: true, status: to, statusLabel: QTN_STATUS_LABEL[to] });
+  } catch (err) {
+    handleError(err, res);
+  }
 }

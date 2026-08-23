@@ -82,6 +82,22 @@ model Offer {
   ownerId     String?
   submittedAt DateTime?
 
+  // ─ Approval workflow (mirrors LvQtn) ─────────────────────────────────────────
+  // RMU offers move through the same lifecycle as LV quotations:
+  //   DRAFT → WAITING_APPROVAL → RETURNED → APPROVED → SUBMITTED.
+  // `status` above holds the state (it already defaults to "DRAFT"); these carry
+  // the timestamps, the approver, and the return reason, exactly like LvQtn. Every
+  // one is additive + nullable/defaulted, so existing offers are untouched — they
+  // read as their old submitted/submittedAt through offerStatus() until a
+  // transition first writes `statusAt`.
+  statusAt               DateTime?
+  submitted              Boolean   @default(false)
+  submittedForApprovalAt DateTime?
+  approverId             String?
+  approverEmail          String    @default("")
+  approvedAt             DateTime?
+  returnReason           String    @default("")
+
   // ─ Price snapshot ──────────────────────────────────────────────────────────
   // The list prices this offer was quoted at, frozen when it was created. Without
   // these, re-reading an offer (or re-generating its PDF) re-prices it against
