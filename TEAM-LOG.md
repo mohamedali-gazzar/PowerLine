@@ -23,6 +23,64 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**✅ `DATABASE_URL` is now the POOLED endpoint, confirmed from the database side. Today is
+closed out.**
+
+Mohamed switched it in Vercel and redeployed. Verified rather than assumed: I drove six
+concurrent requests at the live site that each read the `User` table (all answered 401, so
+the database was genuinely involved), then queried `pg_stat_activity` from a direct
+connection to see what the database itself saw.
+
+    n=1  state=idle  from=127.0.0.1  app=pgbouncer
+    n=1  state=idle  from=::1        app=pgbouncer
+    other sessions: 2 of max_connections 901
+
+**Six concurrent requests, two pooled backends, both fronted by pgbouncer, and no direct
+connections from Vercel at all.** That is pooling working. Unpooled, each serverless
+instance would hold its own backend with a Vercel address.
+
+`DIRECT_URL` was left alone, so schema pushes still use the direct endpoint — which is what
+keeps deploys safe, and what the new guard in `db-push-vercel.js` enforces.
+
+### Production, both domains
+
+| | www.powerlinedesigns.com | powerline-chi.vercel.app |
+| --- | --- | --- |
+| Site | 200 | 200 |
+| API | 200 | 200 |
+| Database | answering | answering |
+| Price-list leak | 401 closed | 401 closed |
+| Quotations | 401 guarded | 401 guarded |
+| Dev bypass | 404 closed | 404 closed |
+| Bundle | matches `main` | matches `main` |
+
+📌 **The real production domain is `www.powerlinedesigns.com`** (plus four more), not the
+vercel.app address most of our notes use. That matters for one open item: **`APP_URL` is
+still unset**, and it is what the "Open the quotation" button in every notification e-mail
+points at. It should almost certainly be `https://www.powerlinedesigns.com`.
+
+### The Vercel token question is settled: stop making them
+
+Three tokens were tried and all failed the same way. The cause was not the scope — it was
+`limited: true` on the token itself. A limited token authenticates and can list deployments,
+but cannot see the project or its settings. The scope was right all along
+(`team_d6sWJ5oTSYuVB70PvMvzfS9D` is the Hobby account's backing id).
+
+A token is only ever needed to read build logs from a terminal. Deploys work on `git push`.
+All three exposed tokens should be deleted.
+
+### Still open, in the order I would take them
+
+1. **Turn on Neon point-in-time restore.** Still no backup of 143 quotations, while every
+   deploy runs a schema sync that can drop data. Today ended well; it did not have to.
+2. **Set `APP_URL`** to the real production domain.
+3. **Rotate the database password** — it was pasted into a chat. Update BOTH Vercel
+   variables together, then redeploy.
+4. The audit's remaining items: the silent autosave failure indicator, Co-Work's unguarded
+   read-modify-write, the ~60,000-round-trip spreadsheet import, offers being hard-deleted,
+   and the third blank-page crash on a partially-saved quotation.
+## 2026-08-23 · Mohamed's side · Claude
+
 **`DATABASE_URL` should be the POOLED Neon endpoint. Verified the pooled endpoint first, and
 added a guard so the switch cannot go wrong.**
 
