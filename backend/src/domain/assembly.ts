@@ -265,29 +265,29 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
   const generalData: Row[] = [
     { label: "Type", value: GENERAL.type },
     { label: "Application", value: GENERAL.application },
-    { label: "Type of apparatus", value: p.apparatusType },
+    { label: "Apparatus", value: p.apparatusType },
     { label: "Packing", value: GENERAL.packing },
-    { label: "Ambient temperature", value: GENERAL.ambientTemperature },
+    { label: "Ambient temp.", value: GENERAL.ambientTemperature },
     { label: "Altitude", value: GENERAL.altitude },
     { label: "Humidity", value: GENERAL.humidity },
     { label: "FAT", value: GENERAL.fat },
-    { label: "Protection index", value: c.installation === "OUTDOOR" ? "IP54" : p.protectionIndex },
-    { label: "Internal Arc Classification (IAC)", value: GENERAL.iac },
-    { label: "Switchgear color", value: GENERAL.color },
-    { label: "Busbars treatment", value: GENERAL.busbarsTreatment },
+    { label: "Protection", value: c.installation === "OUTDOOR" ? "IP54" : p.protectionIndex },
+    { label: "IAC", value: GENERAL.iac },
+    { label: "Color", value: GENERAL.color },
+    { label: "Busbars", value: GENERAL.busbarsTreatment },
   ];
 
   // ---- Electrical Data ----
   const electricalData: Row[] = [
-    { label: "Rated voltage", value: `${r.ratedVoltageKv}kV` },
-    { label: "Service voltage", value: `${r.serviceVoltageKv}kV` },
-    { label: "Power frequency withstand voltage", value: `${r.powerFreqWithstandKv}kV` },
-    { label: "BIL", value: `${r.bilKv}kV` },
-    { label: "Rated frequency", value: `${r.ratedFrequencyHz}Hz` },
-    { label: "Rated busbar current", value: `${c.busbarCurrentA}A` },
-    { label: "Rated short circuit current", value: `${r.ratedShortCircuitKa}kA` },
-    { label: "Rated short circuit current duration", value: `${r.shortCircuitDurationS}s` },
-    { label: "Peak current", value: `${r.peakCurrentKa}kA` },
+    { label: "Rated voltage", value: `${r.ratedVoltageKv} kV` },
+    { label: "Service voltage", value: `${r.serviceVoltageKv} kV` },
+    { label: "Withstand (1 min)", value: `${r.powerFreqWithstandKv} kV` },
+    { label: "BIL", value: `${r.bilKv} kV` },
+    { label: "Frequency", value: `${r.ratedFrequencyHz} Hz` },
+    { label: "Busbar current", value: `${c.busbarCurrentA} A` },
+    { label: "Short circuit", value: `${r.ratedShortCircuitKa} kA` },
+    { label: "SC duration", value: `${r.shortCircuitDurationS} s` },
+    { label: "Peak current", value: `${r.peakCurrentKa} kA` },
   ];
 
   // ---- Additional Data ----

@@ -23,6 +23,32 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**✅ RMU offer "General/Electrical Data" tables redesigned + wording shortened.**
+
+Follow-up to the entry below. Mohamed picked the cleaner table design, so the technical
+data tables (General Data, Electrical Data) now render as a bordered card: a rounded orange
+header, a shaded (peach) label column on the left with the field names in orange, the values
+in a white column to the right, a divider line between the two, and thin lines between rows
+(instead of the old alternating-shade rows).
+
+The field wording is now the SHORT form to match, changed in the shared spec text
+(`backend/src/domain/standards.ts`) and labels (`backend/src/domain/assembly.ts`): e.g.
+"Type of apparatus → Apparatus", "Ambient temperature → Ambient temp.", "Protection index →
+Protection", "Switchgear color → Color", "Power frequency withstand voltage → Withstand
+(1 min)", and units now have a space ("12 kV", "630 A"). This affects **every** RMU offer's
+technical page, on screen and in the PDF.
+
+⚠️ HEADS-UP (closes my earlier question): shortening the text drops a couple of details that
+used to print on every offer — most notably the **storage temperature** ("For storage:
+-5 °C" is gone; the row now shows only the working range "-5 °C to +40 °C"), and
+"Standard IEC 62271-200 → IEC 62271-200" / "…above sea level: under 1,000 m → under 1,000 m".
+The numbers themselves are unchanged. Say if you want the storage temperature (or any other
+dropped detail) put back — it is a one-line change.
+
+Both halves build; all 270 backend tests pass.
+
+## 2026-08-23 · Mohamed's side · Claude
+
 **✅ RMU Technical Offer PDF restyled to match the reference "asd" offer document.**
 
 Mohamed had a reference PDF of how the RMU technical offer should look, and asked to make

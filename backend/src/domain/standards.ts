@@ -58,8 +58,8 @@ export const PRODUCTS: Record<ProductType, ProductProfile> = {
     productName: "P-Ral",
     family: "Air Ring Main Unit",
     insulation: "AIR",
-    apparatusType: "Switch disconnector type AIR",
-    protectionIndex: "IP42 on front face",
+    apparatusType: "Switch disconnector, AIR",
+    protectionIndex: "IP42 front face",
     cubicleDims: "654*750*2220",
     meteringDims: "600*750*2220",
     switchName: "NAL", // NALF used for the fused unit (handled in assembly)
@@ -70,8 +70,8 @@ export const PRODUCTS: Record<ProductType, ProductProfile> = {
     productName: "P-Sec",
     family: "SF6 Ring Main Unit",
     insulation: "SF6",
-    apparatusType: "Switch disconnector type SF6",
-    protectionIndex: "IP3x on front face",
+    apparatusType: "Switch disconnector, SF6",
+    protectionIndex: "IP3x front face",
     cubicleDims: "554*1070*1700",
     meteringDims: "500*1070*1700",
     switchName: "G-Sec",
@@ -199,16 +199,15 @@ export function getRatings(
 // Constants shared by every offer (the "General Data" block).
 export const GENERAL = {
   type: "RMU - Powerline",
-  application: "Standard IEC 62271-200",
+  application: "IEC 62271-200",
   packing: "Domestic",
-  ambientTemperature:
-    "For working: from -5 °C to +40 °C / For storage: -5 °C",
-  altitude: "Altitude for installation above sea level: under 1,000 m",
-  humidity: "Relative humidity: max. 95 %",
-  fat: "Powerline standard FAT (One day)",
+  ambientTemperature: "-5 °C to +40 °C",
+  altitude: "under 1,000 m",
+  humidity: "max. 95 %",
+  fat: "Powerline standard (1 day)",
   iac: "Front Accessibility (AF)",
   color: "RAL 7035",
-  busbarsTreatment: "insulated",
+  busbarsTreatment: "Insulated",
 };
 
 export const GENERAL_NOTES = [

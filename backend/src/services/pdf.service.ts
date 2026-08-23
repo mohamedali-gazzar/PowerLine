@@ -539,27 +539,59 @@ function sectionBar(doc: PDFKit.PDFDocument, title: string, keepWith = 24) {
 }
 
 function dataTable(doc: PDFKit.PDFDocument, title: string, rows: Row[]) {
-  const labelW = 210;
-  const valueW = CONTENT_W - labelW - 12;
-  // Variable row height so wrapped labels/values don't overlap.
-  const rowHeight = (r: Row) => {
-    const lh = doc.font(BOLD).fontSize(9.5).heightOfString(r.label, { width: labelW });
-    const vh = doc.font(BODY).fontSize(9.5).heightOfString(r.value, { width: valueW });
-    return Math.max(18, Math.max(lh, vh) + 8);
-  };
-  // Keep the heading glued to its first row across a page break.
-  sectionBar(doc, title, rows.length ? rowHeight(rows[0]) : 24);
-  for (const [i, r] of rows.entries()) {
-    const rowH = rowHeight(r);
-    ensure(doc, rowH);
-    const y = doc.y;
-    if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, rowH).fill(TINT).fillColor(INK);
-    doc.font(BOLD).fontSize(9.5).fillColor(ORANGE_DK).text(r.label, MARGIN + 6, y + 4, { width: labelW });
-    doc.font(BODY).fontSize(9.5).fillColor(INK)
-      .text(r.value, MARGIN + 6 + labelW, y + 4, { width: valueW });
-    doc.y = y + rowH;
+  const radius = 6;
+  const labelW = 150;
+  const valueW = CONTENT_W - labelW;
+  const padX = 10;
+  const padY = 5;
+  const headerH = 22;
+  const PEACH = "#fcebe1"; // label-column fill
+  const HAIR2 = "#e7e7eb"; // row separators
+  const BORDER = "#e0e0e5"; // card frame + column divider
+  // Per-row heights so a wrapped label/value never overlaps its neighbour.
+  const rowHs = rows.map((r) => {
+    doc.font(BOLD).fontSize(9.5);
+    const lh = doc.heightOfString(r.label, { width: labelW - padX * 2 });
+    doc.font(BODY).fontSize(9.5);
+    const vh = doc.heightOfString(r.value, { width: valueW - padX * 2 });
+    return Math.max(21, Math.max(lh, vh) + padY * 2);
+  });
+  const bodyH = rowHs.reduce((a, b) => a + b, 0);
+  const totalH = headerH + bodyH;
+  // Keep the whole card on one page — a data table is short, so break before it
+  // rather than splitting the peach column / rounded frame across a page edge.
+  if (doc.y + totalH > PAGE_H - 55) {
+    doc.addPage();
+    (doc as unknown as { __onBreak?: () => void }).__onBreak?.();
   }
-  doc.moveDown(0.6);
+  doc.moveDown(0.15);
+  const x = MARGIN;
+  const yTop = doc.y;
+  // Backgrounds (orange header + peach label column), clipped to the rounded card.
+  doc.save();
+  doc.roundedRect(x, yTop, CONTENT_W, totalH, radius).clip();
+  doc.rect(x, yTop + headerH, labelW, bodyH).fill(PEACH);
+  doc.rect(x, yTop, CONTENT_W, headerH).fill(ORANGE);
+  doc.restore();
+  // Header title (white, uppercase).
+  doc.fillColor("white").font(BOLD).fontSize(10.5)
+    .text(title.toUpperCase(), x + padX, yTop + 6, { width: CONTENT_W - padX * 2, lineBreak: false });
+  // Rows: orange label (peach column) + ink value (white column), hairline between.
+  let yy = yTop + headerH;
+  rows.forEach((r, i) => {
+    if (i > 0) doc.moveTo(x, yy).lineTo(x + CONTENT_W, yy).lineWidth(0.7).strokeColor(HAIR2).stroke();
+    doc.fillColor(ORANGE_DK).font(BOLD).fontSize(9.5)
+      .text(r.label, x + padX, yy + padY, { width: labelW - padX * 2 });
+    doc.fillColor(INK).font(BODY).fontSize(9.5)
+      .text(r.value, x + labelW + padX, yy + padY, { width: valueW - padX * 2 });
+    yy += rowHs[i];
+  });
+  // Vertical divider between the two columns + outer rounded frame.
+  doc.moveTo(x + labelW, yTop + headerH).lineTo(x + labelW, yTop + totalH).lineWidth(0.7).strokeColor(BORDER).stroke();
+  doc.roundedRect(x, yTop, CONTENT_W, totalH, radius).lineWidth(1).strokeColor(BORDER).stroke();
+  doc.y = yTop + totalH;
+  doc.fillColor(INK);
+  doc.moveDown(0.5);
 }
 
 function generalNotes(doc: PDFKit.PDFDocument, notes: string[]) {
