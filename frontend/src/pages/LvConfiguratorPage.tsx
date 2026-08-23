@@ -702,21 +702,75 @@ export default function LvConfiguratorPage() {
   };
 
   // Debounced live-save to the backend (replaces the previous localStorage save).
-  // saveRef holds the latest pending state so the final edit isn't lost if the
-  // user navigates away within the debounce window.
+  //
+  // Every save ships the ENTIRE quotation — hundreds of kilobytes for a real one — so what
+  // this does NOT send matters as much as what it does. On 23 Aug 2026 the database's
+  // data-transfer quota ran out and took the live site down completely, autosave being one
+  // of the three big contributors. Two rules keep the volume honest:
+  //
+  //   1. Never send a payload identical to the one already stored. React hands us a new
+  //      state object for any change at all, including ones that alter nothing (a re-render,
+  //      an undo back to where you were, re-picking the same value), and each of those used
+  //      to be a full write.
+  //
+  //   2. Clicking between panels changes only `selectedId`. That is navigation, not content,
+  //      and it used to send the whole quotation to record which tab you were on. It is
+  //      still saved, so reopening returns you to the same panel — just on a long delay, so
+  //      clicking through ten panels is one write instead of ten.
+  //
+  // saveRef holds the latest pending payload so the final edit is never lost, and is cleared
+  // only once a save has actually SUCCEEDED — a failure keeps it queued for the next attempt.
+  const CONTENT_SAVE_MS = 800; // unchanged: a real edit still lands as quickly as before
+  const SELECTION_SAVE_MS = 8000; // navigation only — collapse a burst of clicks
   const saveRef = useRef<{ id: string; state: LvState } | null>(null);
+  const sentRef = useRef(""); // the exact payload the server last accepted
+  const sentContentRef = useRef(""); // …the same, ignoring which panel was selected
+
+  // One place that writes, so a flush and a debounce can never double-send.
+  const commit = useRef((_id: string, _state: LvState) => {});
+  commit.current = (id: string, state: LvState) => {
+    const payload = JSON.stringify(state);
+    if (payload === sentRef.current) return; // already stored — writing it again is waste
+    const contentKey = JSON.stringify({ ...state, selectedId: "" });
+    saveQtn(id, state)
+      .then(() => {
+        sentRef.current = payload;
+        sentContentRef.current = contentKey;
+        saveRef.current = null;
+      })
+      .catch(() => {
+        // Keep saveRef so the edit is retried on the next change, on hide, or on unmount.
+      });
+  };
+
   useEffect(() => {
     if (!rec || loading) return;
+    const payload = JSON.stringify(s);
+    if (payload === sentRef.current) return; // nothing to write
     saveRef.current = { id: rec.id, state: s };
-    const t = setTimeout(() => {
-      saveQtn(rec.id, s).catch(() => {});
-      saveRef.current = null;
-    }, 800);
+    // Blanking selectedId tells content changes apart from navigation between panels.
+    const contentKey = JSON.stringify({ ...s, selectedId: "" });
+    const selectionOnly = sentContentRef.current !== "" && contentKey === sentContentRef.current;
+    const t = setTimeout(() => commit.current(rec.id, s), selectionOnly ? SELECTION_SAVE_MS : CONTENT_SAVE_MS);
     return () => clearTimeout(t);
   }, [rec, s, loading]);
-  // Flush a pending save on unmount so the last edit is never dropped.
+
+  // Flush a pending save when the tab is hidden. This runs while the page is still alive,
+  // so an ordinary fetch still works — unlike an unload handler, which cannot carry the
+  // Authorization header. It is what makes the longer navigation delay safe.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden" && saveRef.current) {
+        commit.current(saveRef.current.id, saveRef.current.state);
+      }
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, []);
+
+  // …and on unmount, so leaving the screen never drops the last edit.
   useEffect(
-    () => () => { if (saveRef.current) saveQtn(saveRef.current.id, saveRef.current.state).catch(() => {}); },
+    () => () => { if (saveRef.current) commit.current(saveRef.current.id, saveRef.current.state); },
     []
   );
   // RPT-1: keyboard — Ctrl/Cmd+Z = undo, Ctrl/Cmd+Y or Shift+Z = redo (ignored while

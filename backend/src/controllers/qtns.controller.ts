@@ -1015,9 +1015,33 @@ export async function downloadAttachment(req: Request, res: Response) {
   try {
     const q = await readableQtn(req);
     if (!q) return res.status(404).json({ error: "Quotation not found." });
-    const f = await prisma.lvAttachment.findFirst({ where: { id: req.params.fileId, qtnId: q.id } });
+    // Fetch the METADATA only. `data` is the whole file as base64 — about a third larger
+    // than the file itself, up to ~4 MB a row — and on a conditional request we do not
+    // need it at all. Reading it unconditionally meant every single view of a specification
+    // moved the entire file out of the database again.
+    const f = await prisma.lvAttachment.findFirst({
+      where: { id: req.params.fileId, qtnId: q.id },
+      select: { id: true, name: true, mime: true, size: true },
+    });
     if (!f) return res.status(404).json({ error: "File not found." });
-    const buf = Buffer.from(f.data, "base64");
+
+    // An attachment is immutable: upload creates it, delete removes it, nothing ever
+    // rewrites the bytes under a given id. So the id plus the size is a strong validator,
+    // and the browser may keep the file indefinitely.
+    const etag = `"${f.id}-${f.size}"`;
+    res.setHeader("ETag", etag);
+    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+    if (req.headers["if-none-match"] === etag) {
+      // Nothing read from the database, nothing sent over the wire.
+      return res.status(304).end();
+    }
+
+    const body = await prisma.lvAttachment.findUnique({
+      where: { id: f.id },
+      select: { data: true },
+    });
+    if (!body) return res.status(404).json({ error: "File not found." });
+    const buf = Buffer.from(body.data, "base64");
     // The stored MIME comes from the uploader's browser and was echoed straight back as
     // Content-Type with `inline` disposition, on the SAME origin as the app. Attaching an
     // .html (or an SVG through the API) therefore ran script on the PowerLine origin when

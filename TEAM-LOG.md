@@ -23,6 +23,93 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**All three data-transfer problems are now fixed. Mohamed is buying a Neon plan and does not
+want it eaten, so this is about keeping the bill down permanently, not tidiness.**
+
+### 1. Quotation lists (done earlier today, commit 9215d21)
+
+`GET /api/qtns`, `/api/qtns/all` and `/api/qtns/queue` fetched every scalar column, `state`
+included — the whole quotation as JSON — to draw a table row. Now they select exactly the
+seventeen columns the table shows. Verified byte-for-byte identical responses.
+
+### 2. Attachments: a repeat view now costs nothing
+
+`downloadAttachment` read the full `data` column (base64, about a third larger than the file,
+up to ~4 MB a row) on **every single view**. Opening the same specification five times moved
+it out of the database five times.
+
+Attachments are immutable — upload creates, delete removes, nothing ever rewrites the bytes
+under an id — so they now carry a strong validator:
+
+- the metadata is fetched first, **without** `data`;
+- `ETag: "<id>-<size>"` and `Cache-Control: private, max-age=31536000, immutable`;
+- if the browser sends back a matching `If-None-Match`, the answer is **304 with no body and
+  the file is never read from the database at all.**
+
+Measured locally on a real upload: first view **200, 6,200 bytes**; second view **304, no
+body**; a fresh fetch returns byte-identical content starting `%PDF-1.4`. So the second and
+every later view of a spec costs one tiny request instead of megabytes.
+
+`listAttachments` was already lean (metadata only) — no change needed there.
+
+### 3. Autosave: no more writing the whole quotation for nothing
+
+Every save ships the ENTIRE quotation. Two kinds of save were pure waste:
+
+- **Identical payloads.** React hands the effect a new state object for any change at all,
+  including ones that alter nothing — a re-render, an undo back to where you started,
+  re-picking the same value. Each was a full write. The payload is now compared against what
+  the server last accepted, and an unchanged one is not sent.
+- **Clicking between panels.** That changes only `selectedId`, and it used to send the whole
+  quotation to record which tab you were on. It is **still saved**, so reopening returns you
+  to the same panel — but on an 8 second delay, so clicking through ten panels is one write
+  instead of ten.
+
+Real edits are untouched: still an 800 ms debounce, so a save lands exactly as quickly as
+before.
+
+Measured in the browser, counting actual PUT requests:
+
+| Action | Saves before | Saves now |
+| --- | --- | --- |
+| Add two panels | 2 | 2 (unchanged — real changes) |
+| Click between panels 4 times | 4 (~11 KB each) | **0** |
+| One field edit | 1 within 1.2 s | 1 within 1.2 s (unchanged) |
+| Three more keystrokes straight after | 1 | 1 (still coalesced) |
+| Navigate to a different panel and wait | 1 | 1, at 8 s instead of 0.8 s |
+
+Two robustness improvements came with it: the pending save is now cleared **only when a save
+actually succeeds** (a failure keeps it queued instead of forgetting it), and a pending save
+is flushed when the tab is hidden — which runs while the page is still alive, so an ordinary
+fetch still works, and is what makes the longer navigation delay safe.
+
+**299 tests passing** (270 backend, 29 frontend). Both typechecks and both builds clean.
+
+### ⚠️ A THIRD blank-page crash, found while testing — still open
+
+Opening quotation `QTN-26-9002` renders a blank white page with
+`TypeError: Cannot read properties of undefined (reading 'trim')`.
+
+I checked this properly: I stashed my changes and reloaded, and **the committed version fails
+identically**, so this is pre-existing and not from anything today. It is the same family as
+the one you fixed (`factors`), and your fix does cover `factors` and the panel list — but
+something else in a partially-saved `project` object still throws. A brand-new quotation with
+a completely empty state `{}` opens fine, so it is specific to a partial one.
+
+Both affected rows are old local test data, so this may not exist in production at all — but
+it is the same failure mode, and the fix belongs with the autosave reliability work.
+
+### Still open
+
+Unchanged from the earlier entry: the LV autosave still shows the user nothing when a save
+fails (the queueing is fixed, the visible indicator is not), Co-Work still has an unguarded
+read-modify-write, the spreadsheet import still does ~60,000 sequential round trips, and
+offers are still hard-deleted so their numbers get reused.
+
+⚠️ Everything here is pushed but **cannot deploy until Neon accepts connections again** —
+every build still fails at `prisma db push`.
+## 2026-08-23 · Mohamed's side · Claude
+
 **Fixed the biggest cause of the data-transfer blowout: quotation lists no longer download
 every quotation's content.**
 
