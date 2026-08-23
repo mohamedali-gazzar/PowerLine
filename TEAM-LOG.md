@@ -23,6 +23,44 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**`DATABASE_URL` should be the POOLED Neon endpoint. Verified the pooled endpoint first, and
+added a guard so the switch cannot go wrong.**
+
+Right now `DATABASE_URL` is the DIRECT endpoint — the build log shows a host with no
+`-pooler`. On serverless that means every function instance opens its own database
+connection instead of sharing a pooled one, which is part of what ran the transfer quota out.
+
+**The pooled endpoint is tested and good.** I connected to it with the real credentials and
+checked the things that actually matter for Prisma, not just that it answers:
+
+| Check | Direct | Pooled |
+| --- | --- | --- |
+| Connect | OK | OK |
+| Parameterised statement | OK (143 quotations) | OK (143 quotations) |
+| Same statement reused | OK | OK |
+| 8 concurrent queries | OK | OK |
+
+That last pair matters: a transaction-mode pooler historically broke prepared-statement
+reuse, which is exactly how Prisma talks to the database. It does not here.
+
+**The change is safe because `directUrl` is already wired.** `scripts/db-setup.js` writes
+`directUrl = env("DIRECT_URL")` into the postgres datasource, so schema pushes keep using the
+direct endpoint even once the app is pooled. That separation is the whole reason this is safe
+to do — DDL must never go through a pooler.
+
+**New guard in `scripts/db-push-vercel.js`.** If `DATABASE_URL` is pooled and `DIRECT_URL` is
+missing, the build now stops with a message naming the fix, instead of silently pushing
+schema through the pooler. And while `DATABASE_URL` is still the direct endpoint it prints a
+warning, so the build log nudges us until it is changed. Tested all three paths: local build
+still skips, pooled-without-direct exits 1, direct warns and proceeds.
+
+⚠️ The value itself has to be pasted by a person — it contains the database password, and
+the Vercel token in the secrets file cannot see the project anyway (it lists zero projects).
+Copy the pooled string from the Neon dashboard with **Pooled connection** toggled ON, put it
+in `DATABASE_URL`, leave `DIRECT_URL` as the one WITHOUT `-pooler`, and redeploy — these are
+read once at start-up, so saving alone does nothing.
+## 2026-08-23 · Mohamed's side · Claude
+
 **✅ THE SITE IS BACK. Everything that was stuck since 11:14 is now live.**
 
 Mohamed renewed the Neon plan. Verified straight away: the database answers again — 20
