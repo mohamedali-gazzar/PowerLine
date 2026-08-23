@@ -3850,6 +3850,39 @@ function SpareEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: 
 // A local control panel: SR-Basic enclosure auto-sized from the number of control
 // groups. "No. Groups" auto-fills the component list (pilot lights / pushbuttons /
 // terminals × G) and recommends the box (H × W × D). Cost = Components + Enclosure +
+// A freely-typeable selling-factor input. It keeps a text "draft" while you edit,
+// so partial decimals ("0.", "0.7156852") and clearing hold instead of snapping back
+// to the global factor mid-typing. `value` is the per-panel override (0 = follow the
+// global Pricing-Settings factor, shown as the placeholder).
+function FactorInput({ value, global, onChange, className, title }: {
+  value: number;
+  global: number;
+  onChange: (n: number) => void;
+  className?: string;
+  title?: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const shown = draft !== null ? draft : value > 0 ? String(value) : "";
+  return (
+    <input
+      className={className ?? "input"}
+      type="text"
+      inputMode="decimal"
+      value={shown}
+      placeholder={String(global)}
+      title={title}
+      onChange={(e) => {
+        const raw = e.target.value;
+        if (raw !== "" && !/^\d*\.?\d*$/.test(raw)) return; // digits + a single dot only
+        setDraft(raw);
+        const n = parseFloat(raw);
+        onChange(raw.trim() === "" || isNaN(n) ? 0 : n);
+      }}
+      onBlur={() => setDraft(null)}
+    />
+  );
+}
+
 // Kits (10 % of the enclosure) + Cables → Unit cost → Factor → Unit selling.
 function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: string, patch: Partial<LvPanel>) => void }) {
   const f = s.factors;
@@ -4044,8 +4077,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
             </div>
             <div className="flex flex-col justify-center">
               <L>Factor</L>
-              <input className="input" type="number" min={0} step={0.1} value={p.sellFactor || f.factor}
-                onChange={(e) => u({ sellFactor: parseFloat(e.target.value) || 0 })} />
+              <FactorInput value={p.sellFactor || 0} global={f.factor} onChange={(n) => u({ sellFactor: n })} />
               <p className="mt-1 text-[11px] text-muted">÷ {factor}{p.sellFactor > 0 ? "" : " (global)"}</p>
             </div>
             {/* Row 3 */}
@@ -4079,8 +4111,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
             <div className="rounded-lg bg-surface p-2.5 text-sm">Unit cost<br /><b>{fmtEgp(calc.unitCost)} EGP</b></div>
             <div>
               <L>Factor</L>
-              <input className="input" type="number" min={0} step={0.1} value={p.sellFactor || f.factor}
-                onChange={(e) => u({ sellFactor: parseFloat(e.target.value) || 0 })} />
+              <FactorInput value={p.sellFactor || 0} global={f.factor} onChange={(n) => u({ sellFactor: n })} />
               <p className="mt-1 text-[11px] text-muted">÷ {factor}{p.sellFactor > 0 ? "" : " (global)"}</p>
             </div>
             <div className="rounded-lg bg-brand-light p-2.5 text-sm text-brand-dark">Unit selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
@@ -4989,13 +5020,15 @@ function PanelEditor({ s, p, up, upPanel }: {
           <div className="rounded-lg bg-surface p-2.5">Unit Cost<br /><b>{fmtEgp(calc.unitCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">
             Factor
-            <input type="number" min={0} step={0.01}
+            <FactorInput
+              value={p.sellFactor || 0}
+              global={s.factors.factor}
+              onChange={(n) => u({ sellFactor: n })}
               className={`mt-0.5 block w-full rounded border px-1.5 py-0.5 text-sm font-bold focus:outline-none ${
                 p.sellFactor > 0 ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-ink"
               }`}
-              value={p.sellFactor > 0 ? p.sellFactor : s.factors.factor}
               title={p.sellFactor > 0 ? "Custom — clear to follow Pricing Settings" : `Default from Pricing Settings (${s.factors.factor})`}
-              onChange={(e) => u({ sellFactor: parseFloat(e.target.value) || 0 })} />
+            />
           </div>
           <div className="rounded-lg bg-brand-light p-2.5 text-brand-dark">Unit Selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
           <div className="rounded-lg bg-brand p-2.5 text-white">Unit Selling (USD)<br /><b>{fmtEgp(s.factors.usd > 0 ? calc.sellUnit / s.factors.usd : 0)} USD</b></div>

@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**✅ LV: the per-panel selling Factor box is now freely editable.**
+
+The Factor field on an LV panel (Panels tab, and the LCP/KWHM auxiliary editors) was hard
+to type into — as soon as what you typed hit "0" (which happens at "0" and "0." while
+typing), it snapped back to the global Pricing-Settings factor, so a value like 0.7156852
+was almost impossible to enter. It now holds exactly what you type (partial decimals
+included), the live cost updates as you type, and clearing the box goes back to the global
+factor. No change to prices or the formula — only how the box behaves while editing.
+Frontend builds; all tests pass.
+
+## 2026-08-23 · Mohamed's side · Claude
+
 **✅ On-screen commercial offer matches the PDF; saved offers now show the cover + A4.**
 
 Follow-up to the on-screen technical work below:
