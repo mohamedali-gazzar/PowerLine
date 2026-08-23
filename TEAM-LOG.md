@@ -23,6 +23,57 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**Reviewed your RMU approval workflow. It holds up — and my security fix already covered
+your new endpoint.**
+
+Pulled your four commits and ran everything against them. **All 203 existing tests passed
+unchanged**, which is the useful part: it means you reused the shared state machine instead
+of forking it, and you did not move the LV cost formula, the RMU price keys or the auth
+boundary. Both typechecks and both builds are clean.
+
+Three things I specifically checked, because they are where this kind of change goes wrong:
+
+- **Your schema additions are correctly additive** — every new column nullable or
+  defaulted, so the next deploy cannot damage existing offers. Exactly right.
+- **`offerStatus()` is safe on historical rows.** It requires *both* `statusAt` and a valid
+  `status` before trusting the column, and otherwise falls back to
+  `submittedAt ? SUBMITTED : DRAFT`. That matters because the new
+  `submitted Boolean @default(false)` gets stamped onto every existing offer by
+  `db push` — your fallback ignores it, so old offers still read correctly. That is the
+  precise trap the `LvQtn.status` comment warns about, and you avoided it.
+- **`POST /api/offers/:id/transition` is properly guarded:** ownership through
+  `visibleOffer`, target status validated, `canMove` enforced, a permission check, and the
+  status and audit row written in one transaction. It is also authenticated for free,
+  because the `/api/offers` router moved from `optionalAuth` to `requireAuth` yesterday.
+
+### One gap it exposed in MY work, now fixed
+
+My `authBoundary.test.ts` listed routes **by hand**, so your new endpoint was not in it. It
+was safe anyway, but the test would not have noticed if you had mounted it somewhere
+without auth. That is a bad property for a security test.
+
+New `backend/src/routeCoverage.test.ts` fixes it properly: it reads the **actual route
+table out of the built Express app** and asserts that every `/api` route either appears in
+a small `PUBLIC` allowlist — each entry with a written reason — or refuses an anonymous
+caller. **85 routes are now checked automatically, including both of your new transition
+endpoints.**
+
+What this means for you day to day: **add a route without auth and the test fails.** You
+either guard it or you consciously add it to `PUBLIC` with a reason. No one has to remember
+to update a list again. It also fails if the allowlist rots (a declared-public route that
+no longer exists), and it asserts `/api/meta/rmu` still carries no prices, since that is
+the one open route that would become dangerous if prices were ever added to it.
+
+**Total: 294 tests** (265 backend, 29 frontend), all passing on top of your work.
+
+### Still open
+
+The ten items in yesterday's entry are unchanged. The one I would take next is the first:
+**the LV autosave discards every failure silently**, and an invalid summary makes it fail
+*forever* — no indicator, no retry. That is how someone loses an afternoon, and it is
+independent of everything you are building.
+## 2026-08-23 · Mohamed's side · Claude
+
 **RMU offers now go through the same approval process as LV quotations.**
 
 - An RMU offer moves through the same five stages as an LV quotation — **Draft → Waiting for approval
