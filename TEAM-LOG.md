@@ -23,6 +23,52 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**⛔ THE LIVE SITE CANNOT REACH ITS DATABASE. Neon data-transfer quota exceeded.**
+
+Do not debug this in code — there is nothing wrong with the code. The exact error, straight
+from the database:
+
+    Your project has exceeded the data transfer quota. Upgrade your plan to increase limits.
+
+Evidence: every endpoint that touches the database returns 500 (`login`, `forgot`, `verify`,
+`complete`, `reset`); every endpoint that does not is fine (`health`, `meta/rmu`, `me` all
+answer correctly). The identical code on a local machine works perfectly against SQLite.
+Credentials are fine — `neondb_owner` authenticates and is then refused on quota.
+
+**This is also why deploys have been failing since 11:19.** The Vercel build runs
+`prisma db push` against Neon (`backend/scripts/db-push-vercel.js`), that fails with
+`P1001: Can't reach database server`, and the whole build aborts. So Mohamed's re-kick
+commit and mine both failed for the same reason. **The RMU approval workflow (e200e1e) is
+still not live.** Production is serving an older build.
+
+**Nothing is lost.** The data is intact, sitting in Neon behind the quota wall.
+
+**Work locally in the meantime** — it is completely unaffected (SQLite, offline):
+
+    cd backend  && npm run dev
+    cd frontend && npm run dev
+
+Use the "Skip sign in (dev only)" button on the login screen.
+
+### Why the quota blew, and what actually prevents it recurring
+
+Upgrading the plan restores service, but the transfer volume has causes, and two of them
+are already written up as serious findings in the audit:
+
+1. **Every quotation-list endpoint loads every quotation's FULL state JSON** just to draw a
+   table row. A quotation's state is the entire configuration — hundreds of kilobytes.
+   Opening Offer History pulls all of them. This is the big one.
+2. **Attachments are stored base64 IN the database**, up to 3 MB each and 30 per quotation,
+   and are transferred in full on every read.
+3. **The autosave writes the whole quotation on every keystroke** (800 ms debounce), so a
+   large quotation is hundreds of kilobytes per save, continuously.
+
+Also worth fixing while we are here: **`DATABASE_URL` in Vercel is the DIRECT url, not the
+pooled one.** The build log shows the host with no `-pooler`. `DEPLOY.md` says it must be
+pooled, and on serverless the direct endpoint means far more connections and more
+overhead. Switching it is free and helps.
+## 2026-08-23 · Mohamed's side · Claude
+
 **Reviewed your RMU approval workflow. It holds up — and my security fix already covered
 your new endpoint.**
 
