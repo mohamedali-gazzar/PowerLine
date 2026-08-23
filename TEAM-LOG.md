@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**✅ RMU offer: General Notes restyled + outer frame removed from the data cards.**
+
+Small visual follow-up. The **General Notes** on the RMU offer are now a numbered table
+(rounded orange header, "1 / 2 / 3" rows with light lines between them and every other row
+lightly shaded) instead of a bullet list. And the **outer border was removed** from the
+General/Electrical Data cards — they now show just the orange header, the shaded label
+column and the thin row lines, no box around the whole thing. Look only; no content or
+numbers changed. Builds; 270 tests pass.
+
+## 2026-08-23 · Mohamed's side · Claude
+
 **✅ RMU offer "General/Electrical Data" tables redesigned + wording shortened.**
 
 Follow-up to the entry below. Mohamed picked the cleaner table design, so the technical

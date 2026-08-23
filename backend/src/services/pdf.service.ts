@@ -525,19 +525,6 @@ function sectionTitle(doc: PDFKit.PDFDocument, title: string, keepWith = 24) {
   doc.fillColor(INK).moveDown(0.5);
 }
 
-/** Full-width orange section header bar (white uppercase title) — used for the data
- *  sections so they read like the structure's cubicle bars and the reference offer. */
-function sectionBar(doc: PDFKit.PDFDocument, title: string, keepWith = 24) {
-  ensure(doc, 22 + keepWith);
-  const y = doc.y;
-  doc.roundedRect(MARGIN, y, CONTENT_W, 20, 3).fill(ORANGE);
-  doc.fillColor("white").font(BOLD).fontSize(11)
-    .text(title.toUpperCase(), MARGIN + 10, y + 5.5, { width: CONTENT_W - 20, lineBreak: false });
-  doc.fillColor(INK);
-  doc.y = y + 20;
-  doc.moveDown(0.3);
-}
-
 function dataTable(doc: PDFKit.PDFDocument, title: string, rows: Row[]) {
   const radius = 6;
   const labelW = 150;
@@ -586,9 +573,8 @@ function dataTable(doc: PDFKit.PDFDocument, title: string, rows: Row[]) {
       .text(r.value, x + labelW + padX, yy + padY, { width: valueW - padX * 2 });
     yy += rowHs[i];
   });
-  // Vertical divider between the two columns + outer rounded frame.
+  // Vertical divider between the two columns (no outer frame).
   doc.moveTo(x + labelW, yTop + headerH).lineTo(x + labelW, yTop + totalH).lineWidth(0.7).strokeColor(BORDER).stroke();
-  doc.roundedRect(x, yTop, CONTENT_W, totalH, radius).lineWidth(1).strokeColor(BORDER).stroke();
   doc.y = yTop + totalH;
   doc.fillColor(INK);
   doc.moveDown(0.5);
@@ -596,14 +582,50 @@ function dataTable(doc: PDFKit.PDFDocument, title: string, rows: Row[]) {
 
 function generalNotes(doc: PDFKit.PDFDocument, notes: string[]) {
   if (!notes.length) return;
-  sectionBar(doc, "General Notes", 18);
-  doc.font(BODY).fontSize(9.5).fillColor(INK);
-  for (const n of notes) {
-    ensure(doc, 16);
-    doc.fillColor(ORANGE).text("•", MARGIN + 4, doc.y, { continued: true })
-      .fillColor(INK).text(`  ${n}`, { width: CONTENT_W - 16 });
-    doc.moveDown(0.15);
+  const radius = 6;
+  const numW = 34;
+  const padX = 10;
+  const padY = 6;
+  const headerH = 22;
+  const PEACH = "#fcebe1"; // zebra fill
+  const HAIR2 = "#e7e7eb"; // row separators
+  const rowHs = notes.map((n) => {
+    doc.font(BODY).fontSize(9.5);
+    const th = doc.heightOfString(n, { width: CONTENT_W - numW - padX });
+    return Math.max(21, th + padY * 2);
+  });
+  const bodyH = rowHs.reduce((a, b) => a + b, 0);
+  const totalH = headerH + bodyH;
+  if (doc.y + totalH > PAGE_H - 55) {
+    doc.addPage();
+    (doc as unknown as { __onBreak?: () => void }).__onBreak?.();
   }
+  doc.moveDown(0.15);
+  const x = MARGIN;
+  const yTop = doc.y;
+  // Rounded orange header + zebra rows, clipped to round the corners. No outer frame.
+  doc.save();
+  doc.roundedRect(x, yTop, CONTENT_W, totalH, radius).clip();
+  let yz = yTop + headerH;
+  notes.forEach((_, i) => {
+    if (i % 2 === 1) doc.rect(x, yz, CONTENT_W, rowHs[i]).fill(PEACH);
+    yz += rowHs[i];
+  });
+  doc.rect(x, yTop, CONTENT_W, headerH).fill(ORANGE);
+  doc.restore();
+  doc.fillColor("white").font(BOLD).fontSize(10.5)
+    .text("GENERAL NOTES", x + padX, yTop + 6, { width: CONTENT_W - padX * 2, lineBreak: false });
+  let yy = yTop + headerH;
+  notes.forEach((n, i) => {
+    if (i > 0) doc.moveTo(x, yy).lineTo(x + CONTENT_W, yy).lineWidth(0.7).strokeColor(HAIR2).stroke();
+    doc.fillColor(INK).font(BOLD).fontSize(9.5)
+      .text(String(i + 1), x + padX, yy + padY, { width: numW - padX, lineBreak: false });
+    doc.fillColor(INK).font(BODY).fontSize(9.5)
+      .text(n, x + numW, yy + padY, { width: CONTENT_W - numW - padX });
+    yy += rowHs[i];
+  });
+  doc.y = yTop + totalH;
+  doc.fillColor(INK);
   doc.moveDown(0.5);
 }
 
