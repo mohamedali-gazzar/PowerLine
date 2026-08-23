@@ -23,6 +23,34 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**✅ RMU Technical Offer PDF restyled to match the reference "asd" offer document.**
+
+Mohamed had a reference PDF of how the RMU technical offer should look, and asked to make
+the app's generated PDF match it. Compared the two page-by-page (rendered both to images)
+and changed the PDF generator (`backend/src/services/pdf.service.ts`) so a multi-RMU offer
+now reads like the reference:
+
+- Each RMU now opens with a **full "RMU 1" / "RMU 2" divider page** (big title, unit code,
+  family line) instead of the small "RMU 1 of 2" strip that used to sit on top of the data.
+- The data page now starts with a light **"RMU NO. 1 … QTY 1"** line under the header.
+- The **General Data / Electrical Data / General Notes** headings are now solid orange bars
+  with the field names in orange — the same look the structure tables already had — instead
+  of the thin underlined headings.
+
+**Nothing about the numbers, prices or the actual technical wording was changed** — only how
+the page looks. The cover and the structure tables were already identical to the reference.
+Both halves build; all 270 backend tests still pass.
+
+⚠️ HEADS-UP: one thing still differs from the reference on purpose — the **field wording**.
+The app writes the fuller engineering text (e.g. "Ambient temperature — For working: -5 °C to
++40 °C / For storage: -5 °C", "Power frequency withstand voltage"), while the reference uses
+short labels ("Ambient temp. — -5 °C to +40 °C", "Withstand (1 min)"). Shortening it would
+drop some detail (like the storage temperature) from every customer offer, so I left the
+fuller text in. ❓ QUESTION FOR MOHAMED: do you want the shorter labels/values too, or keep
+the fuller engineering wording?
+
+## 2026-08-23 · Mohamed's side · Claude
+
 **✅ `DATABASE_URL` is now the POOLED endpoint, confirmed from the database side. Today is
 closed out.**
 

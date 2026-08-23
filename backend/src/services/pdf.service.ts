@@ -96,12 +96,20 @@ export function generateOfferPdf(
         // the CURRENT RMU (its own product code in the top-right).
         const onBreak = () => runningHeader(doc, go);
         (doc as unknown as { __onBreak: () => void }).__onBreak = onBreak;
+
+        // Multi-RMU offers open each unit with a full "RMU N" divider page so the
+        // reader gets a clear title page per unit; a single-RMU offer skips it and
+        // goes straight to its data page.
+        if (offers.length > 1) {
+          doc.addPage();
+          dividerPage(doc, idx + 1, go);
+        }
+
         doc.addPage();
         onBreak();
-
-        // Label each RMU when the offer carries more than one, so the pages read
-        // as "RMU 1 of 3", "RMU 2 of 3", … rather than three lookalike sections.
-        if (offers.length > 1) rmuBanner(doc, idx + 1, offers.length, go);
+        // Light "RMU NO. N … QTY 1" bar under the header (with an orange accent),
+        // introducing this unit's data page.
+        rmuItemBar(doc, idx + 1);
 
         dataTable(doc, "General Data / Type of apparatus", go.generalData);
         dataTable(doc, "Electrical Data", go.electricalData);
@@ -129,18 +137,42 @@ export function generateOfferPdf(
   });
 }
 
-/** Orange banner introducing one RMU inside a multi-RMU technical offer. */
-function rmuBanner(doc: PDFKit.PDFDocument, n: number, total: number, g: GeneratedOffer) {
-  const h = 24;
-  ensure(doc, h + 8);
-  const y = doc.y;
-  doc.roundedRect(MARGIN, y, CONTENT_W, h, 4).fill(ORANGE);
-  doc.fillColor("white").font(BOLD).fontSize(12)
-    .text(`RMU ${n} of ${total}`, MARGIN + 10, y + 6, { width: 140, lineBreak: false });
-  doc.font(BOLD).fontSize(11)
-    .text(g.panelCode, MARGIN + 150, y + 7, { width: CONTENT_W - 160, align: "right", lineBreak: false });
+/** Full-page "RMU N" divider that opens each unit in a multi-RMU technical offer:
+ *  logo top-left, then a large left-aligned "RMU N" (N in orange) over a short rule,
+ *  the system code and the family line. */
+function dividerPage(doc: PDFKit.PDFDocument, n: number, g: GeneratedOffer) {
+  safeImage(doc, asset("logo.png"), MARGIN, 40, { width: 120 });
+  const baseY = PAGE_H * 0.5;
+  doc.font(BOLD).fontSize(11).fillColor(GREY)
+    .text("RING MAIN UNIT", MARGIN, baseY - 82, { characterSpacing: 4, lineBreak: false });
+  doc.font(BOLD).fontSize(60).fillColor(INK).text("RMU ", MARGIN, baseY - 62, { lineBreak: false });
+  const wRmu = doc.widthOfString("RMU ");
+  doc.fillColor(ORANGE).text(String(n), MARGIN + wRmu, baseY - 62, { lineBreak: false });
+  const ry = baseY + 18;
+  doc.rect(MARGIN, ry, 80, 5).fill(ORANGE);
+  doc.font(BOLD).fontSize(20).fillColor(INK).text(g.panelCode, MARGIN, ry + 20, { lineBreak: false });
+  const fam = [g.configCode, g.titleFamily].filter(Boolean).join("  ·  ");
+  doc.font(BODY).fontSize(12).fillColor(GREY).text(fam, MARGIN, ry + 48, { lineBreak: false });
   doc.fillColor(INK);
-  doc.y = y + h + 8;
+}
+
+/** Light "RMU NO. N … QTY 1" bar (with a short orange accent) atop a unit's data page. */
+function rmuItemBar(doc: PDFKit.PDFDocument, n: number) {
+  const y = doc.y;
+  doc.font(BOLD).fontSize(13).fillColor(INK).text("RMU NO. ", MARGIN, y, { lineBreak: false });
+  const w1 = doc.widthOfString("RMU NO. ");
+  doc.fillColor(ORANGE).text(String(n), MARGIN + w1, y, { lineBreak: false });
+  doc.fillColor(INK).font(BOLD).fontSize(13);
+  const wv = doc.widthOfString("1");
+  const wl = doc.widthOfString("QTY ");
+  const rx = PAGE_W - MARGIN - wv;
+  doc.fillColor(INK).text("QTY ", rx - wl, y, { lineBreak: false });
+  doc.fillColor(ORANGE).text("1", rx, y, { lineBreak: false });
+  const by = y + 22;
+  doc.moveTo(MARGIN, by).lineTo(PAGE_W - MARGIN, by).lineWidth(1).strokeColor(LIGHT).stroke();
+  doc.rect(MARGIN, by - 1.5, 46, 3).fill(ORANGE);
+  doc.fillColor(INK);
+  doc.y = by + 10;
 }
 
 // ------------------------------------------------------------------ COVER
@@ -493,6 +525,19 @@ function sectionTitle(doc: PDFKit.PDFDocument, title: string, keepWith = 24) {
   doc.fillColor(INK).moveDown(0.5);
 }
 
+/** Full-width orange section header bar (white uppercase title) — used for the data
+ *  sections so they read like the structure's cubicle bars and the reference offer. */
+function sectionBar(doc: PDFKit.PDFDocument, title: string, keepWith = 24) {
+  ensure(doc, 22 + keepWith);
+  const y = doc.y;
+  doc.roundedRect(MARGIN, y, CONTENT_W, 20, 3).fill(ORANGE);
+  doc.fillColor("white").font(BOLD).fontSize(11)
+    .text(title.toUpperCase(), MARGIN + 10, y + 5.5, { width: CONTENT_W - 20, lineBreak: false });
+  doc.fillColor(INK);
+  doc.y = y + 20;
+  doc.moveDown(0.3);
+}
+
 function dataTable(doc: PDFKit.PDFDocument, title: string, rows: Row[]) {
   const labelW = 210;
   const valueW = CONTENT_W - labelW - 12;
@@ -503,13 +548,13 @@ function dataTable(doc: PDFKit.PDFDocument, title: string, rows: Row[]) {
     return Math.max(18, Math.max(lh, vh) + 8);
   };
   // Keep the heading glued to its first row across a page break.
-  sectionTitle(doc, title, rows.length ? rowHeight(rows[0]) : 24);
+  sectionBar(doc, title, rows.length ? rowHeight(rows[0]) : 24);
   for (const [i, r] of rows.entries()) {
     const rowH = rowHeight(r);
     ensure(doc, rowH);
     const y = doc.y;
     if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, rowH).fill(TINT).fillColor(INK);
-    doc.font(BOLD).fontSize(9.5).fillColor(GREY).text(r.label, MARGIN + 6, y + 4, { width: labelW });
+    doc.font(BOLD).fontSize(9.5).fillColor(ORANGE_DK).text(r.label, MARGIN + 6, y + 4, { width: labelW });
     doc.font(BODY).fontSize(9.5).fillColor(INK)
       .text(r.value, MARGIN + 6 + labelW, y + 4, { width: valueW });
     doc.y = y + rowH;
@@ -519,7 +564,7 @@ function dataTable(doc: PDFKit.PDFDocument, title: string, rows: Row[]) {
 
 function generalNotes(doc: PDFKit.PDFDocument, notes: string[]) {
   if (!notes.length) return;
-  sectionTitle(doc, "General Notes", 18);
+  sectionBar(doc, "General Notes", 18);
   doc.font(BODY).fontSize(9.5).fillColor(INK);
   for (const n of notes) {
     ensure(doc, 16);
