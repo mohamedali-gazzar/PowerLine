@@ -55,6 +55,16 @@ type QtnRow = {
   totalEgp: number;
 };
 
+/**
+ * What the LIST mappers read: a quotation row minus `state` and `createdAt`.
+ *
+ * Lists show neither, and `state` is the whole quotation as JSON, so selecting it for a
+ * table was pure waste — enough of it to exhaust the database's transfer quota. Typing the
+ * mappers this narrowly means the compiler rejects a list handler that forgets a column
+ * listItem needs, instead of it silently rendering undefined.
+ */
+type QtnListRow = Omit<QtnRow, "state" | "createdAt">;
+
 // ── Co-Work membership ───────────────────────────────────────────────────────
 // Co-workers live in the LvQtnCoOwner join table, but quotations shared before
 // that table existed still carry the single legacy `coOwnerId`. Both are read
@@ -62,7 +72,7 @@ type QtnRow = {
 // (at which point it is written to the join table and the legacy slot cleared).
 
 /** Everyone sharing this quotation with its owner — join table ∪ legacy slot. */
-const coOwnersOf = (q: QtnRow): { id: string; email: string; name: string }[] => {
+const coOwnersOf = (q: QtnListRow): { id: string; email: string; name: string }[] => {
   const out = new Map<string, { id: string; email: string; name: string }>();
   (q.coOwners ?? []).forEach((c) =>
     out.set(c.userId, { id: c.userId, email: c.user?.email ?? "", name: c.user?.name ?? "" }),
@@ -81,7 +91,7 @@ const sharedWith = (uid: string) => [
 ];
 
 /** The workflow fields every QTN response carries, so the client never derives status. */
-const workflowOf = (q: QtnRow) => ({
+const workflowOf = (q: QtnListRow) => ({
   status: qtnStatus(q),
   statusLabel: QTN_STATUS_LABEL[qtnStatus(q)],
   locked: isLocked(qtnStatus(q)),
@@ -113,7 +123,7 @@ const record = (q: QtnRow) => {
   };
 };
 
-const listItem = (q: QtnRow) => ({
+const listItem = (q: QtnListRow) => ({
   id: q.id,
   number: q.number,
   updatedAt: q.updatedAt,
@@ -141,6 +151,44 @@ const ownerSelect = {
   owner: { select: { email: true, name: true } },
   coOwner: { select: { email: true, name: true } }, // legacy slot
   coOwners: { select: { userId: true, user: { select: { email: true, name: true } } } },
+} as const;
+
+/**
+ * Columns the LIST endpoints need — deliberately WITHOUT `state`.
+ *
+ * `include: ownerSelect` fetches every scalar column, and `state` is the entire
+ * quotation as JSON: every panel, every component, every price. Drawing one table row
+ * needs none of it, yet listing pulled all of it for every quotation on every request.
+ * On 23 Aug 2026 that helped exhaust the database's data-transfer quota, which took the
+ * live site down completely — no logins, and no deploys either, because the build syncs
+ * the schema over the same connection.
+ *
+ * This is EXACTLY the set listItem() reads (through workflowOf and coOwnersOf). Adding a
+ * field to listItem means adding it here, or it silently reads undefined.
+ */
+export const listSelect = {
+  id: true,
+  number: true,
+  updatedAt: true,
+  projectName: true,
+  customer: true,
+  panelsCount: true,
+  totalEgp: true,
+  // qtnStatus() falls back to this mirror for rows written before the workflow existed.
+  submitted: true,
+  status: true,
+  // workflowOf()
+  approverEmail: true,
+  approvedAt: true,
+  returnReason: true,
+  submittedForApprovalAt: true,
+  // ownership + co-work
+  ownerId: true,
+  coOwnerId: true,
+  // only ever non-null in an includeRemoved list
+  removedAt: true,
+  removedBy: true,
+  ...ownerSelect,
 } as const;
 
 /** The QTN if the caller may SEE it — its owner, its co-owner, or a qtn.viewAll holder. */
@@ -243,7 +291,7 @@ export async function list(req: Request, res: Response) {
         ],
       },
       orderBy: { updatedAt: "desc" },
-      include: ownerSelect,
+      select: listSelect,
     });
     res.json(rows.map(listItem));
   } catch (e) {
@@ -680,7 +728,7 @@ export async function queue(req: Request, res: Response) {
     const rows = await prisma.lvQtn.findMany({
       where: { status: "WAITING_APPROVAL" },
       orderBy: { submittedForApprovalAt: "asc" },
-      include: ownerSelect,
+      select: listSelect,
     });
     res.json(rows.map(listItem));
   } catch (e) {
@@ -714,7 +762,7 @@ export async function listAll(req: Request, res: Response) {
         ],
       },
       orderBy: { updatedAt: "desc" },
-      include: ownerSelect,
+      select: listSelect,
     });
     res.json(rows.map(listItem));
   } catch (e) {

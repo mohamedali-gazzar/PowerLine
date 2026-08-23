@@ -23,6 +23,57 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**Fixed the biggest cause of the data-transfer blowout: quotation lists no longer download
+every quotation's content.**
+
+All three list endpoints — `GET /api/qtns`, `/api/qtns/all` (Offer History) and
+`/api/qtns/queue` (the approval queue) — used `include: ownerSelect`, which fetches **every
+scalar column**, and that includes `state`: the entire quotation as JSON, every panel, every
+component, every price. All of it, for every quotation, on every single request — to draw a
+**table row** that shows the number, project, customer, panel count and total.
+
+Even against the tiny local test database that is **64 times more data than the endpoint
+returns**. Real quotations are hundreds of kilobytes rather than ten, so on production the
+multiplier is far worse. This is why the Neon transfer quota ran out and took the site down.
+
+Now each list selects exactly the seventeen columns the table needs, and `state` is not one
+of them.
+
+**Proof it changed nothing.** Before touching the code I captured the real JSON from all
+five list variants against the local database, including a quotation moved into
+WAITING_APPROVAL so the approval queue had content too. After the change all five responses
+are **byte-for-byte identical**. Same rows, same order, same fields, same values.
+
+**The compiler now enforces it.** The list mappers take a new `QtnListRow`
+(`Omit<QtnRow, "state" | "createdAt">`) instead of the full row, so a list handler that
+forgets a column `listItem` needs is a **build error**, not a column that silently renders
+blank. That is how the change was validated: TypeScript pointed out precisely which fields
+were and were not really used.
+
+New `qtnListSelect.test.ts` guards it permanently — it fails if `state` is ever selected
+again, and also fails if any of the seventeen needed columns is dropped.
+
+**299 tests passing** (270 backend, 29 frontend). Both typechecks and both builds clean.
+
+⚠️ **This is pushed but NOT deployed, and cannot be until the database is back.** Every
+build still fails at `prisma db push` while Neon refuses connections. Once the quota is
+lifted the next build will pick this up automatically, along with the RMU approval workflow
+that has been waiting since 11:14.
+
+### Still open from the audit, worst first
+
+The two other transfer-heavy items are untouched and worth doing next:
+
+- **Attachments are stored base64 inside the database** (up to 3 MB each, 30 per quotation)
+  and transferred in full on every read. They belong in object storage.
+- **The autosave writes the whole quotation on every keystroke** (800 ms debounce), so a
+  large quotation is hundreds of kilobytes, continuously, all day.
+
+And unchanged: the LV autosave still discards every failure silently, Co-Work still has an
+unguarded read-modify-write, the spreadsheet import still does ~60,000 sequential round
+trips, and offers are still hard-deleted so their numbers get reused.
+## 2026-08-23 · Mohamed's side · Claude
+
 **⛔ THE LIVE SITE CANNOT REACH ITS DATABASE. Neon data-transfer quota exceeded.**
 
 Do not debug this in code — there is nothing wrong with the code. The exact error, straight
