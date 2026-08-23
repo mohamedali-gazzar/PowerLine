@@ -3387,7 +3387,6 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
 
       <div className="card p-5">
         <h2 className="sec-head">Staff lists</h2>
-        <p className="mb-3 text-xs text-muted">Editable — <b>shared with the RMU offer form</b>. Add or remove names (RPT-01).</p>
         <L>Sales people</L>
         <div className="mb-2 max-h-44 overflow-auto rounded-lg border border-line">
           {staff.salesPeople.map((p) => (

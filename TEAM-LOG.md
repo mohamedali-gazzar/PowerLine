@@ -21,6 +21,16 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-08-23 · Mohamed's side · Claude
+
+**History + Project tab: two small cleanups.**
+
+- **Offer History** now shows an RMU offer's **QTN number** (QTN-26-#####) in the QTN column, the same
+  as LV rows — instead of the internal PL-YYYY-#### number. (It falls back to the PL number only if no
+  QTN was entered.)
+- Removed the grey helper line "Editable — shared with the RMU offer form. Add or remove names
+  (RPT-01)." under **Staff lists** on the LV Project tab. The lists are unchanged. Frontend-only.
+
 ## 2026-08-22 · Mohamed's side · Claude
 
 **Security audit and hardening. Please read the first two boxes before you next pull.**

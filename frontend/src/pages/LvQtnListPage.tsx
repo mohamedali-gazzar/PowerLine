@@ -220,7 +220,9 @@ export default function LvQtnListPage() {
       };
     });
     const rmu: UniRow[] = (offers ?? []).map((o) => ({
-      kind: "RMU", id: o.id, number: o.offerNumber, updatedAt: o.updatedAt,
+      // Show the customer-facing QTN number (QTN-26-####) like LV, not the internal
+      // PL-YYYY-#### offer number; fall back to it only if no QTN was entered.
+      kind: "RMU", id: o.id, number: o.quotationNo || o.offerNumber, updatedAt: o.updatedAt,
       projectName: o.projectName, customer: o.customer,
       units: `${o.generated?.summary?.totalCubicles ?? 0} ways`,
       totalUsd: rmuTotalUsd(o),
