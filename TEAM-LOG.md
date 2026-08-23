@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**✅ On-screen RMU offer now looks like the exported PDF.**
+
+The RMU technical offer you see while creating/opening a quotation (`OfferView`, used on
+the create page and the saved-offer page) was still the old look — a big orange banner with
+tags, striped tables and a bullet notes list. It now mirrors the exported PDF: a clean
+header (product + system code), the General/Electrical Data as cards with an orange title
+bar and a peach label column, numbered white General Notes, and the Ring Main Unit Structure
+with an ink title, orange "Qty | Description" header, a shaded cubicle row and grey striped
+parts — with every cell's text vertically centred. Frontend builds; all tests pass.
+
+## 2026-08-23 · Mohamed's side · Claude
+
 **✅ RMU offer: structure table recoloured (grey, ink title) + cubicle wording tidied.**
 
 Matched the structure table to the approved look:
