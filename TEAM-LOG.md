@@ -23,6 +23,60 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-23 · Mohamed's side · Claude
 
+**✅ THE SITE IS BACK. Everything that was stuck since 11:14 is now live.**
+
+Mohamed renewed the Neon plan. Verified straight away: the database answers again — 20
+tables, **24 users, 143 quotations, 43 offers**, all intact. Nothing was lost.
+
+Production **recovered on its own without a redeploy**, because Prisma reconnects per
+request. So sign-in started working the moment the quota lifted.
+
+The deploy still had to be re-triggered by hand — Vercel does not retry a failed build — and
+it succeeded. The live bundle now matches what `main` builds exactly, and the code that had
+been waiting all day is finally out:
+
+- **the RMU approval workflow** (Draft → Waiting → Returned → Approved → Submitted),
+  confirmed present in the live bundle;
+- the three data-transfer fixes (quotation lists, attachment caching, autosave);
+- the security hardening and the route-coverage test.
+
+Checked on production after the deploy: site 200, API 200, sign-in returns a proper 401,
+the price-list leak still returns 401, `/api/qtns` still 401, `dev-login` still 404.
+
+### One thing I got wrong, and fixed
+
+While confirming the new sign-in rate limit was live I ran fifteen failed attempts, saw the
+429, and then discovered I had throttled **the office IP** — a different address from the
+same machine was refused too.
+
+That was a genuine design fault in what I shipped, not just a testing artefact. The limiter
+checked the address and the IP against the **same** budget, and a whole office shares one IP.
+Fifteen sign-ins per fifteen minutes across everyone is not much: a dozen people after lunch
+with a couple of typos between them would lock the rest out.
+
+The two budgets are now separate, because they defend against different things:
+
+- **per address: 15 per 15 minutes** — this is what actually stops someone guessing one
+  person's password, and it stays tight;
+- **per IP: 90 per 15 minutes** — this only guards against one host spraying many addresses,
+  and it has to be generous because it is shared by the whole office.
+
+⚠️ If anyone sees "Too many sign-in attempts" in the next few minutes, that is my testing,
+not a fault. It clears on its own; retrying usually works immediately because each serverless
+instance keeps its own count.
+
+### Worth doing next, in order
+
+1. **`DATABASE_URL` in Vercel is the DIRECT url, not the pooled one** — the build log shows a
+   host with no `-pooler`, and `DEPLOY.md` says it must be pooled. On serverless the direct
+   endpoint means many more connections. Free to change, and it reduces exactly the kind of
+   usage that ran the quota out.
+2. **Turn on Neon point-in-time restore.** There is still no backup of anything, while every
+   deploy runs `prisma db push --accept-data-loss`. Today ended well; it did not have to.
+3. The third blank-page crash on a partially-saved quotation (`reading 'trim'`), and the
+   remaining open items from the audit.
+## 2026-08-23 · Mohamed's side · Claude
+
 **All three data-transfer problems are now fixed. Mohamed is buying a Neon plan and does not
 want it eaten, so this is about keeping the bill down permanently, not tidiness.**
 

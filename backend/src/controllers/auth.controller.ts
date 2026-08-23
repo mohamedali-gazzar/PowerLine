@@ -59,12 +59,30 @@ function rateLimited(key: string, max = RATE_MAX): boolean {
   return hits.length > max;
 }
 
-/** Same limit keyed by both the address and the caller, so one noisy client cannot
- *  lock out an address and one address cannot be hammered from many clients. */
-function tooManyRequests(req: Request, email: string, max = RATE_MAX): boolean {
+/**
+ * Limited by both the address and the caller, but NOT with the same budget.
+ *
+ * The per-address budget is what actually stops password guessing: an attacker targets
+ * one account, and that account's counter is the one that stops them.
+ *
+ * The per-IP budget guards something different — one host spraying many addresses — and it
+ * must be much larger, because a whole office shares one address. Giving it the same tight
+ * budget locks out colleagues rather than attackers: a dozen people signing in after lunch,
+ * with a couple of typos between them, would exhaust it. Measured on the live site while
+ * testing this, fifteen attempts from one machine did exactly that.
+ */
+function tooManyRequests(
+  req: Request,
+  email: string,
+  max = RATE_MAX,
+  maxIp = max * IP_BUDGET_MULTIPLIER,
+): boolean {
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "";
-  return rateLimited(`email:${email}`, max) || (ip ? rateLimited(`ip:${ip}`, max) : false);
+  return rateLimited(`email:${email}`, max) || (ip ? rateLimited(`ip:${ip}`, maxIp) : false);
 }
+
+/** How much more a single host may do than a single address, since offices share one IP. */
+const IP_BUDGET_MULTIPLIER = 6;
 
 /** Sign-in gets a larger budget than code requests: a real person mistyping their own
  *  password must not be locked out, but unlimited guessing must not be free either. */
