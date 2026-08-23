@@ -564,15 +564,21 @@ function dataTable(doc: PDFKit.PDFDocument, title: string, rows: Row[]) {
   // Header title (white, uppercase).
   doc.fillColor("white").font(BOLD).fontSize(10.5)
     .text(title.toUpperCase(), x + padX, yTop + 6, { width: CONTENT_W - padX * 2, lineBreak: false });
-  // Rows: orange label (peach column) + ink value (white column), hairline between.
+  // Rows: orange label (peach column) + ink value (white column), each vertically
+  // centred in its row, hairline between.
   let yy = yTop + headerH;
   rows.forEach((r, i) => {
+    const rowH = rowHs[i];
     if (i > 0) doc.moveTo(x, yy).lineTo(x + CONTENT_W, yy).lineWidth(0.7).strokeColor(HAIR2).stroke();
-    doc.fillColor(ORANGE_DK).font(BOLD).fontSize(9.5)
-      .text(r.label, x + padX, yy + padY, { width: labelW - padX * 2 });
-    doc.fillColor(INK).font(BODY).fontSize(9.5)
-      .text(r.value, x + labelW + padX, yy + padY, { width: valueW - padX * 2 });
-    yy += rowHs[i];
+    doc.font(BOLD).fontSize(9.5);
+    const lh = doc.heightOfString(r.label, { width: labelW - padX * 2 });
+    doc.fillColor(ORANGE_DK)
+      .text(r.label, x + padX, yy + (rowH - lh) / 2, { width: labelW - padX * 2 });
+    doc.font(BODY).fontSize(9.5);
+    const vh = doc.heightOfString(r.value, { width: valueW - padX * 2 });
+    doc.fillColor(INK)
+      .text(r.value, x + labelW + padX, yy + (rowH - vh) / 2, { width: valueW - padX * 2 });
+    yy += rowH;
   });
   // Vertical divider between the two columns (no outer frame).
   doc.moveTo(x + labelW, yTop + headerH).lineTo(x + labelW, yTop + totalH).lineWidth(0.7).strokeColor(BORDER).stroke();
@@ -613,12 +619,17 @@ function generalNotes(doc: PDFKit.PDFDocument, notes: string[]) {
     .text("GENERAL NOTES", x + padX, yTop + 6, { width: CONTENT_W - padX * 2, lineBreak: false });
   let yy = yTop + headerH;
   notes.forEach((n, i) => {
+    const rowH = rowHs[i];
     if (i > 0) doc.moveTo(x, yy).lineTo(x + CONTENT_W, yy).lineWidth(0.7).strokeColor(HAIR2).stroke();
-    doc.fillColor(INK).font(BOLD).fontSize(9.5)
-      .text(String(i + 1), x + padX, yy + padY, { width: numW - padX, lineBreak: false });
-    doc.fillColor(INK).font(BODY).fontSize(9.5)
-      .text(n, x + numW, yy + padY, { width: CONTENT_W - numW - padX });
-    yy += rowHs[i];
+    doc.font(BOLD).fontSize(9.5);
+    const nh = doc.heightOfString(String(i + 1));
+    doc.fillColor(INK)
+      .text(String(i + 1), x + padX, yy + (rowH - nh) / 2, { width: numW - padX, lineBreak: false });
+    doc.font(BODY).fontSize(9.5);
+    const th = doc.heightOfString(n, { width: CONTENT_W - numW - padX });
+    doc.fillColor(INK)
+      .text(n, x + numW, yy + (rowH - th) / 2, { width: CONTENT_W - numW - padX });
+    yy += rowH;
   });
   doc.y = yTop + totalH;
   doc.fillColor(INK);
@@ -681,24 +692,36 @@ function cubicleBlock(doc: PDFKit.PDFDocument, c: Cubicle) {
   });
   doc.rect(x, yTop, CONTENT_W, headerH).fill(ORANGE);
   doc.restore();
-  // Header: "Qty" | "Description".
+  // Header: "Qty" | "Description" (vertically centred in the header bar).
   doc.fillColor("white").font(BOLD).fontSize(9.5);
-  doc.text("Qty", x + qtyPad, yTop + 5, { lineBreak: false });
-  doc.text("Description", descX, yTop + 5, { lineBreak: false });
-  // Shaded group row (cubicle name + its quantity).
+  const hLh = doc.heightOfString("Qty");
+  const hY = yTop + (headerH - hLh) / 2;
+  doc.text("Qty", x + qtyPad, hY, { lineBreak: false });
+  doc.text("Description", descX, hY, { lineBreak: false });
+  // Shaded group row (cubicle name + its quantity), both vertically centred.
   let yy = yTop + headerH;
-  doc.fillColor(INK).font(BOLD).fontSize(9.5);
-  if (groupQty) doc.text(groupQty, x + qtyPad, yy + padY, { lineBreak: false });
-  doc.text(groupText, descX, yy + padY, { width: descW });
+  doc.font(BOLD).fontSize(9.5);
+  const gh = doc.heightOfString(groupText, { width: descW });
+  doc.fillColor(INK);
+  if (groupQty) {
+    const gqh = doc.heightOfString(groupQty);
+    doc.text(groupQty, x + qtyPad, yy + (groupH - gqh) / 2, { lineBreak: false });
+  }
+  doc.text(groupText, descX, yy + (groupH - gh) / 2, { width: descW });
   yy += groupH;
-  // Item rows (qty + description), faint separators between them.
+  // Item rows (qty + description), each vertically centred, faint separators between.
   c.items.forEach((it, i) => {
+    const rowH = itemHs[i];
     doc.moveTo(x, yy).lineTo(x + CONTENT_W, yy).lineWidth(0.5).strokeColor(HAIR2).stroke();
+    doc.font(BOLD).fontSize(9);
+    const qh = doc.heightOfString(String(it.qty));
+    doc.font(BODY).fontSize(9);
+    const dh = doc.heightOfString(it.description, { width: descW });
     doc.fillColor(INK).font(BOLD).fontSize(9)
-      .text(String(it.qty), x + qtyPad, yy + padY, { lineBreak: false });
+      .text(String(it.qty), x + qtyPad, yy + (rowH - qh) / 2, { lineBreak: false });
     doc.fillColor(DESC).font(BODY).fontSize(9)
-      .text(it.description, descX, yy + padY, { width: descW });
-    yy += itemHs[i];
+      .text(it.description, descX, yy + (rowH - dh) / 2, { width: descW });
+    yy += rowH;
   });
   doc.y = yTop + totalH;
   doc.fillColor(INK);
