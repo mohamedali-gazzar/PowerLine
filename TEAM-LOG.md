@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Offer History: a quotation can now be removed at any status.**
+
+The Remove (trash) action in Offer History was only available on LV quotations that were
+still Draft or Returned — approved/submitted ones couldn't be removed. It can now remove a
+quotation at **any** status (RMU offers already allowed this). This is unchanged in spirit:
+it's a **soft hide**, not an erase — the row is kept, the number stays reserved, it's
+audited, and it comes back with "Show removed". Who can do it is unchanged: your own rows,
+or anyone's with admin (access.manage). Backend builds + 284 tests pass; frontend builds.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ LV: an MCB incomer now defaults the Busbar Rating to 100 A.**
 
 When a panel's incoming breaker is an MCB (every breaker in the Main Incoming section is an

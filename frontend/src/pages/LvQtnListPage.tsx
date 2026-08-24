@@ -8,9 +8,6 @@ import { useAuth } from "../auth/AuthContext";
 import { useAutoRefresh, useChangedKeys } from "../hooks/useAutoRefresh";
 import { fmtEgp, DEFAULT_FACTORS } from "../lv/catalog";
 
-/** Deleting an LV quotation is refused (409) once it has entered the approval flow,
- *  so the button is only active on the two stages the server still accepts. */
-const DELETABLE = new Set<QtnStatus>(["DRAFT", "RETURNED"]);
 // Status-filter value for superseded LV revisions. "Cancelled" is derived from the
 // revision numbers, not a stored status, so it needs a sentinel that can never collide
 // with a real status.
@@ -298,9 +295,10 @@ export default function LvQtnListPage() {
   const mayManage = myPerms.includes("access.manage");
   // LV: removing HIDES a quotation (kept, restorable) — only drafts and returned ones;
   // anything approved/submitted is the record of an offer that went to a customer.
+  // Any status can be removed — it's a soft hide (kept + restorable via "Show removed"),
+  // not an erase. Gated only by ownership: your own rows, or anyone's with access.manage.
   const canDeleteLv = (x: UniRow) =>
     x.kind === "LV" && !x.removedAt &&
-    DELETABLE.has((x.statusKey as QtnStatus)) &&
     (mayManage || !scopeAll || (x.ownerEmail || "").toLowerCase() === myEmail);
   const canAmendLv = (x: UniRow) =>
     x.kind === "LV" && !x.cancelled &&
@@ -551,7 +549,7 @@ export default function LvQtnListPage() {
                                   <Act title={`Restore — removed ${new Date(x.removedAt).toLocaleDateString()}${x.removedBy ? ` by ${x.removedBy}` : ""}`}
                                     onClick={(e) => onRestore(e, x)}>{RestoreIcon}</Act>
                                 ) : (
-                                  <Act title={canDeleteLv(x) ? "Remove — hidden, can be restored" : "Only drafts & returned quotations can be removed"}
+                                  <Act title={canDeleteLv(x) ? "Remove — hidden, can be restored" : "Only the owner or an admin can remove it"}
                                     danger disabled={!canDeleteLv(x)} onClick={(e) => onDeleteLv(e, x)}>{TrashIcon}</Act>
                                 )}
                               </>

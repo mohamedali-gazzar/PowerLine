@@ -455,12 +455,12 @@ export async function rename(req: Request, res: Response) {
  * different offers could end up sharing a QTN number in customers' hands. The row
  * stays, `removedAt`/`removedBy` are stamped, and the owner can restore it.
  *
- * Only DRAFT and RETURNED can go: once a quotation is approved or submitted it is
- * the record of an offer that went to a customer.
+ * Any status can go: a soft hide is reversible, so approved/submitted records are not
+ * locked out of the History — they can be hidden and brought back.
  *
  * Who: the person who owns it (unchanged — engineers have always been able to
  * clear their own drafts), or anyone with access.manage, who can remove any
- * draft/returned quotation from the shared History.
+ * quotation from the shared History.
  */
 export async function remove(req: Request, res: Response) {
   try {
@@ -472,7 +472,10 @@ export async function remove(req: Request, res: Response) {
     if (!q) return res.status(404).json({ error: "Quotation not found." });
     if (q.removedAt) return res.status(204).end(); // already removed — nothing to do
     const s = qtnStatus(q);
-    if (s !== "DRAFT" && s !== "RETURNED") return lockedResponse(res, s);
+    // No status guard — any quotation can be removed from the lists, whatever its stage.
+    // This is a SOFT hide (removedAt/removedBy stamped, restorable via "Show removed"),
+    // never an erase, and it is audited below, so removing an approved/submitted record
+    // is fully reversible. (Matches the RMU offer remove, which is also un-guarded.)
 
     await prisma.lvQtn.update({
       where: { id: q.id },
