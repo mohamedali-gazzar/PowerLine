@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Dragging a panel to reorder now auto-scrolls a long list.**
+
+When a panel list is long enough to scroll, holding a dragged panel near the top or bottom
+edge of the list now scrolls it automatically, so you can move a panel all the way across a
+40-panel list without letting go. It scrolls the list's own box (or the page on a narrow
+screen), and the panel stays glued under the cursor as it scrolls. The lift/settle feel and
+touch support are unchanged. Display order only — no pricing touched. Build green, 38 tests.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ "No. of poles" now also counts the reserved "Space for MCB" rows.**
 
 A "Space for MCB 1P" / "Space for MCB 3P" row reserves rail space for a breaker you'll add
