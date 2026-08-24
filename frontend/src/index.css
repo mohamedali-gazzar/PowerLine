@@ -63,6 +63,11 @@
 :root[data-theme="dark"] *::-webkit-scrollbar-thumb { background: #3a3a44; }
 :root[data-theme="dark"] *::-webkit-scrollbar-thumb:hover { background: #4a4a56; }
 
+/* Drop-target highlight while dragging a component to reorder it. Applied/removed
+   imperatively (a class toggle on the hovered row/section) so the big component list does
+   NOT re-render on every dragover — that was what made reordering feel laggy. */
+.drop-over { border-color: #F16722 !important; background-color: rgb(var(--c-brand-tint)) !important; }
+
 /* ----------------------------------------------------------------------------
    Brand headline font — Nexa (commercial; not shipped in the brand kit).
    When you have the Nexa web fonts, drop Nexa-Regular.woff2 / Nexa-Bold.woff2

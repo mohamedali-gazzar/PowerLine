@@ -5831,8 +5831,16 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   useEffect(() => { (listRef.current?.children[activeIdx] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" }); }, [activeIdx]);
   // drag-and-drop: reorder rows and move them across sections
   const [dragId, setDragId] = useState<string | null>(null);
-  const [overRow, setOverRow] = useState<string | null>(null);
-  const [overSec, setOverSec] = useState<string | null>(null);
+  // The drop-target highlight is applied IMPERATIVELY (a `.drop-over` class on the hovered
+  // element) rather than via React state — so dragging a component over the list no longer
+  // re-renders the whole card on every move, which is what made reordering laggy.
+  const dropOverRef = useRef<HTMLElement | null>(null);
+  const markDropOver = (el: HTMLElement | null) => {
+    if (dropOverRef.current === el) return;
+    dropOverRef.current?.classList.remove("drop-over");
+    el?.classList.add("drop-over");
+    dropOverRef.current = el;
+  };
 
   const setComp = (id: string, patch: Partial<PanelComponent>) =>
     u({ components: p.components.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
@@ -6178,7 +6186,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     }
   };
   const dropOnRow = (targetId: string) => {
-    setOverRow(null);
+    markDropOver(null);
     const dId = dragId;
     setDragId(null);
     if (!dId || dId === targetId) return;
@@ -6207,7 +6215,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
 
   // Drop a dragged row onto a section tab/header: move it to the end of that section.
   const dropOnSection = (section: string) => {
-    setOverSec(null);
+    markDropOver(null);
     const dId = dragId;
     setDragId(null);
     if (!dId) return;
@@ -6409,12 +6417,10 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
           return (
             <Fragment key={sec}>
             <span
-              onDragOver={(e) => { if (dragId) { e.preventDefault(); if (overSec !== sec) setOverSec(sec); } }}
-              onDragLeave={() => setOverSec((x) => (x === sec ? null : x))}
+              onDragOver={(e) => { if (dragId) { e.preventDefault(); markDropOver(e.currentTarget); } }}
               onDrop={(e) => { e.preventDefault(); dropOnSection(sec); }}
               className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                overSec === sec ? "border-brand bg-brand-light text-brand ring-2 ring-brand/50"
-                : active ? "border-brand bg-brand-light text-brand" : "border-line bg-white text-muted hover:border-brand/40"
+                active ? "border-brand bg-brand-light text-brand" : "border-line bg-white text-muted hover:border-brand/40"
               }`}>
               <button type="button" data-section={sec} onClick={() => { u({ activeSection: sec }); if (comboKind === "pfc") setComboKind(null); setAddTarget(null); }}
                 onKeyDown={(e) => {
@@ -6758,10 +6764,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
         p.sections.filter((sec) => p.components.some((c) => c.section === sec)).map((sec, si, arr) => (
           <div key={sec} className="mb-3">
             <div
-              onDragOver={(e) => { if (dragId) { e.preventDefault(); if (overSec !== sec) setOverSec(sec); } }}
-              onDragLeave={() => setOverSec((x) => (x === sec ? null : x))}
+              onDragOver={(e) => { if (dragId) { e.preventDefault(); markDropOver(e.currentTarget); } }}
               onDrop={(e) => { e.preventDefault(); dropOnSection(sec); }}
-              className={`mb-1.5 flex items-center justify-between rounded-md border bg-brand-light py-1.5 pl-6 pr-2 text-[13px] font-bold capitalize tracking-wide text-brand-dark transition ${overSec === sec ? "border-brand ring-2 ring-brand/50" : "border-brand/20"}`}
+              className="mb-1.5 flex items-center justify-between rounded-md border border-brand/20 bg-brand-light py-1.5 pl-6 pr-2 text-[13px] font-bold capitalize tracking-wide text-brand-dark transition"
             >
               <span>{sec}</span>
               <span className="flex items-center gap-0.5">
@@ -6804,16 +6809,13 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                     const secComps = p.components.filter((c) => c.section === sec);
                     const renderRow = (c: PanelComponent) => isSpacer(c) ? (
                     <tr key={c.id}
-                      onDragOver={(e) => { if (dragId && dragId !== c.id) { e.preventDefault(); if (overRow !== c.id) setOverRow(c.id); } }}
-                      onDragLeave={() => setOverRow((r) => (r === c.id ? null : r))}
+                      onDragOver={(e) => { if (dragId && dragId !== c.id) { e.preventDefault(); markDropOver(e.currentTarget); } }}
                       onDrop={(e) => { e.preventDefault(); dropOnRow(c.id); }}
-                      className={`border-t align-middle transition-colors ${
-                        overRow === c.id ? "border-brand bg-brand-tint" : "border-line/70"
-                      } ${dragId === c.id ? "opacity-40" : ""}`}>
+                      className={`border-t border-line/70 align-middle transition-colors ${dragId === c.id ? "opacity-40" : ""}`}>
                       <td
                         draggable
                         onDragStart={(e) => { setDragId(c.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", c.id); } catch {} }}
-                        onDragEnd={() => { setDragId(null); setOverRow(null); setOverSec(null); }}
+                        onDragEnd={() => { setDragId(null); markDropOver(null); }}
                         title="Drag to reorder or move to another section"
                         className="cursor-grab select-none py-1 pl-1 pr-1 text-muted/50 hover:text-brand active:cursor-grabbing">
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -6833,17 +6835,16 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                     <tr key={c.id} data-selrow="" data-cid={c.id}
                       onMouseDown={(e) => { const t = e.target as HTMLElement; if (t.closest("[data-grip]")) return; onRowDown(c.id, !!t.closest("[data-rowcheck]"), e.shiftKey); }}
                       onMouseEnter={() => onRowEnter(c.id)}
-                      onDragOver={(e) => { if (dragId && dragId !== c.id) { e.preventDefault(); if (overRow !== c.id) setOverRow(c.id); } }}
-                      onDragLeave={() => setOverRow((r) => (r === c.id ? null : r))}
+                      onDragOver={(e) => { if (dragId && dragId !== c.id) { e.preventDefault(); markDropOver(e.currentTarget); } }}
                       onDrop={(e) => { e.preventDefault(); dropOnRow(c.id); }}
                       className={`border-t align-middle transition-colors ${
-                        selected.has(c.id) ? "bg-[#FFF0E8]" : overRow === c.id ? "border-brand bg-brand-tint" : "border-line/70"
+                        selected.has(c.id) ? "bg-[#FFF0E8]" : "border-line/70"
                       } ${dragId === c.id ? "opacity-40" : ""}`}>
                       <td
                         data-grip
                         draggable
                         onDragStart={(e) => { setDragId(c.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", c.id); } catch {} }}
-                        onDragEnd={() => { setDragId(null); setOverRow(null); setOverSec(null); }}
+                        onDragEnd={() => { setDragId(null); markDropOver(null); }}
                         title="Drag to reorder or move to another section"
                         className={`cursor-grab select-none py-1 pl-1 pr-1 text-muted/50 hover:text-brand active:cursor-grabbing ${selected.has(c.id) ? "border-l-[3px] border-[#F16722]" : "border-l-[3px] border-transparent"}`}>
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">

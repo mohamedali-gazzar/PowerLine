@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Dragging a component to reorder it is smooth now (was laggy).**
+
+Reordering a component (or moving it to another section) used to stutter because the whole
+components list re-rendered on every tiny movement (it was updating React state just to show
+the orange "drop here" highlight). Now that highlight is drawn directly on the hovered row/
+section without any re-render, so the drag follows the cursor smoothly. The reordering itself
+is unchanged.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ An approver can now withdraw their approval (before the offer is submitted).**
 
 After approving a quotation/offer, an approver (Section Head / Team Leader / Admin) can
