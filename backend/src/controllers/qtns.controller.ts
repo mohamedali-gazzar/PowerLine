@@ -839,8 +839,9 @@ export async function assignees(req: Request, res: Response) {
   }
 }
 
-// GET /api/qtns/approvers — Section Heads & Team Leaders a quotation can be SENT TO for
-// approval (the Send-for-approval dropdown). Any signed-in user may read it; the transition
+// GET /api/qtns/approvers — the people a quotation can be SENT TO for approval (the
+// Send-for-approval dropdown): Section Heads & Team Leaders, plus Admins (a section head
+// is often set as Admin — same tier). Any signed-in user may read it; the transition
 // endpoint still enforces who may actually approve. Excludes the caller (you don't send to
 // yourself). Shared by LV and RMU.
 export async function approvers(req: Request, res: Response) {
@@ -848,7 +849,7 @@ export async function approvers(req: Request, res: Response) {
     const users = await prisma.user.findMany({
       where: {
         id: { not: req.userId as string },
-        accessRole: { in: ["Section Head", "Team Leader"] },
+        accessRole: { in: ["Admin", "Section Head", "Team Leader"] },
       },
       select: { id: true, name: true, email: true, accessRole: true },
       orderBy: [{ accessRole: "asc" }, { name: "asc" }, { email: "asc" }],

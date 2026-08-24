@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Send-for-approval dropdown now also lists Admins (so section heads show up).**
+
+A section head is usually given the **Admin** role, so they weren't appearing in the
+approver dropdown (which listed only Section Head + Team Leader). Admins are now included
+too, so whoever manages approvals shows up regardless of whether they're set as Admin or
+Section Head.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Fix: the Send-for-approval dropdown was getting cut off by the toolbar.**
 
 The approver list now floats above everything (rendered at the page level, positioned under
