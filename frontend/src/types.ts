@@ -222,6 +222,9 @@ export interface Offer {
   commercial: CommercialData | null;
   // Number of RMUs on the offer (1 for a classic single-RMU offer).
   rmuCount?: number;
+  // Raw multi-RMU snapshot (JSON of StoredRmuLine[]), present only on a genuine
+  // multi-RMU offer. Used to re-hydrate every RMU row when editing a draft.
+  rmusJson?: string | null;
   // Approval workflow (mirrors LV). Present on every offer the API returns.
   statusLabel?: string;
   locked?: boolean;

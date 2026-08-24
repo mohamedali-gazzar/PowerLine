@@ -97,6 +97,7 @@ function Gate() {
         <Route path="lv" element={<LvQtnListPage />} />
         <Route path="lv/qtn/:id" element={<LvConfiguratorPage />} />
         <Route path="offers/new" element={<NewOfferPage />} />
+        <Route path="offers/:id/edit" element={<NewOfferPage />} />
         <Route path="offers/:id" element={<OfferDetailPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

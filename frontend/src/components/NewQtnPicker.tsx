@@ -2,16 +2,28 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { createQtn } from "../lv/qtns";
+import { api } from "../api";
+import type { OfferInput, RmuConfigInput } from "../types";
 import { QtnNumberInput, qtnPrefix } from "./QtnNumberInput";
 
 /**
  * New QTN card picker — desk-scoped. LV offers Panels + Standard EDMS; MV offers
  * RMU + the P-CSS selector. Everything but P-CSS takes a quotation number, then:
  *   LV / EDMS → create the LV workspace (/lv/qtn/:id)
- *   RMU       → the offer form, carrying the number (/offers/new?qtn=…)
+ *   RMU       → create a DRAFT offer, then open the editor (/offers/:id/edit)
  *   P-CSS     → the selector tool (/kiosks), no number.
  * `desk="all"` (the Home dashboard) shows every type.
  */
+
+// A fresh RMU's starting configuration (mirrors NewOfferPage's initialRmu). The
+// draft is created with this, then fully edited in the LV-style offer editor.
+const BLANK_RMU: RmuConfigInput = {
+  productType: "PRAL", lbsBrand: "ABB", clientSpec: "EECH", voltageKv: 12,
+  nalCount: 2, nalfCount: 1, hasMetering: false, rtuType: "NONE",
+  installation: "INDOOR", busbarCurrentA: 630, fuseRatingA: null,
+  meteringCtPrimaryA: null, ctClass: null, vtCores: 1, vtBurdenVa: null,
+  vtClass: null, meteringWithFuse: false,
+};
 
 export type DeskScope = "lv" | "mv" | "all";
 type Flow = "lv-panels" | "lv-edms" | "rmu" | "pcss";
@@ -31,6 +43,8 @@ export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClo
   const [pick, setPick] = useState<QtnType | null>(null);
   const [step, setStep] = useState<"choose" | "number">("choose");
   const [number, setNumber] = useState("");
+  const [projectName, setProjectName] = useState(""); // RMU only
+  const [customer, setCustomer] = useState(""); // RMU only
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -45,13 +59,36 @@ export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClo
   const create = async () => {
     if (!pick) return;
     if (!number.trim()) { setErr("Enter the quotation number."); return; }
-    if (pick.flow === "rmu") {
-      onClose();
-      navigate(`/offers/new?qtn=${encodeURIComponent(number)}`);
-      return;
-    }
     setBusy(true);
     try {
+      if (pick.flow === "rmu") {
+        // Create the DRAFT offer up front (like LV creates its workspace), then drop
+        // into the editor. Project + customer are required by the offer; the rest is
+        // the default RMU, edited (and autosaved) from the editor onward.
+        if (!projectName.trim()) { setErr("Enter the project name."); setBusy(false); return; }
+        if (!customer.trim()) { setErr("Enter the customer."); setBusy(false); return; }
+        const draft: OfferInput = {
+          category: "RMU",
+          quotationNo: number.trim(),
+          projectName: projectName.trim(),
+          customer: customer.trim(),
+          status: "DRAFT",
+          currency: "USD",
+          unitPrice: 0,
+          quantity: 1,
+          discountPct: 0,
+          validityDays: 3,
+          deliveryWeeks: 12,
+          paymentTerms: "50% advance, 50% before delivery",
+          warrantyMonths: 12,
+          offerDate: new Date().toISOString().slice(0, 10),
+          rmu: { ...BLANK_RMU },
+        };
+        const offer = await api.createOffer(draft);
+        onClose();
+        navigate(`/offers/${offer.id}/edit`);
+        return;
+      }
       const rec = await createQtn(number, pick.flow === "lv-edms" ? "edms" : "panels");
       onClose();
       navigate(`/lv/qtn/${rec.id}`);
@@ -123,11 +160,31 @@ export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClo
             </p>
             <label className="label mt-4" htmlFor="qtn-number">Quotation number <span className="text-brand">*</span></label>
             <QtnNumberInput id="qtn-number" autoFocus value={number} onChange={(v) => { setNumber(v); if (err) setErr(""); }} onEnter={create} />
+            {/* RMU offers need a project + customer up front (the LV workspace fills
+                these later, but an offer record requires them). */}
+            {pick?.flow === "rmu" && (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="label" htmlFor="qtn-project">Project name <span className="text-brand">*</span></label>
+                  <input id="qtn-project" className="input" value={projectName}
+                    onChange={(e) => { setProjectName(e.target.value); if (err) setErr(""); }} />
+                </div>
+                <div>
+                  <label className="label" htmlFor="qtn-customer">Customer <span className="text-brand">*</span></label>
+                  <input id="qtn-customer" className="input" value={customer}
+                    onChange={(e) => { setCustomer(e.target.value); if (err) setErr(""); }} />
+                </div>
+              </div>
+            )}
             {err && <p className="mt-1.5 text-xs font-semibold text-red-600">{err}</p>}
             <div className="mt-5 flex justify-between">
               <button className="btn-ghost" onClick={() => setStep("choose")} disabled={busy}>← Back</button>
-              <button className="btn-primary" onClick={create} disabled={busy || !number.trim()}>
-                {busy ? "Creating…" : pick?.flow === "rmu" ? "Continue" : "Create QTN"}
+              <button
+                className="btn-primary"
+                onClick={create}
+                disabled={busy || !number.trim() || (pick?.flow === "rmu" && (!projectName.trim() || !customer.trim()))}
+              >
+                {busy ? "Creating…" : pick?.flow === "rmu" ? "Create & open editor" : "Create QTN"}
               </button>
             </div>
           </>

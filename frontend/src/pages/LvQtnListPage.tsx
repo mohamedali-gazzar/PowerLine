@@ -308,7 +308,13 @@ export default function LvQtnListPage() {
       ? myPerms.includes("qtn.amendOwn") || myPerms.includes("qtn.amendAll")
       : myPerms.includes("qtn.amendAll"));
 
-  const rowHref = (x: UniRow) => (x.kind === "RMU" ? `/offers/${x.id}` : `/lv/qtn/${x.id}`);
+  // A DRAFT / RETURNED RMU offer opens the editor (re-editable, like an LV draft);
+  // once it's locked (waiting / approved / submitted) it opens the read-only view.
+  const rmuEditable = (x: UniRow) => x.statusKey === "DRAFT" || x.statusKey === "RETURNED";
+  const rowHref = (x: UniRow) =>
+    x.kind === "RMU"
+      ? rmuEditable(x) ? `/offers/${x.id}/edit` : `/offers/${x.id}`
+      : `/lv/qtn/${x.id}`;
 
   // The number shown in History, with the revision suffix. If the stored number already
   // carries a "-N" (Amend flow) keep it; otherwise append the Project-tab Revision No.
@@ -364,7 +370,7 @@ export default function LvQtnListPage() {
   const onDuplicateRmu = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     setActionErr("");
-    try { const dup = await api.duplicateOffer(id); navigate(`/offers/${dup.id}`); }
+    try { const dup = await api.duplicateOffer(id); navigate(`/offers/${dup.id}/edit`); }
     catch (e2) { setActionErr((e2 as Error).message || "Could not duplicate that offer."); }
   };
   const onDeleteRmu = async (e: React.MouseEvent, x: UniRow) => {
@@ -566,7 +572,7 @@ export default function LvQtnListPage() {
                               </>
                             ) : (
                               <>
-                                <Act title="Amend — open this offer to work on it" onClick={(e) => { e.stopPropagation(); navigate(`/offers/${x.id}`); }}>{AmendIcon}</Act>
+                                <Act title="Amend — open this offer to work on it" onClick={(e) => { e.stopPropagation(); navigate(rowHref(x)); }}>{AmendIcon}</Act>
                                 <Act title="Duplicate — an independent copy (prices stay frozen)" onClick={(e) => onDuplicateRmu(e, x.id)}>{DuplicateIcon}</Act>
                                 <Act title="Delete — permanent" danger onClick={(e) => onDeleteRmu(e, x)}>{TrashIcon}</Act>
                               </>

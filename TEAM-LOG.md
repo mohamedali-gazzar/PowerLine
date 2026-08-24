@@ -23,6 +23,23 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ RMU offers now work like LV quotations — a re-editable draft with autosave & approval.**
+
+Picking RMU in "New QTN" now asks for the number + project + customer, creates the draft,
+and opens it in an editor with the LV-style header: QTN number · "RMU Quotation" · total
+(excl. VAT) · status on the left; Check-for-updates · PDFs · Send-for-approval on the right.
+While the offer is a Draft (or Returned for revision) you can keep editing it — every change
+saves itself automatically, and it reopens exactly as you left it. Once you Send for
+approval it locks and opens read-only, same as LV. Offer-History rows (and Amend/Duplicate)
+open a draft RMU straight into this editor; a locked one opens the read-only view.
+
+Backend groundwork (the PUT endpoint) shipped earlier; this is the whole front end.
+Undo/Redo and Share/co-work are the next phase (they need new backend). Verified live:
+create-from-dialog, hydrate (incl. multi-RMU), autosave persisting server-side, send for
+approval, and the lock. Frontend builds; no new backend risk.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ LV: an MCB incomer now defaults the Busbar Rating to 100 A (really this time).**
 
 An earlier attempt matched the word "MCB", but in the catalogue a miniature C.B's type is

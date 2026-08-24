@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { api } from "../api";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { api, QTN_STATUS_STYLE, type QtnStatus } from "../api";
 import {
   Field,
   TextInput,
@@ -19,7 +19,7 @@ import {
   CLIENT_SPECS,
   AVAILABLE_CLIENT_SPECS,
 } from "../options";
-import type { GeneratedOffer, OfferInput, RmuConfigInput, LbsBrand } from "../types";
+import type { GeneratedOffer, Offer, OfferInput, RmuConfigInput, StoredRmu, LbsBrand } from "../types";
 
 const initialRmu: RmuConfigInput = {
   productType: "PRAL",
@@ -40,6 +40,53 @@ const initialRmu: RmuConfigInput = {
   vtClass: null,
   meteringWithFuse: false,
 };
+
+// Map a stored RMU (the DB relation, with its extra id/configCode) back to the
+// editable config shape. Defaults fill anything an older row might be missing.
+function storedToConfig(r: StoredRmu): RmuConfigInput {
+  return {
+    ...initialRmu,
+    productType: r.productType,
+    lbsBrand: r.lbsBrand ?? "ABB",
+    clientSpec: r.clientSpec ?? "EECH",
+    voltageKv: r.voltageKv,
+    nalCount: r.nalCount,
+    nalfCount: r.nalfCount,
+    hasMetering: r.hasMetering,
+    rtuType: r.rtuType,
+    installation: r.installation,
+    busbarCurrentA: r.busbarCurrentA,
+    fuseRatingA: r.fuseRatingA ?? null,
+    meteringCtPrimaryA: r.meteringCtPrimaryA ?? null,
+    ctClass: r.ctClass ?? null,
+    vtCores: r.vtCores ?? 1,
+    vtBurdenVa: r.vtBurdenVa ?? null,
+    vtClass: r.vtClass ?? null,
+    meteringWithFuse: r.meteringWithFuse ?? false,
+  };
+}
+
+// Parse Offer.rmusJson (a JSON string of the frozen multi-RMU lines) back into the
+// editable rows. Returns null for a single-RMU offer (column unset/empty/corrupt),
+// so the caller falls back to the single `rmu` relation.
+function parseRmusJson(
+  s: string | null | undefined
+): { config: RmuConfigInput; unitPrice: number; quantity: number }[] | null {
+  if (!s) return null;
+  try {
+    const arr = JSON.parse(s);
+    if (Array.isArray(arr) && arr.length) {
+      return arr.map((l) => ({
+        config: { ...initialRmu, ...(l.config ?? {}) } as RmuConfigInput,
+        unitPrice: Number(l.unitPrice) || 0,
+        quantity: Number(l.quantity) || 1,
+      }));
+    }
+  } catch {
+    /* corrupt snapshot → treat as single-RMU */
+  }
+  return null;
+}
 
 // Tabbed workflow, mirroring the LV section (Project → Panel → Technical → Commercial).
 type Tab = "project" | "settings" | "panel" | "technical" | "commercial";
@@ -63,7 +110,22 @@ function downloadFile(url: string, filename: string) {
 
 export default function NewOfferPage() {
   const navigate = useNavigate();
+  const { id: editId } = useParams(); // present on /offers/:id/edit → edit an existing draft
+  const editing = !!editId;
   const [tab, setTab] = useState<Tab>("project");
+
+  // Edit-mode: load + hydrate gate, the offer's live workflow status, and autosave state.
+  const [hydrated, setHydrated] = useState(!editing); // create mode is "hydrated" immediately
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [offerNumber, setOfferNumber] = useState("");
+  const [offerStatus, setOfferStatus] = useState<QtnStatus>("DRAFT");
+  const [statusLabel, setStatusLabel] = useState("Draft");
+  const [returnReason, setReturnReason] = useState("");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [busy, setBusy] = useState(false); // send-for-approval in flight
+  const [checking, setChecking] = useState(false);
+  const [checkMsg, setCheckMsg] = useState<string | null>(null);
+  const lastSavedSig = useRef<string>("");
 
   const [projectName, setProjectName] = useState("");
   const [customer, setCustomer] = useState("");
@@ -144,6 +206,7 @@ export default function NewOfferPage() {
   // seeded from the New-QTN dialog's ?qtn=…). Suggestion only — still editable, and
   // still required before generating.
   useEffect(() => {
+    if (editing) return; // edit mode hydrates the QTN from the loaded offer
     if (team.quotationNo.trim()) return;
     let alive = true;
     api.nextRmuQtn()
@@ -308,6 +371,128 @@ export default function NewOfferPage() {
     };
   }
 
+  // ── Edit mode: load → hydrate → autosave → approval ──────────────────────
+  /** Fill every editable field from a loaded offer. */
+  function hydrateFrom(o: Offer) {
+    setProjectName(o.projectName || "");
+    setCustomer(o.customer || "");
+    setCurrency((o.currency as "USD" | "EGP") || "USD");
+    setUsdRate(o.usdToEgpRate || 0);
+    setDiscountPct(o.discountPct || 0);
+    setValidityDays(o.validityDays || 3);
+    setDeliveryWeeks(o.deliveryWeeks ?? 12);
+    setPaymentTerms(o.paymentTerms || "");
+    setWarrantyMonths(o.warrantyMonths ?? 12);
+    setDate(o.offerDate || o.createdAt?.slice(0, 10) || date);
+    setTeam({
+      quotationNo: o.quotationNo || "",
+      opportunityNo: o.opportunityNo || "",
+      salesName: o.salesName || "", salesMobile: o.salesMobile || "", salesEmail: o.salesEmail || "",
+      salesManagerName: o.salesManagerName || "", salesManagerMobile: o.salesManagerMobile || "", salesManagerEmail: o.salesManagerEmail || "",
+      supportName: o.supportName || "", supportMobile: o.supportMobile || "", supportEmail: o.supportEmail || "",
+    });
+    const multi = parseRmusJson(o.rmusJson);
+    if (multi && multi.length) {
+      setRows(multi.map((l) => ({ config: l.config, unitPrice: l.unitPrice, quantity: l.quantity, priceTouched: l.unitPrice > 0 })));
+    } else {
+      setRows([{ config: storedToConfig(o.rmu), unitPrice: o.unitPrice || 0, quantity: o.quantity || 1, priceTouched: (o.unitPrice || 0) > 0 }]);
+    }
+    setSel(0);
+  }
+
+  /** Reflect an offer's workflow status; returns true if it's still editable here. */
+  function applyStatus(o: Offer): boolean {
+    const st = (o.status || "DRAFT") as QtnStatus;
+    setOfferNumber(o.offerNumber || "");
+    setOfferStatus(st);
+    setStatusLabel(o.statusLabel ?? st);
+    setReturnReason(o.returnReason ?? "");
+    return st === "DRAFT" || st === "RETURNED";
+  }
+
+  // Load the offer once in edit mode. A locked offer (past Draft/Returned) is not
+  // editable here → bounce to its read-only detail page. Hydrate BEFORE opening the
+  // autosave gate so the first save can never overwrite the draft with blank state.
+  useEffect(() => {
+    if (!editId) return;
+    let alive = true;
+    api.getOffer(editId)
+      .then((o) => {
+        if (!alive) return;
+        if (!applyStatus(o)) { navigate(`/offers/${editId}`, { replace: true }); return; }
+        hydrateFrom(o);
+        lastSavedSig.current = ""; // the first real edit will persist
+        setHydrated(true);
+      })
+      .catch((e) => { if (alive) setLoadErr((e as Error).message); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId]);
+
+  // Autosave (debounced) once hydrated and while the draft is still editable. The
+  // signature guard skips no-op saves. buildPayload() always sends status:"DRAFT"
+  // but updateOffer ignores status/ownership, so a RETURNED draft keeps its status.
+  const editable = offerStatus === "DRAFT" || offerStatus === "RETURNED";
+  const autosaveSig = editing && hydrated ? JSON.stringify(buildPayload()) : "";
+  useEffect(() => {
+    if (!editing || !hydrated || !editable || !editId) return;
+    if (!autosaveSig || autosaveSig === lastSavedSig.current) return;
+    const t = setTimeout(async () => {
+      setSaveState("saving");
+      try {
+        await api.updateOffer(editId, JSON.parse(autosaveSig) as OfferInput);
+        lastSavedSig.current = autosaveSig;
+        setSaveState("saved");
+      } catch {
+        setSaveState("error");
+      }
+    }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autosaveSig, editing, hydrated, editable, editId]);
+
+  /** Send the draft for approval (flush the latest edits first), then open the
+   *  read-only detail page with the approval bar — exactly like an LV quotation. */
+  async function sendForApproval() {
+    if (!editId) return;
+    if (!projectName.trim() || !customer.trim() || !team.quotationNo.trim()) {
+      setError("Project name, customer and QTN number are required before sending for approval.");
+      setTab("project");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const payload = buildPayload();
+      await api.updateOffer(editId, payload); // flush the latest state
+      lastSavedSig.current = JSON.stringify(payload);
+      await api.transitionOffer(editId, "WAITING_APPROVAL");
+      navigate(`/offers/${editId}`);
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  /** Re-check the server: pick up any status change (e.g. an approver returned it)
+   *  and re-price against the current list. A draft re-prices on every save, so this
+   *  is mostly a status refresh — the LV "Check for updates" analogue. */
+  async function checkForUpdates() {
+    if (!editId) return;
+    setChecking(true);
+    setCheckMsg(null);
+    try {
+      const o = await api.getOffer(editId);
+      if (!applyStatus(o)) { navigate(`/offers/${editId}`, { replace: true }); return; }
+      setPreviewCache({}); // re-pull previews → current catalogue prices
+      setCheckMsg("Up to date.");
+    } catch (e) {
+      setCheckMsg((e as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  }
+
   /** Create the offer once and reuse it while inputs are unchanged. */
   async function ensureOffer(payload: OfferInput, sig: string) {
     if (created && created.sig === sig) return created;
@@ -335,7 +520,16 @@ export default function NewOfferPage() {
     setDone(null);
     try {
       const payload = buildPayload();
-      const rec = await ensureOffer(payload, JSON.stringify(payload));
+      // Edit mode: the offer already exists — flush the latest edits and reuse it,
+      // so the PDF always reflects the current draft. Create mode: make it once.
+      let rec: { id: string; offerNumber: string };
+      if (editing && editId) {
+        await api.updateOffer(editId, payload);
+        lastSavedSig.current = JSON.stringify(payload);
+        rec = { id: editId, offerNumber: offerNumber || team.quotationNo.trim() };
+      } else {
+        rec = await ensureOffer(payload, JSON.stringify(payload));
+      }
       const jobs: { url: string; name: string; label: string }[] = [];
       // Name exports like the LV section: "TO-<QTN> Rev 00" / "CO-<QTN> Rev 00".
       const nameQtn = team.quotationNo.trim() || rec.offerNumber;
@@ -354,17 +548,75 @@ export default function NewOfferPage() {
 
   const generateAll = () => download(priceMissing ? ["Technical"] : ["Technical", "Commercial"]);
 
+  // Edit mode: show a skeleton until the draft is loaded. The autosave gate already
+  // prevents saving before hydration; this just avoids flashing an empty form.
+  if (editing && !hydrated) {
+    return loadErr ? (
+      <div className="card border-red-200 bg-red-50 p-4 text-red-700">{loadErr}</div>
+    ) : (
+      <div className="space-y-3">
+        <div className="skeleton h-20" />
+        <div className="skeleton h-64" />
+      </div>
+    );
+  }
+
+  const saveText =
+    saveState === "saving" ? "Saving…" :
+    saveState === "saved" ? "✓ Saved" :
+    saveState === "error" ? "⚠ Save failed" : "";
+
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between animate-fade-up">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">New RMU Offer</h1>
-          <p className="text-sm text-muted">Configure the RMU — the offer builds itself.</p>
+      {editing ? (
+        /* LV-style draft header: QTN · RMU Quotation · total · status  |  actions */
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl2 border border-line bg-white p-4 shadow-soft animate-fade-up">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-xl font-extrabold tracking-tight">{team.quotationNo || offerNumber || "RMU Offer"}</h1>
+              <span className="text-sm font-semibold text-muted">RMU Quotation</span>
+              <span className="rounded-md bg-brand-tint px-2 py-1 text-sm font-bold text-brand-dark">
+                {totals.exVat.toLocaleString(undefined, { maximumFractionDigits: 0 })} {currency} excl. VAT
+              </span>
+              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${QTN_STATUS_STYLE[offerStatus] ?? "bg-slate-100 text-slate-600"}`}>
+                {statusLabel}
+              </span>
+            </div>
+            <p className="mt-1 truncate text-sm text-muted">
+              {projectName || "—"} · {customer || "—"}
+              {offerStatus === "RETURNED" && returnReason && (
+                <span className="ml-2 rounded bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">Returned: {returnReason}</span>
+              )}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {saveText && (
+              <span className={`text-xs font-semibold ${saveState === "error" ? "text-red-600" : "text-muted"}`}>{saveText}</span>
+            )}
+            <button type="button" className="btn-ghost" onClick={checkForUpdates} disabled={checking}>
+              {checking ? "Checking…" : "↻ Check for updates"}
+            </button>
+            <button type="button" className="btn-ghost" disabled={submitting} onClick={generateAll}>
+              {submitting ? "Generating…" : "⬇ PDFs"}
+            </button>
+            {editable && (
+              <button type="button" className="btn-primary" disabled={busy} onClick={sendForApproval}>
+                {busy ? "Sending…" : "Send for approval"}
+              </button>
+            )}
+          </div>
         </div>
-        <button type="button" className="btn-primary" disabled={submitting} onClick={generateAll}>
-          {submitting ? "Generating…" : "Generate & Download →"}
-        </button>
-      </div>
+      ) : (
+        <div className="mb-4 flex items-center justify-between animate-fade-up">
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight">New RMU Offer</h1>
+            <p className="text-sm text-muted">Configure the RMU — the offer builds itself.</p>
+          </div>
+          <button type="button" className="btn-primary" disabled={submitting} onClick={generateAll}>
+            {submitting ? "Generating…" : "Generate & Download →"}
+          </button>
+        </div>
+      )}
 
       {/* Tab bar (sticky), like the LV section */}
       <div className="sticky top-0 z-20 -mx-4 mb-5 bg-surface/85 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
@@ -407,6 +659,12 @@ export default function NewOfferPage() {
       {error && (
         <div className="card mb-4 border-red-200 bg-red-50 p-3 text-sm text-red-700 animate-fade-in">
           {error}
+        </div>
+      )}
+
+      {checkMsg && (
+        <div className="card mb-4 border-sky-200 bg-sky-50 p-3 text-sm text-sky-700 animate-fade-in">
+          {checkMsg}
         </div>
       )}
 
