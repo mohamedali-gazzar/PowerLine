@@ -23,6 +23,40 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**Fixed: the sidebar "resume draft" shortcut was showing someone else's draft.**
+
+Mohamed's sidebar offered "222" as *his* draft to resume. 222 belongs to Rana Hazem.
+
+Same root cause as the delete bug an hour earlier, which is what makes it worth writing
+down as a pattern rather than a one-off: **a personal feature was built from the widened
+all-users list.** The shortcut combines two sources —
+
+    api.qtns.list()    // correctly scoped: own + co-worked quotations
+    api.listOffers()   // returns EVERY user's offers to a qtn.viewAll holder  <-- leak
+
+— sorts them by last-updated and takes the newest DRAFT. For anyone who can view all
+quotations, a colleague's draft could win and be presented as their own work to resume.
+
+`GET /api/offers` now accepts **`?mine=1`**, which returns only the caller's own offers
+whatever their permissions, and the sidebar uses it. Verified: the Offer History list still
+shows all 6 local offers to an admin, while `?mine=1` returns 0 — correct, because that
+user owns none of them. Before the fix that same query is what surfaced 222.
+
+It is also less data: the shortcut no longer downloads the whole company's offers to pick
+one row.
+
+### The pattern to watch for
+
+Reads widen for `qtn.viewAll` so approvers can act on work awaiting them — that widening is
+correct and deliberate. But anything **personal** must not consume the widened result:
+a "resume my draft" shortcut, a "my work" count, a personal dashboard tile. Two bugs today
+came from exactly this. If a feature says "my" or "your", scope it explicitly.
+
+LV was already right (`sharedWith(uid)` = own plus co-worked), so only the RMU half leaked.
+
+300 tests passing, both typechecks and builds clean.
+## 2026-08-24 · Mohamed's side · Claude
+
 **Fixed: deleting an RMU offer said "Offer not found" and left it in the list.**
 
 Reported on `222` in Offer History. The cause was a mismatch the unified list created:

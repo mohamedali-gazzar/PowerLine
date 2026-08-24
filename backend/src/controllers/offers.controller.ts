@@ -96,7 +96,13 @@ export async function getOffers(req: Request, res: Response) {
     // Approvers (qtn.viewAll) see every offer so they can act on ones awaiting
     // approval — the same widening the LV list does. Everyone else: their own.
     const acc = req.userId ? await accessOf(req.userId) : null;
-    const all = acc ? acc.perms.has("qtn.viewAll") : false;
+    // `?mine=1` asks for only the caller's own offers, whatever their permissions.
+    // Needed because a personal feature must not be built from the widened list: the
+    // sidebar "resume draft" shortcut was picking a colleague's draft as "yours", since
+    // a qtn.viewAll holder receives everyone's offers here. It also means that shortcut
+    // no longer downloads the whole company's offers to choose one row.
+    const mine = req.query.mine === "1";
+    const all = !mine && acc ? acc.perms.has("qtn.viewAll") : false;
     // "Show removed" is owner-level, exactly as it is for LV quotations: seeing hidden
     // work is a different privilege from seeing a colleague's active work.
     const includeRemoved =

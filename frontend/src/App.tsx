@@ -86,7 +86,9 @@ export default function App() {
     let alive = true;
     Promise.all([
       api.qtns.list().catch(() => [] as Awaited<ReturnType<typeof api.qtns.list>>),
-      api.listOffers().catch(() => [] as Awaited<ReturnType<typeof api.listOffers>>),
+      // `mine` matters: without it a qtn.viewAll holder receives every user's offers and
+      // the most-recent draft could be a colleague's, shown as though it were theirs.
+      api.listOffers({ mine: true }).catch(() => [] as Awaited<ReturnType<typeof api.listOffers>>),
     ])
       .then(([qs, offers]) => {
         if (!alive) return;

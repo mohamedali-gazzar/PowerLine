@@ -485,8 +485,17 @@ export const api = {
   // ── RMU offers ─────────────────────────────────────────────────────────────
   // includeRemoved mirrors the LV list: hidden offers are kept, and only an admin may
   // ask to see them (the server gates it regardless of what is sent here).
-  listOffers: (opts?: { includeRemoved?: boolean }) =>
-    request<Offer[]>(`/offers${opts?.includeRemoved ? "?includeRemoved=1" : ""}`),
+  // includeRemoved mirrors the LV list: hidden offers are kept, and only an admin may
+  // ask to see them (the server gates it regardless of what is sent here).
+  // mine restricts the result to the caller's OWN offers, for personal features that
+  // must not draw on the widened all-users list.
+  listOffers: (opts?: { includeRemoved?: boolean; mine?: boolean }) => {
+    const q = new URLSearchParams();
+    if (opts?.includeRemoved) q.set("includeRemoved", "1");
+    if (opts?.mine) q.set("mine", "1");
+    const s = q.toString();
+    return request<Offer[]>(`/offers${s ? `?${s}` : ""}`);
+  },
   getOffer: (id: string) => request<Offer>(`/offers/${id}`),
   /** An RMU offer's audit trail (return-for-revision history, etc.). */
   offerEvents: (id: string) => request<QtnEventDto[]>(`/offers/${id}/events`),
