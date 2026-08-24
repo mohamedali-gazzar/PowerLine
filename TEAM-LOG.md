@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ LV: an MCB incomer now defaults the Busbar Rating to 100 A (really this time).**
+
+An earlier attempt matched the word "MCB", but in the catalogue a miniature C.B's type is
+actually "MDRC" (also "MDRC-Himel"/"MDRCs") — so an MCB incomer was never recognised and
+the Busbar Rating field just stayed blank. Fixed: the breaker detector now knows the MDRC
+type, and when every incoming C.B is an MDRC the Busbar Rating fills with 100 A. If an
+MCCB/ACB is also on the incoming side, the frame rule still wins so the bar isn't
+undersized. It's a default — you can still type over it. Verified against real catalogue
+parts (345 MDRC rows).
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Offer History shows the revision number (e.g. QTN-26-1129-1).**
 
 An LV quotation with a Revision No. set on the Project tab now shows that suffix in Offer

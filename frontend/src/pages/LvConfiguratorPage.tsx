@@ -4832,7 +4832,11 @@ const INCOMER_RATINGS = [80, 100, 125, 160, 250, 400, 630, 800, 1000, 1250, 1600
 // UP to the nearest standard rating. Returns 0 (field stays empty) until an incoming
 // C.B is added.
 function predictIncomerRating(p: LvPanel): number {
-  const isBreaker = (c: PanelComponent) => /\b(ACB|MCCB|MCB)\b/i.test(c.type || "");
+  // A breaker's catalogue type is "ACB", "MCCB", or — for a miniature C.B — "MDRC"
+  // (also "MDRC-Himel" / "MDRCs"), NEVER the literal "MCB". Matching only "MCB" here
+  // silently missed every MCB incomer, so its busbar rating never filled.
+  const isBreaker = (c: PanelComponent) =>
+    /\b(ACB|MCCB|MCB)\b/i.test(c.type || "") || /^MDRC/i.test((c.type || "").trim());
   // Busbar rating follows the C.B's ampere FRAME ("… 160 AF …"), e.g.
   //   MCCB XT2N 63A-36kA 160 AF …  → 160   (frame, not the 63 A rated current)
   //   MCCB XT4N 200A-36kA 250 AF … → 250
@@ -4851,11 +4855,13 @@ function predictIncomerRating(p: LvPanel): number {
   // the field stays empty by default and only fills once an incomer has been added.
   const incoming = p.components.filter((c) => !isSpacer(c) && isBreaker(c) && /incom/i.test(c.section || ""));
   if (!incoming.length) return 0;
-  // An MCB incomer defaults the Busbar Rating to 100 A: MCBs are small breakers and a
-  // 100 A bar is the standard minimum, so use it regardless of the MCB's rated current.
-  // (Only when EVERY incoming breaker is an MCB — an MCCB/ACB present uses the frame rule.)
-  const isMcbOnly = (c: PanelComponent) => /\bMCB\b/i.test(c.type || "") && !/\b(ACB|MCCB)\b/i.test(c.type || "");
-  if (incoming.every(isMcbOnly)) return 100;
+  // An MCB (MDRC) incomer defaults the Busbar Rating to 100 A: MCBs are small breakers
+  // and a 100 A bar is the standard minimum, so use it regardless of the MCB's rated
+  // current. In the catalogue an MCB's type is "MDRC" (also "MDRC-Himel" / "MDRCs"),
+  // not "MCB". Applies only when EVERY incoming breaker is an MDRC — if an MCCB/ACB is
+  // also present, the frame rule below wins so the bar isn't undersized.
+  const isMcb = (c: PanelComponent) => /^MDRC/i.test((c.type || "").trim()) || /\bMCB\b/i.test(c.type || "");
+  if (incoming.every(isMcb)) return 100;
   const a = incoming.reduce((mx, c) => Math.max(mx, frameAmps(c)), 0);
   if (!a) return 0;
   return INCOMER_RATINGS.find((r) => r >= a) ?? INCOMER_RATINGS[INCOMER_RATINGS.length - 1];
