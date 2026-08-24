@@ -3595,9 +3595,14 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
     const calc = calcPanel(p, s.factors, s.abbItemDiscounts);        // at the saved factor
     const stagedSf = p.id in staged ? staged[p.id] : null;           // 0 = global · >0 custom · null = none
     const newFactor = stagedSf == null ? null : stagedSf > 0 ? stagedSf : global; // proposed factor
-    return { p, currentFactor, calc, newFactor, dirty: stagedSf != null && stagedSf !== p.sellFactor, custom: p.sellFactor > 0 };
+    // Total selling previews the target while one is staged (total cost ÷ new factor × qty);
+    // with no target it's the current/default total.
+    const previewTotalEgp = newFactor != null && newFactor > 0
+      ? (calc.unitCostOps * safetyMul / newFactor) * p.qty
+      : calc.totalSell;
+    return { p, currentFactor, calc, newFactor, previewTotalEgp, dirty: stagedSf != null && stagedSf !== p.sellFactor, custom: p.sellFactor > 0 };
   });
-  const totalSell = rows.reduce((t, r) => t + r.calc.totalSell, 0);
+  const totalSell = rows.reduce((t, r) => t + r.previewTotalEgp, 0);
   const dirtyRows = rows.filter((r) => r.dirty);
   // Copy the Total cost column as plain integers, one per line (paste straight into Excel).
   const copyTotalCost = async () => {
@@ -3621,7 +3626,12 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
     const nf = Math.round(curFactor * (sellUnitEgp / (targetDisplay * rate)) * 10000) / 10000;
     setStaged((d) => ({ ...d, [id]: nf }));
   };
-  const stageDefault = (id: string) => setStaged((d) => ({ ...d, [id]: 0 })); // 0 → follow global
+  // ↺ Default: immediately put the panel back on the Pricing Settings factor (sellFactor 0
+  // = follow global) and drop any staged target for it. Direct — no "Apply" needed.
+  const resetToDefault = (id: string) => {
+    setStaged((d) => { const n = { ...d }; delete n[id]; return n; });
+    up({ panels: s.panels.map((p) => (p.id === id ? { ...p, sellFactor: 0 } : p)) });
+  };
   const apply = async () => {
     if (!dirtyRows.length) return;
     const risky = dirtyRows.filter((r) => r.newFactor != null && r.newFactor > 0.95);
@@ -3696,9 +3706,9 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
             {rows.map((r) => (
               <PanelTargetRow key={r.p.id} name={r.p.name} qty={r.p.qty}
                 unitCost={r.calc.unitCostOps * safetyMul} factor={r.currentFactor} custom={r.custom} dirty={r.dirty}
-                sellUnit={r.calc.sellUnit} newFactor={r.newFactor} totalSell={r.calc.totalSell} m={m}
+                sellUnit={r.calc.sellUnit} newFactor={r.newFactor} totalSell={r.previewTotalEgp} m={m}
                 onTarget={(t) => stageTarget(r.p.id, r.currentFactor, r.calc.sellUnit, t)}
-                onDefault={() => stageDefault(r.p.id)} />
+                onDefault={() => resetToDefault(r.p.id)} />
             ))}
           </tbody>
           <tfoot>
@@ -3749,23 +3759,23 @@ function PanelTargetRow({ name, qty, unitCost, factor, custom, dirty, sellUnit, 
       <td className="py-1.5 pr-2 text-center font-semibold">{qty}</td>
       <td className="py-1.5 px-3 text-center">{m(unitCost)}</td>
       <td className="py-1.5 px-3 text-center">
-        <span className={curRisky ? "font-bold text-red-600" : custom ? "font-bold text-brand-dark" : "text-ink"}
-          title={custom ? "Custom factor for this panel" : "The project Selling Factor (Pricing Settings)"}>{factor}</span>
-      </td>
-      <td className="py-1.5 px-3 text-center">{m(sellUnit)}</td>
-      <td className="py-1.5 pr-2 text-center">
         <div className="flex items-center justify-center gap-1.5">
-          <input inputMode="decimal" value={draft} placeholder=""
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commit}
-            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setDraft(""); e.currentTarget.blur(); } }}
-            className="w-24 rounded border border-line bg-white px-2 py-1 text-right text-sm font-bold text-ink placeholder:font-normal placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30" />
+          <span className={curRisky ? "font-bold text-red-600" : custom ? "font-bold text-brand-dark" : "text-ink"}
+            title={custom ? "Custom factor for this panel" : "The project Selling Factor (Pricing Settings)"}>{factor}</span>
           {(custom || draft.trim() !== "") && (
             <button type="button" onClick={() => { setDraft(""); onDefault(); }}
               title="Reset — clear the target and use the project factor"
-              className="grid h-7 w-7 shrink-0 place-items-center rounded border border-line text-base leading-none text-muted transition-colors hover:border-brand/40 hover:text-brand-dark">↺</button>
+              className="grid h-5 w-5 shrink-0 place-items-center rounded border border-line text-sm leading-none text-muted transition-colors hover:border-brand/40 hover:text-brand-dark">↺</button>
           )}
         </div>
+      </td>
+      <td className="py-1.5 px-3 text-center">{m(sellUnit)}</td>
+      <td className="py-1.5 pr-2 text-center">
+        <input inputMode="decimal" value={draft} placeholder=""
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setDraft(""); e.currentTarget.blur(); } }}
+          className="w-24 rounded border border-line bg-white px-2 py-1 text-right text-sm font-bold text-ink placeholder:font-normal placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30" />
       </td>
       <td className="py-1.5 px-3 text-center">
         {newFactor == null

@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Panel pricing: reset icon beside Factor + Total selling previews the target.**
+
+- The ↺ reset icon now sits beside the Factor value (not the target box); clicking it
+  immediately puts the panel back on the Pricing Settings (project) factor — no Apply needed.
+- Typing a Target selling now previews the new Total selling (target × qty) and updates the
+  footer total; resetting returns it to the default selling at the project factor. Unit
+  selling stays as the current-price reference.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Panel pricing table: copy the Total cost column, and collapse/expand the card.**
 
 - A small copy icon in the "Total cost" header copies that whole column as plain numbers,
