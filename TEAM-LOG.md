@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Dashboard "My QTN History" no longer shows deleted QTNs.**
+
+The Home dashboard's history was fetching every LV quotation and RMU offer — including
+soft-deleted ones — while the main Offer History correctly hides them. Added the same
+"not removed" filter to the dashboard's data (`/api/account/history`), so a deleted QTN
+never comes back on the dashboard. Verified: created a throwaway offer, deleted it, and it
+disappeared from the list immediately. Backend builds; 285 tests pass.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ RMU editor polish: QTN in the confirmation, no header PDFs button, New-QTN on Home only.**
 
 Three small follow-ups to the RMU editor:

@@ -21,9 +21,11 @@ export async function updateProfile(req: Request, res: Response) {
 export async function history(req: Request, res: Response) {
   try {
   const ownerId = req.userId as string;
+  // Exclude removed (soft-deleted) records, exactly as Offer History does — a deleted
+  // QTN must not resurface on the dashboard. Both models hide with a `removedAt` stamp.
   const [lv, rmu] = await Promise.all([
-    prisma.lvQtn.findMany({ where: { ownerId }, orderBy: { updatedAt: "desc" } }),
-    prisma.offer.findMany({ where: { ownerId }, orderBy: { updatedAt: "desc" } }),
+    prisma.lvQtn.findMany({ where: { ownerId, removedAt: null }, orderBy: { updatedAt: "desc" } }),
+    prisma.offer.findMany({ where: { ownerId, removedAt: null }, orderBy: { updatedAt: "desc" } }),
   ]);
   const items = [
     ...lv.map((q) => ({
