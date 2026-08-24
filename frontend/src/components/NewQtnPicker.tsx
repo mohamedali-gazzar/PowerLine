@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { createQtn } from "../lv/qtns";
 import { api } from "../api";
 import type { OfferInput, RmuConfigInput } from "../types";
-import { QtnNumberInput, qtnPrefix } from "./QtnNumberInput";
+import { QtnNumberInput, qtnPrefix, isValidQtn } from "./QtnNumberInput";
 
 /**
  * New QTN card picker — desk-scoped. LV offers Panels + Standard EDMS; MV offers
@@ -53,12 +53,17 @@ export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClo
     if (!pick) return;
     if (pick.flow === "pcss") { onClose(); navigate("/kiosks"); return; }
     setErr("");
+    if (!number.trim()) setNumber(qtnPrefix()); // prefill "QTN-YY-", the user adds the serial
     setStep("number");
   };
 
   const create = async () => {
     if (!pick) return;
     if (!number.trim()) { setErr("Enter the quotation number."); return; }
+    if (!isValidQtn(number)) {
+      setErr(`Use the format ${qtnPrefix()}00000 — "QTN-", a 2-digit year, then a 5-digit serial.`);
+      return;
+    }
     setBusy(true);
     try {
       if (pick.flow === "rmu") {
@@ -182,7 +187,7 @@ export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClo
               <button
                 className="btn-primary"
                 onClick={create}
-                disabled={busy || !number.trim() || (pick?.flow === "rmu" && (!projectName.trim() || !customer.trim()))}
+                disabled={busy || !isValidQtn(number) || (pick?.flow === "rmu" && (!projectName.trim() || !customer.trim()))}
               >
                 {busy ? "Creating…" : pick?.flow === "rmu" ? "Create & open editor" : "Create QTN"}
               </button>

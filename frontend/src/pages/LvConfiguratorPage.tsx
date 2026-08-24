@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorkers, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
 import ReassignQtnModal from "../components/ReassignQtnModal";
 import CoWorkModal from "../components/CoWorkModal";
+import { maskQtn, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { useStaff, SALES_MANAGER } from "../staff";
 import PanelsBulkImport, { type ImportedPanel } from "../components/PanelsBulkImport";
@@ -3401,6 +3402,7 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
   useEffect(() => { setQtnDraft(qtnNum); }, [qtnNum]);
   const commitQtn = async () => {
     if (qtnDraft.trim() === qtnNum.trim()) { setQtnErr(""); return; }
+    if (!isValidQtn(qtnDraft)) { setQtnErr(`Use the format ${qtnPrefix()}00000 — a 2-digit year and a 5-digit serial.`); return; }
     const res = await onRenameQtn(qtnDraft);
     setQtnErr(res.ok ? "" : res.error || "Invalid QTN number.");
   };
@@ -3418,8 +3420,9 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <L>QTN No. <span className="text-red-500">*</span></L>
-              <input className={`input ${qtnDraft.trim() ? "" : "ring-1 ring-red-400"}`} value={qtnDraft}
-                onChange={(e) => { setQtnDraft(e.target.value); setQtnErr(""); }}
+              <input className={`input font-mono ${qtnDraft.trim() ? "" : "ring-1 ring-red-400"}`} value={qtnDraft}
+                inputMode="numeric" placeholder={`${qtnPrefix()}00000`}
+                onChange={(e) => { setQtnDraft(maskQtn(e.target.value)); setQtnErr(""); }}
                 onBlur={commitQtn}
                 onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setQtnDraft(qtnNum); setQtnErr(""); } }} />
               {qtnErr && <p className="mt-1 text-[11px] font-semibold text-red-600">{qtnErr}</p>}

@@ -11,6 +11,7 @@ import {
 } from "../components/fields";
 import OfferView from "../components/OfferView";
 import OfferCover from "../components/OfferCover";
+import { QtnNumberInput, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
 import { useStaff, findPerson, SALES_MANAGER } from "../staff";
 import {
   RTU_TYPES,
@@ -676,7 +677,13 @@ export default function NewOfferPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div><L>Project name <span className="text-red-500">*</span></L><input className={`input ${projectName.trim() ? "" : "ring-1 ring-red-400"}`} value={projectName} onChange={(e) => setProjectName(e.target.value)} /></div>
               <div><L>Customer <span className="text-red-500">*</span></L><input className={`input ${customer.trim() ? "" : "ring-1 ring-red-400"}`} value={customer} onChange={(e) => setCustomer(e.target.value)} /></div>
-              <div><L>QTN No. <span className="text-red-500">*</span></L><input className={`input ${team.quotationNo.trim() ? "" : "ring-1 ring-red-400"}`} value={team.quotationNo} onChange={(e) => upTeam({ quotationNo: e.target.value })} /></div>
+              <div>
+                <L>QTN No. <span className="text-red-500">*</span></L>
+                <QtnNumberInput value={team.quotationNo} onChange={(v) => upTeam({ quotationNo: v })} />
+                {team.quotationNo.trim() && !isValidQtn(team.quotationNo) && (
+                  <p className="mt-1 text-[11px] font-semibold text-amber-600">Format: {qtnPrefix()}00000</p>
+                )}
+              </div>
               <div><L>OPTY No.</L><input className="input" value={team.opportunityNo} onChange={(e) => upTeam({ opportunityNo: e.target.value })} /></div>
               <div>
                 <L>Sales support engineer</L>

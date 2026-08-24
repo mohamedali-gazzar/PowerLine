@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ QTN number field is now locked to the format QTN-YY-NNNNN (LV and MV).**
+
+The quotation-number field only accepts the serial "QTN-" + 2-digit year + 5-digit number
+(e.g. QTN-26-01129). It fills in "QTN-26-" for you, ignores anything that isn't a digit,
+adds the dashes automatically, and won't let you create/rename until the 5-digit serial is
+complete. Applied to: the New-QTN dialog (LV panels, Standard EDMS, RMU), the RMU editor's
+QTN field, and the LV workspace's QTN (rename) field. Existing older numbers still show and
+save as they are — only what you newly type is held to the format.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Dashboard "My QTN History" no longer shows deleted QTNs.**
 
 The Home dashboard's history was fetching every LV quotation and RMU offer — including

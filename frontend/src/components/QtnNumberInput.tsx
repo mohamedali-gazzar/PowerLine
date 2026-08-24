@@ -1,12 +1,29 @@
-// A QTN-number field: a plain text input for the FULL number (value/onChange are the
-// full string, e.g. "QTN-26-01479"), starting empty with an example placeholder like
-// "QTN-26-00000". The "QTN-YY-" prefix is only a hint, not enforced.
+// A QTN-number field locked to the serial format QTN-YY-NNNNN (e.g. "QTN-26-01479"):
+// "QTN-", a 2-digit year, "-", then a 5-digit serial. The input is masked as you type —
+// only digits are accepted and the dashes are inserted automatically — and value/onChange
+// are always the full string. Shared by the New-QTN dialog for both LV and MV.
 
 const CURRENT_YY = new Date().getFullYear() % 100;
 
-/** Default prefix with the current year, e.g. "QTN-26-". Used for hints/examples. */
+/** Default prefix with the current year, e.g. "QTN-26-". Used for the seed + examples. */
 export function qtnPrefix(): string {
   return `QTN-${String(CURRENT_YY).padStart(2, "0")}-`;
+}
+
+/** Coerce whatever the user typed into the QTN-YY-NNNNN shape (digits only, max 2+5).
+ *  Empty input stays empty so the placeholder shows. */
+export function maskQtn(raw: string): string {
+  const digits = (raw || "").replace(/\D/g, "").slice(0, 7); // YY (2) + serial (5)
+  if (digits.length === 0) return "";
+  if (digits.length < 2) return `QTN-${digits}`;
+  const yy = digits.slice(0, 2);
+  const serial = digits.slice(2);
+  return `QTN-${yy}-${serial}`; // once the year is complete, show the "-" and the serial
+}
+
+/** True only for a complete serial: QTN-<2 digits>-<5 digits>. */
+export function isValidQtn(full: string): boolean {
+  return /^QTN-\d{2}-\d{5}$/.test((full || "").trim());
 }
 
 function parse(full: string): { year: string; suffix: string } {
@@ -36,11 +53,12 @@ export function QtnNumberInput({
   return (
     <input
       id={id}
+      inputMode="numeric"
       className="w-full rounded-lg border border-line bg-white px-3 py-2 font-mono text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
       autoFocus={autoFocus}
       value={value}
       placeholder={`QTN-${String(CURRENT_YY).padStart(2, "0")}-00000`}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => onChange(maskQtn(e.target.value))}
       onKeyDown={(e) => { if (e.key === "Enter") onEnter?.(); }}
     />
   );
