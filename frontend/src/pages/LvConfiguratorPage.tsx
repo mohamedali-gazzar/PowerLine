@@ -4850,6 +4850,12 @@ function predictIncomerRating(p: LvPanel): number {
   // Predict only from the incoming C.B (breakers in the "Main Incoming" section), so
   // the field stays empty by default and only fills once an incomer has been added.
   const incoming = p.components.filter((c) => !isSpacer(c) && isBreaker(c) && /incom/i.test(c.section || ""));
+  if (!incoming.length) return 0;
+  // An MCB incomer defaults the Busbar Rating to 100 A: MCBs are small breakers and a
+  // 100 A bar is the standard minimum, so use it regardless of the MCB's rated current.
+  // (Only when EVERY incoming breaker is an MCB — an MCCB/ACB present uses the frame rule.)
+  const isMcbOnly = (c: PanelComponent) => /\bMCB\b/i.test(c.type || "") && !/\b(ACB|MCCB)\b/i.test(c.type || "");
+  if (incoming.every(isMcbOnly)) return 100;
   const a = incoming.reduce((mx, c) => Math.max(mx, frameAmps(c)), 0);
   if (!a) return 0;
   return INCOMER_RATINGS.find((r) => r >= a) ?? INCOMER_RATINGS[INCOMER_RATINGS.length - 1];

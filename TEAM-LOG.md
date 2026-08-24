@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ LV: an MCB incomer now defaults the Busbar Rating to 100 A.**
+
+When a panel's incoming breaker is an MCB (every breaker in the Main Incoming section is an
+MCB — no MCCB/ACB), the Busbar Rating now auto-fills to **100 A** as soon as the incomer is
+added, instead of reading the MCB's small rated current. It's still editable, and an
+MCCB/ACB incomer keeps the existing "snap to the breaker's ampere frame" rule. Frontend
+builds; tests pass.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ ERP CSV: the "Item Name" column now shows the panel name (was the item code).**
 
 In the ERP CSV export, the "Item Name" column was filled with the enclosure-family
