@@ -96,8 +96,8 @@ function Act({ title, onClick, disabled, danger, children }: {
   );
 }
 
-/** Offer History — every LV quotation and RMU offer in one list. "+ New QTN" opens
- *  the picker for any product (LV panels, EDMS, RMU, P-CSS). */
+/** Offer History — every LV quotation and RMU offer in one list. Creating a new QTN
+ *  lives on the Home dashboard only ("+ New QTN"); this page just lists + opens them. */
 export default function LvQtnListPage() {
   const navigate = useNavigate();
   const { user } = useAuth();

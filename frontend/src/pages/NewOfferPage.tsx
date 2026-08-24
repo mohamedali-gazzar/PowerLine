@@ -538,7 +538,9 @@ export default function NewOfferPage() {
       if (outputs.includes("Commercial"))
         jobs.push({ url: api.commercialPdfUrl(rec.id, true), name: `CO-${nameQtn} Rev 00.pdf`, label: "Commercial" });
       jobs.forEach((j, i) => setTimeout(() => downloadFile(j.url, j.name), i * 700));
-      setDone({ id: rec.id, offerNumber: rec.offerNumber, items: jobs.map((j) => j.label) });
+      // Show the QTN number in the confirmation (fall back to the internal PL-… only
+      // if there's no QTN yet), never the internal offer number when a QTN exists.
+      setDone({ id: rec.id, offerNumber: nameQtn, items: jobs.map((j) => j.label) });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -595,9 +597,6 @@ export default function NewOfferPage() {
             )}
             <button type="button" className="btn-ghost" onClick={checkForUpdates} disabled={checking}>
               {checking ? "Checking…" : "↻ Check for updates"}
-            </button>
-            <button type="button" className="btn-ghost" disabled={submitting} onClick={generateAll}>
-              {submitting ? "Generating…" : "⬇ PDFs"}
             </button>
             {editable && (
               <button type="button" className="btn-primary" disabled={busy} onClick={sendForApproval}>

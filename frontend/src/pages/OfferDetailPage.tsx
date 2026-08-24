@@ -114,7 +114,6 @@ export default function OfferDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link to="/offers/new" className="btn-ghost">+ New</Link>
           {offer.rmu.productType === "PSEC" && (
             <a href={api.sldPdfUrl(offer.id)} target="_blank" rel="noreferrer" className="btn-ghost">
               ⬇ SLD PDF

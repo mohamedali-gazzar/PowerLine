@@ -23,6 +23,19 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ RMU editor polish: QTN in the confirmation, no header PDFs button, New-QTN on Home only.**
+
+Three small follow-ups to the RMU editor:
+- The "✓ Offer … generated" confirmation now shows the QTN number (e.g. "Offer 52"),
+  not the internal PL-2026-#### number.
+- Removed the "⬇ PDFs" button from the editor header (it only had Check-for-updates +
+  Send-for-approval left, like LV). PDFs are still downloaded from the Technical /
+  Commercial tabs.
+- Removed the "+ New" button from an offer's detail page. Creating a new QTN now lives
+  on the Home dashboard only.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ RMU offers now work like LV quotations — a re-editable draft with autosave & approval.**
 
 Picking RMU in "New QTN" now asks for the number + project + customer, creates the draft,
