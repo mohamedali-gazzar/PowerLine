@@ -77,9 +77,9 @@ export default function OfferDetailPage() {
 
   // Which moves this user may make now. The server is authoritative; this just
   // decides which buttons to show (mirrors offerTransitionDenial on the backend).
-  const actions: { to: QtnStatus; label: string; primary?: boolean; reason?: boolean }[] = [];
+  const actions: { to: QtnStatus; label: string; primary?: boolean; reason?: boolean; send?: boolean }[] = [];
   if ((status === "DRAFT" || status === "RETURNED") && isOwner)
-    actions.push({ to: "WAITING_APPROVAL", label: "Send for approval", primary: true });
+    actions.push({ to: "WAITING_APPROVAL", label: "Send for approval", primary: true, send: true });
   if (status === "WAITING_APPROVAL") {
     if (has("qtn.approve")) {
       actions.push({ to: "APPROVED", label: "Approve", primary: true });
@@ -89,6 +89,8 @@ export default function OfferDetailPage() {
   }
   if (status === "APPROVED") {
     if (isOwner || has("qtn.submitApproved")) actions.push({ to: "SUBMITTED", label: "Submit", primary: true });
+    // The approver can retract their approval while it hasn't been submitted yet.
+    if (has("qtn.approve")) actions.push({ to: "WAITING_APPROVAL", label: "Withdraw approval" });
     if (isOwner) actions.push({ to: "DRAFT", label: "Withdraw" });
   }
   if (status === "SUBMITTED" && has("qtn.reopen"))
@@ -142,7 +144,7 @@ export default function OfferDetailPage() {
             <span className="text-xs text-muted">No actions available at this stage.</span>
           ) : (
             actions.map((a) =>
-              a.to === "WAITING_APPROVAL" ? (
+              a.send ? (
                 <SendForApprovalMenu
                   key={a.to + a.label}
                   busy={busy}

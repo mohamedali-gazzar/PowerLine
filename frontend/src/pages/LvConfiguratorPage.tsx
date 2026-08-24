@@ -1439,6 +1439,20 @@ export default function LvConfiguratorPage() {
                 Withdraw
               </button>
             )}
+            {!cancelled && status === "APPROVED" && canApprove && (
+              <button className="btn-ghost" disabled={submitting} onClick={() => {
+                sendApproverRef.current = null; // not a fresh send — no chosen approver
+                doTransition("WAITING_APPROVAL", {
+                  confirm: {
+                    title: "Withdraw approval",
+                    message: "This retracts your approval and puts the quotation back to Waiting for approval. Only possible before it is submitted.",
+                    confirmLabel: "Withdraw approval",
+                  },
+                });
+              }}>
+                Withdraw approval
+              </button>
+            )}
             {status === "SUBMITTED" && canReopen && (
               <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
                 confirm: {

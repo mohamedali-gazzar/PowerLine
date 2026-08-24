@@ -572,6 +572,11 @@ async function transitionDenial(
   const need = (p: Perm, msg: string) => (acc.perms.has(p) ? null : msg);
 
   if (to === "WAITING_APPROVAL") {
+    // From APPROVED this is the approver retracting their approval (un-approve); it needs
+    // approve rights, not ownership. From DRAFT/RETURNED it's the owner sending it.
+    if (from === "APPROVED") {
+      return need("qtn.approve", "You do not have permission to withdraw an approval.");
+    }
     return isOwner ? null : "Only the person who created this quotation can send it for approval.";
   }
   if (to === "APPROVED") {
@@ -611,7 +616,8 @@ async function announce(
   actorEmail: string,
   note: string,
   origin: string,
-  approverId?: string | null
+  approverId?: string | null,
+  from?: QtnStatus
 ) {
   const link = `/lv/qtn/${q.id}`;
   const when = new Date().toLocaleString("en-GB");
@@ -624,6 +630,16 @@ async function announce(
   ];
   try {
     if (to === "WAITING_APPROVAL") {
+      // Un-approve (APPROVED → WAITING): the approver retracted their approval — tell the owner.
+      if (from === "APPROVED") {
+        await notify({
+          userId: q.ownerId, kind: "QTN_WAITING",
+          title: `QTN ${q.number} — approval withdrawn`,
+          body: `${actorEmail} withdrew the approval of quotation ${q.number}; it is waiting for approval again.`,
+          link, qtnId: q.id, details, note, origin,
+        });
+        return;
+      }
       // Sent to a chosen approver (Send-for-approval dropdown) → notify only them.
       // No choice (or the chooser picked themselves) → fall back to the approver broadcast.
       if (approverId && approverId !== q.ownerId) {
@@ -701,17 +717,23 @@ export async function transition(req: Request, res: Response) {
 
     const actorEmail = req.userEmail ?? "";
     const action = qtnAction(from, to);
+    const isUnapprove = to === "WAITING_APPROVAL" && from === "APPROVED";
     const approverFields =
       to === "APPROVED"
         ? { approverId: req.userId ?? null, approverEmail: actorEmail, returnReason: "" }
         : to === "RETURNED"
         ? { approverId: req.userId ?? null, approverEmail: actorEmail, returnReason: note }
+        : isUnapprove
+        ? { approverId: null, approverEmail: "", approvedAt: null } // clear the retracted approval
         : {};
 
-    // Send-for-approval dropdown: an optional chosen approver to notify + record.
+    // Send-for-approval dropdown: an optional chosen approver to notify + record. Skipped
+    // for an un-approve (that's the approver retracting, not a fresh send).
     let sendApproverId: string | null = null;
     let eventNote = note;
-    if (to === "WAITING_APPROVAL") {
+    if (isUnapprove) {
+      eventNote = "Approval withdrawn";
+    } else if (to === "WAITING_APPROVAL") {
       const rawId = String(req.body?.approverId ?? "").trim();
       if (rawId) {
         const appr = await prisma.user.findUnique({ where: { id: rawId }, select: { id: true, email: true, name: true } });
@@ -739,7 +761,7 @@ export async function transition(req: Request, res: Response) {
     ]);
 
     // Outside the transaction: a mail failure must not roll back an approval.
-    await announce(q, to, actorEmail, note, originOf(req), sendApproverId);
+    await announce(q, to, actorEmail, note, originOf(req), sendApproverId, from);
     res.json({ ok: true, status: to, statusLabel: QTN_STATUS_LABEL[to] });
   } catch (e) {
     fail(res, e);

@@ -31,7 +31,9 @@ export const QTN_TRANSITIONS: Record<QtnStatus, QtnStatus[]> = {
   DRAFT: ["WAITING_APPROVAL"],
   WAITING_APPROVAL: ["APPROVED", "RETURNED", "DRAFT"], // DRAFT = creator withdraws
   RETURNED: ["WAITING_APPROVAL", "DRAFT"],
-  APPROVED: ["SUBMITTED", "DRAFT"], // DRAFT = withdraw before final submission
+  // DRAFT = owner withdraws before submission; WAITING_APPROVAL = approver retracts their
+  // approval (un-approve) while it hasn't been submitted yet.
+  APPROVED: ["SUBMITTED", "DRAFT", "WAITING_APPROVAL"],
   SUBMITTED: ["DRAFT"], // reopen — requires qtn.reopen
 };
 
@@ -40,7 +42,7 @@ export const QTN_LOCKED: QtnStatus[] = ["WAITING_APPROVAL", "APPROVED", "SUBMITT
 
 /** The action name recorded in the audit trail for a given move. */
 export function qtnAction(from: QtnStatus, to: QtnStatus): string {
-  if (to === "WAITING_APPROVAL") return "REQUEST_APPROVAL";
+  if (to === "WAITING_APPROVAL") return from === "APPROVED" ? "WITHDRAW_APPROVAL" : "REQUEST_APPROVAL";
   if (to === "APPROVED") return "APPROVE";
   if (to === "RETURNED") return "RETURN";
   if (to === "SUBMITTED") return "SUBMIT";

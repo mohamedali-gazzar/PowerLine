@@ -53,6 +53,7 @@ describe("allowed moves", () => {
     ["RETURNED", "DRAFT"],
     ["APPROVED", "SUBMITTED"],
     ["APPROVED", "DRAFT"],
+    ["APPROVED", "WAITING_APPROVAL"], // approver retracts their approval (un-approve)
     ["SUBMITTED", "DRAFT"],
   ];
 
@@ -70,8 +71,8 @@ describe("allowed moves", () => {
     for (const [from, to] of rejected) {
       expect(canMove(from, to), `${from} -> ${to} must be rejected`).toBe(false);
     }
-    // Sanity: the matrix is 5x5 with 9 legal moves, so 16 are illegal.
-    expect(rejected).toHaveLength(16);
+    // Sanity: the matrix is 5x5 with 10 legal moves, so 15 are illegal.
+    expect(rejected).toHaveLength(15);
   });
 
   it("never allows a status to move to itself", () => {
@@ -103,6 +104,7 @@ describe("the action name written to the audit trail", () => {
   it("names each move the way the history shows it", () => {
     expect(qtnAction("DRAFT", "WAITING_APPROVAL")).toBe("REQUEST_APPROVAL");
     expect(qtnAction("RETURNED", "WAITING_APPROVAL")).toBe("REQUEST_APPROVAL");
+    expect(qtnAction("APPROVED", "WAITING_APPROVAL")).toBe("WITHDRAW_APPROVAL"); // un-approve
     expect(qtnAction("WAITING_APPROVAL", "APPROVED")).toBe("APPROVE");
     expect(qtnAction("WAITING_APPROVAL", "RETURNED")).toBe("RETURN");
     expect(qtnAction("APPROVED", "SUBMITTED")).toBe("SUBMIT");

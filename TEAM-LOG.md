@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ An approver can now withdraw their approval (before the offer is submitted).**
+
+After approving a quotation/offer, an approver (Section Head / Team Leader / Admin) can
+press "Withdraw approval" to take the approval back — it returns to "Waiting for approval",
+the approval record is cleared, and the owner is notified. Only possible while it hasn't
+been submitted yet; once submitted there's no withdraw (only the permissioned Reopen).
+Works in both LV and RMU. Backend tests updated (287 pass).
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Exported Technical / Commercial offers are always light, even in night mode.**
 
 When you worked in dark mode, the exported LV Technical & Commercial PDFs came out dark
