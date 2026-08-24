@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Fix: the Send-for-approval dropdown was getting cut off by the toolbar.**
+
+The approver list now floats above everything (rendered at the page level, positioned under
+the button) so it's no longer clipped by the surrounding bar. Closes on outside click,
+Escape, or scroll.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ "Send for approval" is now a dropdown of Section Heads & Team Leaders (LV + RMU).**
 
 Instead of a plain button, Send for approval opens a short list of the people who can
