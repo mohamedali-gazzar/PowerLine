@@ -610,7 +610,8 @@ async function announce(
   to: QtnStatus,
   actorEmail: string,
   note: string,
-  origin: string
+  origin: string,
+  approverId?: string | null
 ) {
   const link = `/lv/qtn/${q.id}`;
   const when = new Date().toLocaleString("en-GB");
@@ -623,6 +624,17 @@ async function announce(
   ];
   try {
     if (to === "WAITING_APPROVAL") {
+      // Sent to a chosen approver (Send-for-approval dropdown) → notify only them.
+      // No choice (or the chooser picked themselves) → fall back to the approver broadcast.
+      if (approverId && approverId !== q.ownerId) {
+        await notify({
+          userId: approverId, kind: "QTN_WAITING",
+          title: `QTN ${q.number} is waiting for your approval`,
+          body: `${actorEmail} sent quotation ${q.number} to you for approval.`,
+          link, qtnId: q.id, details, note, origin,
+        });
+        return;
+      }
       const ids = (await approverIds()).filter((id) => id !== q.ownerId);
       await notifyAll(ids, {
         kind: "QTN_WAITING",
@@ -696,6 +708,20 @@ export async function transition(req: Request, res: Response) {
         ? { approverId: req.userId ?? null, approverEmail: actorEmail, returnReason: note }
         : {};
 
+    // Send-for-approval dropdown: an optional chosen approver to notify + record.
+    let sendApproverId: string | null = null;
+    let eventNote = note;
+    if (to === "WAITING_APPROVAL") {
+      const rawId = String(req.body?.approverId ?? "").trim();
+      if (rawId) {
+        const appr = await prisma.user.findUnique({ where: { id: rawId }, select: { id: true, email: true, name: true } });
+        if (appr && appr.id !== q.ownerId) {
+          sendApproverId = appr.id;
+          eventNote = `Sent to ${appr.name || appr.email} for approval`;
+        }
+      }
+    }
+
     // Status and audit row move together or not at all.
     await prisma.$transaction([
       prisma.lvQtn.update({
@@ -706,14 +732,14 @@ export async function transition(req: Request, res: Response) {
         data: {
           qtnId: q.id, qtnNumber: q.number, ownerId: q.ownerId,
           ownerEmail: q.owner?.email ?? "",
-          action, fromStatus: from, toStatus: to, note,
+          action, fromStatus: from, toStatus: to, note: eventNote,
           actorId: req.userId ?? null, actorEmail,
         },
       }),
     ]);
 
     // Outside the transaction: a mail failure must not roll back an approval.
-    await announce(q, to, actorEmail, note, originOf(req));
+    await announce(q, to, actorEmail, note, originOf(req), sendApproverId);
     res.json({ ok: true, status: to, statusLabel: QTN_STATUS_LABEL[to] });
   } catch (e) {
     fail(res, e);
@@ -806,6 +832,26 @@ export async function assignees(req: Request, res: Response) {
       where: { id: { not: req.userId as string } },
       select: { id: true, name: true, email: true },
       orderBy: [{ name: "asc" }, { email: "asc" }],
+    });
+    res.json({ users });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+// GET /api/qtns/approvers — Section Heads & Team Leaders a quotation can be SENT TO for
+// approval (the Send-for-approval dropdown). Any signed-in user may read it; the transition
+// endpoint still enforces who may actually approve. Excludes the caller (you don't send to
+// yourself). Shared by LV and RMU.
+export async function approvers(req: Request, res: Response) {
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        id: { not: req.userId as string },
+        accessRole: { in: ["Section Head", "Team Leader"] },
+      },
+      select: { id: true, name: true, email: true, accessRole: true },
+      orderBy: [{ accessRole: "asc" }, { name: "asc" }, { email: "asc" }],
     });
     res.json({ users });
   } catch (e) {

@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ "Send for approval" is now a dropdown of Section Heads & Team Leaders (LV + RMU).**
+
+Instead of a plain button, Send for approval opens a short list of the people who can
+approve — only users whose Access-Center role is **Section Head** or **Team Leader**. Pick
+one and the quotation/offer goes to them: they get the notification and the history records
+"Sent to <name> for approval". (As agreed, any approver can still approve it — the choice
+just targets who is notified.) Works the same in the LV configurator, the RMU editor and the
+RMU offer page. New `GET /api/qtns/approvers` feeds the list; no database change. If no
+Section Head/Team Leader is chosen it falls back to notifying all approvers as before.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Panel pricing: reset icon beside Factor + Total selling previews the target.**
 
 - The ↺ reset icon now sits beside the Factor value (not the target box); clicking it

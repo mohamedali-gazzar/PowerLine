@@ -233,8 +233,8 @@ export async function listApprovalQueue(): Promise<QtnListItem[]> {
 
 /** Move a quotation through the workflow. Throws with the server's message so the
  *  caller can show WHY a transition was refused instead of failing silently. */
-export async function transitionQtn(id: string, to: QtnStatus, note?: string) {
-  return api.qtns.transition(id, to, note);
+export async function transitionQtn(id: string, to: QtnStatus, note?: string, approverId?: string) {
+  return api.qtns.transition(id, to, note, approverId);
 }
 
 export async function qtnEvents(id: string) {

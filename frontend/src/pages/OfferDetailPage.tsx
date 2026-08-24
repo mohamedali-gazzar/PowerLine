@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import OfferView from "../components/OfferView";
 import CommercialView from "../components/CommercialView";
 import OfferCover from "../components/OfferCover";
+import SendForApprovalMenu from "../components/SendForApprovalMenu";
 import type { Offer } from "../types";
 
 export default function OfferDetailPage() {
@@ -55,7 +56,7 @@ export default function OfferDetailPage() {
   const isOwner = !!user && offer.ownerId === user.id;
   const has = (p: string) => perms.includes(p);
 
-  async function move(to: QtnStatus, opts: { reason?: boolean } = {}) {
+  async function move(to: QtnStatus, opts: { reason?: boolean; approverId?: string } = {}) {
     if (!offer) return;
     let note = "";
     if (opts.reason) {
@@ -65,7 +66,7 @@ export default function OfferDetailPage() {
     setBusy(true);
     setActionErr(null);
     try {
-      await api.transitionOffer(offer.id, to, note);
+      await api.transitionOffer(offer.id, to, note, opts.approverId);
       setOffer(await api.getOffer(offer.id)); // reflect the new status + lock
     } catch (e) {
       setActionErr((e as Error).message);
@@ -140,17 +141,25 @@ export default function OfferDetailPage() {
           {actions.length === 0 ? (
             <span className="text-xs text-muted">No actions available at this stage.</span>
           ) : (
-            actions.map((a) => (
-              <button
-                key={a.to + a.label}
-                type="button"
-                disabled={busy}
-                className={`${a.primary ? "btn-primary" : "btn-ghost"} disabled:cursor-not-allowed disabled:opacity-50`}
-                onClick={() => move(a.to, { reason: a.reason })}
-              >
-                {busy ? "…" : a.label}
-              </button>
-            ))
+            actions.map((a) =>
+              a.to === "WAITING_APPROVAL" ? (
+                <SendForApprovalMenu
+                  key={a.to + a.label}
+                  busy={busy}
+                  onSend={(approverId) => move("WAITING_APPROVAL", { approverId })}
+                />
+              ) : (
+                <button
+                  key={a.to + a.label}
+                  type="button"
+                  disabled={busy}
+                  className={`${a.primary ? "btn-primary" : "btn-ghost"} disabled:cursor-not-allowed disabled:opacity-50`}
+                  onClick={() => move(a.to, { reason: a.reason })}
+                >
+                  {busy ? "…" : a.label}
+                </button>
+              )
+            )
           )}
         </div>
       </div>

@@ -12,6 +12,7 @@ import {
 import OfferView from "../components/OfferView";
 import OfferCover from "../components/OfferCover";
 import { QtnNumberInput, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
+import SendForApprovalMenu from "../components/SendForApprovalMenu";
 import { useStaff, findPerson, SALES_MANAGER } from "../staff";
 import {
   RTU_TYPES,
@@ -454,7 +455,7 @@ export default function NewOfferPage() {
 
   /** Send the draft for approval (flush the latest edits first), then open the
    *  read-only detail page with the approval bar — exactly like an LV quotation. */
-  async function sendForApproval() {
+  async function sendForApproval(approverId: string) {
     if (!editId) return;
     if (!projectName.trim() || !customer.trim() || !team.quotationNo.trim()) {
       setError("Project name, customer and QTN number are required before sending for approval.");
@@ -467,7 +468,7 @@ export default function NewOfferPage() {
       const payload = buildPayload();
       await api.updateOffer(editId, payload); // flush the latest state
       lastSavedSig.current = JSON.stringify(payload);
-      await api.transitionOffer(editId, "WAITING_APPROVAL");
+      await api.transitionOffer(editId, "WAITING_APPROVAL", undefined, approverId);
       navigate(`/offers/${editId}`);
     } catch (e) {
       setError((e as Error).message);
@@ -600,9 +601,7 @@ export default function NewOfferPage() {
               {checking ? "Checking…" : "↻ Check for updates"}
             </button>
             {editable && (
-              <button type="button" className="btn-primary" disabled={busy} onClick={sendForApproval}>
-                {busy ? "Sending…" : "Send for approval"}
-              </button>
+              <SendForApprovalMenu busy={busy} onSend={sendForApproval} />
             )}
           </div>
         </div>

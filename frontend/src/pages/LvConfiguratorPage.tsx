@@ -5,6 +5,7 @@ import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorkers, l
 import ReassignQtnModal from "../components/ReassignQtnModal";
 import CoWorkModal from "../components/CoWorkModal";
 import { maskQtn, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
+import SendForApprovalMenu from "../components/SendForApprovalMenu";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { useStaff, SALES_MANAGER } from "../staff";
 import PanelsBulkImport, { type ImportedPanel } from "../components/PanelsBulkImport";
@@ -412,6 +413,9 @@ export default function LvConfiguratorPage() {
     return res;
   };
 
+  // The approver chosen from the Send-for-approval dropdown, held across the multi-step
+  // send flow (validation → warnings modal → transition).
+  const sendApproverRef = useRef<string | null>(null);
   /** Move the quotation through the workflow. Surfaces the server's reason on
    *  refusal — the old submit/reopen handlers swallowed every error, so a rejected
    *  action looked like nothing happened at all. */
@@ -427,7 +431,10 @@ export default function LvConfiguratorPage() {
     setSubmitting(true);
     setWfError("");
     try {
-      await transitionQtn(rec.id, to, opts?.note);
+      // The chosen Section Head / Team Leader (Send-for-approval dropdown), carried in a
+      // ref so the warnings-modal "Send anyway" continuation still has it.
+      const approver = to === "WAITING_APPROVAL" ? sendApproverRef.current ?? undefined : undefined;
+      await transitionQtn(rec.id, to, opts?.note, approver);
       setStatus(to);
       if (to === "RETURNED") setWf((w) => ({ ...w, returnReason: opts?.note ?? "" }));
       if (to === "DRAFT") setWf((w) => ({ ...w, returnReason: "" }));
@@ -493,7 +500,8 @@ export default function LvConfiguratorPage() {
     if (warns.length) { setApprovalWarns(warns); return; } // the modal confirms the send
     runSendForApproval();
   };
-  const sendForApproval = () => {
+  const sendForApproval = (approverId: string) => {
+    sendApproverRef.current = approverId || null; // chosen from the dropdown; used in doTransition
     if (!s.project.supportEngineer.trim()) {
       setWfError("Select a Sales support engineer on the Project tab before sending for approval.");
       setTab("project");
@@ -1339,9 +1347,7 @@ export default function LvConfiguratorPage() {
             <button className="btn-ghost" disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
             {/* Only the moves this user may actually make. */}
             {!cancelled && (status === "DRAFT" || status === "RETURNED") && (
-              <button className="btn-primary" disabled={submitting} onClick={sendForApproval}>
-                {submitting ? "Sending…" : "Send for approval"}
-              </button>
+              <SendForApprovalMenu busy={submitting} onSend={sendForApproval} />
             )}
             {!cancelled && status === "WAITING_APPROVAL" && canApprove && (
               <button className="btn-primary" disabled={submitting} onClick={() => doTransition("APPROVED", {

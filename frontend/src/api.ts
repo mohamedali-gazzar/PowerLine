@@ -166,6 +166,13 @@ export interface QtnEventDto {
   actorEmail: string;
   createdAt: string;
 }
+/** A Section Head / Team Leader a quotation can be sent to for approval. */
+export interface Approver {
+  id: string;
+  name: string;
+  email: string;
+  accessRole: string;
+}
 export interface NotificationDto {
   id: string;
   kind: string;
@@ -515,11 +522,12 @@ export const api = {
     request<Offer>(`/offers/${id}/duplicate${number ? `?number=${encodeURIComponent(number)}` : ""}`, {
       method: "POST",
     }),
-  /** Move an RMU offer through the approval lifecycle (Send / Approve / Return / Submit / Withdraw). */
-  transitionOffer: (id: string, to: QtnStatus, note?: string) =>
+  /** Move an RMU offer through the approval lifecycle (Send / Approve / Return / Submit / Withdraw).
+   *  `approverId` is the chosen Section Head / Team Leader when sending for approval. */
+  transitionOffer: (id: string, to: QtnStatus, note?: string, approverId?: string) =>
     request<{ ok: boolean; status: QtnStatus; statusLabel: string }>(`/offers/${id}/transition`, {
       method: "POST",
-      body: JSON.stringify({ to, note: note ?? "" }),
+      body: JSON.stringify({ to, note: note ?? "", ...(approverId ? { approverId } : {}) }),
     }),
   previewConfig: (cfg: RmuConfigInput) =>
     request<GeneratedOffer>("/offers/preview", { method: "POST", body: JSON.stringify(cfg) }),
@@ -608,15 +616,18 @@ export const api = {
     },
     /** Quotations waiting for approval (needs qtn.approve). */
     queue: () => request<QtnListItemDto[]>("/qtns/queue"),
-    /** Move a quotation through the workflow. `note` is required when returning. */
-    transition: (id: string, to: QtnStatus, note?: string) =>
+    /** Move a quotation through the workflow. `note` is required when returning;
+     *  `approverId` is the chosen Section Head / Team Leader when sending for approval. */
+    transition: (id: string, to: QtnStatus, note?: string, approverId?: string) =>
       request<{ ok: true; status: QtnStatus; statusLabel: string }>(`/qtns/${id}/transition`, {
         method: "POST",
-        body: JSON.stringify({ to, ...(note ? { note } : {}) }),
+        body: JSON.stringify({ to, ...(note ? { note } : {}), ...(approverId ? { approverId } : {}) }),
       }),
     events: (id: string) => request<QtnEventDto[]>(`/qtns/${id}/events`),
     /** Colleagues a quotation can be handed over to. */
     assignees: () => request<{ users: { id: string; name: string; email: string }[] }>("/qtns/assignees"),
+    /** Section Heads & Team Leaders a quotation can be SENT TO for approval. */
+    approvers: () => request<{ users: Approver[] }>("/qtns/approvers"),
     /** Hand a quotation to another user (transfer ownership so they can continue it). */
     reassign: (id: string, toUserId: string, note?: string) =>
       request<{ ok: true; ownerId: string; ownerEmail: string; ownerName: string }>(`/qtns/${id}/reassign`, {

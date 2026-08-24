@@ -18,6 +18,7 @@ import {
   transition,
   events,
   assignees,
+  approvers,
   reassign,
   cowork,
   listAttachments,
@@ -35,6 +36,7 @@ router.get("/all", requirePerm("qtn.viewAll"), listAll); // LV Offers History (n
 router.get("/queue", requirePerm("qtn.approve"), queue); // waiting for approval
 router.get("/next-number", getNextNumber);
 router.get("/assignees", assignees); // users a quotation can be handed to
+router.get("/approvers", approvers); // Section Heads & Team Leaders to send for approval
 
 router.post("/", create);
 router.get("/:id", getOne);

@@ -434,7 +434,7 @@ async function offerTransitionDenial(
 }
 
 /** Tell the right people. Never throws — mail must not fail an approval. */
-async function announceOffer(offer: WorkflowOffer, to: QtnStatus, actorEmail: string, note: string) {
+async function announceOffer(offer: WorkflowOffer, to: QtnStatus, actorEmail: string, note: string, approverId?: string | null) {
   const link = "/lv"; // the unified Offer History, where RMU offers are actioned
   const when = new Date().toLocaleString("en-GB");
   const details: [string, string][] = [
@@ -447,13 +447,23 @@ async function announceOffer(offer: WorkflowOffer, to: QtnStatus, actorEmail: st
   const ownerId = offer.ownerId ?? "";
   try {
     if (to === "WAITING_APPROVAL") {
-      const ids = (await approverIds()).filter((id) => id !== ownerId);
-      await notifyAll(ids, {
-        kind: "QTN_WAITING",
-        title: `RMU offer ${offer.offerNumber} is waiting for approval`,
-        body: `${actorEmail} sent RMU offer ${offer.offerNumber} for approval.`,
-        link, qtnId: offer.id, details, note,
-      });
+      // Sent to a chosen approver → notify only them; otherwise broadcast to all approvers.
+      if (approverId && approverId !== ownerId) {
+        await notify({
+          userId: approverId, kind: "QTN_WAITING",
+          title: `RMU offer ${offer.offerNumber} is waiting for your approval`,
+          body: `${actorEmail} sent RMU offer ${offer.offerNumber} to you for approval.`,
+          link, qtnId: offer.id, details, note,
+        });
+      } else {
+        const ids = (await approverIds()).filter((id) => id !== ownerId);
+        await notifyAll(ids, {
+          kind: "QTN_WAITING",
+          title: `RMU offer ${offer.offerNumber} is waiting for approval`,
+          body: `${actorEmail} sent RMU offer ${offer.offerNumber} for approval.`,
+          link, qtnId: offer.id, details, note,
+        });
+      }
     } else if (to === "APPROVED" && ownerId) {
       await notify({
         userId: ownerId, kind: "QTN_APPROVED",
@@ -513,6 +523,20 @@ export async function transitionOffer(req: Request, res: Response) {
         ? { approverId: req.userId ?? null, approverEmail: actorEmail, returnReason: note }
         : {};
 
+    // Send-for-approval dropdown: an optional chosen approver to notify + record.
+    let sendApproverId: string | null = null;
+    let eventNote = note;
+    if (to === "WAITING_APPROVAL") {
+      const rawId = String(req.body?.approverId ?? "").trim();
+      if (rawId) {
+        const appr = await prisma.user.findUnique({ where: { id: rawId }, select: { id: true, email: true, name: true } });
+        if (appr && appr.id !== offer.ownerId) {
+          sendApproverId = appr.id;
+          eventNote = `Sent to ${appr.name || appr.email} for approval`;
+        }
+      }
+    }
+
     // Status and audit row move together or not at all.
     await prisma.$transaction([
       prisma.offer.update({
@@ -523,12 +547,12 @@ export async function transitionOffer(req: Request, res: Response) {
         data: {
           qtnId: offer.id, qtnNumber: offer.offerNumber, ownerId: offer.ownerId,
           ownerEmail: offer.owner?.email ?? "",
-          action, fromStatus: from, toStatus: to, note,
+          action, fromStatus: from, toStatus: to, note: eventNote,
           actorId: req.userId ?? null, actorEmail,
         },
       }),
     ]);
-    await announceOffer(offer, to, actorEmail, note);
+    await announceOffer(offer, to, actorEmail, note, sendApproverId);
     res.json({ ok: true, status: to, statusLabel: QTN_STATUS_LABEL[to] });
   } catch (err) {
     handleError(err, res);
