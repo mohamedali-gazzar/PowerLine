@@ -98,6 +98,12 @@ model Offer {
   approvedAt             DateTime?
   returnReason           String    @default("")
 
+  /// Hidden from the lists rather than erased, exactly like LvQtn.removedAt. A hard
+  /// delete freed the offer's PL-YYYY-#### number for reuse, so two different offers
+  /// could end up sharing a number in the customer's paperwork.
+  removedAt   DateTime?
+  removedBy   String    @default("")
+
   // ─ Price snapshot ──────────────────────────────────────────────────────────
   // The list prices this offer was quoted at, frozen when it was created. Without
   // these, re-reading an offer (or re-generating its PDF) re-prices it against

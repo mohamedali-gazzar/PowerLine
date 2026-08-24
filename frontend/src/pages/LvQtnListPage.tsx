@@ -163,7 +163,7 @@ export default function LvQtnListPage() {
     // RMU offers (always the signed-in user's own — the server scopes them). A failure
     // here must not blank the LV list, so it is swallowed to an empty RMU set.
     try {
-      setOffers(await api.listOffers());
+      setOffers(await api.listOffers({ includeRemoved: showRemoved }));
     } catch {
       setOffers([]);
     }

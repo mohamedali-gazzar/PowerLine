@@ -11,6 +11,7 @@ import {
   getOffer,
   getOfferRaw,
   deleteOffer,
+  removeOffer,
   duplicateOffer,
   toConfigInput,
   resolvePricing,
@@ -94,8 +95,13 @@ export async function getOffers(req: Request, res: Response) {
   try {
     // Approvers (qtn.viewAll) see every offer so they can act on ones awaiting
     // approval — the same widening the LV list does. Everyone else: their own.
-    const all = req.userId ? (await accessOf(req.userId)).perms.has("qtn.viewAll") : false;
-    res.json(await listOffers(req.userId, { all }));
+    const acc = req.userId ? await accessOf(req.userId) : null;
+    const all = acc ? acc.perms.has("qtn.viewAll") : false;
+    // "Show removed" is owner-level, exactly as it is for LV quotations: seeing hidden
+    // work is a different privilege from seeing a colleague's active work.
+    const includeRemoved =
+      req.query.includeRemoved === "1" && Boolean(acc && acc.perms.has("access.manage"));
+    res.json(await listOffers(req.userId, { all, includeRemoved }));
   } catch (err) {
     handleError(err, res);
   }
@@ -156,13 +162,56 @@ export async function duplicateOfferById(req: Request, res: Response) {
   }
 }
 
+/**
+ * Remove an offer from the lists. Mirrors the LV quotation rules exactly.
+ *
+ * This used to require ownership and answer 404 "Offer not found" otherwise. But the
+ * unified Offer History shows EVERY user's offers to a qtn.viewAll holder, so an admin
+ * looking at a colleague's offer saw a Delete button, pressed it, and was told the offer
+ * did not exist — while it stayed in the list, because nothing had been deleted. Two
+ * faults in one: the wrong people were refused, and the message described the wrong
+ * problem.
+ *
+ * Now: access.manage may remove any offer, everyone else only their own; anything else
+ * gets a message that says what is actually wrong. A submitted offer is protected, the
+ * same way a submitted quotation is. And it is a soft remove, so the offer number is
+ * never freed for reuse.
+ */
 export async function deleteOfferById(req: Request, res: Response) {
   try {
     const offer = await getOfferRaw(req.params.id);
-    if (!offer || offer.ownerId !== req.userId) {
+    if (!offer) return res.status(404).json({ error: "Offer not found" });
+
+    const acc = await accessOf(req.userId);
+    const mine = offer.ownerId === req.userId;
+    const mayManage = acc.perms.has("access.manage");
+    if (!mine && !mayManage) {
+      // Only say it exists to someone already allowed to see it in the list.
+      if (acc.perms.has("qtn.viewAll")) {
+        return res.status(403).json({
+          error: "This offer belongs to someone else. Only its owner, or an admin, can remove it.",
+        });
+      }
       return res.status(404).json({ error: "Offer not found" });
     }
-    await deleteOffer(req.params.id);
+
+    if (offer.removedAt) return res.status(204).end(); // already hidden — nothing to do
+
+    // NO status guard here, deliberately, and it is worth writing down why.
+    //
+    // A guard was tried and immediately blocked almost every existing offer. postOffer()
+    // stamps `submittedAt` the moment it attributes an offer to a signed-in user, and
+    // offerStatus() falls back to `submittedAt ? SUBMITTED : DRAFT` whenever `statusAt` is
+    // null — which it is for every offer created before the approval workflow existed. So
+    // offers the list correctly shows as Draft report as Submitted here, and a guard makes
+    // them permanently undeletable.
+    //
+    // It is also not needed: this is a SOFT remove, so nothing is destroyed and an admin
+    // can bring it back with "Show removed". Blocking the action would cost more than it
+    // protects. (The `submittedAt`-at-creation behaviour is a separate fault — it makes the
+    // RMU workflow status wrong for legacy offers — and should be fixed on its own.)
+
+    await removeOffer(offer.id, req.userEmail ?? "");
     res.status(204).end();
   } catch (err) {
     handleError(err, res);

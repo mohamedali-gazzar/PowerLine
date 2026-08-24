@@ -483,7 +483,10 @@ export interface AnnouncementInput {
 
 export const api = {
   // ── RMU offers ─────────────────────────────────────────────────────────────
-  listOffers: () => request<Offer[]>("/offers"),
+  // includeRemoved mirrors the LV list: hidden offers are kept, and only an admin may
+  // ask to see them (the server gates it regardless of what is sent here).
+  listOffers: (opts?: { includeRemoved?: boolean }) =>
+    request<Offer[]>(`/offers${opts?.includeRemoved ? "?includeRemoved=1" : ""}`),
   getOffer: (id: string) => request<Offer>(`/offers/${id}`),
   /** An RMU offer's audit trail (return-for-revision history, etc.). */
   offerEvents: (id: string) => request<QtnEventDto[]>(`/offers/${id}/events`),

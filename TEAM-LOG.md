@@ -21,6 +21,64 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-08-24 · Mohamed's side · Claude
+
+**Fixed: deleting an RMU offer said "Offer not found" and left it in the list.**
+
+Reported on `222` in Offer History. The cause was a mismatch the unified list created:
+
+- the list shows **every user's** RMU offers to anyone with `qtn.viewAll`, so an admin sees
+  colleagues' offers and a Delete button next to them;
+- but `deleteOfferById` required **ownership**, and answered `404 "Offer not found"` otherwise.
+
+So the button was offered to people it would always refuse, and the refusal described the
+wrong problem — the offer existed, it just was not theirs. Nothing was deleted, so the row
+stayed after a refresh. Both halves were wrong.
+
+RMU delete now mirrors the LV quotation rules exactly:
+
+| | Before | Now |
+| --- | --- | --- |
+| Admin removing a colleague's offer | 404 "Offer not found" | **204, removed** |
+| Non-admin, someone else's offer | 404 "Offer not found" | **403 "This offer belongs to someone else."** |
+| Someone with no visibility at all | 404 | 404 (unchanged — no information leaked) |
+| Removing twice | error | 204, idempotent |
+| What happens to the offer | **erased** | hidden, and restorable |
+
+**It is now a soft remove**, which also closes an open P1: offers were hard-deleted, and
+`nextOfferNumber()` derives the next number from the highest one in use — so deleting the
+latest offer made the next one **reuse its `PL-YYYY-####` number**, and two different
+documents could reach a customer under the same reference. `Offer` gains `removedAt` and
+`removedBy` (both additive and nullable/defaulted, so the deploy cannot damage anything),
+and the **Show removed** tick in Offer History now covers RMU offers as well as LV ones —
+owner-level only, exactly as it already was for LV.
+
+Verified against the local database, every branch: an admin removing a colleague's offer
+returns 204 and it drops out of the list; it comes back with Show removed; a second remove
+is a no-op; the row is still in the table with `removedBy` recorded; a non-admin with
+`qtn.viewAll` gets the 403 and cannot see removed offers at all. Test data restored
+afterwards.
+
+### ⚠️ A worse fault found while doing it — not yet fixed
+
+**`postOffer()` stamps `submittedAt` the moment it attributes an offer to a signed-in
+user.** Combined with `offerStatus()` falling back to `submittedAt ? SUBMITTED : DRAFT`
+whenever `statusAt` is null — which it is for every offer created before the approval
+workflow existed — **every legacy RMU offer reports as Submitted on the server** while
+Offer History correctly shows it as Draft.
+
+I found this because I had added a "cannot remove a submitted offer" guard, and it blocked
+almost every existing offer. I removed the guard (a soft remove is reversible, so the guard
+cost more than it protected) and left the reason in a comment at the call site — but the
+underlying fault is still there, and it matters beyond deletion: anything that trusts
+`offerStatus()` on a legacy offer sees the wrong state. That includes the approval queue and
+the transition rules on the RMU workflow you just built.
+
+Worth fixing at the source: `postOffer` should not set `submittedAt`, and existing rows need
+deciding on — they are indistinguishable from genuinely submitted ones by that column alone.
+That is a business call, so it needs Mohamed rather than a guess.
+
+299 tests passing, both typechecks and builds clean.
 ## 2026-08-23 · Mohamed's side · Claude
 
 **✅ LV Commercial PDF: header now repeats on every page and rows are never cut.**

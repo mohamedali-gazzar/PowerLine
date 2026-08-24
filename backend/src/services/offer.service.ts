@@ -310,13 +310,21 @@ export async function createOffer(input: CreateOfferInput) {
   return decorate(offer);
 }
 
-export async function listOffers(ownerId: string | undefined, opts: { all?: boolean } = {}) {
+export async function listOffers(
+  ownerId: string | undefined,
+  opts: { all?: boolean; includeRemoved?: boolean } = {},
+) {
   // Per-user by default: only the signed-in owner's offers. An approver (qtn.viewAll)
   // passes { all: true } so they can see and act on offers awaiting their approval —
   // the same widening the LV list does. Unauthenticated → none.
   if (!ownerId) return [];
   const offers = await prisma.offer.findMany({
-    where: opts.all ? {} : { ownerId },
+    where: {
+      ...(opts.all ? {} : { ownerId }),
+      // Removed offers are kept but hidden, so a number is never reused. Only an
+      // access.manage holder may ask to see them (the controller gates that).
+      ...(opts.includeRemoved ? {} : { removedAt: null }),
+    },
     orderBy: { createdAt: "desc" },
     include: includeRmu,
   });
@@ -333,6 +341,21 @@ export async function getOffer(id: string) {
 
 export async function getOfferRaw(id: string) {
   return prisma.offer.findUnique({ where: { id }, include: includeRmu });
+}
+
+/**
+ * Hide an offer from the lists WITHOUT erasing it.
+ *
+ * A hard delete freed its PL-YYYY-#### number, and nextOfferNumber() derives the next
+ * number from the highest one in use — so deleting the latest offer made the following
+ * one reuse that number, and two different documents could reach a customer under the
+ * same reference. Same reasoning as LvQtn.removedAt.
+ */
+export async function removeOffer(id: string, byEmail: string) {
+  await prisma.offer.update({
+    where: { id },
+    data: { removedAt: new Date(), removedBy: byEmail },
+  });
 }
 
 export async function deleteOffer(id: string) {
