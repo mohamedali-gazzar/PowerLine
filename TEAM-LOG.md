@@ -23,6 +23,27 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ LV Pricing Settings tab: a per-panel "Panel pricing" table + clearer cost steps.**
+
+Reworked the Pricing Settings tab:
+- Removed the "Record Results" box; the Pricing Settings and Live Exchange Rates cards are
+  now centered, and the new table below is the same width.
+- New **Panel pricing** table (like the commercial offer): each panel's Total cost · Factor
+  (the project factor) · Unit selling · **Target selling** · **New factor** · Total selling,
+  in USD or EGP. Type the price you want to sell a panel at → it shows the **New factor**
+  needed (as a preview; your typed value stays put). A ↺ icon beside the box clears it and
+  puts the panel back on the project factor. **Apply to Panels & Commercial Offer** commits
+  every change at once; a factor above 0.95 (almost no margin) asks first.
+- The per-panel **Panel cost (live)** card now shows the calculation in order: cost items →
+  **Total Cost** (with operations % + safety % folded in) → ÷ factor → **Unit Selling**
+  (EGP & USD). The old editable Factor box and the "Target Price" pop-up were removed
+  (pricing now lives in the table).
+
+Prices are unchanged — operations/safety were already in the selling price; this only moves
+them into the shown "cost" step so the math reads correctly. Frontend builds; 29 tests pass.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ LV Panels: "Target Price" tool — solve the selling factor from a price you want.**
 
 New 🎯 Target Price button in the Panel cost (live) card. Type the price you want to sell

@@ -3541,7 +3541,8 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
     );
   };
   return (
-    <div className="flex flex-col items-start gap-4 animate-fade-up lg:flex-row">
+    <div className="animate-fade-up mx-auto w-full max-w-[77rem]">
+    <div className="flex flex-col items-start gap-4 lg:flex-row lg:justify-center">
       <div className="card w-full max-w-3xl p-5">
         <h2 className="sec-head">Pricing Settings</h2>
         <p className="mb-3 text-xs text-muted">
@@ -3560,12 +3561,176 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
         </div>
       </div>
       <LiveFxCard s={s} fx={fx} onApply={upF} />
-      <div className="card flex w-full flex-1 flex-col self-stretch p-5 lg:min-w-[15rem]">
-        <h2 className="sec-head mb-2">Record Results</h2>
-        <textarea className="input min-h-[220px] w-full flex-1 resize-y text-[13px]" placeholder="Record results, notes, decisions…"
-          value={s.recordResults ?? ""} onChange={(e) => up({ recordResults: e.target.value })} />
-      </div>
     </div>
+    <PanelTargetTable s={s} up={up} />
+    </div>
+  );
+}
+
+// A commercial-style table of every panel — name, qty, unit cost, factor, unit selling,
+// an editable TARGET selling, and total selling. Typing a target unit price previews the
+// selling factor that reaches it (price ∝ 1/factor); "↺ Default" previews the global
+// factor. Nothing is written to the panels until "Apply to Panels & Commercial Offer",
+// which asks first if any staged factor is above 0.95 (thin margin). Under the Pricing cards.
+function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }) {
+  const { confirm, dialogs } = useDialogs();
+  const [cur, setCur] = useState<"USD" | "EGP">("USD");
+  // Staged factor overrides (panelId → the sellFactor to apply; 0 = follow the global
+  // factor). The table is a preview — nothing touches the panels or the Commercial Offer
+  // until "Apply to Panels & Commercial Offer".
+  const [staged, setStaged] = useState<Record<string, number>>({});
+  if (!s.panels.length) return null; // nothing to price until panels exist
+  const rate = cur === "USD" ? (s.factors.usd || 1) : 1; // EGP per unit of display currency
+  const m = (egp: number) => fmtEgp(egp / rate);
+  const global = s.factors.factor;
+  const safetyMul = 1 + (s.factors.safetyFactor || 0); // Cost shown = total cost (incl. operations + safety)
+  // Each row shows the panel's CURRENT values (its saved factor). A staged target only
+  // proposes a NEW factor — nothing is written until "Apply to Panels & Commercial Offer".
+  const rows = s.panels.map((p) => {
+    const currentFactor = p.sellFactor > 0 ? p.sellFactor : global; // "Factor" = project/current
+    const calc = calcPanel(p, s.factors, s.abbItemDiscounts);        // at the saved factor
+    const stagedSf = p.id in staged ? staged[p.id] : null;           // 0 = global · >0 custom · null = none
+    const newFactor = stagedSf == null ? null : stagedSf > 0 ? stagedSf : global; // proposed factor
+    return { p, currentFactor, calc, newFactor, dirty: stagedSf != null && stagedSf !== p.sellFactor, custom: p.sellFactor > 0 };
+  });
+  const totalSell = rows.reduce((t, r) => t + r.calc.totalSell, 0);
+  const dirtyRows = rows.filter((r) => r.dirty);
+  // Type a target UNIT price → the factor that reaches it (price ∝ 1/factor). Staged only.
+  const stageTarget = (id: string, curFactor: number, sellUnitEgp: number, targetDisplay: number) => {
+    if (!(targetDisplay > 0) || !(sellUnitEgp > 0)) return;
+    const nf = Math.round(curFactor * (sellUnitEgp / (targetDisplay * rate)) * 10000) / 10000;
+    setStaged((d) => ({ ...d, [id]: nf }));
+  };
+  const stageDefault = (id: string) => setStaged((d) => ({ ...d, [id]: 0 })); // 0 → follow global
+  const apply = async () => {
+    if (!dirtyRows.length) return;
+    const risky = dirtyRows.filter((r) => r.newFactor != null && r.newFactor > 0.95);
+    if (risky.length) {
+      const names = risky.map((r) => `${r.p.name || "(unnamed)"} → ${r.newFactor}`).join(", ");
+      const ok = await confirm({
+        title: `${risky.length} panel${risky.length > 1 ? "s" : ""} need a factor above 0.95`,
+        message: `A factor above 0.95 leaves almost no margin (the price is about the same as the cost): ${names}. Apply to the panels anyway?`,
+        confirmLabel: "Apply anyway",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+    up({ panels: s.panels.map((p) => (p.id in staged ? { ...p, sellFactor: staged[p.id] } : p)) });
+    setStaged({});
+  };
+  return (
+    <div className="card mt-4 p-5">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="sec-head mb-0">Panel pricing</h2>
+          <p className="mt-1 text-xs text-muted">
+            Set a <b>target selling</b> (unit) price for any panel — it previews the factor. Nothing
+            changes until you <b>Apply to Panels &amp; Commercial Offer</b>. A factor above 0.95 asks first.
+          </p>
+        </div>
+        <div className="inline-flex rounded-lg border border-line bg-white p-0.5">
+          {(["USD", "EGP"] as const).map((cc) => (
+            <button key={cc} type="button" onClick={() => setCur(cc)}
+              className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${cur === cc ? "bg-brand text-white" : "text-muted hover:text-brand"}`}>{cc}</button>
+          ))}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b-2 border-brand text-left text-[12px] uppercase tracking-wide text-muted">
+              <th className="py-1.5 pr-2">Panel</th>
+              <th className="py-1.5 pr-2 text-center">Qty</th>
+              <th className="w-40 py-1.5 px-3 text-center">Total cost ({cur})</th>
+              <th className="w-24 py-1.5 px-3 text-center">Factor</th>
+              <th className="w-40 py-1.5 px-3 text-center">Unit selling ({cur})</th>
+              <th className="py-1.5 pr-2 text-center">Target selling ({cur})</th>
+              <th className="w-24 py-1.5 px-3 text-center">New factor</th>
+              <th className="py-1.5 text-right">Total selling ({cur})</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <PanelTargetRow key={r.p.id} name={r.p.name} qty={r.p.qty}
+                unitCost={r.calc.unitCostOps * safetyMul} factor={r.currentFactor} custom={r.custom} dirty={r.dirty}
+                sellUnit={r.calc.sellUnit} newFactor={r.newFactor} totalSell={r.calc.totalSell} m={m}
+                onTarget={(t) => stageTarget(r.p.id, r.currentFactor, r.calc.sellUnit, t)}
+                onDefault={() => stageDefault(r.p.id)} />
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-brand text-sm font-bold">
+              <td className="py-2 pr-2" colSpan={7}>Total selling (excl. VAT)</td>
+              <td className="py-2 text-right text-brand-dark">{m(totalSell)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+        {dirtyRows.length > 0 && (
+          <>
+            <span className="mr-auto text-xs font-semibold text-brand-dark">
+              {dirtyRows.length} panel{dirtyRows.length > 1 ? "s" : ""} changed — preview only, not applied yet
+            </span>
+            <button type="button" className="btn-ghost" onClick={() => setStaged({})}>Discard</button>
+          </>
+        )}
+        <button type="button" className="btn-primary disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!dirtyRows.length} onClick={apply}>
+          Apply to Panels &amp; Commercial Offer
+        </button>
+      </div>
+      {dialogs}
+    </div>
+  );
+}
+
+// One row of the panel-pricing table. Values are the PREVIEW (staged) numbers; a local
+// draft holds the target input until the user commits it (blur / Enter) to the parent.
+function PanelTargetRow({ name, qty, unitCost, factor, custom, dirty, sellUnit, newFactor, totalSell, m, onTarget, onDefault }: {
+  name: string; qty: number; unitCost: number; factor: number; custom: boolean; dirty: boolean;
+  sellUnit: number; newFactor: number | null; totalSell: number; m: (egp: number) => string;
+  onTarget: (targetDisplay: number) => void; onDefault: () => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const commit = () => {
+    const v = parseFloat(draft.replace(/,/g, ""));
+    if (v > 0) onTarget(v); // keep the typed value visible — do NOT clear the draft
+  };
+  const curRisky = factor > 0.95;
+  const newRisky = newFactor != null && newFactor > 0.95;
+  return (
+    <tr className={`border-b border-line/60 align-middle ${dirty ? "bg-brand-tint/40" : ""}`}>
+      <td className="py-1.5 pr-2"><b>{name || <span className="font-normal text-muted">(unnamed)</span>}</b></td>
+      <td className="py-1.5 pr-2 text-center font-semibold">{qty}</td>
+      <td className="py-1.5 px-3 text-center">{m(unitCost)}</td>
+      <td className="py-1.5 px-3 text-center">
+        <span className={curRisky ? "font-bold text-red-600" : custom ? "font-bold text-brand-dark" : "text-ink"}
+          title={custom ? "Custom factor for this panel" : "The project Selling Factor (Pricing Settings)"}>{factor}</span>
+      </td>
+      <td className="py-1.5 px-3 text-center">{m(sellUnit)}</td>
+      <td className="py-1.5 pr-2 text-center">
+        <div className="flex items-center justify-center gap-1.5">
+          <input inputMode="decimal" value={draft} placeholder=""
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setDraft(""); e.currentTarget.blur(); } }}
+            className="w-24 rounded border border-line bg-white px-2 py-1 text-right text-sm font-bold text-ink placeholder:font-normal placeholder:text-muted focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30" />
+          {(custom || draft.trim() !== "") && (
+            <button type="button" onClick={() => { setDraft(""); onDefault(); }}
+              title="Reset — clear the target and use the project factor"
+              className="grid h-7 w-7 shrink-0 place-items-center rounded border border-line text-base leading-none text-muted transition-colors hover:border-brand/40 hover:text-brand-dark">↺</button>
+          )}
+        </div>
+      </td>
+      <td className="py-1.5 px-3 text-center">
+        {newFactor == null
+          ? <span className="text-muted">—</span>
+          : <span className={newRisky ? "font-bold text-red-600" : "font-bold text-brand-dark"}
+              title={newRisky ? "Above 0.95 — thin margin (price ≈ cost)" : "Factor needed to reach your target"}>{newFactor}</span>}
+      </td>
+      <td className="py-1.5 text-right font-semibold">{m(totalSell)}</td>
+    </tr>
   );
 }
 
@@ -4877,102 +5042,6 @@ function predictIncomerRating(p: LvPanel): number {
 // Shared by the copper breakdown window and the copper cost cells.
 const fmtNum = (n: number) => (isFinite(n) ? n : 0).toLocaleString("en-US", { maximumFractionDigits: 4 });
 
-// "Target Price" — reverse-solve the selling factor from a wanted price. The selling
-// price is inversely proportional to the factor (cost ÷ factor = price, and everything
-// else stays constant while only the factor moves), so:
-//     newFactor = currentFactor × (currentPrice ÷ targetPrice)
-// e.g. 610 USD at factor 0.7, want 500 USD → 0.7 × 610/500 = 0.854. Computing from the
-// RAW current price means applying the result lands exactly on the target. A factor above
-// 0.95 leaves almost no margin (a factor near 1 means the price ≈ cost), so it is refused
-// until the user confirms. Portaled to <body>, like the copper window.
-function TargetPriceModal({ currentFactor, sellEgp, usdRate, onApply, onClose }: {
-  currentFactor: number; sellEgp: number; usdRate: number;
-  onApply: (factor: number) => void; onClose: () => void;
-}) {
-  const sellUsd = usdRate > 0 ? sellEgp / usdRate : 0;
-  const [cur, setCur] = useState<"USD" | "EGP">("USD");
-  const [targetStr, setTargetStr] = useState("");
-  const [confirmHigh, setConfirmHigh] = useState(false);
-  // Re-arm the over-0.95 confirmation whenever the inputs change.
-  useEffect(() => { setConfirmHigh(false); }, [targetStr, cur]);
-  const currentSell = cur === "USD" ? sellUsd : sellEgp;
-  const target = parseFloat(targetStr.replace(/,/g, "")) || 0;
-  const raw = target > 0 && currentSell > 0 ? currentFactor * (currentSell / target) : 0;
-  const nf = Math.round(raw * 10000) / 10000; // 4 dp — enough to reproduce the exact price
-  const valid = nf > 0;
-  const tooHigh = nf > 0.95;
-  const apply = () => {
-    if (!valid) return;
-    if (tooHigh && !confirmHigh) { setConfirmHigh(true); return; }
-    onApply(nf);
-    onClose();
-  };
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
-      <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
-      <div role="dialog" aria-modal="true" className="relative w-full max-w-md rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
-        <div className="flex items-center gap-2">
-          <span className="h-5 w-1.5 rounded-full bg-brand" />
-          <h2 className="text-lg font-extrabold tracking-tight text-ink">🎯 Target Price</h2>
-        </div>
-        <p className="mt-1 text-xs text-muted">
-          Type the price you want to sell this panel at — it works out the selling factor
-          that gets you there. A lower price needs a higher factor (thinner margin).
-        </p>
-
-        <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-          <div className="rounded-lg bg-surface p-2.5">Current factor<br /><b className="text-base">{currentFactor}</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Current price<br />
-            <b className="text-base">{cur === "USD" ? `${Math.round(sellUsd).toLocaleString()} USD` : `${fmtEgp(sellEgp)} EGP`}</b>
-          </div>
-        </div>
-
-        <label className="label mt-4">Target selling price</label>
-        <div className="flex gap-2">
-          <input autoFocus inputMode="decimal" className="input flex-1"
-            placeholder={cur === "USD" ? String(Math.round(sellUsd)) : String(Math.round(sellEgp))}
-            value={targetStr} onChange={(e) => setTargetStr(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") apply(); }} />
-          <div className="flex shrink-0 overflow-hidden rounded-lg border border-line">
-            {(["USD", "EGP"] as const).map((c) => (
-              <button key={c} type="button" onClick={() => setCur(c)}
-                className={`px-3 text-sm font-bold ${cur === c ? "bg-brand text-white" : "bg-white text-muted"}`}>{c}</button>
-            ))}
-          </div>
-        </div>
-
-        {valid && (
-          <div className={`mt-4 rounded-lg p-3 ${tooHigh ? "bg-red-50 ring-1 ring-red-200" : "bg-brand-light"}`}>
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-sm font-semibold text-muted">New factor</span>
-              <span className={`text-2xl font-extrabold ${tooHigh ? "text-red-600" : "text-brand-dark"}`}>{nf}</span>
-            </div>
-            {tooHigh && (
-              <p className="mt-1 text-xs font-semibold text-red-700">
-                ⚠ Above 0.95 — this leaves almost no margin (a factor near 1 means the price is
-                about the same as the cost). Confirm to apply it anyway.
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="mt-5 flex items-center justify-between gap-2">
-          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="button" disabled={!valid}
-            className={`rounded-lg px-4 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-40 ${
-              tooHigh ? "bg-red-600 text-white hover:bg-red-700" : "btn-primary"
-            }`}
-            onClick={apply}>
-            {!valid ? "Enter a price" : tooHigh && !confirmHigh ? "Apply anyway…" : tooHigh ? "Yes, apply " + nf : "Apply factor " + nf}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
 // Floating, minimizable window that explains how the "Main Busbar" and
 // "Cu Connections" cost cells are calculated for the current panel. Portaled to
 // <body> because the Panels tab's animate-fade-up transform would otherwise anchor
@@ -5127,7 +5196,6 @@ function PanelEditor({ s, p, up, upPanel }: {
   // combos render in CombosCard; P.F.C renders inline in ComponentsCard.
   const [comboKind, setComboKind] = useState<ComboKind | null>(null);
   const [copperOpen, setCopperOpen] = useState<null | "busbar" | "cu">(null); // separate "how is this calculated?" windows
-  const [targetOpen, setTargetOpen] = useState(false); // "Target Price" — solve the factor for a wanted price
 
   return (
     <div className="space-y-4">
@@ -5161,28 +5229,18 @@ function PanelEditor({ s, p, up, upPanel }: {
             <span className="absolute right-1.5 top-1.5 text-[10px] text-muted opacity-50 group-hover:opacity-100">ⓘ</span>
           </button>
           <div className="rounded-lg bg-surface p-2.5">Total Copper (KG)<br /><b>{fmtNum(calc.cuWeight + calc.busbarKg)} KG</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Unit Cost<br /><b>{fmtEgp(calc.unitCost)} EGP</b></div>
+          {/* Total Cost (base + operations + safety) → (÷ factor) → Unit Selling. The markups
+              fold into the Total Cost so cost ÷ factor = selling reconciles exactly. */}
           <div className="rounded-lg bg-surface p-2.5">
-            Factor
-            <FactorInput
-              value={p.sellFactor || 0}
-              global={s.factors.factor}
-              onChange={(n) => u({ sellFactor: n })}
-              className={`mt-0.5 block w-full rounded border px-1.5 py-0.5 text-sm font-bold focus:outline-none ${
-                p.sellFactor > 0 ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-ink"
-              }`}
-              title={p.sellFactor > 0 ? "Custom — clear to follow Pricing Settings" : `Default from Pricing Settings (${s.factors.factor})`}
-            />
+            Total Cost<br /><b>{fmtEgp(calc.unitCostOps * (1 + (s.factors.safetyFactor || 0)))} EGP</b>
+            <div className="mt-0.5 text-[10px] font-normal text-muted">+ operations {Math.round((s.factors.operations || 0) * 1000) / 10}% + safety {Math.round((s.factors.safetyFactor || 0) * 1000) / 10}%</div>
           </div>
-          <div className="rounded-lg bg-brand-light p-2.5 text-brand-dark">Unit Selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
+          <div className="rounded-lg bg-brand-light p-2.5 text-brand-dark">
+            Unit Selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b>
+            <div className="mt-0.5 text-[10px] font-normal text-brand-dark/70">÷ factor {p.sellFactor > 0 ? p.sellFactor : s.factors.factor}</div>
+          </div>
           <div className="rounded-lg bg-brand p-2.5 text-white">Unit Selling (USD)<br /><b>{fmtEgp(s.factors.usd > 0 ? calc.sellUnit / s.factors.usd : 0)} USD</b></div>
         </div>
-        )}
-        {costOpen && (
-          <button type="button" onClick={() => setTargetOpen(true)}
-            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-brand/40 px-3 py-1.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-tint">
-            🎯 Target Price — solve the factor for a price you want
-          </button>
         )}
       </div>
 
@@ -5288,16 +5346,6 @@ function PanelEditor({ s, p, up, upPanel }: {
       </div>{/* /details + cost row */}
 
       {copperOpen && <CopperBreakdownWindow which={copperOpen} p={p} calc={calc} f={s.factors} onClose={() => setCopperOpen(null)} />}
-
-      {targetOpen && (
-        <TargetPriceModal
-          currentFactor={p.sellFactor > 0 ? p.sellFactor : s.factors.factor}
-          sellEgp={calc.sellUnit}
-          usdRate={s.factors.usd}
-          onApply={(nf) => u({ sellFactor: nf })}
-          onClose={() => setTargetOpen(false)}
-        />
-      )}
 
       {/* Components (section pills + circuit-combination sub-row live inside this card) */}
       <ComponentsCard s={s} p={p} u={u} replaceComponent={replaceComponent} comboKind={comboKind} setComboKind={setComboKind} />
