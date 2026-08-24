@@ -173,6 +173,11 @@ export interface Approver {
   email: string;
   accessRole: string;
 }
+/** Review-lock state: whether the caller holds it, and who holds it otherwise. */
+export interface LockState {
+  mine: boolean;
+  heldBy: { id: string; name: string; email: string } | null;
+}
 export interface NotificationDto {
   id: string;
   kind: string;
@@ -814,6 +819,15 @@ export const api = {
     setAccess: (id: string, data: { role?: string; perms?: string[]; notifyByEmail?: boolean }) =>
       request<{ ok: true }>(`/access/users/${id}`, { method: "POST", body: JSON.stringify(data) }),
     history: () => request<{ items: PriceChangeRow[] }>("/access/history"),
+  },
+
+  // ── Review locks (one approver at a time) ───────────────────────────────────
+  locks: {
+    /** Acquire / refresh the "someone is reviewing this" lock. `force` takes over (admin). */
+    acquire: (id: string, force = false) =>
+      request<LockState>(`/locks/${id}`, { method: "POST", body: JSON.stringify({ force }) }),
+    /** Release the lock (only if the caller holds it). */
+    release: (id: string) => request<{ ok: true }>(`/locks/${id}`, { method: "DELETE" }),
   },
 
   // ── Announcements ───────────────────────────────────────────────────────────

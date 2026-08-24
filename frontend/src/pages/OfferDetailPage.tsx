@@ -6,6 +6,7 @@ import OfferView from "../components/OfferView";
 import CommercialView from "../components/CommercialView";
 import OfferCover from "../components/OfferCover";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
+import { useReviewLock } from "../hooks/useReviewLock";
 import type { Offer } from "../types";
 
 export default function OfferDetailPage() {
@@ -38,6 +39,12 @@ export default function OfferDetailPage() {
     return () => { alive = false; };
   }, [id, offer?.status]);
 
+  // Review lock — while an approver is reviewing a waiting offer, others can't act on it.
+  const lock = useReviewLock(
+    offer?.id,
+    !!offer && (offer.status || "DRAFT") === "WAITING_APPROVAL" && perms.includes("qtn.approve"),
+  );
+
   if (error)
     return <div className="card border-red-200 bg-red-50 p-4 text-red-700">{error}</div>;
   if (!offer)
@@ -55,6 +62,8 @@ export default function OfferDetailPage() {
   const status = (offer.status || "DRAFT") as QtnStatus;
   const isOwner = !!user && offer.ownerId === user.id;
   const has = (p: string) => perms.includes(p);
+  // Another approver is reviewing this right now → block review actions until they're done.
+  const lockedByOther = !lock.mine && !!lock.heldBy;
 
   async function move(to: QtnStatus, opts: { reason?: boolean; approverId?: string } = {}) {
     if (!offer) return;
@@ -139,6 +148,16 @@ export default function OfferDetailPage() {
         {(status === "APPROVED" || status === "SUBMITTED") && offer.approverEmail && (
           <span className="text-xs text-muted">Approved by {offer.approverEmail}</span>
         )}
+        {lockedByOther && (
+          <span className="flex items-center gap-2 rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+            🔒 {lock.heldBy!.name || lock.heldBy!.email} is reviewing this now
+            {has("access.manage") && (
+              <button type="button" className="rounded border border-amber-300 px-1.5 py-0.5 text-[11px] font-bold text-amber-800 hover:bg-amber-100" onClick={lock.takeOver}>
+                Take over
+              </button>
+            )}
+          </span>
+        )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {actions.length === 0 ? (
             <span className="text-xs text-muted">No actions available at this stage.</span>
@@ -154,7 +173,8 @@ export default function OfferDetailPage() {
                 <button
                   key={a.to + a.label}
                   type="button"
-                  disabled={busy}
+                  disabled={busy || (lockedByOther && (a.to === "APPROVED" || a.to === "RETURNED"))}
+                  title={lockedByOther && (a.to === "APPROVED" || a.to === "RETURNED") ? `${lock.heldBy!.name || lock.heldBy!.email} is reviewing this` : undefined}
                   className={`${a.primary ? "btn-primary" : "btn-ghost"} disabled:cursor-not-allowed disabled:opacity-50`}
                   onClick={() => move(a.to, { reason: a.reason })}
                 >

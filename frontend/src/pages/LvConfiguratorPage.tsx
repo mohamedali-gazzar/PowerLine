@@ -6,6 +6,7 @@ import ReassignQtnModal from "../components/ReassignQtnModal";
 import CoWorkModal from "../components/CoWorkModal";
 import { maskQtn, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
+import { useReviewLock } from "../hooks/useReviewLock";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { useStaff, SALES_MANAGER } from "../staff";
 import PanelsBulkImport, { type ImportedPanel } from "../components/PanelsBulkImport";
@@ -651,6 +652,9 @@ export default function LvConfiguratorPage() {
   const canApprove = myPerms.includes("qtn.approve");
   const canReturn = canApprove || myPerms.includes("qtn.return");
   const canReopen = myPerms.includes("qtn.reopen");
+  // Review lock: while one approver is reviewing a waiting quotation, others can't act.
+  const reviewLock = useReviewLock(rec?.id, status === "WAITING_APPROVAL" && canApprove);
+  const lockedByOther = !reviewLock.mine && !!reviewLock.heldBy;
   // Hand-over: a manager (qtn.reassign) can move anyone's; the owner can hand off their own.
   // A co-owner is neither — hide it from them (the server would 403 anyway).
   const isCoOwnerHere = !!rec?.coOwners?.some((c) => c.id === user?.id);
@@ -1350,7 +1354,9 @@ export default function LvConfiguratorPage() {
               <SendForApprovalMenu busy={submitting} onSend={sendForApproval} />
             )}
             {!cancelled && status === "WAITING_APPROVAL" && canApprove && (
-              <button className="btn-primary" disabled={submitting} onClick={() => doTransition("APPROVED", {
+              <button className="btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={submitting || lockedByOther}
+                title={lockedByOther ? `${reviewLock.heldBy!.name || reviewLock.heldBy!.email} is reviewing this` : undefined}
+                onClick={() => doTransition("APPROVED", {
                 confirm: {
                   title: "Approve this quotation",
                   message: "The creator will be notified that it is ready to submit.",
@@ -1423,8 +1429,20 @@ export default function LvConfiguratorPage() {
               main action for this stage) with Share spanning them, whatever the
               workflow stage. */}
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {lockedByOther && (
+              <span className="mr-auto flex items-center gap-2 rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                🔒 {reviewLock.heldBy!.name || reviewLock.heldBy!.email} is reviewing this now
+                {myPerms.includes("access.manage") && (
+                  <button type="button" className="rounded border border-amber-300 px-1.5 py-0.5 text-[11px] font-bold text-amber-800 hover:bg-amber-100" onClick={reviewLock.takeOver}>
+                    Take over
+                  </button>
+                )}
+              </span>
+            )}
             {!cancelled && status === "WAITING_APPROVAL" && canReturn && (
-              <button className="btn-ghost" disabled={submitting} onClick={() => setReturnOpen(true)}>
+              <button className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50" disabled={submitting || lockedByOther}
+                title={lockedByOther ? `${reviewLock.heldBy!.name || reviewLock.heldBy!.email} is reviewing this` : undefined}
+                onClick={() => setReturnOpen(true)}>
                 ↩ Return for revision
               </button>
             )}

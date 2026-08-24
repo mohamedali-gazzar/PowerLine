@@ -622,3 +622,16 @@ model Announcement {
 
   @@index([published, start, end])
 }
+
+/// A short-lived "someone is reviewing this" lock, so two approvers can't act on the same
+/// quotation/offer at once. `subjectId` is the LvQtn.id OR Offer.id under review (both are
+/// cuids, so one table serves both). It is refreshed by a heartbeat and treated as free
+/// once `heartbeatAt` is older than the TTL (see locks.controller). New, additive table —
+/// safe for the deploy's `prisma db push` (nothing else references it).
+model ReviewLock {
+  subjectId   String   @id
+  userId      String
+  userName    String   @default("")
+  userEmail   String   @default("")
+  heartbeatAt DateTime @default(now())
+}

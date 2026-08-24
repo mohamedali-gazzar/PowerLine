@@ -4,6 +4,7 @@ import cors from "cors";
 import offersRouter from "./routes/offers.routes";
 import authRouter from "./routes/auth.routes";
 import qtnsRouter from "./routes/qtns.routes";
+import locksRouter from "./routes/locks.routes";
 import { requireAuth } from "./middleware/auth";
 import {
   updateProfile,
@@ -135,6 +136,7 @@ export function createApp() {
   // ── Accounts system ────────────────────────────────────────────────────────
   app.use("/api/auth", authRouter);
   app.use("/api/qtns", qtnsRouter); // per-user LV quotations (requireAuth inside)
+  app.use("/api/locks", locksRouter); // review locks — one approver at a time (requireAuth inside)
 
   // In-app notifications
   app.get("/api/notifications", requireAuth, listNotifications);

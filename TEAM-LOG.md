@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Two approvers can't review the same QTN at once (a "someone is reviewing" lock).**
+
+When an approver opens a quotation/offer that's waiting for approval, it locks to them.
+A second approver who opens it sees "🔒 <name> is reviewing this now" with Approve/Return
+disabled until the first one finishes. The lock keeps itself alive with a heartbeat and
+frees automatically after ~45s if the reviewer's tab is closed or crashes; it also releases
+the moment they leave. An Admin gets a "Take over" button to claim it. Works in both LV and
+RMU. Adds one small, additive table (ReviewLock) — safe for the deploy's db push; 289 tests.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Dragging a component to reorder it is smooth now (was laggy).**
 
 Reordering a component (or moving it to another section) used to stutter because the whole
