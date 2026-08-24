@@ -328,6 +328,105 @@ export async function createOffer(input: CreateOfferInput) {
   return decorate(offer);
 }
 
+/** Update a DRAFT offer in place — same normalisation and price-freeze as createOffer,
+ *  but writing over the existing row (keeps its id, number, owner, category and status).
+ *  Used for autosave while editing a draft, exactly as an LV quotation is re-saved. The
+ *  caller (controller) enforces that the offer is still editable (DRAFT/RETURNED). */
+export async function updateOffer(id: string, input: CreateOfferInput) {
+  const inputLines: { config: RmuConfigInput; unitPrice: number; quantity: number }[] =
+    input.rmus?.length
+      ? input.rmus.map((u) => ({ config: u.config as RmuConfigInput, unitPrice: u.unitPrice, quantity: u.quantity }))
+      : [{ config: input.rmu as RmuConfigInput, unitPrice: input.unitPrice, quantity: input.quantity }];
+  const isMulti = inputLines.length > 1;
+
+  const storedLines: StoredRmuLine[] = inputLines.map((u) => {
+    const s = priceForConfig(u.config);
+    return {
+      config: u.config,
+      unitPrice: u.unitPrice ?? 0,
+      quantity: u.quantity ?? 1,
+      snap: {
+        priceKey: s.priceKey,
+        basePriceUsd: s.basePrice,
+        listPriceUsd: s.listPrice,
+        addOns: s.addOns,
+        priceFound: s.found,
+      },
+    };
+  });
+  const primary = storedLines[0];
+  const cfg = primary.config;
+  const configCode = buildCode(cfg);
+  const snap = primary.snap;
+  const snapVat = vatPct();
+
+  const offer = await prisma.offer.update({
+    where: { id },
+    data: {
+      // offerNumber, category, status and ownership are NOT touched — a re-save keeps the
+      // draft's identity and lifecycle. Everything else is rebuilt from the current input.
+      pricedAt: new Date(),
+      rmusJson: isMulti ? JSON.stringify(storedLines) : null,
+      snapPriceKey: snap.priceKey,
+      snapBasePriceUsd: snap.basePriceUsd,
+      snapListPriceUsd: snap.listPriceUsd,
+      snapAddOnsJson: JSON.stringify(snap.addOns),
+      snapVatPct: snapVat,
+      snapPriceFound: snap.priceFound,
+      salesNumber: input.salesNumber ?? null,
+      orderNumber: input.orderNumber ?? null,
+      quotationNo: input.quotationNo ?? null,
+      opportunityNo: input.opportunityNo ?? null,
+      salesName: input.salesName ?? null,
+      salesMobile: input.salesMobile ?? null,
+      salesEmail: input.salesEmail ?? null,
+      salesManagerName: input.salesManagerName ?? null,
+      salesManagerMobile: input.salesManagerMobile ?? null,
+      salesManagerEmail: input.salesManagerEmail ?? null,
+      supportName: input.supportName ?? null,
+      supportMobile: input.supportMobile ?? null,
+      supportEmail: input.supportEmail ?? null,
+      projectName: input.projectName,
+      customer: input.customer,
+      currency: input.currency,
+      usdToEgpRate: input.usdToEgpRate ?? null,
+      unitPrice: primary.unitPrice,
+      quantity: primary.quantity,
+      discountPct: input.discountPct,
+      validityDays: input.validityDays,
+      deliveryWeeks: input.deliveryWeeks ?? null,
+      paymentTerms: input.paymentTerms ?? null,
+      warrantyMonths: input.warrantyMonths ?? null,
+      notes: input.notes ?? null,
+      offerDate: input.offerDate ?? null,
+      rmu: {
+        update: {
+          productType: cfg.productType,
+          lbsBrand: cfg.lbsBrand ?? "ABB",
+          clientSpec: cfg.clientSpec ?? "EECH",
+          voltageKv: cfg.voltageKv,
+          nalCount: cfg.nalCount,
+          nalfCount: cfg.nalfCount,
+          hasMetering: cfg.hasMetering,
+          rtuType: cfg.rtuType,
+          installation: cfg.installation,
+          busbarCurrentA: cfg.busbarCurrentA,
+          fuseRatingA: cfg.fuseRatingA ?? null,
+          meteringCtPrimaryA: cfg.meteringCtPrimaryA ?? null,
+          ctClass: cfg.ctClass ?? null,
+          vtCores: cfg.vtCores ?? 1,
+          vtBurdenVa: cfg.vtBurdenVa ?? null,
+          vtClass: cfg.vtClass ?? null,
+          meteringWithFuse: cfg.meteringWithFuse ?? false,
+          configCode,
+        },
+      },
+    },
+    include: includeRmu,
+  });
+  return decorate(offer);
+}
+
 export async function listOffers(
   ownerId: string | undefined,
   opts: { all?: boolean; includeRemoved?: boolean } = {},

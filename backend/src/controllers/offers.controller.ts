@@ -7,6 +7,7 @@ import {
 } from "../validation/offer.schema";
 import {
   createOffer,
+  updateOffer,
   listOffers,
   getOffer,
   getOfferRaw,
@@ -145,6 +146,32 @@ export async function getOfferEvents(req: Request, res: Response) {
       orderBy: { createdAt: "asc" },
     });
     res.json(rows);
+  } catch (err) {
+    handleError(err, res);
+  }
+}
+
+// PUT /api/offers/:id — update a draft offer in place (autosave while editing). Only the
+// owner (or access.manage) may edit, and only while DRAFT or RETURNED — once it is sent
+// for approval it is locked, exactly like an LV quotation.
+export async function putOffer(req: Request, res: Response) {
+  try {
+    const existing = await getOfferRaw(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Offer not found" });
+    const mayManage = req.userId ? (await accessOf(req.userId)).perms.has("access.manage") : false;
+    if (existing.ownerId !== req.userId && !mayManage) {
+      return res.status(404).json({ error: "Offer not found" });
+    }
+    const s = offerStatus(existing);
+    if (s !== "DRAFT" && s !== "RETURNED") {
+      return res.status(409).json({
+        error: `This offer is ${QTN_STATUS_LABEL[s]} and cannot be edited. Withdraw or reopen it first.`,
+        status: s,
+      });
+    }
+    const input = createOfferSchema.parse(req.body);
+    const updated = await updateOffer(req.params.id, input);
+    res.json(updated);
   } catch (err) {
     handleError(err, res);
   }
