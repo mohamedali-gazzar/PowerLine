@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Panel pricing table: copy the Total cost column, and collapse/expand the card.**
+
+- A small copy icon in the "Total cost" header copies that whole column as plain numbers,
+  one per line (e.g. 2846 / 2846 / 18) — paste straight into Excel.
+- The "Panel pricing" card now opens/closes with a ▶ arrow beside its title, like the
+  Panel details / Panel cost cards (the open/closed state is remembered).
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ LV Pricing Settings tab: a per-panel "Panel pricing" table + clearer cost steps.**
 
 Reworked the Pricing Settings tab:

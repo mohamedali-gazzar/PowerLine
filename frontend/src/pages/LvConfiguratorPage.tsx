@@ -3579,6 +3579,10 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
   // factor). The table is a preview — nothing touches the panels or the Commercial Offer
   // until "Apply to Panels & Commercial Offer".
   const [staged, setStaged] = useState<Record<string, number>>({});
+  const [copied, setCopied] = useState(false);
+  // Collapsible like the "Panel details" / "Panel cost (live)" cards (state remembered).
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem("lv-panelpricing-open") !== "0"; } catch { return true; } });
+  const toggleOpen = () => setOpen((o) => { try { localStorage.setItem("lv-panelpricing-open", o ? "0" : "1"); } catch { /* ignore */ } return !o; });
   if (!s.panels.length) return null; // nothing to price until panels exist
   const rate = cur === "USD" ? (s.factors.usd || 1) : 1; // EGP per unit of display currency
   const m = (egp: number) => fmtEgp(egp / rate);
@@ -3595,6 +3599,22 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
   });
   const totalSell = rows.reduce((t, r) => t + r.calc.totalSell, 0);
   const dirtyRows = rows.filter((r) => r.dirty);
+  // Copy the Total cost column as plain integers, one per line (paste straight into Excel).
+  const copyTotalCost = async () => {
+    const text = rows.map((r) => Math.round((r.calc.unitCostOps * safetyMul) / rate)).join("\n");
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch { /* fall through */ }
+    if (!ok) {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch { /* ignore */ }
+    }
+    if (ok) { setCopied(true); setTimeout(() => setCopied(false), 1500); }
+  };
   // Type a target UNIT price → the factor that reaches it (price ∝ 1/factor). Staged only.
   const stageTarget = (id: string, curFactor: number, sellUnitEgp: number, targetDisplay: number) => {
     if (!(targetDisplay > 0) || !(sellUnitEgp > 0)) return;
@@ -3620,28 +3640,51 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
   };
   return (
     <div className="card mt-4 p-5">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="sec-head mb-0">Panel pricing</h2>
+      <div className="mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button type="button" onClick={toggleOpen} className="flex items-center gap-1.5 text-left">
+            <span className={`text-[11px] text-muted transition-transform ${open ? "rotate-90" : ""}`}>▶</span>
+            <h2 className="sec-head mb-0">Panel pricing</h2>
+          </button>
+          {open && (
+            <div className="inline-flex rounded-lg border border-line bg-white p-0.5">
+              {(["USD", "EGP"] as const).map((cc) => (
+                <button key={cc} type="button" onClick={() => setCur(cc)}
+                  className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${cur === cc ? "bg-brand text-white" : "text-muted hover:text-brand"}`}>{cc}</button>
+              ))}
+            </div>
+          )}
+        </div>
+        {open && (
           <p className="mt-1 text-xs text-muted">
             Set a <b>target selling</b> (unit) price for any panel — it previews the factor. Nothing
             changes until you <b>Apply to Panels &amp; Commercial Offer</b>. A factor above 0.95 asks first.
           </p>
-        </div>
-        <div className="inline-flex rounded-lg border border-line bg-white p-0.5">
-          {(["USD", "EGP"] as const).map((cc) => (
-            <button key={cc} type="button" onClick={() => setCur(cc)}
-              className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${cur === cc ? "bg-brand text-white" : "text-muted hover:text-brand"}`}>{cc}</button>
-          ))}
-        </div>
+        )}
       </div>
+      {open && (<>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b-2 border-brand text-left text-[12px] uppercase tracking-wide text-muted">
               <th className="py-1.5 pr-2">Panel</th>
               <th className="py-1.5 pr-2 text-center">Qty</th>
-              <th className="w-40 py-1.5 px-3 text-center">Total cost ({cur})</th>
+              <th className="w-40 py-1.5 px-3 text-center">
+                <span className="inline-flex items-center gap-1.5">
+                  Total cost ({cur})
+                  <button type="button" onClick={copyTotalCost} title="Copy this column — one value per line"
+                    className={`grid h-5 w-5 place-items-center rounded transition-colors ${copied ? "text-green-600" : "text-muted hover:text-brand-dark"}`}>
+                    {copied ? (
+                      <span className="text-xs leading-none">✓</span>
+                    ) : (
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
+                  </button>
+                </span>
+              </th>
               <th className="w-24 py-1.5 px-3 text-center">Factor</th>
               <th className="w-40 py-1.5 px-3 text-center">Unit selling ({cur})</th>
               <th className="py-1.5 pr-2 text-center">Target selling ({cur})</th>
@@ -3680,6 +3723,7 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
           Apply to Panels &amp; Commercial Offer
         </button>
       </div>
+      </>)}
       {dialogs}
     </div>
   );
