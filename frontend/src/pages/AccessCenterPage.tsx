@@ -313,8 +313,17 @@ function UserCard({
     onEdit(p ? { role: p.name, perms: [...p.perms] } : { role: CUSTOM_ROLE });
   };
 
+  // The system owner: role and permissions are locked for everyone, including the owner.
+  // The server refuses the change regardless — this only makes that visible, so nobody
+  // wastes time editing controls whose result will be rejected.
+  const ownerLocked = Boolean(user.protectedOwner);
+
   return (
-    <div className="card p-4">
+    <div
+      className={`card p-4 ${
+        ownerLocked ? "border-2 border-red-500/70 bg-red-500/[0.04]" : ""
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="truncate font-bold text-ink">
@@ -322,6 +331,11 @@ function UserCard({
             {isSelf && (
               <span className="ml-2 rounded-full bg-brand-tint px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-dark">
                 You
+              </span>
+            )}
+            {ownerLocked && (
+              <span className="ml-2 rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">
+                🔒 Owner — locked
               </span>
             )}
           </p>
@@ -342,18 +356,27 @@ function UserCard({
           <label className="label" htmlFor={`role-${user.id}`}>
             Role
           </label>
-          <select
-            id={`role-${user.id}`}
-            className="input w-52"
-            value={draft.role || CUSTOM_ROLE}
-            disabled={busy}
-            onChange={(e) => pickRole(e.target.value)}
-          >
-            {roles.map((r) => (
-              <option key={r.name} value={r.name}>{r.name}</option>
-            ))}
-            <option value={CUSTOM_ROLE}>Custom…</option>
-          </select>
+          {ownerLocked ? (
+            // Not a disabled dropdown: there is nothing to choose from. Owner is not a
+            // preset anyone can be given, it is this one account.
+            <div className="flex w-52 items-center gap-2 rounded-lg border-2 border-red-500/70 bg-red-500/10 px-3 py-2">
+              <span className="text-sm font-bold text-red-600">Owner</span>
+              <span className="text-[11px] text-red-600/80">locked</span>
+            </div>
+          ) : (
+            <select
+              id={`role-${user.id}`}
+              className="input w-52"
+              value={draft.role || CUSTOM_ROLE}
+              disabled={busy}
+              onChange={(e) => pickRole(e.target.value)}
+            >
+              {roles.map((r) => (
+                <option key={r.name} value={r.name}>{r.name}</option>
+              ))}
+              <option value={CUSTOM_ROLE}>Custom…</option>
+            </select>
+          )}
 
           {/* Turning this off does not silence the person � the in-app bell still
               fills. It only decides whether a copy is also e-mailed. */}
@@ -402,8 +425,8 @@ function UserCard({
                   <input
                     type="checkbox"
                     className="shrink-0"
-                    checked={t.checked}
-                    disabled={t.disabled}
+                    checked={ownerLocked ? true : t.checked}
+                    disabled={ownerLocked || t.disabled}
                     onChange={(e) => toggle(p.key, e.target.checked)}
                   />
                   <span className="truncate">{p.label}</span>
@@ -428,7 +451,14 @@ function UserCard({
             {note.text}
           </p>
         )}
-        {isSelf && isAdminRole && !note && (
+        {ownerLocked && !note && (
+          <p className="text-xs font-semibold text-red-600">
+            🔒 This is the system owner. Its role and permissions cannot be changed — not by
+            another admin, and not by the owner. Only the e-mail-notification preference is
+            editable here. The server refuses the change, so this is not just a hidden button.
+          </p>
+        )}
+        {!ownerLocked && isSelf && isAdminRole && !note && (
           <p className="text-xs text-muted">You cannot remove your own admin access.</p>
         )}
       </div>

@@ -23,6 +23,65 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**Two things: legacy RMU offers no longer pretend to be Submitted, and the owner account is
+locked against everyone.**
+
+### 1. The submittedAt fault is fixed
+
+Your postOffer fix was already in — new offers no longer get a submission date. The problem
+was the rows created before it. `offerStatus()` fell back to
+`submittedAt ? SUBMITTED : DRAFT`, and on Offer that column never meant "went through
+approval": the old code stamped it the moment an offer was **generated**, to feed the
+dashboard chart. So every pre-workflow offer reported as **Submitted** while Offer History
+correctly showed it as **Draft** — which made it undeletable and put it in the wrong place
+in the approval queue and the transition rules.
+
+The fallback now reads the **`submitted` mirror** instead, which is safe to trust because
+`statusWrite()` is its only writer and always sets `statusAt` alongside it. A row that never
+moved through the workflow reads false, so it is a Draft — which is what it is. Same shape
+as `qtnStatus()`.
+
+`submittedAt` keeps its own meaning and its own consumers (the weekly chart); it is simply
+no longer mistaken for a workflow state. Verified locally: `PL-2026-0006` went from
+`status=SUBMITTED locked=true` to `status=DRAFT locked=false` and became deletable, with its
+`submittedAt` untouched. 7 new tests pin it.
+
+**No data migration was needed**, which is why this was safe to do without a decision from
+Mohamed — nothing was rewritten, only re-read correctly.
+
+### 2. The owner account is locked
+
+Mohamed asked for his account to be untouchable. Locking yourself out of the Access Center
+is the one mistake with no way back through the app — the only recovery is a script against
+the production database — so this is worth having.
+
+`OWNER_EMAILS` in `backend/src/config.ts` names the owner (defaults to
+`mohamed.ali@powerline.com.eg`, overridable by env so ownership can move without a code
+change). Three things follow:
+
+- **`accessOf()` grants that account every admin permission whatever the database says.**
+  Proven: with the row forced to `role=USER tier=ENGINEER perms=[]`, the server still
+  returned tier ADMIN with `access.manage`, and the Access Center still opened. A bad edit,
+  or a restore from an older backup, cannot lock the owner out.
+- **`setAccess` refuses any change to its role or permissions — 403, for everyone,** another
+  admin and the owner alike. E-mail notifications stay editable, because a preference is
+  not access.
+- **The card is visibly locked:** a red border, a red "🔒 Owner — locked" badge, the role
+  shown as a red **Owner** box instead of a dropdown, all 15 permission ticks checked and
+  disabled, and a line saying the server refuses the change so it is not merely a hidden
+  button. Verified in the browser: 15 permission boxes all disabled, notifications still
+  enabled, no dropdown in that card.
+
+Note **Owner is not a role anyone can be assigned** — it is this one account. It does not
+appear in the role dropdown, so nobody can be promoted into it by mistake.
+
+One deliberate gap: **"Approve their own QTNs" is still not granted to the owner.** That
+stays a separate opt-in by design, and since the owner card is locked it can now only be
+changed in the database. Say if you want that included instead.
+
+313 tests passing, both typechecks and builds clean.
+## 2026-08-24 · Mohamed's side · Claude
+
 **Fixed: the sidebar "resume draft" shortcut was showing someone else's draft.**
 
 Mohamed's sidebar offered "222" as *his* draft to resume. 222 belongs to Rana Hazem.

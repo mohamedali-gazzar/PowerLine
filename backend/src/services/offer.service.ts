@@ -27,15 +27,33 @@ const includeRmu = { rmu: true, owner: { select: { email: true, name: true } } }
 /** An offer's effective approval status. Offers created before the workflow — and
  *  new ones before their first transition — have `statusAt == null`, so we fall
  *  back to the submitted mirror, exactly as qtnStatus() does for LV rows. */
+/**
+ * An offer's effective workflow state.
+ *
+ * The fallback reads the `submitted` MIRROR, not `submittedAt`, and the difference
+ * matters. On Offer, `submittedAt` has never meant "went through approval" — the old
+ * postOffer() stamped it the moment an offer was generated, to feed the dashboard chart,
+ * and the approval workflow did not exist yet. So falling back to it reported every
+ * offer generated before the workflow as SUBMITTED, while the list correctly showed it as
+ * Draft. That made those offers undeletable and put them in the wrong place in the
+ * approval queue and the transition rules.
+ *
+ * `submitted` is safe to trust because statusWrite() is the only thing that writes it,
+ * always together with `statusAt` — so a row that never moved through the workflow reads
+ * false and is therefore a DRAFT, which is exactly what it is. Same shape as qtnStatus().
+ *
+ * `submittedAt` keeps its own meaning and its own consumers (the weekly chart in
+ * account.controller); this only stops it being mistaken for a workflow state.
+ */
 export function offerStatus(offer: {
   status?: string | null;
   statusAt?: Date | null;
-  submittedAt?: Date | null;
+  submitted?: boolean | null;
 }): QtnStatus {
   if (offer.statusAt && offer.status && (QTN_STATUSES as readonly string[]).includes(offer.status)) {
     return offer.status as QtnStatus;
   }
-  return offer.submittedAt ? "SUBMITTED" : "DRAFT";
+  return offer.submitted ? "SUBMITTED" : "DRAFT";
 }
 
 type StoredRmu = {

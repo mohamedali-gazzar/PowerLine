@@ -5,6 +5,7 @@
 // the price history rather than in a parallel system.
 import type { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
+import { isProtectedOwner } from "../config";
 import { fail } from "../lib/http";
 import {
   accessOf, PERMS, PERM_LABEL, TIERS, ROLE_PRESETS, inferRole, type Perm, type Tier,
@@ -58,7 +59,10 @@ export async function listAccessUsers(_req: Request, res: Response) {
           perms,
           tier,
           // The single stored role, or a best guess for not-yet-set rows.
-          accessRole: u.accessRole || inferRole(tier, perms),
+          // The owner is shown as "Owner" and rendered locked; the server refuses changes
+          // regardless, so this is presentation, not enforcement.
+          accessRole: isProtectedOwner(u.email) ? "Owner" : u.accessRole || inferRole(tier, perms),
+          protectedOwner: isProtectedOwner(u.email),
           migrated: Boolean(u.tier),
         };
       }),
@@ -103,6 +107,18 @@ export async function setAccess(req: Request, res: Response) {
         ? nextPermsRaw.filter((p): p is Perm => (PERMS as readonly string[]).includes(p))
         : [];
       nextRole = "";
+    }
+
+    // The system owner's access is not editable by anyone, including another admin and
+    // including the owner. Personal preferences (e-mail notifications) still are — those
+    // are not access. This is the guarantee behind the locked card in the Access Center;
+    // the UI only reflects it, so disabling the controls there is not the protection.
+    if (isProtectedOwner(target.email) && (nextTier !== undefined || nextPerms !== undefined)) {
+      return res.status(403).json({
+        error:
+          "This is the system owner's account. Its role and permissions are locked and " +
+          "cannot be changed by anyone.",
+      });
     }
 
     // Locking yourself out is the one mistake with no in-app recovery.

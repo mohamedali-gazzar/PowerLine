@@ -31,6 +31,28 @@ export const IS_PROD =
 export const IS_DEV = !IS_PROD;
 
 /**
+ * The system owner's account, which nobody may modify.
+ *
+ * Locking yourself out of the Access Center is the one mistake with no way back through
+ * the app — the only recovery is a script run against the production database. Naming the
+ * owner here makes that unreachable: the account keeps full access whatever the database
+ * says, and every attempt to change its role or permissions is refused, including by
+ * another admin and including by the owner themselves.
+ *
+ * Comma-separated, and overridable, so ownership can move without a code change.
+ */
+export const OWNER_EMAILS = (process.env.OWNER_EMAILS || "mohamed.ali@powerline.com.eg")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
+/** Is this address the protected system owner? */
+export function isProtectedOwner(email?: string | null): boolean {
+  if (!email) return false;
+  return OWNER_EMAILS.includes(email.trim().toLowerCase());
+}
+
+/**
  * Every environment variable the backend reads, what it does, and what happens when it is
  * missing. Kept as data so `describeConfig()` can report it and so there is a single
  * answer to "what do I have to set?".

@@ -189,6 +189,8 @@ export interface AccessUser {
   perms: string[];
   /** The single stored access role (Admin | Section Head | … | Custom). */
   accessRole: string;
+  /** The system owner. Role and permissions are locked; the server refuses changes. */
+  protectedOwner?: boolean;
   migrated: boolean;
   notifyByEmail: boolean;
   createdAt: string;

@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { prisma } from "../lib/prisma";
 import { fail } from "../lib/http";
+import { isProtectedOwner } from "../config";
 
 /** Legacy roles, most privileged last. Never dropped: `role` is still the source of
  *  truth for any user the Access Center has not touched yet. */
@@ -110,9 +111,19 @@ export async function accessOf(userId: string | undefined): Promise<Access> {
   if (!userId) return none;
   const u = await prisma.user.findUnique({
     where: { id: userId },
-    select: { role: true, tier: true, perms: true },
+    select: { email: true, role: true, tier: true, perms: true },
   });
   if (!u) return none;
+  // The system owner holds every admin permission no matter what the row says, so a bad
+  // edit — or a database restored from an older backup — can never lock them out. Any
+  // separately-granted permission (qtn.approveOwn) is still merged in.
+  if (isProtectedOwner(u.email)) {
+    return {
+      tier: "ADMIN",
+      perms: new Set([...ADMIN_PERMS, ...safeParsePerms(u.perms)]),
+      role: "OWNER",
+    };
+  }
   const role = ((ROLES as readonly string[]).includes(u.role) ? u.role : "USER") as Role;
   // Not migrated yet → behave exactly as the legacy role did.
   if (!u.tier || !(TIERS as readonly string[]).includes(u.tier)) {
