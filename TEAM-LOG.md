@@ -23,6 +23,19 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Re-ordering the panels in the list is smooth now (and only changes their order).**
+
+You could already drag a panel by its dotted handle to change its place in the LV panel
+list. It now feels the way it should: grab the handle and the row lifts gently (a soft
+shadow, a raised feel) and follows your finger/cursor up and down, while only the one
+neighbour it would push past slides aside to open a gap — no jumping, no flashing, no
+resizing. Let go and it settles into its new slot, the panels renumber (1, 2, 3…), and
+every total updates. It works with touch as well as the mouse, and the panel fields stay
+fully clickable — only the handle starts a drag. Dragging changes the display order only;
+it never touches any price or cost (all 29 pricing tests still pass). Frontend build green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Two approvers can't review the same QTN at once (a "someone is reviewing" lock).**
 
 When an approver opens a quotation/offer that's waiting for approval, it locks to them.

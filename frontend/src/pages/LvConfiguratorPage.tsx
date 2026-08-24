@@ -7,6 +7,7 @@ import CoWorkModal from "../components/CoWorkModal";
 import { maskQtn, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
 import { useReviewLock } from "../hooks/useReviewLock";
+import { usePointerReorder } from "../hooks/usePointerReorder";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { useStaff, SALES_MANAGER } from "../staff";
 import PanelsBulkImport, { type ImportedPanel } from "../components/PanelsBulkImport";
@@ -4942,9 +4943,15 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
   freshIds?: Set<string>;
   addLabel?: string; emptyLabel?: string; emptyAddLabel?: string;
 }) {
-  // Drag-and-drop reorder state (hooks must precede the early return).
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
+  // Smooth pointer drag-to-reorder (handle-driven, touch-friendly). Reordering only changes
+  // display order — the saved order autosaves to the QTN; no pricing math is touched. Hooks
+  // must precede the early return.
+  const { setRowRef, handleProps } = usePointerReorder(s.panels.length, (from, to) => {
+    const arr = [...s.panels];
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    up({ panels: arr });
+  });
   if (!s.panels.length) {
     return (
       <div className="card p-12 text-center animate-fade-up">
@@ -4966,20 +4973,6 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
       </div>
     );
   }
-  // Drop the dragged panel before the target; position-based numbering and the
-  // saved order (autosaved to the QTN) follow automatically.
-  const dropPanel = (targetId: string) => {
-    const dId = dragId;
-    setDragId(null); setOverId(null);
-    if (!dId || dId === targetId) return;
-    const arr = [...s.panels];
-    const from = arr.findIndex((p) => p.id === dId);
-    if (from < 0) return;
-    const [moved] = arr.splice(from, 1);
-    const to = arr.findIndex((p) => p.id === targetId);
-    arr.splice(to < 0 ? arr.length : to, 0, moved);
-    up({ panels: arr });
-  };
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[260px_1fr] animate-fade-up">
       {/* panel list — sticks below the tab header, with its own scroll (independent of the editor) */}
@@ -4987,28 +4980,21 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
         {s.panels.map((p, i) => {
           const active = p.id === s.selectedId;
           return (
-            <div key={p.id}
-              onDragOver={(e) => { if (dragId && dragId !== p.id) { e.preventDefault(); if (overId !== p.id) setOverId(p.id); } }}
-              onDragLeave={() => setOverId((o) => (o === p.id ? null : o))}
-              onDrop={(e) => { e.preventDefault(); dropPanel(p.id); }}
-              className={`mb-1.5 rounded-lg border px-2 py-1.5 transition-all duration-150 ${
+            <div key={p.id} ref={setRowRef(i)}
+              className={`mb-1.5 rounded-lg border px-2 py-1.5 transition-colors duration-150 ${
                 p.highlight
                   ? `bg-yellow-200 hover:bg-yellow-300 ${active ? "border-brand" : "border-yellow-400"}`
                   : active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
-              } ${dragId === p.id ? "scale-[0.98] opacity-40" : ""} ${overId === p.id ? "border-t-2 border-t-brand bg-brand-tint" : ""} ${
-                freshIds?.has(p.id) ? "animate-flash-new" : ""
-              }`}>
+              } ${freshIds?.has(p.id) ? "animate-flash-new" : ""}`}>
               {/* Icons sit inline after a short name; a long name pushes them to wrap onto a
                   second line, right-aligned (flex-wrap + ml-auto). */}
               <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
                 {/* name group — kept together; the name shows in full (wraps only if very long) */}
                 <div className="flex min-w-0 items-center gap-1">
                   <span
-                    draggable
-                    onDragStart={(e) => { setDragId(p.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", p.id); } catch {} }}
-                    onDragEnd={() => { setDragId(null); setOverId(null); }}
+                    {...handleProps(i)}
                     title="Drag to reorder"
-                    className="shrink-0 cursor-grab select-none px-0.5 text-muted/50 transition-colors hover:text-brand active:cursor-grabbing">
+                    className="shrink-0 select-none px-0.5 text-muted/50 transition-colors hover:text-brand">
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                       <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
                       <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
