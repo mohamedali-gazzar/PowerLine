@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ ERP CSV: the "Item Name" column now shows the panel name (was the item code).**
+
+In the ERP CSV export, the "Item Name" column was filled with the enclosure-family
+identifier — the same value as "Item Code" — so it read like a code. It now shows the
+panel's own name (what the user typed, e.g. "MSB-ARCADE"). "Item Code" still carries the
+enclosure identifier the ERP matches on, so imports are unaffected. Frontend builds; tests pass.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **Two things: legacy RMU offers no longer pretend to be Submitted, and the owner account is
 locked against everyone.**
 

@@ -88,7 +88,9 @@ export function buildErpItemsCsv(s: LvState): string {
     r[IX.cost_center] = fam.cc;
     r[IX.code] = `${CODE_STEM}-${fam.codeSuffix}`;
     r[IX.item_type] = "EGS";
-    r[IX.item_name] = fam.item;
+    // "Item Name" is the panel's own name (what the user typed); the enclosure-family
+    // identifier stays in "Item Code". Description mirrors the name.
+    r[IX.item_name] = p.name?.trim() || fam.item;
     r[IX.description] = p.name?.trim() || fam.item;
     r[IX.item_group] = fam.group;
     r[IX.qty] = qty;
