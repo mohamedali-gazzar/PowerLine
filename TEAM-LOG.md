@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Exported Technical / Commercial offers are always light, even in night mode.**
+
+When you worked in dark mode, the exported LV Technical & Commercial PDFs came out dark
+because the pages were captured outside the "print-area" that keeps offers on white paper.
+The export now renders the pages with the light offer palette regardless of your app theme,
+so the customer always gets a clean white document. (RMU offer PDFs are built on the server
+and were already light.)
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ LV: you can now Withdraw an approved quotation before submitting it.**
 
 On the LV side the Withdraw button only appeared while a quotation was Waiting for approval —

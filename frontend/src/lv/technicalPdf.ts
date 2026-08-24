@@ -298,6 +298,7 @@ export async function exportSheetsPdf(opts: ExportOpts): Promise<Blob | void> {
 
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;left:-10000px;top:0;z-index:-1;background:#fff;";
+  host.className = "print-area"; // keep the offer's light palette even when the app is in dark mode
   document.body.appendChild(host);
   try {
     const clones = sheets.map((sheet) => {
@@ -364,6 +365,7 @@ export async function exportCommercialPdf(opts: ExportOpts): Promise<Blob | void
 
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;left:-10000px;top:0;z-index:-1;background:#fff;";
+  host.className = "print-area"; // keep the offer's light palette even when the app is in dark mode
   document.body.appendChild(host);
   try {
     // Cover + paginated Main Offer, as A4 page-blocks.
@@ -444,6 +446,7 @@ export async function exportTechnicalPdf(opts: ExportOpts): Promise<Blob | void>
   // Off-screen host where page-blocks are laid out and measured, then captured.
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;left:-10000px;top:0;z-index:-1;background:#fff;";
+  host.className = "print-area"; // keep the offer's light palette even when the app is in dark mode
   document.body.appendChild(host);
 
   try {
