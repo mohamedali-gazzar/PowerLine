@@ -4877,6 +4877,102 @@ function predictIncomerRating(p: LvPanel): number {
 // Shared by the copper breakdown window and the copper cost cells.
 const fmtNum = (n: number) => (isFinite(n) ? n : 0).toLocaleString("en-US", { maximumFractionDigits: 4 });
 
+// "Target Price" — reverse-solve the selling factor from a wanted price. The selling
+// price is inversely proportional to the factor (cost ÷ factor = price, and everything
+// else stays constant while only the factor moves), so:
+//     newFactor = currentFactor × (currentPrice ÷ targetPrice)
+// e.g. 610 USD at factor 0.7, want 500 USD → 0.7 × 610/500 = 0.854. Computing from the
+// RAW current price means applying the result lands exactly on the target. A factor above
+// 0.95 leaves almost no margin (a factor near 1 means the price ≈ cost), so it is refused
+// until the user confirms. Portaled to <body>, like the copper window.
+function TargetPriceModal({ currentFactor, sellEgp, usdRate, onApply, onClose }: {
+  currentFactor: number; sellEgp: number; usdRate: number;
+  onApply: (factor: number) => void; onClose: () => void;
+}) {
+  const sellUsd = usdRate > 0 ? sellEgp / usdRate : 0;
+  const [cur, setCur] = useState<"USD" | "EGP">("USD");
+  const [targetStr, setTargetStr] = useState("");
+  const [confirmHigh, setConfirmHigh] = useState(false);
+  // Re-arm the over-0.95 confirmation whenever the inputs change.
+  useEffect(() => { setConfirmHigh(false); }, [targetStr, cur]);
+  const currentSell = cur === "USD" ? sellUsd : sellEgp;
+  const target = parseFloat(targetStr.replace(/,/g, "")) || 0;
+  const raw = target > 0 && currentSell > 0 ? currentFactor * (currentSell / target) : 0;
+  const nf = Math.round(raw * 10000) / 10000; // 4 dp — enough to reproduce the exact price
+  const valid = nf > 0;
+  const tooHigh = nf > 0.95;
+  const apply = () => {
+    if (!valid) return;
+    if (tooHigh && !confirmHigh) { setConfirmHigh(true); return; }
+    onApply(nf);
+    onClose();
+  };
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
+      <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
+      <div role="dialog" aria-modal="true" className="relative w-full max-w-md rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
+        <div className="flex items-center gap-2">
+          <span className="h-5 w-1.5 rounded-full bg-brand" />
+          <h2 className="text-lg font-extrabold tracking-tight text-ink">🎯 Target Price</h2>
+        </div>
+        <p className="mt-1 text-xs text-muted">
+          Type the price you want to sell this panel at — it works out the selling factor
+          that gets you there. A lower price needs a higher factor (thinner margin).
+        </p>
+
+        <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+          <div className="rounded-lg bg-surface p-2.5">Current factor<br /><b className="text-base">{currentFactor}</b></div>
+          <div className="rounded-lg bg-surface p-2.5">Current price<br />
+            <b className="text-base">{cur === "USD" ? `${Math.round(sellUsd).toLocaleString()} USD` : `${fmtEgp(sellEgp)} EGP`}</b>
+          </div>
+        </div>
+
+        <label className="label mt-4">Target selling price</label>
+        <div className="flex gap-2">
+          <input autoFocus inputMode="decimal" className="input flex-1"
+            placeholder={cur === "USD" ? String(Math.round(sellUsd)) : String(Math.round(sellEgp))}
+            value={targetStr} onChange={(e) => setTargetStr(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") apply(); }} />
+          <div className="flex shrink-0 overflow-hidden rounded-lg border border-line">
+            {(["USD", "EGP"] as const).map((c) => (
+              <button key={c} type="button" onClick={() => setCur(c)}
+                className={`px-3 text-sm font-bold ${cur === c ? "bg-brand text-white" : "bg-white text-muted"}`}>{c}</button>
+            ))}
+          </div>
+        </div>
+
+        {valid && (
+          <div className={`mt-4 rounded-lg p-3 ${tooHigh ? "bg-red-50 ring-1 ring-red-200" : "bg-brand-light"}`}>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm font-semibold text-muted">New factor</span>
+              <span className={`text-2xl font-extrabold ${tooHigh ? "text-red-600" : "text-brand-dark"}`}>{nf}</span>
+            </div>
+            {tooHigh && (
+              <p className="mt-1 text-xs font-semibold text-red-700">
+                ⚠ Above 0.95 — this leaves almost no margin (a factor near 1 means the price is
+                about the same as the cost). Confirm to apply it anyway.
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="mt-5 flex items-center justify-between gap-2">
+          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" disabled={!valid}
+            className={`rounded-lg px-4 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-40 ${
+              tooHigh ? "bg-red-600 text-white hover:bg-red-700" : "btn-primary"
+            }`}
+            onClick={apply}>
+            {!valid ? "Enter a price" : tooHigh && !confirmHigh ? "Apply anyway…" : tooHigh ? "Yes, apply " + nf : "Apply factor " + nf}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // Floating, minimizable window that explains how the "Main Busbar" and
 // "Cu Connections" cost cells are calculated for the current panel. Portaled to
 // <body> because the Panels tab's animate-fade-up transform would otherwise anchor
@@ -5031,6 +5127,7 @@ function PanelEditor({ s, p, up, upPanel }: {
   // combos render in CombosCard; P.F.C renders inline in ComponentsCard.
   const [comboKind, setComboKind] = useState<ComboKind | null>(null);
   const [copperOpen, setCopperOpen] = useState<null | "busbar" | "cu">(null); // separate "how is this calculated?" windows
+  const [targetOpen, setTargetOpen] = useState(false); // "Target Price" — solve the factor for a wanted price
 
   return (
     <div className="space-y-4">
@@ -5080,6 +5177,12 @@ function PanelEditor({ s, p, up, upPanel }: {
           <div className="rounded-lg bg-brand-light p-2.5 text-brand-dark">Unit Selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
           <div className="rounded-lg bg-brand p-2.5 text-white">Unit Selling (USD)<br /><b>{fmtEgp(s.factors.usd > 0 ? calc.sellUnit / s.factors.usd : 0)} USD</b></div>
         </div>
+        )}
+        {costOpen && (
+          <button type="button" onClick={() => setTargetOpen(true)}
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-brand/40 px-3 py-1.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-tint">
+            🎯 Target Price — solve the factor for a price you want
+          </button>
         )}
       </div>
 
@@ -5185,6 +5288,16 @@ function PanelEditor({ s, p, up, upPanel }: {
       </div>{/* /details + cost row */}
 
       {copperOpen && <CopperBreakdownWindow which={copperOpen} p={p} calc={calc} f={s.factors} onClose={() => setCopperOpen(null)} />}
+
+      {targetOpen && (
+        <TargetPriceModal
+          currentFactor={p.sellFactor > 0 ? p.sellFactor : s.factors.factor}
+          sellEgp={calc.sellUnit}
+          usdRate={s.factors.usd}
+          onApply={(nf) => u({ sellFactor: nf })}
+          onClose={() => setTargetOpen(false)}
+        />
+      )}
 
       {/* Components (section pills + circuit-combination sub-row live inside this card) */}
       <ComponentsCard s={s} p={p} u={u} replaceComponent={replaceComponent} comboKind={comboKind} setComboKind={setComboKind} />

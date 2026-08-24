@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ LV Panels: "Target Price" tool — solve the selling factor from a price you want.**
+
+New 🎯 Target Price button in the Panel cost (live) card. Type the price you want to sell
+the panel at (USD or EGP) and it works out the selling factor that gets you there — e.g.
+a panel selling at 610 USD on factor 0.7, want 500 USD → factor 0.854. (The price is
+inversely proportional to the factor, so a lower price needs a higher factor.) Apply sets
+the panel's factor. If the new factor comes out above 0.95 — almost no margin, price near
+cost — it warns and refuses to apply until you confirm ("Apply anyway"). Verified live.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ QTN number field is now locked to the format QTN-YY-NNNNN (LV and MV).**
 
 The quotation-number field only accepts the serial "QTN-" + 2-digit year + 5-digit number
