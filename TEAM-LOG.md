@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ "No. of poles" now also counts the reserved "Space for MCB" rows.**
+
+A "Space for MCB 1P" / "Space for MCB 3P" row reserves rail space for a breaker you'll add
+later, but it was being left out of the "No. of poles" total entirely. It now counts by its
+poles just like a real breaker — a 1P space = 1 pole, a 3P space = 3 — so a Main-Incoming
+with a 3P MCB + a 1P MCB + a "Space for MCB 1P" now reads 5 poles, not 4. Reserved spaces
+for panel-mount devices ("Space for MCCB/ACB") stay out, since this summary is DIN-rail
+width only. Sizing readout only — no price changes. 38 tests pass (4 new); build green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ "No. of poles" now counts each MCB by its real pole count (1P = 1, 3P = 3).**
 
 The panel-width summary counts the space a breaker takes as one module per pole — a 1-pole

@@ -61,6 +61,17 @@ function mcbPoles(name: string, polesField: number): number {
  *  is not a DIN-rail item the summary tracks (MCCB/ACB/MMS/pilot/overload/etc.). */
 export function componentPoles(c: { name: string; type: string; poles: number }): { kind: PoleKind; poles: number } | null {
   const n = c.name || "";
+  // Reserved DIN-rail space for a future MCB (e.g. "Space for MCB 3P") — it holds the width
+  // the breaker will occupy, so it counts toward the panel poles (1P → 1, 3P → 3). The poles
+  // field carries the count; fall back to the "NP" in the name. Only MCB reservations size the
+  // DIN rail — a "Space for MCCB/ACB" is a panel-mount device, not a rail module, so it stays
+  // out of this summary. Counted under the MCB tally.
+  if (c.type === "Space") {
+    if (!/\bmcb\b/i.test(n)) return null;
+    const np = n.match(/\b([1-4])\s*P\b/i);
+    const poles = c.poles || (np ? +np[1] : 0);
+    return poles > 0 ? { kind: "mcb", poles } : null;
+  }
   if (/^CAL\d|auxiliary contact block/i.test(n)) return { kind: "aux", poles: 1 };            // side-aux (names quote "AF09..96") — match before AF
   if (/contactor/i.test(n) && /\bAF(\d+)/.test(n)) return { kind: "af", poles: afWidth(+n.match(/\bAF(\d+)/)![1]) };
   if (/\bESB\d/i.test(n)) return { kind: "esb", poles: esbPoles(n) };
