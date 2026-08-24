@@ -46,6 +46,16 @@ function mdrcsPoles(name: string): number {
   if (/\bDME\d/i.test(name)) return 1;                             // DME100 (1-module RCBO)
   return 1;
 }
+// MCB rail width = its pole count: a breaker takes one DIN module per pole, so a 1P MCB is
+// 1 pole of space and a 3P MCB is 3. The pole count is read from the breaker's own rating —
+// the "1P/2P/3P/4P" in its name, or the ABB family code (S201→1P, S203→3P, SN201, S803…) —
+// so the space is right even if a saved/hand-typed row's stored poles number is stale. Falls
+// back to that stored number, then 1. Sizing only — copper pricing uses the stored field.
+function mcbPoles(name: string, polesField: number): number {
+  const np = name.match(/\b([1-4])\s*P\b/i); if (np) return +np[1];   // "3P" / "3 P"
+  const fam = name.match(/\bS[HN]?[1-9]0([1-4])\b/i); if (fam) return +fam[1]; // S203 / SN201 / S803
+  return polesField || 1;
+}
 
 /** Classify a component into a pole-summary kind + its rail width (poles), or null if it
  *  is not a DIN-rail item the summary tracks (MCCB/ACB/MMS/pilot/overload/etc.). */
@@ -54,7 +64,7 @@ export function componentPoles(c: { name: string; type: string; poles: number })
   if (/^CAL\d|auxiliary contact block/i.test(n)) return { kind: "aux", poles: 1 };            // side-aux (names quote "AF09..96") — match before AF
   if (/contactor/i.test(n) && /\bAF(\d+)/.test(n)) return { kind: "af", poles: afWidth(+n.match(/\bAF(\d+)/)![1]) };
   if (/\bESB\d/i.test(n)) return { kind: "esb", poles: esbPoles(n) };
-  if (c.type === "MDRC" || /miniature circuit breaker/i.test(n)) return { kind: "mcb", poles: c.poles || mdrcsPoles(n) };
+  if (c.type === "MDRC" || /miniature circuit breaker/i.test(n)) return { kind: "mcb", poles: mcbPoles(n, c.poles) };
   if (/RCCB/i.test(n)) return { kind: "rccb", poles: mdrcsPoles(n) };
   if (/RCBO/i.test(n)) return { kind: "rcbo", poles: mdrcsPoles(n) };
   if (/terminal/i.test(n)) return { kind: "terminal", poles: 1 };

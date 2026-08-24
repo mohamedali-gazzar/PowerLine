@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ "No. of poles" now counts each MCB by its real pole count (1P = 1, 3P = 3).**
+
+The panel-width summary counts the space a breaker takes as one module per pole — a 1-pole
+MCB is 1 pole of space, a 3-pole MCB is 3, times the quantity. It already did this for
+breakers picked from the catalogue; the change makes it read the pole count straight from
+the breaker's own rating (the "1P/2P/3P" in its name, or the ABB S20x code), so the space
+is still correct for an older saved quotation or a hand-typed row whose stored pole number
+was off. This is only the sizing readout that helps choose the enclosure width — it does
+not change any price (all 34 tests pass, including every cost test). Frontend build green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Re-ordering the panels in the list is smooth now (and only changes their order).**
 
 You could already drag a panel by its dotted handle to change its place in the LV panel
