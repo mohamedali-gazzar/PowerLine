@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ LV: you can now Withdraw an approved quotation before submitting it.**
+
+On the LV side the Withdraw button only appeared while a quotation was Waiting for approval —
+not after it was Approved. Now the owner can Withdraw at both stages (it goes back to Draft
+and the approval is undone), matching the RMU offers. Once the quotation is Submitted there
+is still no Withdraw — only a permissioned Reopen for admins, unchanged.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Send-for-approval dropdown now also lists Admins (so section heads show up).**
 
 A section head is usually given the **Admin** role, so they weren't appearing in the

@@ -1428,11 +1428,11 @@ export default function LvConfiguratorPage() {
                 ↩ Return for revision
               </button>
             )}
-            {!cancelled && status === "WAITING_APPROVAL" && isOwner && (
+            {!cancelled && (status === "WAITING_APPROVAL" || status === "APPROVED") && isOwner && (
               <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
                 confirm: {
                   title: "Withdraw from approval",
-                  message: "It goes back to draft and you can edit it again. Whoever was reviewing it will no longer see it in their queue.",
+                  message: "It goes back to draft and you can edit it again — the approval is undone. (Only available before the quotation is submitted.)",
                   confirmLabel: "Withdraw",
                 },
               })}>
