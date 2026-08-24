@@ -91,6 +91,7 @@ export interface QtnSummaryInput {
   customer?: string;
   panelsCount?: number;
   totalEgp?: number;
+  revisionNo?: number;
 }
 /** The approval states a quotation moves through. Mirrors the server's
  *  domain/qtnStatus.ts — the server is the authority; this is for rendering. */
@@ -140,6 +141,8 @@ export interface QtnListItemDto extends QtnWorkflow {
   customer: string;
   panels: number;
   totalEgp: number;
+  /** Project-tab Revision No. (0 = original) — used to show the "-N" suffix in History. */
+  revisionNo?: number;
   submitted: boolean;
   /** Set only on hidden quotations, which appear only in an includeRemoved list. */
   removedAt?: string | null;
@@ -503,6 +506,9 @@ export const api = {
   offerEvents: (id: string) => request<QtnEventDto[]>(`/offers/${id}/events`),
   createOffer: (data: OfferInput) =>
     request<Offer>("/offers", { method: "POST", body: JSON.stringify(data) }),
+  /** Update a draft RMU offer in place (autosave while editing). 409 once it's locked. */
+  updateOffer: (id: string, data: OfferInput) =>
+    request<Offer>(`/offers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteOffer: (id: string) => request<void>(`/offers/${id}`, { method: "DELETE" }),
   /** Clone an RMU offer into a fresh DRAFT (Duplicate / Amend). Prices stay frozen. */
   duplicateOffer: (id: string, number?: string) =>

@@ -25,6 +25,7 @@ type Summary = {
   customer?: string;
   panelsCount?: number;
   totalEgp?: number;
+  revisionNo?: number;
 };
 
 type QtnRow = {
@@ -53,6 +54,7 @@ type QtnRow = {
   customer: string;
   panelsCount: number;
   totalEgp: number;
+  revisionNo: number;
 };
 
 /**
@@ -131,6 +133,7 @@ const listItem = (q: QtnListRow) => ({
   customer: q.customer,
   panels: q.panelsCount,
   totalEgp: q.totalEgp,
+  revisionNo: q.revisionNo,
   submitted: q.submitted,
   ...workflowOf(q),
   ownerId: q.ownerId ?? "",
@@ -174,6 +177,7 @@ export const listSelect = {
   customer: true,
   panelsCount: true,
   totalEgp: true,
+  revisionNo: true,
   // qtnStatus() falls back to this mirror for rows written before the workflow existed.
   submitted: true,
   status: true,
@@ -251,6 +255,7 @@ function summaryData(s?: Summary) {
     customer: s?.customer ?? "",
     panelsCount: s?.panelsCount ?? 0,
     totalEgp: s?.totalEgp ?? 0,
+    revisionNo: s?.revisionNo ?? 0,
   };
 }
 

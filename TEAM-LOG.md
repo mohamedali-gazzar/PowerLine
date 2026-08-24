@@ -23,6 +23,26 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Offer History shows the revision number (e.g. QTN-26-1129-1).**
+
+An LV quotation with a Revision No. set on the Project tab now shows that suffix in Offer
+History (matching what the offer document prints), instead of only the base number. The
+revision is denormalized onto a small column on save (the History list can't load the full
+state — that once took the site down), and the list appends "-N" when it's > 0. It fills in
+on a quotation's next save. Adds an additive `revisionNo` column (default 0, safe).
+
+## 2026-08-24 · Mohamed's side · Claude
+
+**✅ Groundwork: a draft RMU offer can be updated in place (for the coming LV-style editor).**
+
+Added `PUT /api/offers/:id` (+ `updateOffer` service + `api.updateOffer`) so a DRAFT RMU
+offer can be edited and re-saved in place — re-freezing its prices exactly like create,
+keeping its number/status, and refused once it's past Draft/Returned (same lock as LV).
+Not wired into any screen yet; it's the backend half of turning the RMU page into an
+LV-style editable draft (Phase 1). Safe on its own — an unused, gated endpoint.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Offer History: a quotation can now be removed at any status.**
 
 The Remove (trash) action in Offer History was only available on LV quotations that were

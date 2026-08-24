@@ -10,6 +10,7 @@ const summary = z
     customer: z.string().max(300).optional(),
     panelsCount: z.number().int().min(0).optional(),
     totalEgp: z.number().min(0).optional(),
+    revisionNo: z.number().int().min(0).optional(),
   })
   .optional();
 

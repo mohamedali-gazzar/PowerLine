@@ -45,6 +45,8 @@ export interface QtnListItem {
   customer: string;
   panels: number;
   totalEgp: number;
+  /** Project-tab Revision No. (0 = original) — drives the "-N" suffix in History. */
+  revisionNo?: number;
   submitted?: boolean;
   status: QtnStatus;
   locked: boolean;
@@ -71,6 +73,8 @@ function summaryOf(state: LvState): QtnSummaryInput {
     customer: state.project.customer,
     panelsCount: state.panels.length,
     totalEgp: Number.isFinite(total) ? total : 0,
+    // Denormalized so the History list can show the revision suffix without the state.
+    revisionNo: parseInt(String(state.project.revisionNo ?? "").replace(/\D/g, ""), 10) || 0,
   };
 }
 

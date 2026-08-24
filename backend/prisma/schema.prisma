@@ -236,6 +236,9 @@ model LvQtn {
   customer    String    @default("")
   panelsCount Int       @default(0)
   totalEgp    Float     @default(0)
+  /// Project-tab Revision No. (0 = original). Denormalized so the History list can show
+  /// the revision suffix (e.g. "QTN-26-1129-1") without loading the whole state JSON.
+  revisionNo  Int       @default(0)
   /// MIRROR COLUMNS. Kept so the weekly-submissions chart keeps working unchanged,
   /// but never written by hand again — statusWrite() in domain/qtnStatus.ts owns
   /// them. submittedAt is now sticky: reopening no longer nulls it, so a quotation

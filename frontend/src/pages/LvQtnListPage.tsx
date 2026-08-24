@@ -50,6 +50,7 @@ interface UniRow {
   removedAt?: string | null;
   removedBy?: string;
   cancelled?: boolean; // LV superseded revision
+  revisionNo?: number; // LV Project-tab revision (0 = original)
   lv?: QtnListItem;
   rmu?: Offer;
 }
@@ -206,7 +207,8 @@ export default function LvQtnListPage() {
         totalUsd: Number.isFinite(x.totalEgp) ? x.totalEgp / DEFAULT_FACTORS.usd : null,
         statusKey: st, statusLabel: QTN_STATUS_LABEL[st], statusStyle: QTN_STATUS_STYLE[st],
         ownerEmail: x.ownerEmail, ownerName: x.ownerName, approverEmail: x.approverEmail,
-        removedAt: x.removedAt, removedBy: x.removedBy, cancelled: cancelledIds.has(x.id), lv: x,
+        removedAt: x.removedAt, removedBy: x.removedBy, cancelled: cancelledIds.has(x.id),
+        revisionNo: x.revisionNo, lv: x,
       };
     });
     const rmu: UniRow[] = (offers ?? []).map((o) => ({
@@ -307,6 +309,15 @@ export default function LvQtnListPage() {
       : myPerms.includes("qtn.amendAll"));
 
   const rowHref = (x: UniRow) => (x.kind === "RMU" ? `/offers/${x.id}` : `/lv/qtn/${x.id}`);
+
+  // The number shown in History, with the revision suffix. If the stored number already
+  // carries a "-N" (Amend flow) keep it; otherwise append the Project-tab Revision No.
+  // when it's > 0 — so a rev-1 quotation reads "QTN-26-1129-1" like its offer does.
+  const displayNumber = (x: UniRow): string => {
+    if (x.kind !== "LV") return x.number;
+    if (parseRevision(x.number).rev > 0) return x.number;
+    return x.revisionNo && x.revisionNo > 0 ? `${x.number}-${x.revisionNo}` : x.number;
+  };
 
   // ── LV actions ──────────────────────────────────────────────────────────────
   const onDeleteLv = async (e: React.MouseEvent, x: UniRow) => {
@@ -513,7 +524,7 @@ export default function LvQtnListPage() {
                           <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${x.kind === "RMU" ? "bg-violet-100 text-violet-700" : "bg-brand-light text-brand-dark"}`}>{x.kind}</span>
                         </td>
                         <td className="px-4 py-3 font-bold text-ink">
-                          <span className={`rounded-md px-2 py-0.5 font-mono text-xs font-bold ${dead ? "bg-surface text-muted line-through" : "bg-brand-light text-brand-dark"}`}>{x.number}</span>
+                          <span className={`rounded-md px-2 py-0.5 font-mono text-xs font-bold ${dead ? "bg-surface text-muted line-through" : "bg-brand-light text-brand-dark"}`}>{displayNumber(x)}</span>
                           {dead && (
                             <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">Cancelled</span>
                           )}
