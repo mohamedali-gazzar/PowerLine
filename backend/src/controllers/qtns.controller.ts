@@ -638,7 +638,7 @@ async function transitionDenial(
 
 /** Tell everyone who needs to know. Never throws — mail must not fail an approval. */
 async function announce(
-  q: { id: string; number: string; ownerId: string; projectName: string },
+  q: { id: string; number: string; ownerId: string; projectName: string; owner?: { name?: string | null; email?: string | null } | null; state?: string },
   to: QtnStatus,
   actorEmail: string,
   note: string,
@@ -648,9 +648,14 @@ async function announce(
 ) {
   const link = `/lv/qtn/${q.id}`;
   const when = new Date().toLocaleString("en-GB");
+  const ownerName = q.owner?.name || q.owner?.email || "";
+  let salesName = "";
+  try { salesName = (JSON.parse(q.state || "{}")?.project?.salesName as string) || ""; } catch { /* corrupt state → no sales name */ }
   const details: [string, string][] = [
     ["QTN", q.number],
+    ["Sales support", ownerName || "—"],
     ["Project", q.projectName || "—"],
+    ["Sales", salesName || "—"],
     ["Status", QTN_STATUS_LABEL[to]],
     ["By", actorEmail || "—"],
     ["When", when],

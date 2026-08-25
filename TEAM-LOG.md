@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Notifications are now short and readable — QTN, who, project, sales, status.**
+
+Each notification used to be two long sentences. Now it's a compact card:
+the quotation number and the sales-support (owner) name in bold, the project name and the sales
+person underneath in grey, then the status in bold — plus the "x ago" time. New notifications
+carry this snapshot; older ones still show their original wording. Works for both LV quotations
+and RMU offers. Adds one small defaulted column (Notification.detailsJson) — safe for the deploy's
+db push. Verified live. Backend 291 tests + frontend 38 tests green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ "Check for updates" now shows a red notification count you can tick off as you read them.**
 
 The little sentence under the button ("Up to date — version 51 · 4 added…") is gone. In its place,

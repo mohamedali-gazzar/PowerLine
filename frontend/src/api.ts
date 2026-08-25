@@ -187,6 +187,8 @@ export interface NotificationDto {
   kind: string;
   title: string;
   body: string;
+  /** JSON [label, value][] snapshot for the compact card (QTN, Sales support, Project, Sales, Status). */
+  detailsJson?: string;
   link: string;
   qtnId: string | null;
   readAt: string | null;

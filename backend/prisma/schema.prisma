@@ -363,6 +363,9 @@ model Notification {
   kind       String    @default("")
   title      String    @default("")
   body       String    @default("")
+  /// JSON [label, value][] snapshot (QTN no, project, sales support, sales, status …) taken at
+  /// notification time, so the panel can render a compact structured card without a QTN lookup.
+  detailsJson String   @default("")
   link       String    @default("")
   qtnId      String?
   readAt     DateTime?

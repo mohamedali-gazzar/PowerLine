@@ -40,6 +40,7 @@ export async function notify(n: NotifyInput) {
       kind: n.kind,
       title: n.title,
       body: n.body,
+      detailsJson: JSON.stringify(n.details ?? []),
       link: n.link,
       qtnId: n.qtnId ?? null,
     },

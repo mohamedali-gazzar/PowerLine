@@ -469,9 +469,14 @@ async function offerTransitionDenial(
 async function announceOffer(offer: WorkflowOffer, to: QtnStatus, actorEmail: string, note: string, approverId?: string | null, from?: QtnStatus) {
   const link = "/lv"; // the unified Offer History, where RMU offers are actioned
   const when = new Date().toLocaleString("en-GB");
+  const ownerName = offer.owner?.name || offer.owner?.email || "";
+  const salesName = (offer as { salesName?: string | null }).salesName || "";
+  const qtnNo = (offer as { quotationNo?: string | null }).quotationNo || offer.offerNumber;
   const details: [string, string][] = [
-    ["Offer", offer.offerNumber],
+    ["QTN", qtnNo],
+    ["Sales support", ownerName || "—"],
     ["Project", offer.projectName || "—"],
+    ["Sales", salesName || "—"],
     ["Status", QTN_STATUS_LABEL[to]],
     ["By", actorEmail || "—"],
     ["When", when],

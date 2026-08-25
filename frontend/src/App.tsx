@@ -380,8 +380,37 @@ function NotificationBell({ pinMode }: { pinMode: "off" | "min" | "open" }) {
                     <span className="flex items-start gap-2">
                       <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${n.readAt ? "bg-transparent" : "bg-brand"}`} />
                       <span className="min-w-0 flex-1">
-                        <span className="block text-xs font-bold text-ink">{n.title}</span>
-                        {n.body && <span className="mt-0.5 block text-[11px] text-muted">{n.body}</span>}
+                        {(() => {
+                          // Compact card from the snapshot: "QTN (sales support)" · project · sales · status.
+                          // Older notifications (no snapshot) fall back to the original title/body.
+                          let dl: [string, string][] = [];
+                          try { dl = JSON.parse(n.detailsJson || "[]"); } catch { /* ignore */ }
+                          const get = (k: string) => dl.find(([l]) => l === k)?.[1] || "";
+                          const qtn = get("QTN") || get("Offer");
+                          const support = get("Sales support");
+                          const project = get("Project");
+                          const sales = get("Sales");
+                          const status = get("Status");
+                          if (!qtn) {
+                            return (
+                              <>
+                                <span className="block text-xs font-bold text-ink">{n.title}</span>
+                                {n.body && <span className="mt-0.5 block text-[11px] text-muted">{n.body}</span>}
+                              </>
+                            );
+                          }
+                          const grey = (v: string) => v && v !== "—";
+                          return (
+                            <>
+                              <span className="block text-xs font-bold text-ink">
+                                {qtn}{grey(support) ? ` (${support})` : ""}
+                              </span>
+                              {grey(project) && <span className="mt-0.5 block text-[11px] text-muted">{project}</span>}
+                              {grey(sales) && <span className="block text-[11px] text-muted">{sales}</span>}
+                              {status && <span className="mt-1 block text-xs font-bold text-brand-dark">{status}</span>}
+                            </>
+                          );
+                        })()}
                         <span className="mt-0.5 block text-[10px] text-muted">{ago(n.createdAt)}</span>
                       </span>
                     </span>
