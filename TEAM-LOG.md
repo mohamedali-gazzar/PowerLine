@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ The New-QTN number field now starts empty (was pre-filled with "QTN-26-").**
+
+When you create a quotation, the number box no longer starts with "QTN-26-" typed in — it's
+empty, with a faint "QTN-26-00000" hint showing the shape. You type the number and the dashes
+fill themselves in as you go. Creating still only accepts a complete number in the QTN-YY-NNNNN
+form (a 2-digit year and a 5-digit serial), so nothing incomplete gets through. Build green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Fixed the QTN-number offer link opening the quotation list instead of the offer.**
 
 The by-QTN-number link had put the internal code after a "#", and other apps (like the ERP)

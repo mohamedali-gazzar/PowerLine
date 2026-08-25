@@ -53,7 +53,8 @@ export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClo
     if (!pick) return;
     if (pick.flow === "pcss") { onClose(); navigate("/kiosks"); return; }
     setErr("");
-    if (!number.trim()) setNumber(qtnPrefix()); // prefill "QTN-YY-", the user adds the serial
+    // Leave the number field empty (the placeholder shows the QTN-YY-00000 format); the user
+    // types the whole number and create() still accepts only a complete QTN-YY-NNNNN.
     setStep("number");
   };
 
