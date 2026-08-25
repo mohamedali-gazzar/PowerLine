@@ -1311,11 +1311,12 @@ export default function LvConfiguratorPage() {
   const offerLabel = linkRevNum > 0 ? `${qtnNum}-${linkRevNum}` : qtnNum;
   // Copy the offer URL as a hyperlink named by that label. Writes both clipboard formats: rich
   // text/html (a real <a>, so a rich ERP field shows a clickable link that reads as the QTN
-  // name) and a text/plain fallback that is the BARE URL — a strict "URL" field in the ERP
-  // validates it starts with http(s), so it must not be prefixed with the label. Falls back
-  // to writeText.
+  // name) and a text/plain URL that starts with http(s) so a strict "URL" field in the ERP
+  // accepts it. The QTN number rides in the URL fragment (#QTN-…) so it is visible right after
+  // the address without breaking the link — the app ignores the fragment when opening it.
   const copyOfferLink = async () => {
-    const url = window.location.href;
+    const base = window.location.href.split("#")[0]; // drop any existing fragment
+    const url = offerLabel ? `${base}#${offerLabel}` : base;
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const html = `<a href="${esc(url)}">${esc(offerLabel)}</a>`;
     const plain = url;

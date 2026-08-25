@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ The copied offer link now carries the QTN number in the web address itself.**
+
+The link that "Copy link" copies now ends with the quotation number (e.g.
+`https://…/lv/qtn/…#QTN-26-12354-1`), so you can see which quotation it points to straight
+from the address — while it stays a valid link a URL field accepts, and still opens the right
+offer when clicked (the number after the "#" is just a label the app ignores). Build green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Fixed "Copy link" so a URL field in the ERP accepts it ("Invalid URL" error).**
 
 When you pasted the copied offer link into the ERP's URL field it complained "URL must start
