@@ -2959,19 +2959,13 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                     const effGroup = effectiveGroups(p.components);
                     return secs.flatMap((sec) => {
                       const comps = p.components.filter((c) => c.section === sec);
-                      const order: string[] = [];
-                      const byG = new Map<string, PanelComponent[]>();
-                      comps.forEach((c) => {
-                        const k = effGroup.get(c.id) || "";
-                        if (!byG.has(k)) { byG.set(k, []); order.push(k); }
-                        byG.get(k)!.push(c);
-                      });
+                      const hasGroups = comps.some((c) => effGroup.get(c.id));
                       const rows: JSX.Element[] = [];
                       let dataRow = 0; // zebra counter — shade every other component row (per section)
                       // Section header shows for multi-section panels, and whenever the
                       // section has combination sub-groups (Source 1 / 2 …) so the section
                       // context (e.g. Main Incoming) is never lost above the sub-headers.
-                      if (multiSection || order.some((g) => g))
+                      if (multiSection || hasGroups)
                         rows.push(
                           <tr key={`s-${sec}`} data-pdf-head style={{ breakInside: "avoid", breakAfter: "avoid" }}>
                             {sec.length > 40 ? (
@@ -2987,44 +2981,56 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                             )}
                           </tr>
                         );
-                      for (const g of order) {
-                        // Combination sub-header (Source 1 / Source 2 / …) under the section.
-                        if (g) {
-                          // Derive the combination multiplier (qty ÷ baseQty) so the offer
-                          // sub-header still shows ×N, in sync with the editor.
-                          const gf = byG.get(g)!.find((c) => !isSpacer(c));
-                          const gbase = gf ? (gf.baseQty ?? gf.qty) : 0;
-                          const gcq = gf && gbase > 0 ? Math.max(1, Math.round(gf.qty / gbase)) : 1;
-                          // Match the panels editor: MCC (by name) + custom combinations (flagged) show "QTY (N) each contain:".
-                          const gScalable = /\(Type \d+\)/.test(g) || !!byG.get(g)!.find((c) => !isSpacer(c))?.comboScalable;
-                          rows.push(
-                            // Group sub-header styled like the panels editor. break-after: avoid keeps it
-                            // with its first rows so it's never stranded at the bottom of a page. The empty
-                            // first cell starts the header at the Description column, aligned with its items;
-                            // every sub-header uses one font size (13.5px) regardless of name length.
-                            <tr key={`g-${sec}-${g}`} data-pdf-head style={{ breakInside: "avoid", breakAfter: "avoid" }}>
-                              <td className="py-1" />
-                              <td colSpan={hideBrand ? 3 : 4} className="px-2 py-1 text-left font-display font-normal leading-[20px] text-[13.5px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>{gScalable ? <span className="font-bold">, QTY ({gcq}) each contain:</span> : ""}</td>
-                            </tr>
-                          );
+                      // Walk the section IN ORDER, mirroring the panels editor, so every
+                      // component prints exactly where it sits in the panel. A combination
+                      // sub-header (Source 1 / Source 2 / …) is emitted only when the running
+                      // group changes to a new combination; loose rows between combinations
+                      // stay in place. (Bucketing by group name used to pull every ungrouped
+                      // row up beside the first one, so a second EXT under "Source 2" wrongly
+                      // printed under "Source 1" and vanished from Source 2.)
+                      let curGroup = " ";
+                      for (const c of comps) {
+                        const g = effGroup.get(c.id) || "";
+                        if (g !== curGroup) {
+                          curGroup = g;
+                          // Combination sub-header under the section, at the start of each run.
+                          if (g) {
+                            // Derive the combination multiplier (qty ÷ baseQty) so the offer
+                            // sub-header still shows ×N, in sync with the editor. gf/gScalable
+                            // read the first member the group actually claims in this section.
+                            const gf = comps.find((x) => !isSpacer(x) && (effGroup.get(x.id) || "") === g);
+                            const gbase = gf ? (gf.baseQty ?? gf.qty) : 0;
+                            const gcq = gf && gbase > 0 ? Math.max(1, Math.round(gf.qty / gbase)) : 1;
+                            // Match the panels editor: MCC (by name) + custom combinations (flagged) show "QTY (N) each contain:".
+                            const gScalable = /\(Type \d+\)/.test(g) || !!comps.find((x) => !isSpacer(x) && (effGroup.get(x.id) || "") === g)?.comboScalable;
+                            rows.push(
+                              // Group sub-header styled like the panels editor. break-after: avoid keeps it
+                              // with its first rows so it's never stranded at the bottom of a page. The empty
+                              // first cell starts the header at the Description column, aligned with its items;
+                              // every sub-header uses one font size (13.5px) regardless of name length.
+                              <tr key={`g-${sec}-${g}`} data-pdf-head style={{ breakInside: "avoid", breakAfter: "avoid" }}>
+                                <td className="py-1" />
+                                <td colSpan={hideBrand ? 3 : 4} className="px-2 py-1 text-left font-display font-normal leading-[20px] text-[13.5px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>{gScalable ? <span className="font-bold">, QTY ({gcq}) each contain:</span> : ""}</td>
+                              </tr>
+                            );
+                          }
                         }
-                        for (const c of byG.get(g)!)
-                          rows.push(isSpacer(c) ? (
-                            <tr key={c.id}>
-                              <td colSpan={hideBrand ? 4 : 5} className="px-2 py-0.5 text-[12.5px] leading-[12.5px]">&nbsp;</td>
-                            </tr>
-                          ) : (
-                            <tr key={c.id} style={{ breakInside: "avoid" }} className={`align-middle ${dataRow++ % 2 === 1 ? "bg-[#f4f4f6]" : ""}`}>
-                              <td className="px-2 py-1 text-center text-[12.5px] font-semibold leading-[15px]">{c.baseQty ?? c.qty}</td>
-                              <td className="px-2 py-1 text-[12.5px] leading-[15px]">
-                                {c.name}
-                                {c.comment && <div className="mt-0.5 text-[11px] italic leading-tight text-muted">{c.comment}</div>}
-                              </td>
-                              <td className="px-2 py-1 text-center text-[12.5px] leading-[15px]">{c.adj}</td>
-                              {!hideBrand && <td className="px-2 py-1 text-[12.5px] leading-[15px]">{c.brand}</td>}
-                              <td className="px-2 py-1 text-[11.5px] text-muted leading-[15px]">{c.note}</td>
-                            </tr>
-                          ));
+                        rows.push(isSpacer(c) ? (
+                          <tr key={c.id}>
+                            <td colSpan={hideBrand ? 4 : 5} className="px-2 py-0.5 text-[12.5px] leading-[12.5px]">&nbsp;</td>
+                          </tr>
+                        ) : (
+                          <tr key={c.id} style={{ breakInside: "avoid" }} className={`align-middle ${dataRow++ % 2 === 1 ? "bg-[#f4f4f6]" : ""}`}>
+                            <td className="px-2 py-1 text-center text-[12.5px] font-semibold leading-[15px]">{c.baseQty ?? c.qty}</td>
+                            <td className="px-2 py-1 text-[12.5px] leading-[15px]">
+                              {c.name}
+                              {c.comment && <div className="mt-0.5 text-[11px] italic leading-tight text-muted">{c.comment}</div>}
+                            </td>
+                            <td className="px-2 py-1 text-center text-[12.5px] leading-[15px]">{c.adj}</td>
+                            {!hideBrand && <td className="px-2 py-1 text-[12.5px] leading-[15px]">{c.brand}</td>}
+                            <td className="px-2 py-1 text-[11.5px] text-muted leading-[15px]">{c.note}</td>
+                          </tr>
+                        ));
                       }
                       return rows;
                     });

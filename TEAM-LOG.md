@@ -21,6 +21,18 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-08-25 · Mohamed's side · Claude
+
+**✅ Technical Offer now prints each item exactly where it sits in the panel.**
+
+A panel's "Main Incoming" had one EXT under Source 1 and one under Source 2, but the printed
+Technical Offer showed BOTH EXTs under Source 1 and none under Source 2. Cause: the offer table
+grouped components by group *name*, which quietly pulled every loose (un-grouped) row up next to
+the first loose row — so the Source 2 EXT jumped up under Source 1. The offer now walks the
+components in order, exactly like the panels editor does, and only draws a "Source 1 / Source 2"
+sub-header when the combination actually changes. Loose rows stay put, so the printed offer now
+matches the panel item-for-item. No price or data change. Build green.
+
 ## 2026-08-24 · Mohamed's side · Claude
 
 **✅ The status on a notification is now a coloured pill.**
