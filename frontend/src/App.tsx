@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { api, type NotificationDto, type MyAccess } from "./api";
+import { api, QTN_STATUS_STYLE, QTN_STATUS_LABEL, type QtnStatus, type NotificationDto, type MyAccess } from "./api";
 import { useAuth } from "./auth/AuthContext";
 import { useTheme } from "./theme";
 
@@ -407,7 +407,16 @@ function NotificationBell({ pinMode }: { pinMode: "off" | "min" | "open" }) {
                               </span>
                               {grey(project) && <span className="mt-0.5 block text-[11px] text-muted">{project}</span>}
                               {grey(sales) && <span className="block text-[11px] text-muted">{sales}</span>}
-                              {status && <span className="mt-1 block text-xs font-bold text-brand-dark">{status}</span>}
+                              {status && (() => {
+                                // Colour the status like everywhere else (green=approved, amber=waiting …),
+                                // by matching the snapshot's label back to its status key.
+                                const key = (Object.keys(QTN_STATUS_LABEL) as QtnStatus[]).find((k) => QTN_STATUS_LABEL[k] === status);
+                                return (
+                                  <span className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${key ? QTN_STATUS_STYLE[key] : "bg-slate-100 text-slate-600"}`}>
+                                    {status}
+                                  </span>
+                                );
+                              })()}
                             </>
                           );
                         })()}

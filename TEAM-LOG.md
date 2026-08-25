@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ The status on a notification is now a coloured pill.**
+
+Follow-up to the notification card: the status line is a coloured pill instead of bold text —
+the same colours used everywhere else (e.g. red for "Returned", amber for "Waiting", green for
+"Approved"), so you can tell a notification's stage at a glance. Build green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Notifications are now short and readable — QTN, who, project, sales, status.**
 
 Each notification used to be two long sentences. Now it's a compact card:
