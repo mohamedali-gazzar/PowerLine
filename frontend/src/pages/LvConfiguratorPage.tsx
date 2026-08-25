@@ -411,7 +411,18 @@ export default function LvConfiguratorPage() {
   // and separately when this revision has been superseded.
   const lockedByStatus = status === "WAITING_APPROVAL" || status === "APPROVED" || status === "SUBMITTED";
   const canEditWaiting = status === "WAITING_APPROVAL" && myPerms.includes("qtn.editWaiting");
-  const readOnly = (lockedByStatus && !canEditWaiting) || cancelled;
+  // Review SANDBOX: an approver (Section Head / Team Leader) — or anyone with edit-waiting — may
+  // open a QTN that's waiting for approval and freely edit it to COMPARE ("what if we swap this
+  // component?"), but nothing is saved. Autosave is switched off below, and the server refuses
+  // their writes anyway, so returning it sends the estimator's ORIGINAL back — only the comments
+  // travel with it. It never applies to the owner or a co-worker (their edits are real).
+  const iAmOwner = !!user?.id && rec?.ownerId === user.id;
+  const iAmCoOwner = !!user?.id && !!rec?.coOwners?.some((c) => c.id === user.id);
+  const reviewSandbox =
+    status === "WAITING_APPROVAL" &&
+    (myPerms.includes("qtn.approve") || myPerms.includes("qtn.editWaiting")) &&
+    !iAmOwner && !iAmCoOwner;
+  const readOnly = (lockedByStatus && !canEditWaiting && !reviewSandbox) || cancelled;
 
   // Renames the QTN on the backend (unique, non-empty). Edited from the Project tab.
   const renameQtnNumber = async (n: string): Promise<{ ok: boolean; error?: string }> => {
@@ -458,6 +469,11 @@ export default function LvConfiguratorPage() {
       setSubmitting(false);
     }
   };
+
+  // Discard the review sandbox and snap back to the estimator's saved version, so an approver can
+  // flip between "what if" and the original while comparing. (rec.state is never overwritten while
+  // reviewing, because autosave is off in the sandbox.)
+  const resetToOriginal = () => { if (rec) setHist({ past: [], present: rec.state, future: [] }); };
 
   // The actual transition. When the pre-approval warnings modal is what confirmed the
   // send, it carries its own "Send anyway" button and its own note, so the plain confirm
@@ -786,6 +802,7 @@ export default function LvConfiguratorPage() {
 
   useEffect(() => {
     if (!rec || loading) return;
+    if (reviewSandbox) return; // review sandbox — approver edits stay local, are never saved
     const payload = JSON.stringify(s);
     if (payload === sentRef.current) return; // nothing to write
     saveRef.current = { id: rec.id, state: s };
@@ -794,7 +811,7 @@ export default function LvConfiguratorPage() {
     const selectionOnly = sentContentRef.current !== "" && contentKey === sentContentRef.current;
     const t = setTimeout(() => commit.current(rec.id, s), selectionOnly ? SELECTION_SAVE_MS : CONTENT_SAVE_MS);
     return () => clearTimeout(t);
-  }, [rec, s, loading]);
+  }, [rec, s, loading, reviewSandbox]);
 
   // Flush a pending save when the tab is hidden. This runs while the page is still alive,
   // so an ordinary fetch still works — unlike an unload handler, which cannot carry the
@@ -831,6 +848,8 @@ export default function LvConfiguratorPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totals = useMemo(() => grandTotals(s), [s]);
+  // The estimator's saved totals — the baseline the review sandbox compares a what-if against.
+  const originalTotals = useMemo(() => (rec ? grandTotals(rec.state) : null), [rec]);
   const sel = s.panels.find((p) => p.id === s.selectedId) ?? null;
   const isSpareQtn = s.kind === "spare";
   // ── Co-Work ────────────────────────────────────────────────────────────────
@@ -1386,7 +1405,7 @@ export default function LvConfiguratorPage() {
               {QTN_STATUS_LABEL[status]}
             </span>
             {/* Live active-working-time — real hands-on time, recorded on the quotation. */}
-            <ActiveTimeBadge qtnId={rec?.id} initialSeconds={rec?.activeSeconds ?? 0} enabled={!sharedReadOnly} />
+            <ActiveTimeBadge qtnId={rec?.id} initialSeconds={rec?.activeSeconds ?? 0} enabled={!sharedReadOnly && !reviewSandbox} />
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -1553,6 +1572,25 @@ export default function LvConfiguratorPage() {
       {/* Cancellation and workflow status are INDEPENDENT. They used to be an
           either/or, so a cancelled+submitted quotation showed only the red banner
           and lost its reopen action entirely — unrecoverable through the UI. */}
+      {reviewSandbox && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 no-print animate-fade-up">
+          <p className="text-sm font-semibold text-amber-900">
+            🔬 Review mode — swap components to compare; <b>nothing here is saved</b>. Returning it sends the estimator's original back with your comments.
+          </p>
+          {originalTotals && (
+            <span className="whitespace-nowrap text-xs font-semibold text-amber-800">
+              Original <b>{fmtEgp(originalTotals.sell)}</b> · Now <b className="text-amber-900">{fmtEgp(totals.sell)}</b>
+              {Math.round(totals.sell - originalTotals.sell) !== 0 && (
+                <> · Δ {totals.sell - originalTotals.sell > 0 ? "+" : ""}{fmtEgp(totals.sell - originalTotals.sell)}</>
+              )}
+            </span>
+          )}
+          <button type="button" onClick={resetToOriginal}
+            className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-800 transition-colors hover:bg-amber-100">
+            ↺ Reset to original
+          </button>
+        </div>
+      )}
       {cancelled && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 no-print animate-fade-up">
           <p className="text-sm font-semibold text-red-800">

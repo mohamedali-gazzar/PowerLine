@@ -23,6 +23,20 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Approvers can now edit a quotation "on scratch" to compare, without changing the estimator's work.**
+
+When a quotation is waiting for approval, a Section Head or Team Leader opening it now gets a
+**Review mode**: they can freely swap components and see how the price would change — to weigh
+"what if we replace this part" — but **nothing they do is saved**. A yellow banner makes this
+clear and shows the original selling total next to the "now" total with the difference, plus a
+"Reset to original" button to snap back. When they return it for revision, the estimator gets
+their **original quotation back, untouched**, with the approver's comments. It's safe two ways:
+the app never saves an approver's scratch edits, and the server refuses their writes anyway.
+The estimator (owner) and co-workers are unaffected — their edits are still real and saved.
+Verified live end-to-end. Frontend build + 38 tests green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ RMU offers now track hands-on time too (same as LV quotations).**
 
 The active-time tracker now also runs on RMU offers: a live "⏱" timer in the RMU editor
