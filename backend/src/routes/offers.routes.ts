@@ -13,6 +13,7 @@ import {
   transitionOffer,
   getOfferEvents,
   putOffer,
+  offerActivity,
 } from "../controllers/offers.controller";
 
 const router = Router();
@@ -24,6 +25,7 @@ router.get("/next-qtn", getNextQtn); // must precede "/:id"
 router.get("/:id", getOfferById);
 router.get("/:id/events", getOfferEvents); // audit trail (return-for-revision history)
 router.put("/:id", putOffer); // update a draft offer in place (autosave while editing)
+router.post("/:id/activity", offerActivity); // accrue active working time (owner)
 router.post("/:id/duplicate", duplicateOfferById);
 router.post("/:id/transition", transitionOffer); // RMU approval lifecycle
 router.delete("/:id", deleteOfferById);

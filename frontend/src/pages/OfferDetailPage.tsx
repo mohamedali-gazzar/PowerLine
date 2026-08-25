@@ -6,6 +6,7 @@ import OfferView from "../components/OfferView";
 import CommercialView from "../components/CommercialView";
 import OfferCover from "../components/OfferCover";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
+import ActiveTimeBadge from "../components/ActiveTimeBadge";
 import { useReviewLock } from "../hooks/useReviewLock";
 import type { Offer } from "../types";
 
@@ -120,6 +121,8 @@ export default function OfferDetailPage() {
             <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${QTN_STATUS_STYLE[status] ?? "bg-slate-100 text-slate-600"}`}>
               {offer.statusLabel ?? status}
             </span>
+            {/* Recorded active working time on this offer (display only — building happens in the editor). */}
+            <ActiveTimeBadge qtnId={offer.id} initialSeconds={offer.activeSeconds ?? 0} enabled={false} kind="rmu" />
           </div>
           <p className="mt-1 text-sm text-muted">
             {offer.projectName} · {offer.customer}

@@ -24,10 +24,12 @@ export default function ActiveTimeBadge({
   qtnId,
   initialSeconds,
   enabled,
+  kind = "lv",
 }: {
   qtnId: string | undefined;
   initialSeconds: number;
   enabled: boolean; // accrue only while the user can actively build (owner/co-owner, not frozen)
+  kind?: "lv" | "rmu"; // which record type — picks the LV quotation vs RMU offer endpoint
 }) {
   const [accrued, setAccrued] = useState(0); // seconds accrued THIS session — drives the live display
   const lastActivity = useRef(Date.now());
@@ -44,11 +46,13 @@ export default function ActiveTimeBadge({
 
   useEffect(() => {
     if (!qtnId || !enabled) return;
+    const id = qtnId;
     const flush = (keepalive = false) => {
       const n = pending.current;
       if (n <= 0) return;
       pending.current = 0;
-      api.qtns.activity(qtnId, n, keepalive).catch(() => { pending.current += n; }); // retry next flush
+      const call = kind === "rmu" ? api.offerActivity(id, n, keepalive) : api.qtns.activity(id, n, keepalive);
+      call.catch(() => { pending.current += n; }); // retry next flush
     };
     const tick = window.setInterval(() => {
       const active = document.visibilityState === "visible" && Date.now() - lastActivity.current < IDLE_MS;
@@ -68,7 +72,7 @@ export default function ActiveTimeBadge({
       window.removeEventListener("beforeunload", onUnload);
       flush(true); // flush the remainder when leaving the quotation
     };
-  }, [qtnId, enabled]);
+  }, [qtnId, enabled, kind]);
 
   const total = (initialSeconds || 0) + accrued;
   return (

@@ -177,6 +177,33 @@ export async function putOffer(req: Request, res: Response) {
   }
 }
 
+// POST /api/offers/:id/activity  { seconds } → { activeSeconds }
+// Accrue real hands-on time on an RMU offer, mirroring the LV quotation tracker. Owner-only
+// (or access.manage); each delta is clamped so a stale/bad client can't inflate the total, and
+// the increment is atomic. Returns the new total so the live counter can reconcile.
+export async function offerActivity(req: Request, res: Response) {
+  try {
+    const existing = await getOfferRaw(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Offer not found" });
+    const mayManage = req.userId ? (await accessOf(req.userId)).perms.has("access.manage") : false;
+    if (existing.ownerId !== req.userId && !mayManage) {
+      return res.status(404).json({ error: "Offer not found" });
+    }
+    const raw = Number((req.body ?? {}).seconds);
+    const seconds = Number.isFinite(raw) ? Math.min(Math.max(Math.round(raw), 0), 3600) : 0;
+    const current = (existing as { activeSeconds?: number }).activeSeconds ?? 0;
+    if (seconds <= 0) return res.json({ activeSeconds: current });
+    const updated = await prisma.offer.update({
+      where: { id: existing.id },
+      data: { activeSeconds: { increment: seconds } },
+      select: { activeSeconds: true },
+    });
+    res.json({ activeSeconds: updated.activeSeconds });
+  } catch (err) {
+    handleError(err, res);
+  }
+}
+
 // POST /api/offers/:id/duplicate — clone an offer into a fresh DRAFT (Duplicate /
 // Amend in the unified history). Owner-only, like get/delete. An optional ?number=
 // sets the new offer number; otherwise the next PL-YYYY-#### is assigned.

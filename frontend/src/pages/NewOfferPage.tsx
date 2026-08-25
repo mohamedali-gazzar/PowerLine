@@ -13,6 +13,7 @@ import OfferView from "../components/OfferView";
 import OfferCover from "../components/OfferCover";
 import { QtnNumberInput, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
+import ActiveTimeBadge from "../components/ActiveTimeBadge";
 import { useStaff, findPerson, SALES_MANAGER } from "../staff";
 import {
   RTU_TYPES,
@@ -121,6 +122,7 @@ export default function NewOfferPage() {
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [offerNumber, setOfferNumber] = useState("");
   const [offerStatus, setOfferStatus] = useState<QtnStatus>("DRAFT");
+  const [offerActiveSeconds, setOfferActiveSeconds] = useState(0); // hands-on time on this offer
   const [statusLabel, setStatusLabel] = useState("Draft");
   const [returnReason, setReturnReason] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -408,6 +410,7 @@ export default function NewOfferPage() {
     setOfferNumber(o.offerNumber || "");
     setOfferStatus(st);
     setStatusLabel(o.statusLabel ?? st);
+    setOfferActiveSeconds(o.activeSeconds ?? 0);
     setReturnReason(o.returnReason ?? "");
     return st === "DRAFT" || st === "RETURNED";
   }
@@ -585,6 +588,8 @@ export default function NewOfferPage() {
               <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${QTN_STATUS_STYLE[offerStatus] ?? "bg-slate-100 text-slate-600"}`}>
                 {statusLabel}
               </span>
+              {/* Live active-working-time — real hands-on time, recorded on the offer. */}
+              <ActiveTimeBadge qtnId={editId} initialSeconds={offerActiveSeconds} enabled={editable} kind="rmu" />
             </div>
             <p className="mt-1 truncate text-sm text-muted">
               {projectName || "—"} · {customer || "—"}

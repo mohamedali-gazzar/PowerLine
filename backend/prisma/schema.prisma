@@ -121,6 +121,10 @@ model Offer {
   snapAddOnsJson   String? // JSON: [{ name, price }]
   snapVatPct       Float?
   snapPriceFound   Boolean?
+  /// Active working time (seconds) accumulated across sessions — real hands-on time building this
+  /// offer, not the wall-clock from create to submit. Incremented by POST /:id/activity while the
+  /// owner is on the editor and not idle. Mirrors LvQtn.activeSeconds.
+  activeSeconds Int     @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

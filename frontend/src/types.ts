@@ -215,6 +215,8 @@ export interface Offer {
   offerDate?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Accumulated active working time (seconds) — real hands-on time, not create→submit span. */
+  activeSeconds?: number;
   rmu: StoredRmu;
   pricing: Pricing;
   generated: GeneratedOffer;

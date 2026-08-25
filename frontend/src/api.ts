@@ -525,6 +525,13 @@ export const api = {
   /** Update a draft RMU offer in place (autosave while editing). 409 once it's locked. */
   updateOffer: (id: string, data: OfferInput) =>
     request<Offer>(`/offers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  /** Accrue active working time on an RMU offer (delta seconds). `keepalive` survives tab close. */
+  offerActivity: (id: string, seconds: number, keepalive = false) =>
+    request<{ activeSeconds: number }>(`/offers/${id}/activity`, {
+      method: "POST",
+      body: JSON.stringify({ seconds }),
+      keepalive,
+    }),
   deleteOffer: (id: string) => request<void>(`/offers/${id}`, { method: "DELETE" }),
   /** Clone an RMU offer into a fresh DRAFT (Duplicate / Amend). Prices stay frozen. */
   duplicateOffer: (id: string, number?: string) =>

@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ RMU offers now track hands-on time too (same as LV quotations).**
+
+The active-time tracker now also runs on RMU offers: a live "⏱" timer in the RMU editor
+header counts the real working time while you build the offer, it's saved on the offer, shown
+on the RMU offer's detail page, and it fills the "Active time" column in Offers History (RMU
+rows used to show "—"). Same rules as LV — counts while you're active, pauses after ~90s idle
+or when you leave, and only the owner adds time. Adds one small defaulted column
+(Offer.activeSeconds) — safe for the deploy's db push. Backend 291 tests + frontend 38 tests green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Every LV quotation now tracks the real hands-on time spent on it.**
 
 Each LV quotation now measures the actual working time — the minutes someone is genuinely on it

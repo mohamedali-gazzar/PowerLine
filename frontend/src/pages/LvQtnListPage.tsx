@@ -221,6 +221,7 @@ export default function LvQtnListPage() {
       projectName: o.projectName, customer: o.customer,
       units: `${o.generated?.summary?.totalCubicles ?? 0} ways`,
       totalUsd: rmuTotalUsd(o),
+      activeSeconds: o.activeSeconds ?? 0,
       // RMU offers now use the same 5-stage approval status as LV, so they share
       // the LV labels/styles. (The API's offerStatus() maps any legacy SENT/WON/LOST
       // to Draft/Submitted, so o.status is always one of the five.)
