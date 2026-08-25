@@ -23,6 +23,25 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ The price database can no longer add a component with the on-screen form.**
+
+The "+ Add a component" button on the LV price database is gone. Adding a new item is now
+done only the safe way: press "Download Current Excel", add the row in the spreadsheet, then
+"Update from Excel" to upload it back. This keeps every addition going through the same
+checked import path instead of a quick one-off form. Build green, 38 tests pass.
+
+## 2026-08-24 · Mohamed's side · Claude
+
+**✅ Cleaned up the header spacing on the Commercial Offer priced pages.**
+
+The header on the Commercial Offer's price pages (logo + project + customer/quotation number)
+had a thin grey divider rule under it that repeated on every page. That rule is removed — the
+price table's own column heading already separates it — and the gap between the header and the
+table is now a comfortable, even margin (it had briefly been too tight). Only the Commercial
+Offer changed; the Technical Offer header is untouched. Build green, 38 tests pass.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Commercial Offer Terms & Conditions now break cleanly, with the logo on every page.**
 
 When the Terms & Conditions ran longer than one page, the exported Commercial PDF used to

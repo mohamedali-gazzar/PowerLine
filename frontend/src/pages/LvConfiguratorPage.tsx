@@ -2894,9 +2894,11 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
 }
 
 // Running page header on every non-cover offer page (logo + project name + QTN · customer).
-function PageHeader({ s, qtnRef }: { s: LvState; qtnRef: string }) {
+// `flush` drops the divider rule + extra bottom gap under the header (used by the Commercial
+// Offer, whose priced table has its own column-header rule right below — no second line needed).
+function PageHeader({ s, qtnRef, flush }: { s: LvState; qtnRef: string; flush?: boolean }) {
   return (
-    <div data-pdf-header className="mb-3 flex items-center justify-between gap-4 border-b pb-2" style={{ borderColor: "#E7E7EB" }}>
+    <div data-pdf-header className={`flex items-center justify-between gap-4 ${flush ? "mb-10" : "mb-3 border-b pb-2"}`} style={{ borderColor: "#E7E7EB" }}>
       <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-14" />
       <div className="text-right">
         {s.project.name && <div className="text-base font-bold leading-tight text-ink">{s.project.name}</div>}
@@ -3329,8 +3331,8 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
       <div data-co-root className="print-area space-y-6">
         {/* Cover page — same branded cover as the Technical Offer */}
         <OfferCover s={s} qtnNo={qtnNo} kind="Commercial" />
-        <section className="a4-sheet flex flex-col space-y-5 px-10 pb-10 pt-12">
-        <PageHeader s={s} qtnRef={qtnRef} />
+        <section className="a4-sheet flex flex-col px-10 pb-10 pt-12">
+        <PageHeader s={s} qtnRef={qtnRef} flush />
         <table data-pdf-cotable className="w-full text-sm">
           <thead>
             <tr className="border-b-2 border-brand text-left text-[12px] uppercase tracking-wide text-muted">
@@ -3353,7 +3355,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
             ))}
           </tbody>
         </table>
-        <div data-pdf-totals className="ml-auto w-72 space-y-1 text-sm">
+        <div data-pdf-totals className="ml-auto mt-6 w-72 space-y-1 text-sm">
           <div className="flex justify-between"><span className="text-muted">Subtotal (excl. VAT)</span><b>{m(subtotal)}</b></div>
           <div className="flex justify-between"><span className="text-muted">VAT {Math.round(s.factors.vat * 100)}%</span><b>{m(vat)}</b></div>
           <div className="flex justify-between border-t-2 border-brand pt-1 text-base"><span className="font-bold">Total ({cur})</span><b className="text-brand-dark">{m(subtotal + vat)}</b></div>

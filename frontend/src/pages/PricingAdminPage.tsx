@@ -539,125 +539,6 @@ function DuplicateNames({ reloadKey }: { reloadKey: number }) {
   );
 }
 
-/** Add an LV component. Every field is required — an item missing its type,
- *  description or reference cannot be found or priced by the calculator. */
-function AddLvComponent({
-  types,
-  brands,
-  onAdded,
-  onClose,
-}: {
-  types: string[];
-  brands: string[];
-  onAdded: () => void;
-  onClose: () => void;
-}) {
-  const empty = { t: "", f: "", r: "", d: "", ref: "", brand: "", poles: "3", cuP: "", cuC: "", eur: "", egp: "" };
-  const [v, setV] = useState<Record<string, string>>(empty);
-  const [err, setErr] = useState("");
-  const [saving, setSaving] = useState(false);
-  const set = (k: string, val: string) => setV((s) => ({ ...s, [k]: val }));
-
-  const submit = async () => {
-    setErr("");
-    setSaving(true);
-    try {
-      await api.pricing.lvAdd({
-        t: v.t.trim(),
-        f: v.f.trim(),
-        r: v.r.trim(),
-        d: v.d.trim(),
-        ref: v.ref.trim(),
-        brand: v.brand.trim(),
-        poles: Number(v.poles) || 0,
-        cuP: Number(v.cuP) || 0,
-        cuC: Number(v.cuC) || 0,
-        eur: Number(v.eur) || 0,
-        egp: Number(v.egp) || 0,
-      });
-      setV(empty);
-      void refreshCatalog(getToken()); // adding an item publishes too
-      onAdded();
-      onClose();
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const F = ({ k, label, ph, list }: { k: string; label: string; ph?: string; list?: string[] }) => (
-    <div>
-      <label className="label">{label}</label>
-      <input
-        className="input"
-        value={v[k]}
-        placeholder={ph}
-        list={list ? `dl-${k}` : undefined}
-        onChange={(e) => set(k, e.target.value)}
-      />
-      {list && (
-        <datalist id={`dl-${k}`}>
-          {list.map((x) => (
-            <option key={x} value={x} />
-          ))}
-        </datalist>
-      )}
-    </div>
-  );
-
-  return (
-    <div className="card mb-3 border-brand/40 p-4">
-      <h2 className="sec-head">Add a component</h2>
-      {/* Said before they type it, not only after the server refuses it. */}
-      <p className="mb-3 text-xs text-muted">
-        All fields are required except the copper weights (leave 0 if the item has none). It is added to the end of the
-        catalogue. The description has to differ from every other item's — two items with the same name cannot be told
-        apart, and a quotation would use whichever comes first.
-      </p>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <F k="t" label="Type" ph="MCCB" list={types} />
-        <F k="f" label="Family" ph="XT2S" />
-        <F k="r" label="Rating" ph="160A" />
-        <div className="sm:col-span-3">
-          <label className="label">Description</label>
-          <input className="input" value={v.d} placeholder="MCCB XT2S 160A 3P" onChange={(e) => set("d", e.target.value)} />
-        </div>
-        <F k="ref" label="Reference" ph="1SDA067xxxR1" />
-        <F k="brand" label="Brand" list={brands} />
-        <div>
-          <label className="label">Poles</label>
-          <input className="input" type="number" min={0} value={v.poles} onChange={(e) => set("poles", e.target.value)} />
-        </div>
-        <div>
-          <label className="label">Weight/Panel/Pole</label>
-          <input className="input" type="number" min={0} step="0.001" placeholder="0" value={v.cuP} onChange={(e) => set("cuP", e.target.value)} />
-        </div>
-        <div>
-          <label className="label">Weight/Cell/Pole</label>
-          <input className="input" type="number" min={0} step="0.001" placeholder="0" value={v.cuC} onChange={(e) => set("cuC", e.target.value)} />
-        </div>
-        <div className="hidden sm:block" aria-hidden />
-        <div>
-          <label className="label">Price EUR</label>
-          <input className="input" type="number" min={0} step="0.01" value={v.eur} onChange={(e) => { set("eur", e.target.value); if (e.target.value) set("egp", ""); }} />
-        </div>
-        <div>
-          <label className="label">or Price EGP</label>
-          <input className="input" type="number" min={0} step="0.01" value={v.egp} onChange={(e) => { set("egp", e.target.value); if (e.target.value) set("eur", ""); }} />
-        </div>
-      </div>
-      {err && <p className="mt-2 text-sm font-semibold text-red-700">{err}</p>}
-      <div className="mt-4 flex gap-2">
-        <button className="btn-primary" onClick={submit} disabled={saving}>
-          {saving ? "Adding…" : "Add component"}
-        </button>
-        <button className="btn-ghost" onClick={onClose}>Cancel</button>
-      </div>
-    </div>
-  );
-}
-
 /** LV price list — 2,121 components and 253 enclosures, with Excel-style
  *  filtering. Filtering and paging happen on the SERVER (50 rows at a time), so
  *  the screen stays fast no matter how big the catalogue gets. */
@@ -760,7 +641,6 @@ function LvPrices() {
   const [facets, setFacets] = useState<{ types: string[]; brands: string[]; families: string[] } | null>(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
-  const [addOpen, setAddOpen] = useState(false); // "+ Add a component" form (now opened from the button row)
   // Bumped whenever rows are written, so the duplicate-name warning re-counts.
   const [reloadKey, setReloadKey] = useState(0);
   const take = 50;
@@ -873,33 +753,8 @@ function LvPrices() {
             // version behind — reload it or the configurator keeps the old text.
             void refreshCatalog(getToken());
           }}
-          extra={
-            kind === "components" ? (
-              <button className="btn-ghost" onClick={() => setAddOpen(true)}>+ Add a component</button>
-            ) : null
-          }
         />
       </div>
-
-      {/* Add a component (components only — enclosures and cells are matched by
-          name against generated cell tables, so a hand-added one would never be
-          found by the calculator). */}
-      {kind === "components" && addOpen && (
-        <AddLvComponent
-          types={facets?.types ?? []}
-          brands={facets?.brands ?? []}
-          onClose={() => setAddOpen(false)}
-          onAdded={() => {
-            setPage(0);
-            setQ("");
-            setReloadKey((k) => k + 1);
-            api.pricing.lvList({ kind, take }).then((r) => {
-              setRows(r.rows);
-              setTotal(r.total);
-            });
-          }}
-        />
-      )}
 
       {/* Excel-style filter bar */}
       <div className="card mb-3 flex flex-wrap items-end gap-2 p-3">
