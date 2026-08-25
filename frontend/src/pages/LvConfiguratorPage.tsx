@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorkers, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
 import ReassignQtnModal from "../components/ReassignQtnModal";
 import CoWorkModal from "../components/CoWorkModal";
@@ -271,6 +271,14 @@ const EDMS_IGNORE_KEYS = new Set<string>([
 
 export default function LvConfiguratorPage() {
   const { id = "" } = useParams();
+  const { hash } = useLocation();
+  // The offer link reads by QTN number: the URL is /lv/qtn/<QTN number>#<record id>, so the
+  // number is the visible name while the real record id (a cuid — always hyphen-free) rides in
+  // the #fragment for an exact, collision-proof lookup. A QTN number always has hyphens, a cuid
+  // never does — so resolve the id from whichever part is hyphen-free. Old /lv/qtn/<id> links
+  // (and the earlier /lv/qtn/<id>#<number> form) still resolve, since their path IS the id.
+  const hashId = decodeURIComponent((hash || "").replace(/^#/, ""));
+  const routeQtnId = id.includes("-") ? hashId || id : id;
   const navigate = useNavigate();
   /**
    * Pin the quotation header (number, price, status, actions) to the top so it
@@ -345,7 +353,7 @@ export default function LvConfiguratorPage() {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    getQtn(id)
+    getQtn(routeQtnId)
       .then((r) => {
         if (!alive) return;
         if (!r) { navigate("/lv", { replace: true }); return; }
@@ -365,18 +373,18 @@ export default function LvConfiguratorPage() {
       })
       .catch(() => { if (alive) navigate("/lv", { replace: true }); });
     return () => { alive = false; };
-  }, [id, navigate, tabKey]);
+  }, [routeQtnId, navigate, tabKey]);
   // Load the saved revision-comment history (all "Return for revision" events), and
   // refresh it whenever the workflow status changes so a new return shows up at once.
   // The endpoint is owner/approver-gated; a 403 just leaves the history empty.
   useEffect(() => {
-    if (!id) return;
+    if (!routeQtnId) return;
     let alive = true;
-    api.qtns.events(id)
+    api.qtns.events(routeQtnId)
       .then((evs) => { if (alive) setReturnHistory(evs.filter((e) => e.action === "RETURN")); })
       .catch(() => { if (alive) setReturnHistory([]); });
     return () => { alive = false; };
-  }, [id, status]);
+  }, [routeQtnId, status]);
   // A revision is cancelled once a higher revision of the same base exists.
   useEffect(() => {
     if (!qtnNum) return;
@@ -1309,14 +1317,17 @@ export default function LvConfiguratorPage() {
   // re-computes whenever the number or revision changes; never typed by hand.
   const linkRevNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
   const offerLabel = linkRevNum > 0 ? `${qtnNum}-${linkRevNum}` : qtnNum;
-  // Copy the offer URL as a hyperlink named by that label. Writes both clipboard formats: rich
-  // text/html (a real <a>, so a rich ERP field shows a clickable link that reads as the QTN
-  // name) and a text/plain URL that starts with http(s) so a strict "URL" field in the ERP
-  // accepts it. The QTN number rides in the URL fragment (#QTN-…) so it is visible right after
-  // the address without breaking the link — the app ignores the fragment when opening it.
+  // Copy the offer URL as a hyperlink named by that label. The URL reads by QTN number —
+  // /lv/qtn/<QTN number>#<record id> — so the number is the visible name in the address, while
+  // the exact record id rides in the #fragment for a collision-proof lookup (QTN numbers are only
+  // unique per user). Writes both clipboard formats: rich text/html (a real <a>, so a rich ERP
+  // field shows a clickable link that reads as the QTN name) and a text/plain URL that starts with
+  // http(s) so a strict "URL" field in the ERP accepts it.
   const copyOfferLink = async () => {
-    const base = window.location.href.split("#")[0]; // drop any existing fragment
-    const url = offerLabel ? `${base}#${offerLabel}` : base;
+    const rid = rec?.id || routeQtnId; // the real record id (cuid)
+    const url = offerLabel
+      ? `${window.location.origin}/lv/qtn/${encodeURIComponent(offerLabel)}#${rid}`
+      : `${window.location.origin}/lv/qtn/${rid}`;
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const html = `<a href="${esc(url)}">${esc(offerLabel)}</a>`;
     const plain = url;

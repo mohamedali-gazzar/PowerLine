@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ The offer link now reads by QTN number, not the internal id.**
+
+The copied link's address now shows the quotation number instead of the long internal code —
+e.g. `…/lv/qtn/QTN-26-12354-1#…`. Opening it still lands on the exact same offer: the internal
+code rides quietly at the end (after the "#") so there's never any mix-up, even though two
+people can have the same quotation number. Links you copied before still open fine. Build
+green, 38 tests pass.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ The copied offer link now carries the QTN number in the web address itself.**
 
 The link that "Copy link" copies now ends with the quotation number (e.g.
