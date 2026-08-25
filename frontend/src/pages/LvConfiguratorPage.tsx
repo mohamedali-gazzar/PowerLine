@@ -43,6 +43,8 @@ import {
 import { rankSearchOptions } from "../lv/search";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
+import { catalogVersion } from "../lv/catalogSource";
+import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import {
   api, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type QtnAttachmentDto, type QtnStatus,
@@ -723,6 +725,14 @@ export default function LvConfiguratorPage() {
     setHist((h) => (!readOnly && h.future.length ? { past: [...h.past, h.present].slice(-60), present: h.future[0], future: h.future.slice(1) } : h));
   const canUndo = !readOnly && hist.past.length > 0;
   const canRedo = !readOnly && hist.future.length > 0;
+  // "Apply changes" from the price-list changelog: re-price this quotation to the current
+  // published catalogue (component + cell prices; the estimator's qty, adjustments and notes are
+  // kept). Offered on editable (draft/returned) quotations only. Returns how many priced lines moved.
+  const applyCatalogPrices = (): { changed: number; removed: number } => {
+    const { next, changed, removed } = repriceToCatalog(s);
+    apply(() => ({ ...next, pricesAppliedVersion: catalogVersion() }));
+    return { changed, removed };
+  };
   // ERP upload: download the QTN's panels as an ERPNext "Bulk Edit Items" CSV
   // (one row per panel — see lv/erpCsv.ts).
   const erpCount = erpItemCount(s);
@@ -1553,6 +1563,9 @@ export default function LvConfiguratorPage() {
                 ⬇ ERP CSV
               </button>
             )}
+            {/* Re-price this quotation to the current price list — offered only while it's an
+                editable draft/returned QTN (the estimator's own work), never once it's locked. */}
+            {!readOnly && !reviewSandbox && <CatalogUpdateCheck onApply={applyCatalogPrices} />}
           </div>
         </div>
       </div>

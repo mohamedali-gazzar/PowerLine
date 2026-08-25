@@ -96,7 +96,7 @@ export default function CatalogUpdateCheck({ onApply }: { onApply?: () => { chan
     <div className="flex flex-col items-end gap-1 no-print">
       <button onClick={run} disabled={busy}
         title="Re-read the published price list and show what changed in the latest upload"
-        className="rounded-full border border-line bg-white px-4 py-1.5 text-xs font-bold text-ink hover:border-brand/50 hover:text-brand-dark disabled:opacity-60">
+        className="btn-ghost disabled:opacity-60">
         {busy ? "Checking…" : "⟳ Check for updates"}
       </button>
       {msg && (

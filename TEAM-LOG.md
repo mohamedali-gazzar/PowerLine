@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ "Check for updates" now looks like the other Home buttons, and drafts can apply the new prices.**
+
+Two tweaks to yesterday's move: the Home "Check for updates" button now uses the same plain button
+style as "Access Center" (matching height and look). And the "apply these prices to this quotation"
+action is back — but only on a draft (still-editable) quotation: open a draft, press "Check for
+updates" in its toolbar, and you can pull its component/cell prices up to the current list. Locked
+quotations (waiting/approved/submitted) don't show it. Build green, 38 tests pass.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ "Pillars" and "Coffree" enclosures are temporarily locked (can't be picked).**
 
 Neither "Pillars" nor "Coffree" appears in the enclosure-family picker any more, so no new panel
