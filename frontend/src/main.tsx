@@ -96,6 +96,9 @@ function Gate() {
         />
         <Route path="lv" element={<LvQtnListPage />} />
         <Route path="lv/qtn/:id" element={<LvConfiguratorPage />} />
+        {/* Read-by-QTN-number link: /lv/qtn/<QTN number>/<record id>. The number is the
+            visible name; the id (last segment) is what actually resolves the offer. */}
+        <Route path="lv/qtn/:label/:id" element={<LvConfiguratorPage />} />
         <Route path="offers/new" element={<NewOfferPage />} />
         <Route path="offers/:id/edit" element={<NewOfferPage />} />
         <Route path="offers/:id" element={<OfferDetailPage />} />

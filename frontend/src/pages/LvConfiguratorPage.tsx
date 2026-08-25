@@ -272,11 +272,13 @@ const EDMS_IGNORE_KEYS = new Set<string>([
 export default function LvConfiguratorPage() {
   const { id = "" } = useParams();
   const { hash } = useLocation();
-  // The offer link reads by QTN number: the URL is /lv/qtn/<QTN number>#<record id>, so the
-  // number is the visible name while the real record id (a cuid — always hyphen-free) rides in
-  // the #fragment for an exact, collision-proof lookup. A QTN number always has hyphens, a cuid
-  // never does — so resolve the id from whichever part is hyphen-free. Old /lv/qtn/<id> links
-  // (and the earlier /lv/qtn/<id>#<number> form) still resolve, since their path IS the id.
+  // The offer link reads by QTN number: /lv/qtn/<QTN number>/<record id>. The number is the
+  // visible name; the real record id (a cuid — always hyphen-free) is the last path segment, used
+  // for an exact, collision-proof lookup (QTN numbers are only unique per user). On the two-segment
+  // route `:id` is already that last segment, so it resolves directly. A QTN number always has
+  // hyphens and a cuid never does, so for a single-segment path we can tell which it is: a plain id
+  // resolves as-is (old /lv/qtn/<id> links), and a bare number falls back to the #fragment id if
+  // present (the brief interim /lv/qtn/<number>#<id> form).
   const hashId = decodeURIComponent((hash || "").replace(/^#/, ""));
   const routeQtnId = id.includes("-") ? hashId || id : id;
   const navigate = useNavigate();
@@ -1318,15 +1320,16 @@ export default function LvConfiguratorPage() {
   const linkRevNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
   const offerLabel = linkRevNum > 0 ? `${qtnNum}-${linkRevNum}` : qtnNum;
   // Copy the offer URL as a hyperlink named by that label. The URL reads by QTN number —
-  // /lv/qtn/<QTN number>#<record id> — so the number is the visible name in the address, while
-  // the exact record id rides in the #fragment for a collision-proof lookup (QTN numbers are only
-  // unique per user). Writes both clipboard formats: rich text/html (a real <a>, so a rich ERP
-  // field shows a clickable link that reads as the QTN name) and a text/plain URL that starts with
-  // http(s) so a strict "URL" field in the ERP accepts it.
+  // /lv/qtn/<QTN number>/<record id> — so the number is the visible name in the address, while the
+  // exact record id is the last path segment for a collision-proof lookup (QTN numbers are only
+  // unique per user). The id lives in the PATH, not a #fragment, because fragments get dropped when
+  // a link is stored/opened through another app (e.g. the ERP). Writes both clipboard formats: rich
+  // text/html (a real <a>, so a rich ERP field shows a clickable link that reads as the QTN name)
+  // and a text/plain URL that starts with http(s) so a strict "URL" field in the ERP accepts it.
   const copyOfferLink = async () => {
     const rid = rec?.id || routeQtnId; // the real record id (cuid)
     const url = offerLabel
-      ? `${window.location.origin}/lv/qtn/${encodeURIComponent(offerLabel)}#${rid}`
+      ? `${window.location.origin}/lv/qtn/${encodeURIComponent(offerLabel)}/${rid}`
       : `${window.location.origin}/lv/qtn/${rid}`;
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const html = `<a href="${esc(url)}">${esc(offerLabel)}</a>`;

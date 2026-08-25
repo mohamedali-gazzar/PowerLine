@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Fixed the QTN-number offer link opening the quotation list instead of the offer.**
+
+The by-QTN-number link had put the internal code after a "#", and other apps (like the ERP)
+quietly drop everything after the "#" when you save or open a link — so it arrived without the
+code and couldn't find the offer, landing on the list. The code now sits in the address itself
+(`…/lv/qtn/QTN-26-12354-1/<code>`), which can't be dropped, so the link always opens the right
+offer while still showing the quotation number as the name. Old links still work. Build green, 38 tests.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ The offer link now reads by QTN number, not the internal id.**
 
 The copied link's address now shows the quotation number instead of the long internal code —
