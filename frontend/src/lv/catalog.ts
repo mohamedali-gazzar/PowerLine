@@ -111,6 +111,12 @@ export const FORMS = ["1", "2a", "2b", "3a", "3b", "4a", "4b"] as const;
 
 // Sizing & Copper systems (RPT-01): Panels allowed only when incomer ≤ 800 A.
 export const PANEL_SYSTEMS = ["SR-Basic", "Unikit", "Local (Sheet Metal)", "Minicenter", "Primo", "Pillars", "Coffree"] as const;
+// Temporarily LOCKED enclosure families — hidden from the family pickers so no new panel can be
+// built on them. Existing quotations that already use them keep working (pricing/lookup use the
+// full PANEL_SYSTEMS). To unlock, empty this set.
+export const LOCKED_SYSTEMS = new Set<string>(["Pillars", "Coffree"]);
+/** The families a user may pick right now — PANEL_SYSTEMS minus the locked ones. */
+export const SELECTABLE_SYSTEMS: string[] = PANEL_SYSTEMS.filter((s) => !LOCKED_SYSTEMS.has(s));
 export const CELL_SYSTEMS = ["Pro-E", "IS2", "PLP"] as const;
 export const PANELS_MAX_INCOMER_A = 800;
 

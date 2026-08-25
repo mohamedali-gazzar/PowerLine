@@ -9,6 +9,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useAutoRefresh, useChangedKeys } from "../hooks/useAutoRefresh";
 import NewQtnPicker from "../components/NewQtnPicker";
 import RedPriceAlert from "../components/RedPriceAlert";
+import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import Announcements from "../components/Announcements";
 import EstimatorEvaluation from "./EstimatorEvaluation";
 
@@ -104,7 +105,11 @@ export default function HomeDashboard() {
             <p className="text-sm text-muted">{user?.email}</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-start gap-2">
+          {/* Global price-list "Check for updates" — re-reads the published catalogue and shows
+              what changed. No per-QTN apply here (that lived in the configurator); this is the
+              company-wide "is the price list current?" check. */}
+          <CatalogUpdateCheck />
           {can("access.manage") && (
             <button className="btn-ghost" onClick={() => navigate("/access")}>🔑 Access Center</button>
           )}

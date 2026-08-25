@@ -23,6 +23,33 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ "Pillars" and "Coffree" enclosures are temporarily locked (can't be picked).**
+
+Neither "Pillars" nor "Coffree" appears in the enclosure-family picker any more, so no new panel
+can be built on them. Quotations that already use them are unaffected — their prices and the rest
+still work exactly as before. It's a one-line switch to turn back on whenever you say. Build green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
+**✅ Spare-parts quotations now export an ERP CSV too.**
+
+A spare-parts quotation now shows the "⬇ ERP CSV" button like a normal one. Its spare-parts line
+goes into the file with the Item Code and Item Group both set to "LV Spare Parts"; every other
+column is filled the same way as a panel line (priced at its selling price). Normal panel exports
+are unchanged. Build green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
+**✅ "Check for updates" moved from inside a quotation to the Home page.**
+
+The "⟳ Check for updates" button (re-reads the published price list and shows what changed) now
+lives on Home next to "Access Center", instead of inside each quotation's toolbar. Anyone can run
+it from Home to see whether the price list is current. (The per-quotation "apply these prices to
+this quotation" button went with it — tell me if you want that part kept inside quotations too.)
+Build green, 38 tests pass.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Approvers can now edit a quotation "on scratch" to compare, without changing the estimator's work.**
 
 When a quotation is waiting for approval, a Section Head or Team Leader opening it now gets a

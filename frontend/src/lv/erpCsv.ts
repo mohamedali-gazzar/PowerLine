@@ -22,6 +22,12 @@ const ERP_FAM: Record<string, ErpFam> = {
   "PLP":                 { item: "PLP",         cc: "1202 - Main Free Standing - PL",     codeSuffix: "PLP",        group: "PLP", noTax: true },
 };
 
+// A spare-parts cell has no enclosure family, so it exports as one ERP line whose item code AND
+// item group are "LV Spare Parts". Everything else on the row is filled exactly like an enclosure
+// line (priced at the cell's LV selling price); the cost-center follows the Local/automation stem.
+const SPARE_FAM: ErpFam = { item: "LV Spare Parts", cc: "5101 - Automation Item Groups - PL", codeSuffix: "LV-Spare-Parts", group: "LV Spare Parts" };
+const isSpareCell = (p: LvPanel) => !!p.spare && p.spareKind === "spare";
+
 const CODE_STEM = "EG-374674477"; // fixed item-code stem, per the customer's ERP
 const TAX_TEMPLATE = "VAT14% - PL";
 const WAREHOUSE = "Work In Progress - PL";
@@ -66,8 +72,8 @@ export function buildErpItemsCsv(s: LvState): string {
   ];
 
   for (const p of s.panels) {
-    if (p.spare && p.spareKind === "spare") continue;         // the loose spare-parts cell has no enclosure item
-    const fam = ERP_FAM[panelFamily(p)];
+    // Spare-parts cell → a single "LV Spare Parts" line; any other panel → its enclosure family.
+    const fam = isSpareCell(p) ? SPARE_FAM : ERP_FAM[panelFamily(p)];
     if (!fam) continue;                                       // family with no ERP mapping → skip
 
     // Two currencies, as the ERP expects: the transaction columns follow whatever the
@@ -115,5 +121,5 @@ export function buildErpItemsCsv(s: LvState): string {
 
 /** How many panels will become rows (for enabling/labelling the download button). */
 export function erpItemCount(s: LvState): number {
-  return s.panels.filter((p) => !(p.spare && p.spareKind === "spare") && ERP_FAM[panelFamily(p)]).length;
+  return s.panels.filter((p) => isSpareCell(p) || !!ERP_FAM[panelFamily(p)]).length;
 }
