@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Commercial Offer Terms & Conditions now break cleanly, with the logo on every page.**
+
+When the Terms & Conditions ran longer than one page, the exported Commercial PDF used to
+slice the sheet straight across at the page edge — cutting a line of text in half — and the
+PowerLine logo only showed on the first page. Now the terms are laid out as proper pages:
+the logo sits at the top of every page, each page leaves an empty footer margin at the
+bottom, and the page always breaks *between* clauses, never through a line. English and
+Arabic are handled the same way. Verified on a real offer whose English and Arabic terms
+each run two pages: both pages carry the logo, both break cleanly, nothing is cut. Build green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Dragging a panel to reorder now auto-scrolls a long list.**
 
 When a panel list is long enough to scroll, holding a dragged panel near the top or bottom

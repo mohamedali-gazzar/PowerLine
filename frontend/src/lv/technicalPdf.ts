@@ -137,6 +137,72 @@ function paginateBlocks(host: HTMLElement, headerEl: HTMLElement | null, origBlo
   return pages;
 }
 
+// Paginate one Terms & Conditions sheet into A4 page-blocks: the PowerLine logo header
+// (from the sheet's <thead>) repeats on every page, each page keeps an empty footer band of
+// breathing space, and the terms sections flow across pages breaking only *between* sections
+// — never slicing a line. Replaces the old whole-sheet capture that cut the sheet at raw
+// 297 mm boundaries (mid-paragraph, and with no logo past the first page). Handles RTL, so the
+// Arabic sheet paginates the same way as the English one.
+function paginateTermsSheet(host: HTMLElement, sheet: HTMLElement): HTMLElement[] {
+  // Bake controlled inputs/textareas into static nodes (their live values are lost on clone).
+  const baked = sheet.cloneNode(true) as HTMLElement;
+  neutralize(baked);
+  inlineInputs(sheet, baked);
+  const ot = Array.from(sheet.querySelectorAll("textarea"));
+  const ct = Array.from(baked.querySelectorAll("textarea"));
+  ct.forEach((cta, i) => {
+    const d = document.createElement("div");
+    d.textContent = ot[i]?.value || "";
+    d.className = cta.className;
+    d.style.whiteSpace = "pre-wrap";
+    cta.replaceWith(d);
+  });
+  baked.querySelectorAll<HTMLElement>(".no-print").forEach((n) => n.remove());
+
+  // Running header = the logo cell from the sheet's <thead>, repeated atop each page.
+  const theadCell = baked.querySelector<HTMLElement>("thead td");
+  const header = document.createElement("div");
+  if (theadCell) header.innerHTML = theadCell.innerHTML;
+
+  const rtl = !!baked.querySelector('[dir="rtl"]'); // the Arabic sheet marks its content RTL
+
+  // Flow the title heading first, then each terms section as its own breakable block.
+  const cell = baked.querySelector<HTMLElement>("tbody td");
+  const blocks: HTMLElement[] = [];
+  if (cell) {
+    for (const child of Array.from(cell.children) as HTMLElement[]) {
+      if ((child.className || "").includes("space-y-3")) {
+        for (const sec of Array.from(child.children) as HTMLElement[]) blocks.push(sec); // one per section
+      } else {
+        blocks.push(child); // the title block
+      }
+    }
+  }
+  if (!blocks.length) return [];
+
+  const pages: HTMLElement[] = [];
+  let bi = 0;
+  do {
+    const { page, content } = contentPage(header);
+    const foot = page.querySelector<HTMLElement>(".pdf-footer");
+    if (foot) { foot.textContent = ""; foot.style.height = "20px"; foot.style.paddingTop = "0"; } // empty footer — just space
+    if (rtl) content.setAttribute("dir", "rtl");
+    host.appendChild(page);
+    while (bi < blocks.length) {
+      const clone = blocks[bi].cloneNode(true) as HTMLElement;
+      if (content.childElementCount > 0) clone.style.marginTop = "12px"; // rhythm between sections
+      content.appendChild(clone);
+      if (content.scrollHeight > content.clientHeight + 1) {
+        if (content.childElementCount > 1) { content.removeChild(clone); break; } // push to next page
+        bi++; break; // a single section taller than a page — keep it and move on
+      }
+      bi++;
+    }
+    pages.push(page);
+  } while (bi < blocks.length);
+  return pages;
+}
+
 // Paginate one panel: spec block on the first page, then the component table's rows
 // flow across pages with the column header (thead) repeated on each.
 function paginatePanel(host: HTMLElement, headerEl: HTMLElement | null, panelEl: HTMLElement): HTMLElement[] {
@@ -379,29 +445,12 @@ export async function exportCommercialPdf(opts: ExportOpts): Promise<Blob | void
       for (const el of p.querySelectorAll<HTMLElement>(".no-print")) el.remove();
     }
 
-    // Terms & Conditions sheets, captured whole (values baked in), sliced if taller than A4.
-    const termClones = termSheets.map((ts) => {
-      const c = ts.cloneNode(true) as HTMLElement;
-      neutralize(c);
-      inlineInputs(ts, c);
-      const ot = Array.from(ts.querySelectorAll("textarea"));
-      const ct = Array.from(c.querySelectorAll("textarea"));
-      ct.forEach((cta, i) => {
-        const d = document.createElement("div");
-        d.textContent = ot[i]?.value || "";
-        d.className = cta.className;
-        d.style.whiteSpace = "pre-wrap";
-        cta.replaceWith(d);
-      });
-      c.style.width = "210mm";
-      c.style.margin = "0";
-      c.style.boxShadow = "none";
-      for (const el of c.querySelectorAll<HTMLElement>(".no-print")) el.remove();
-      host.appendChild(c);
-      return c;
-    });
+    // Terms & Conditions → proper A4 page-blocks: the PowerLine logo repeats atop every page,
+    // each page keeps an empty footer band for breathing space, and sections break cleanly
+    // (never mid-line). English and Arabic are paginated the same way.
+    const termPages = termSheets.flatMap((ts) => paginateTermsSheet(host, ts));
 
-    if (!blockPages.length && !termClones.length) return;
+    if (!blockPages.length && !termPages.length) return;
     await new Promise((r) => setTimeout(r, 40));
     await document.fonts.ready;
 
@@ -417,16 +466,12 @@ export async function exportCommercialPdf(opts: ExportOpts): Promise<Blob | void
       pdf.addImage(img, "JPEG", 0, 0, PW, PH);
       addPageLinks(pdf, p);
     }
-    for (const c of termClones) {
-      const rect = c.getBoundingClientRect();
-      const imgHmm = rect.width ? (PW * rect.height) / rect.width : PH;
-      const img = await htmlToImage.toJpeg(c, { quality: 0.92, backgroundColor: "#ffffff", pixelRatio: 2, fontEmbedCSS });
-      const nPages = Math.max(1, Math.ceil((imgHmm - 0.5) / PH));
-      for (let i = 0; i < nPages; i++) {
-        if (!firstPage) pdf.addPage();
-        firstPage = false;
-        pdf.addImage(img, "JPEG", 0, -i * PH, PW, imgHmm);
-      }
+    for (const p of termPages) {
+      const img = await htmlToImage.toJpeg(p, { quality: 0.92, backgroundColor: "#ffffff", pixelRatio: 2, fontEmbedCSS });
+      if (!firstPage) pdf.addPage();
+      firstPage = false;
+      pdf.addImage(img, "JPEG", 0, 0, PW, PH);
+      addPageLinks(pdf, p);
     }
     if (opts.asBlob) return pdf.output("blob");
     pdf.save(filename.toLowerCase().endsWith(".pdf") ? filename : `${filename}.pdf`);
