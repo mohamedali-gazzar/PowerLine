@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Fixed "Copy link" so a URL field in the ERP accepts it ("Invalid URL" error).**
+
+When you pasted the copied offer link into the ERP's URL field it complained "URL must start
+with http:// or https://". That was because the plain-text form started with the quotation
+name ("QTN-26-… — https://…"). It now copies the plain web address on its own, so a URL field
+takes it straight away. Pasting into a notes/rich-text field still shows the tidy clickable
+link named after the quotation, exactly as before. Build green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ One-click "Copy link" for pasting an offer into the ERP.**
 
 There's a new "🔗 Copy link" button in the quotation header's action row, beside "⬇ ERP CSV". It

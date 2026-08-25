@@ -1311,12 +1311,14 @@ export default function LvConfiguratorPage() {
   const offerLabel = linkRevNum > 0 ? `${qtnNum}-${linkRevNum}` : qtnNum;
   // Copy the offer URL as a hyperlink named by that label. Writes both clipboard formats: rich
   // text/html (a real <a>, so a rich ERP field shows a clickable link that reads as the QTN
-  // name) and a text/plain fallback ("label — url") for plain fields. Falls back to writeText.
+  // name) and a text/plain fallback that is the BARE URL — a strict "URL" field in the ERP
+  // validates it starts with http(s), so it must not be prefixed with the label. Falls back
+  // to writeText.
   const copyOfferLink = async () => {
     const url = window.location.href;
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const html = `<a href="${esc(url)}">${esc(offerLabel)}</a>`;
-    const plain = `${offerLabel} — ${url}`;
+    const plain = url;
     try {
       await navigator.clipboard.write([
         new ClipboardItem({
