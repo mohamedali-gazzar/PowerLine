@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Removed the divider line under the logo on the Terms & Conditions pages.**
+
+The thin grey rule beneath the PowerLine logo on the Commercial Offer's Terms & Conditions
+pages is gone — on both the English and the Arabic terms. The logo still sits at the top of
+every terms page as before; only the line under it is removed. Build green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ The price database can no longer add a component with the on-screen form.**
 
 The "+ Add a component" button on the LV price database is gone. Adding a new item is now

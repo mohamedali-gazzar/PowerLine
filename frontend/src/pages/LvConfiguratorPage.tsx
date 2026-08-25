@@ -3366,7 +3366,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
           <table className="w-full">
             <thead>
               <tr><td className="pb-3">
-                <div className="flex items-center border-b pb-2" style={{ borderColor: "#E7E7EB" }}>
+                <div className="flex items-center pb-2">
                   <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-14" />
                 </div>
               </td></tr>
@@ -3391,7 +3391,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
           <table className="w-full">
             <thead>
               <tr><td className="pb-3">
-                <div className="flex items-center border-b pb-2" style={{ borderColor: "#E7E7EB" }}>
+                <div className="flex items-center pb-2">
                   <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-14" />
                 </div>
               </td></tr>
