@@ -9,6 +9,7 @@ import {
   getOne,
   create,
   update,
+  activity,
   rename,
   remove,
   restore,
@@ -46,6 +47,7 @@ router.delete("/:id", remove); // hides it — never erases; see the controller
 // Undo that. Owner only: the person who can hide one from everybody brings it back.
 router.post("/:id/restore", requirePerm("access.manage"), restore);
 router.post("/:id/duplicate", duplicate);
+router.post("/:id/activity", activity); // accrue active working time (owner/co-owner)
 
 // Workflow. submit/unsubmit are thin aliases over /transition so an older client
 // mid-rollout keeps working.

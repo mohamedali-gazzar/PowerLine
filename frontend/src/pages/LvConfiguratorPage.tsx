@@ -5,6 +5,7 @@ import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorkers, l
 import ReassignQtnModal from "../components/ReassignQtnModal";
 import CoWorkModal from "../components/CoWorkModal";
 import { maskQtn, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
+import ActiveTimeBadge from "../components/ActiveTimeBadge";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
 import { useReviewLock } from "../hooks/useReviewLock";
 import { usePointerReorder } from "../hooks/usePointerReorder";
@@ -1379,10 +1380,14 @@ export default function LvConfiguratorPage() {
           {/* Workflow stage, under the price — it belongs with the quotation's own
               details rather than among the buttons that act on it. */}
           {/* text-sm (14px) rather than text-xs (12px) — the 2px the owner asked for. */}
-          <span className={`mt-2 inline-flex items-center rounded-lg px-2.5 py-1 text-sm font-bold ${QTN_STATUS_STYLE[status]}`}
-            title={`Workflow stage: ${QTN_STATUS_LABEL[status]}`}>
-            {QTN_STATUS_LABEL[status]}
-          </span>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-sm font-bold ${QTN_STATUS_STYLE[status]}`}
+              title={`Workflow stage: ${QTN_STATUS_LABEL[status]}`}>
+              {QTN_STATUS_LABEL[status]}
+            </span>
+            {/* Live active-working-time — real hands-on time, recorded on the quotation. */}
+            <ActiveTimeBadge qtnId={rec?.id} initialSeconds={rec?.activeSeconds ?? 0} enabled={!sharedReadOnly} />
+          </div>
         </div>
         <div className="flex flex-col items-end gap-2">
           {/* The action buttons and the Share dropdown form their own group, sized by

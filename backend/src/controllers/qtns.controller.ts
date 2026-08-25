@@ -54,6 +54,7 @@ type QtnRow = {
   customer: string;
   panelsCount: number;
   totalEgp: number;
+  activeSeconds?: number;
   revisionNo: number;
 };
 
@@ -121,6 +122,7 @@ const record = (q: QtnRow) => {
     ownerEmail: q.owner?.email ?? "",
     ownerName: q.owner?.name ?? "",
     coOwners: coOwnersOf(q),
+    activeSeconds: q.activeSeconds ?? 0,
     state,
   };
 };
@@ -133,6 +135,7 @@ const listItem = (q: QtnListRow) => ({
   customer: q.customer,
   panels: q.panelsCount,
   totalEgp: q.totalEgp,
+  activeSeconds: q.activeSeconds ?? 0,
   revisionNo: q.revisionNo,
   submitted: q.submitted,
   ...workflowOf(q),
@@ -177,6 +180,7 @@ export const listSelect = {
   customer: true,
   panelsCount: true,
   totalEgp: true,
+  activeSeconds: true,
   revisionNo: true,
   // qtnStatus() falls back to this mirror for rows written before the workflow existed.
   submitted: true,
@@ -320,6 +324,29 @@ export async function getOne(req: Request, res: Response) {
     const q = await visibleQtn(req);
     if (!q) return res.status(404).json({ error: "Quotation not found." });
     res.json(record(q));
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+// POST /api/qtns/:id/activity  { seconds } → { activeSeconds }
+// Accrue real hands-on time. The client sends small deltas while an owner/co-owner is on the
+// page and not idle; each delta is clamped so a stale/bad client can't inflate the total, and
+// the increment is atomic. Only the people building it (owner/co-owner) accrue — a read-only
+// viewer gets 404 and their deltas are ignored. Returns the new total for the live counter.
+export async function activity(req: Request, res: Response) {
+  try {
+    const raw = Number((req.body ?? {}).seconds);
+    const seconds = Number.isFinite(raw) ? Math.min(Math.max(Math.round(raw), 0), 3600) : 0;
+    const q = await writableQtn(req);
+    if (!q) return res.status(404).json({ error: "Quotation not found." });
+    if (seconds <= 0) return res.json({ activeSeconds: q.activeSeconds ?? 0 });
+    const updated = await prisma.lvQtn.update({
+      where: { id: q.id },
+      data: { activeSeconds: { increment: seconds } },
+      select: { activeSeconds: true },
+    });
+    res.json({ activeSeconds: updated.activeSeconds });
   } catch (e) {
     fail(res, e);
   }

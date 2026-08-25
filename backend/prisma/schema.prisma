@@ -236,6 +236,10 @@ model LvQtn {
   customer    String    @default("")
   panelsCount Int       @default(0)
   totalEgp    Float     @default(0)
+  /// Active working time (seconds) accumulated across sessions — the real hands-on time spent
+  /// building this quotation, not the wall-clock from create to submit. Incremented by
+  /// POST /:id/activity while an owner/co-owner is on the page and not idle.
+  activeSeconds Int     @default(0)
   /// Project-tab Revision No. (0 = original). Denormalized so the History list can show
   /// the revision suffix (e.g. "QTN-26-1129-1") without loading the whole state JSON.
   revisionNo  Int       @default(0)

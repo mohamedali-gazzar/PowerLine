@@ -23,6 +23,21 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ Every LV quotation now tracks the real hands-on time spent on it.**
+
+Each LV quotation now measures the actual working time — the minutes someone is genuinely on it
+and active — and adds them up across every session, instead of the calendar gap from creating it
+to submitting it. So a quotation opened at 2pm one day and submitted at 2pm the next, but only
+worked on for 15 + 9 + 6 + 30 minutes, records **60 minutes**, not a day. A live "⏱" timer shows
+in the quotation header (it counts while the page is open and you're active, and pauses after a
+minute and a half of no clicking/typing or when you switch away), and the total is saved on the
+quotation and shown in a new "Active time" column in the Offers History. Only the people building
+it (owner / co-worker) add time; it stops once the quotation is submitted or locked. Adds one
+small, defaulted column (activeSeconds) — safe for the deploy's db push. LV only for now (RMU
+offers still show "—"). Backend build + 290 tests green; frontend build + 38 tests green.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ The New-QTN number field now starts empty (was pre-filled with "QTN-26-").**
 
 When you create a quotation, the number box no longer starts with "QTN-26-" typed in — it's

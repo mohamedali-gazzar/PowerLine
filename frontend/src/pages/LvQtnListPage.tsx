@@ -7,6 +7,7 @@ import type { Offer } from "../types";
 import { useAuth } from "../auth/AuthContext";
 import { useAutoRefresh, useChangedKeys } from "../hooks/useAutoRefresh";
 import { fmtEgp, DEFAULT_FACTORS } from "../lv/catalog";
+import { fmtActive } from "../components/ActiveTimeBadge";
 
 // Status-filter value for superseded LV revisions. "Cancelled" is derived from the
 // revision numbers, not a stored status, so it needs a sentinel that can never collide
@@ -41,6 +42,7 @@ interface UniRow {
   customer: string;
   units: string; // LV: panel count · RMU: "N ways"
   totalUsd: number | null;
+  activeSeconds?: number; // LV: accumulated hands-on time (RMU not tracked yet)
   statusKey: string;
   statusLabel: string;
   statusStyle: string;
@@ -205,6 +207,7 @@ export default function LvQtnListPage() {
         projectName: x.projectName, customer: x.customer,
         units: String(x.panels ?? 0),
         totalUsd: Number.isFinite(x.totalEgp) ? x.totalEgp / DEFAULT_FACTORS.usd : null,
+        activeSeconds: x.activeSeconds ?? 0,
         statusKey: st, statusLabel: QTN_STATUS_LABEL[st], statusStyle: QTN_STATUS_STYLE[st],
         ownerEmail: x.ownerEmail, ownerName: x.ownerName, approverEmail: x.approverEmail,
         removedAt: x.removedAt, removedBy: x.removedBy, cancelled: cancelledIds.has(x.id),
@@ -508,6 +511,7 @@ export default function LvQtnListPage() {
                     <th className="px-4 py-3">Customer</th>
                     <th className="px-4 py-3">Panels / Ways</th>
                     <th className="px-4 py-3">Total (USD incl. VAT)</th>
+                    <th className="px-4 py-3" title="Active hands-on time spent working on the quotation">Active time</th>
                     <th className="px-4 py-3">Updated</th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
@@ -554,6 +558,9 @@ export default function LvQtnListPage() {
                         <td className="px-4 py-3 text-muted">{x.customer || "—"}</td>
                         <td className="px-4 py-3 text-muted">{x.units}</td>
                         <td className="px-4 py-3 font-semibold">{x.totalUsd == null ? <span className="text-muted">—</span> : "$" + fmtEgp(x.totalUsd)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap font-semibold text-ink" title="Active hands-on time on this quotation">
+                          {x.activeSeconds ? `⏱ ${fmtActive(x.activeSeconds)}` : <span className="text-muted">—</span>}
+                        </td>
                         <td className="px-4 py-3 text-xs text-muted">{new Date(x.updatedAt).toLocaleDateString()}</td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>

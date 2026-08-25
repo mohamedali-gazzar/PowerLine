@@ -141,6 +141,8 @@ export interface QtnListItemDto extends QtnWorkflow {
   customer: string;
   panels: number;
   totalEgp: number;
+  /** Accumulated active working time (seconds) — real hands-on time, not create→submit span. */
+  activeSeconds?: number;
   /** Project-tab Revision No. (0 = original) — used to show the "-N" suffix in History. */
   revisionNo?: number;
   submitted: boolean;
@@ -154,6 +156,8 @@ export interface QtnRecordDto extends QtnWorkflow {
   createdAt: string;
   updatedAt: string;
   submitted: boolean;
+  /** Accumulated active working time (seconds) — real hands-on time, not create→submit span. */
+  activeSeconds?: number;
   state: unknown;
 }
 /** One row of a quotation's audit trail. */
@@ -597,6 +601,14 @@ export const api = {
       request<{ ok: true }>(`/qtns/${id}`, {
         method: "PUT",
         body: JSON.stringify({ state, summary }),
+      }),
+    /** Accrue active working time. `seconds` is the delta since the last flush; the server
+     *  clamps it and returns the new total. `keepalive` lets a flush survive tab close. */
+    activity: (id: string, seconds: number, keepalive = false) =>
+      request<{ activeSeconds: number }>(`/qtns/${id}/activity`, {
+        method: "POST",
+        body: JSON.stringify({ seconds }),
+        keepalive,
       }),
     rename: (id: string, number: string) =>
       request<{ ok: boolean; error?: string }>(`/qtns/${id}/number`, {

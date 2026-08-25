@@ -34,6 +34,8 @@ export interface QtnRecord {
   ownerName: string;
   /** Co-Work: everyone sharing this quotation with the owner (any number). */
   coOwners: { id: string; email: string; name: string }[];
+  /** Accumulated active working time (seconds) — real hands-on time, not create→submit span. */
+  activeSeconds: number;
   state: LvState;
 }
 
@@ -45,6 +47,8 @@ export interface QtnListItem {
   customer: string;
   panels: number;
   totalEgp: number;
+  /** Accumulated active working time (seconds) — real hands-on time, shown in History. */
+  activeSeconds?: number;
   /** Project-tab Revision No. (0 = original) — drives the "-N" suffix in History. */
   revisionNo?: number;
   submitted?: boolean;
@@ -203,6 +207,7 @@ const toRecord = (r: QtnRecordDto): QtnRecord => ({
   ownerEmail: r.ownerEmail ?? "",
   ownerName: r.ownerName ?? "",
   coOwners: r.coOwners ?? [],
+  activeSeconds: r.activeSeconds ?? 0,
   state: normalize(r.state as LvState),
 });
 
