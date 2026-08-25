@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useDialogs } from "./ConfirmModal";
 import { getToken, api, type CatalogChanges, type CatalogChangeItem } from "../api";
@@ -50,75 +50,85 @@ const numOrText = (v: string | null) => {
   return v && v.trim() ? v : "—";
 };
 
+// "Read" changes are remembered per browser so the red count only shows what hasn't been
+// acknowledged. Keyed by catalogue version + the change's identity, so a fresh upload (new
+// version) shows up again while already-read items stay dismissed.
+const READ_STORE = "lvCatalogReadChanges";
+const loadReadChanges = (): Set<string> => {
+  try { return new Set(JSON.parse(localStorage.getItem(READ_STORE) || "[]") as string[]); } catch { return new Set(); }
+};
+const saveReadChanges = (s: Set<string>) => {
+  try { localStorage.setItem(READ_STORE, JSON.stringify([...s].slice(-2000))); } catch { /* ignore */ }
+};
+const changeKey = (version: number, it: CatalogChangeItem): string =>
+  `${version}|${it.field}|${it.label || it.detail?.ref || it.detail?.d || ""}|${it.oldValue ?? ""}|${it.newValue ?? ""}`;
+
 export default function CatalogUpdateCheck({ onApply }: { onApply?: () => { changed: number; removed: number } }) {
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [warn, setWarn] = useState(false);
   const [changes, setChanges] = useState<CatalogChanges | null>(null);
   const [open, setOpen] = useState(false);
+  const [read, setRead] = useState<Set<string>>(() => loadReadChanges());
 
+  // Load the recent changelog on mount so the red notification count appears without a click.
+  useEffect(() => {
+    let alive = true;
+    api.catalog.lvChanges(catalogVersion() || undefined).then((c) => { if (alive) setChanges(c); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Pull the latest catalogue for this browser and open the changelog.
   const run = async () => {
     setBusy(true);
-    setMsg("");
-    setChanges(null);
-    setOpen(false);
     const before = catalogVersion();
     const u = await checkCatalogUpdates(getToken());
-    if (!u.ok) {
-      setBusy(false);
-      setWarn(true);
-      setMsg("Couldn’t reach the price list — still quoting on the catalogue already loaded.");
-      return;
-    }
-    setWarn(false);
-    // Ask what actually changed. Behind → everything since; already current → the
-    // most recent upload, so "what came in last time?" is always answerable.
-    let c: CatalogChanges | null = null;
     try {
-      c = await api.catalog.lvChanges(before || undefined);
-    } catch {
-      /* changelog is a nicety — the refresh above already did the important part */
-    }
+      const c = await api.catalog.lvChanges((u.ok ? before : catalogVersion()) || undefined);
+      setChanges(c);
+    } catch { /* offline → keep whatever the badge already loaded */ }
     setBusy(false);
-    setChanges(c);
-    const headline = u.changed ? `Updated to version ${u.version}` : `Up to date — version ${u.version}`;
-    if (!c || !c.total) {
-      setMsg(`${headline}. No item changes recorded.`);
-      return;
-    }
-    const parts = Object.entries(c.counts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([f, n]) => `${n} ${CHANGE_FIELD_LABEL[f] ?? f}${n === 1 ? "" : "s"}`);
-    setMsg(`${headline} · ${parts.join(" · ")}`);
+    setOpen(true);
+  };
+
+  const version = changes?.version ?? 0;
+  const items = changes?.items ?? [];
+  const unreadCount = items.filter((it) => !read.has(changeKey(version, it))).length;
+  const markRead = (it: CatalogChangeItem) => {
+    const next = new Set(read).add(changeKey(version, it));
+    setRead(next); saveReadChanges(next);
+  };
+  const markAllRead = () => {
+    const next = new Set(read);
+    for (const it of items) next.add(changeKey(version, it));
+    setRead(next); saveReadChanges(next);
   };
 
   return (
-    <div className="flex flex-col items-end gap-1 no-print">
-      <button onClick={run} disabled={busy}
-        title="Re-read the published price list and show what changed in the latest upload"
-        className="btn-ghost disabled:opacity-60">
-        {busy ? "Checking…" : "⟳ Check for updates"}
-      </button>
-      {msg && (
-        <span className={`max-w-[26rem] text-right text-[11px] leading-snug ${warn ? "font-semibold text-red-700" : "text-muted"}`}>
-          {msg}
-          {!!changes?.total && (
-            <>
-              {" "}
-              <button onClick={() => setOpen(true)} className="font-semibold text-brand-dark underline underline-offset-2">
-                see {changes.total} change{changes.total === 1 ? "" : "s"}
-              </button>
-            </>
-          )}
-        </span>
+    <div className="flex flex-col items-end no-print">
+      <div className="relative">
+        <button onClick={run} disabled={busy}
+          title="Re-read the published price list and show what changed"
+          className="btn-ghost disabled:opacity-60">
+          {busy ? "Checking…" : "⟳ Check for updates"}
+        </button>
+        {unreadCount > 0 && (
+          <span aria-label={`${unreadCount} unread price changes`}
+            className="pointer-events-none absolute -right-2 -top-2 grid h-5 min-w-[1.25rem] place-items-center rounded-full bg-red-600 px-1 text-[11px] font-extrabold leading-none text-white ring-2 ring-white">
+            {unreadCount}
+          </span>
+        )}
+      </div>
+      {open && changes && (
+        <ChangeLogDialog changes={changes} onApply={onApply}
+          isRead={(it) => read.has(changeKey(version, it))} onMarkRead={markRead} onMarkAllRead={markAllRead}
+          onClose={() => setOpen(false)} />
       )}
-      {open && changes && <ChangeLogDialog changes={changes} onApply={onApply} onClose={() => setOpen(false)} />}
     </div>
   );
 }
 
 /** The changelog, as its own dismissible panel rather than a dropdown under the button. */
-function ChangeLogDialog({ changes, onApply, onClose }: { changes: CatalogChanges; onApply?: () => { changed: number; removed: number }; onClose: () => void }) {
+function ChangeLogDialog({ changes, onApply, isRead, onMarkRead, onMarkAllRead, onClose }: { changes: CatalogChanges; onApply?: () => { changed: number; removed: number }; isRead: (it: CatalogChangeItem) => boolean; onMarkRead: (it: CatalogChangeItem) => void; onMarkAllRead: () => void; onClose: () => void }) {
+  const anyUnread = changes.items.some((it) => !isRead(it));
   const { confirm, dialogs } = useDialogs();
   const [applied, setApplied] = useState<{ changed: number; removed: number } | null>(null);
   useEffect(() => {
@@ -175,13 +185,19 @@ function ChangeLogDialog({ changes, onApply, onClose }: { changes: CatalogChange
                     ].filter(Boolean).join(" · ")}
               </span>
             )}
+            {anyUnread && (
+              <button onClick={onMarkAllRead} className="btn-ghost"
+                title="Mark every change here as read — clears the notification count">
+                ✓ Mark all read
+              </button>
+            )}
             <button onClick={onClose} className="btn-ghost" title="Close (Esc)">✕ Close</button>
           </div>
         </div>
 
         <div className="mt-3 flex-1 overflow-auto rounded-lg border border-line">
           <ul className="divide-y divide-line">
-            {changes.items.map((it, i) => <ChangeRow key={i} it={it} />)}
+            {changes.items.map((it, i) => <ChangeRow key={i} it={it} read={isRead(it)} onRead={() => onMarkRead(it)} />)}
           </ul>
         </div>
         {changes.total > changes.items.length && (
@@ -195,8 +211,9 @@ function ChangeLogDialog({ changes, onApply, onClose }: { changes: CatalogChange
   );
 }
 
-/** One changelog entry, described according to what actually changed. */
-function ChangeRow({ it }: { it: CatalogChangeItem }) {
+/** One changelog entry, described according to what actually changed, with a "read" toggle that
+ *  dismisses it from the notification count. */
+function ChangeRow({ it, read, onRead }: { it: CatalogChangeItem; read: boolean; onRead: () => void }) {
   const d = it.detail ?? undefined;
   const name = it.label || d?.d || d?.name || d?.ref || "item";
   const Head = (
@@ -206,6 +223,7 @@ function ChangeRow({ it }: { it: CatalogChangeItem }) {
     </div>
   );
 
+  let body: ReactNode;
   // Added / removed / restored → describe the whole item, not one field.
   if (it.field === "__created" || it.field === "__retired" || it.field === "__restored") {
     const verb = it.field === "__created" ? "Added" : it.field === "__retired" ? "Removed" : "Restored";
@@ -223,8 +241,8 @@ function ChangeRow({ it }: { it: CatalogChangeItem }) {
           ["IP", d.ip || "—"], ["Mounting", d.mount || "—"], ["RAL", d.ral || "—"],
         ].filter(([, v]) => v !== "—" || true) as [string, string][])
       : [];
-    return (
-      <li className="px-3 py-2">
+    body = (
+      <>
         {Head}
         <div className="mt-0.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: TRED }}>{verb}</div>
         {!!spec.length && (
@@ -237,18 +255,16 @@ function ChangeRow({ it }: { it: CatalogChangeItem }) {
             ))}
           </div>
         )}
-      </li>
+      </>
     );
-  }
-
-  // Price → one currency, rounded, with the percentage move.
-  if (it.field === "price") {
+  } else if (it.field === "price") {
+    // Price → one currency, rounded, with the percentage move.
     const a = parseMoney(it.oldValue);
     const b = parseMoney(it.newValue);
     const pct = pctMove(moneyValue(a), moneyValue(b));
     const up = moneyValue(b) >= moneyValue(a);
-    return (
-      <li className="px-3 py-2">
+    body = (
+      <>
         {Head}
         <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12px]">
           <span className="text-muted">Price</span>
@@ -260,16 +276,14 @@ function ChangeRow({ it }: { it: CatalogChangeItem }) {
             </span>
           )}
         </div>
-      </li>
+      </>
     );
-  }
-
-  // Brand → also say whether it turned the ABB discount on or off.
-  if (it.field === "brand") {
+  } else if (it.field === "brand") {
+    // Brand → also say whether it turned the ABB discount on or off.
     const was = discountable(it.oldValue ?? "", d?.eur);
     const now = discountable(it.newValue ?? "", d?.eur);
-    return (
-      <li className="px-3 py-2">
+    body = (
+      <>
         {Head}
         <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12px]">
           <span className="text-muted">Brand</span>
@@ -283,32 +297,41 @@ function ChangeRow({ it }: { it: CatalogChangeItem }) {
             <span className="font-bold text-ink">→ {now ? "Yes" : "No"}</span>
           </div>
         )}
-      </li>
+      </>
     );
-  }
-
-  // Description → the full text, before and after.
-  if (it.field === "description") {
-    return (
-      <li className="px-3 py-2">
+  } else if (it.field === "description") {
+    // Description → the full text, before and after.
+    body = (
+      <>
         {Head}
         <div className="mt-0.5 text-[12px]">
           <div className="text-muted line-through">{it.oldValue || "—"}</div>
           <div className="font-bold text-ink">→ {it.newValue || "—"}</div>
         </div>
-      </li>
+      </>
+    );
+  } else {
+    // Anything else → the field, before and after.
+    body = (
+      <>
+        {Head}
+        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12px]">
+          <span className="text-muted">{CHANGE_FIELD_LABEL[it.field] ?? it.field}</span>
+          <span className="text-muted line-through">{numOrText(it.oldValue)}</span>
+          <span className="font-bold text-ink">→ {numOrText(it.newValue)}</span>
+        </div>
+      </>
     );
   }
 
-  // Anything else → the field, before and after.
   return (
-    <li className="px-3 py-2">
-      {Head}
-      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12px]">
-        <span className="text-muted">{CHANGE_FIELD_LABEL[it.field] ?? it.field}</span>
-        <span className="text-muted line-through">{numOrText(it.oldValue)}</span>
-        <span className="font-bold text-ink">→ {numOrText(it.newValue)}</span>
-      </div>
+    <li className={`flex items-start justify-between gap-3 px-3 py-2 ${read ? "opacity-45" : ""}`}>
+      <div className="min-w-0">{body}</div>
+      <button type="button" onClick={onRead} disabled={read}
+        title={read ? "Already read" : "Mark this change as read — removes it from the notification count"}
+        className={`mt-0.5 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${read ? "bg-green-100 text-green-700" : "border border-line text-muted hover:border-brand/50 hover:text-brand-dark"}`}>
+        {read ? "✓ Read" : "Read"}
+      </button>
     </li>
   );
 }

@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ "Check for updates" now shows a red notification count you can tick off as you read them.**
+
+The little sentence under the button ("Up to date — version 51 · 4 added…") is gone. In its place,
+the button carries a red circle with how many price changes you haven't looked at yet — like a
+notifications badge. Open it and each change has a "Read" button; marking one read drops the count
+by one (4 → 3 → …), and there's a "Mark all read" to clear them all at once. What you've read is
+remembered on your computer, and a fresh price-list upload brings the count back for the new items.
+Build green, 38 tests pass.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ "Check for updates" now looks like the other Home buttons, and drafts can apply the new prices.**
 
 Two tweaks to yesterday's move: the Home "Check for updates" button now uses the same plain button
