@@ -23,6 +23,24 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-25 · Mohamed's side · Claude
 
+**✅ A quotation sent for approval is now frozen for its creator — no more editing under the reviewer's feet.**
+
+Before: after an estimator sent a QTN for approval, they could keep editing it while the
+reviewer was revising it, so the reviewer was chasing a moving target. Cause: the estimator's
+own "Tendering" role carries the `edit-waiting` permission, and both the screen and the server
+treated that permission as a licence to keep saving a waiting quotation.
+
+Now: once a quotation is **Waiting for approval** (or Approved / Submitted) it is read-only for
+its creator and co-workers — every field is locked and nothing autosaves. The **only** way the
+creator gets editing back is to **Withdraw** it (it drops back to Draft), or for the reviewer to
+**Return** it with comments (it becomes Returned and editable again). Withdraw shows only while
+it is Waiting/Approved; the moment the reviewer Returns it, Withdraw is gone. A reviewer can
+still open the read-only "compare" sandbox as before — nothing they touch there is ever saved.
+Enforced on the server too (a locked quotation refuses saves with a clear message), not just in
+the browser. No data or price change. Builds green, 291 + 38 tests pass.
+
+## 2026-08-25 · Mohamed's side · Claude
+
 **✅ Technical Offer now prints each item exactly where it sits in the panel.**
 
 A panel's "Main Incoming" had one EXT under Source 1 and one under Source 2, but the printed

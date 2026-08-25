@@ -411,19 +411,24 @@ export default function LvConfiguratorPage() {
   // Content is frozen while the quotation is under review, approved or submitted —
   // and separately when this revision has been superseded.
   const lockedByStatus = status === "WAITING_APPROVAL" || status === "APPROVED" || status === "SUBMITTED";
-  const canEditWaiting = status === "WAITING_APPROVAL" && myPerms.includes("qtn.editWaiting");
   // Review SANDBOX: an approver (Section Head / Team Leader) — or anyone with edit-waiting — may
   // open a QTN that's waiting for approval and freely edit it to COMPARE ("what if we swap this
   // component?"), but nothing is saved. Autosave is switched off below, and the server refuses
   // their writes anyway, so returning it sends the estimator's ORIGINAL back — only the comments
-  // travel with it. It never applies to the owner or a co-worker (their edits are real).
+  // travel with it. It never applies to the owner or a co-worker — for them a quotation waiting
+  // for approval is simply locked, and the only way back to editing is Withdraw or a Return.
   const iAmOwner = !!user?.id && rec?.ownerId === user.id;
   const iAmCoOwner = !!user?.id && !!rec?.coOwners?.some((c) => c.id === user.id);
   const reviewSandbox =
     status === "WAITING_APPROVAL" &&
     (myPerms.includes("qtn.approve") || myPerms.includes("qtn.editWaiting")) &&
     !iAmOwner && !iAmCoOwner;
-  const readOnly = (lockedByStatus && !canEditWaiting && !reviewSandbox) || cancelled;
+  // Sent for approval ⇒ frozen for the people who build it (owner + co-workers). Only the
+  // review sandbox opens the inputs, and nothing it touches is saved. Previously anyone with
+  // qtn.editWaiting — which the estimator's own Tendering role carries — kept editing while it
+  // was under review, so the reviewer was revising a moving target. To edit again the owner
+  // must Withdraw it (→ Draft), or a reviewer must Return it (→ Returned).
+  const readOnly = (lockedByStatus && !reviewSandbox) || cancelled;
 
   // Renames the QTN on the backend (unique, non-empty). Edited from the Project tab.
   const renameQtnNumber = async (n: string): Promise<{ ok: boolean; error?: string }> => {
@@ -802,6 +807,7 @@ export default function LvConfiguratorPage() {
   useEffect(() => {
     if (!rec || loading) return;
     if (reviewSandbox) return; // review sandbox — approver edits stay local, are never saved
+    if (readOnly) return; // frozen by status (waiting for approval / approved / submitted) — never autosave
     const payload = JSON.stringify(s);
     if (payload === sentRef.current) return; // nothing to write
     saveRef.current = { id: rec.id, state: s };
@@ -810,7 +816,7 @@ export default function LvConfiguratorPage() {
     const selectionOnly = sentContentRef.current !== "" && contentKey === sentContentRef.current;
     const t = setTimeout(() => commit.current(rec.id, s), selectionOnly ? SELECTION_SAVE_MS : CONTENT_SAVE_MS);
     return () => clearTimeout(t);
-  }, [rec, s, loading, reviewSandbox]);
+  }, [rec, s, loading, reviewSandbox, readOnly]);
 
   // Flush a pending save when the tab is hidden. This runs while the page is still alive,
   // so an ordinary fetch still works — unlike an unload handler, which cannot carry the

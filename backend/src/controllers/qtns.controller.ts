@@ -426,12 +426,12 @@ export async function update(req: Request, res: Response) {
     // accepted writes regardless, so the debounced autosave could overwrite a
     // quotation that was already under approval.
     const s = qtnStatus(q);
-    if (isLocked(s)) {
-      const acc = await accessOf(req.userId);
-      if (!(s === "WAITING_APPROVAL" && acc.perms.has("qtn.editWaiting"))) {
-        return lockedResponse(res, s);
-      }
-    }
+    // A quotation sent for approval (or approved / submitted) is frozen for everyone who can
+    // write it — its owner and co-workers. The only way back to editing is to Withdraw it
+    // (→ Draft) or for a reviewer to Return it (→ Returned); both are status transitions, not
+    // saves. qtn.editWaiting used to let the owner keep saving while it was under review, so the
+    // reviewer was revising a moving target — it no longer unlocks writes.
+    if (isLocked(s)) return lockedResponse(res, s);
     // While the quotation is shared, merge per-panel so no one overwrites anyone else.
     let toStore: unknown = state ?? {};
     if (coOwnersOf(q).length) {
