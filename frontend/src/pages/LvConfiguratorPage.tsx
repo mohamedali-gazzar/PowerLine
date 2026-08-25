@@ -307,6 +307,7 @@ export default function LvConfiguratorPage() {
     return saved && TABS.includes(saved) ? saved : "project";
   });
   const [matAbbOnly, setMatAbbOnly] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false); // "Copy offer link" feedback flash
   // RPT-1: the QTN number is editable after creation (kept unique per user).
   const [qtnNum, setQtnNum] = useState("");
   // Where this quotation sits in the approval workflow. The server owns it; the
@@ -1303,6 +1304,33 @@ export default function LvConfiguratorPage() {
     if (target.tagName === "INPUT" && typeof (target as HTMLInputElement).selectionStart === "number") (target as HTMLInputElement).select();
   };
 
+  // Auto-named offer link for pasting into the ERP. The label is the quotation number with its
+  // revision folded in (rev 00 → plain, rev 01 → "-1", …) — derived from live state, so it
+  // re-computes whenever the number or revision changes; never typed by hand.
+  const linkRevNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
+  const offerLabel = linkRevNum > 0 ? `${qtnNum}-${linkRevNum}` : qtnNum;
+  // Copy the offer URL as a hyperlink named by that label. Writes both clipboard formats: rich
+  // text/html (a real <a>, so a rich ERP field shows a clickable link that reads as the QTN
+  // name) and a text/plain fallback ("label — url") for plain fields. Falls back to writeText.
+  const copyOfferLink = async () => {
+    const url = window.location.href;
+    const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const html = `<a href="${esc(url)}">${esc(offerLabel)}</a>`;
+    const plain = `${offerLabel} — ${url}`;
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([plain], { type: "text/plain" }),
+        }),
+      ]);
+    } catch {
+      try { await navigator.clipboard.writeText(plain); } catch { /* clipboard unavailable */ }
+    }
+    setLinkCopied(true);
+    window.setTimeout(() => setLinkCopied(false), 1800);
+  };
+
   return (
     <div>
       <div className={`mb-5 flex flex-wrap items-end justify-between gap-3 animate-fade-up no-print ${
@@ -1324,7 +1352,7 @@ export default function LvConfiguratorPage() {
             </button>
           </div>
           <h1 className="flex items-center gap-3 text-2xl font-extrabold tracking-tight">
-            <span className="code-chip">{qtnNum}</span>
+            <span className="code-chip">{offerLabel}</span>
             {s.project.name || "LV Quotation"}
           </h1>
           <p className="text-sm text-muted">
@@ -1483,6 +1511,11 @@ export default function LvConfiguratorPage() {
                 🔓 Reopen
               </button>
             )}
+            <button type="button" onClick={copyOfferLink}
+              title="Copy a clickable link to this offer, named by its quotation number — paste it into the ERP"
+              className="rounded-full border border-line bg-white px-4 py-1.5 text-xs font-bold text-ink hover:border-brand/50 hover:text-brand-dark no-print">
+              {linkCopied ? "✓ Copied" : "🔗 Copy link"}
+            </button>
             {erpCount > 0 && (
               <button onClick={exportErpCsv}
                 title={`Download ${erpCount} panel${erpCount > 1 ? "s" : ""} as an ERPNext "Bulk Edit Items" CSV for your ERP`}

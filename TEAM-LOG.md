@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-24 · Mohamed's side · Claude
 
+**✅ One-click "Copy link" for pasting an offer into the ERP.**
+
+There's a new "🔗 Copy link" button in the quotation header's action row, beside "⬇ ERP CSV". It
+copies a link to this offer that is already named for you — the quotation number with its
+revision (e.g. "QTN-26-12354-1"), never typed by hand and always in step with the number/
+revision on screen. Paste it into a notes/rich-text field in the ERP and it shows up as a
+clickable link that reads as the quotation name (not a long web address); paste into a plain
+text field and you get "QTN-26-12354-1 — <link>" instead. Build green, 38 tests pass.
+
+## 2026-08-24 · Mohamed's side · Claude
+
 **✅ Removed the divider line under the logo on the Terms & Conditions pages.**
 
 The thin grey rule beneath the PowerLine logo on the Commercial Offer's Terms & Conditions
