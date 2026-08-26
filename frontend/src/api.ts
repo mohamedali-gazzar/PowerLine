@@ -726,6 +726,8 @@ export const api = {
       brand?: string;
       fam?: string;
       noPrice?: boolean;
+      /** Only currently-offered items — hides removed (retired) ones. */
+      activeOnly?: boolean;
       page?: number;
       take?: number;
     }) => {
@@ -735,6 +737,7 @@ export const api = {
       if (p.brand) s.set("brand", p.brand);
       if (p.fam) s.set("fam", p.fam);
       if (p.noPrice) s.set("noPrice", "1");
+      if (p.activeOnly) s.set("active", "1");
       s.set("page", String(p.page ?? 0));
       s.set("take", String(p.take ?? 50));
       return request<{ kind: string; rows: LvRow[]; total: number; page: number; take: number }>(

@@ -184,6 +184,10 @@ export async function listLvPrices(req: Request, res: Response) {
     const brand = String(req.query.brand ?? "").trim();
     const fam = String(req.query.fam ?? "").trim();
     const onlyNoPrice = req.query.noPrice === "1";
+    // Hide retired (removed) items unless the caller asks for them. Absent = show all,
+    // so the "Download current" export and any other caller keep every row; the price
+    // list page passes active=1 so a removed item disappears from the search.
+    const activeOnly = req.query.active === "1";
     const page = Math.max(0, Number(req.query.page ?? 0));
     const take = Math.min(200, Math.max(10, Number(req.query.take ?? 50)));
 
@@ -192,6 +196,7 @@ export async function listLvPrices(req: Request, res: Response) {
       if (q) where.search = { contains: q };
       if (type) where.t = type;
       if (brand) where.brand = brand;
+      if (activeOnly) where.active = true;
       if (onlyNoPrice) where.AND = [{ eur: 0 }, { egp: 0 }];
       const [rows, total] = await Promise.all([
         prisma.lvComponent.findMany({ where, orderBy: { sortIndex: "asc" }, skip: page * take, take }),
@@ -203,6 +208,7 @@ export async function listLvPrices(req: Request, res: Response) {
     const where: Record<string, unknown> = {};
     if (q) where.search = { contains: q };
     if (fam) where.fam = fam;
+    if (activeOnly) where.active = true;
     if (onlyNoPrice) where.AND = [{ eur: 0 }, { egp: 0 }];
     const [rows, total] = await Promise.all([
       prisma.lvEnclosure.findMany({ where, orderBy: { sortIndex: "asc" }, skip: page * take, take }),

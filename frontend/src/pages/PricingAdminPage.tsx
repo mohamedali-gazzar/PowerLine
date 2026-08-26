@@ -638,6 +638,9 @@ function LvPrices() {
   const [brand, setBrand] = useState("");
   const [fam, setFam] = useState("");
   const [noPrice, setNoPrice] = useState(false);
+  // Removed (retired) items are hidden from the list by default — a removal should
+  // disappear from view. Tick "Show removed" to see them (struck through) and restore any.
+  const [showRemoved, setShowRemoved] = useState(false);
   const [facets, setFacets] = useState<{ types: string[]; brands: string[]; families: string[] } | null>(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
@@ -655,7 +658,7 @@ function LvPrices() {
     const t = setTimeout(() => {
       setRows(null);
       api.pricing
-        .lvList({ kind, q, type, brand, fam, noPrice, page, take })
+        .lvList({ kind, q, type, brand, fam, noPrice, activeOnly: !showRemoved, page, take })
         .then((r) => {
           setRows(r.rows);
           setTotal(r.total);
@@ -663,9 +666,9 @@ function LvPrices() {
         .catch((e) => setErr((e as Error).message));
     }, 250);
     return () => clearTimeout(t);
-  }, [kind, q, type, brand, fam, noPrice, page]);
+  }, [kind, q, type, brand, fam, noPrice, showRemoved, page]);
 
-  useEffect(() => setPage(0), [kind, q, type, brand, fam, noPrice]);
+  useEffect(() => setPage(0), [kind, q, type, brand, fam, noPrice, showRemoved]);
 
   const toggleRetire = async (row: LvRow) => {
     if (kind === "combos") return; // unreachable — the row table isn't rendered for combinations
@@ -744,7 +747,7 @@ function LvPrices() {
           onApplied={() => {
             setPage(0);
             setReloadKey((k) => k + 1);
-            api.pricing.lvList({ kind, q, type, brand, fam, noPrice, page: 0, take }).then((r) => {
+            api.pricing.lvList({ kind, q, type, brand, fam, noPrice, activeOnly: !showRemoved, page: 0, take }).then((r) => {
               setRows(r.rows);
               setTotal(r.total);
             });
@@ -802,6 +805,10 @@ function LvPrices() {
         <label className="flex items-center gap-2 pb-2 text-sm">
           <input type="checkbox" checked={noPrice} onChange={(e) => setNoPrice(e.target.checked)} />
           Only items with no price
+        </label>
+        <label className="flex items-center gap-2 pb-2 text-sm" title="Removed items are hidden by default — show them here to review or restore">
+          <input type="checkbox" checked={showRemoved} onChange={(e) => setShowRemoved(e.target.checked)} />
+          Show removed
         </label>
         {filtersOn && (
           <button className="btn-ghost mb-0.5" onClick={clearFilters}>Clear filters</button>

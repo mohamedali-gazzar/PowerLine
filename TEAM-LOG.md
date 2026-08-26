@@ -23,6 +23,27 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-25 · Mohamed's side · Claude
 
+**✅ Removing items from the price list now actually takes effect and they disappear from view.**
+
+Follow-up to the full-sync removals: two things were making removed items look like they "still
+exist". Fixed both:
+
+1. **Removals now apply automatically when you upload your whole list.** The "remove missing
+   items" tick is pre-checked whenever the file clearly IS the full price list (it recognised at
+   least as many items as it would remove), so a normal Download → edit → upload → Apply removes
+   the deleted rows without a separate step. A *part* of the list still leaves it unticked (so it
+   can never wipe the catalogue), and you can always tick/untick it yourself.
+2. **Removed items are now hidden from the price list.** The search used to still show retired
+   items, so a removed product looked like it was never removed. They're hidden by default now;
+   tick the new **Show removed** box to see them (struck through) and Restore any. The
+   "Download current" export is unchanged (it still includes everything).
+
+Verified end-to-end: retiring an item hides it from the default search and it reappears under
+"Show removed"; a full-list-minus-one upload pre-ticks the removal, a 2-item upload does not.
+Backend + frontend build green, 291 + 38 tests pass.
+
+## 2026-08-25 · Mohamed's side · Claude
+
 **✅ The Excel price update can now REMOVE items that are no longer in your sheet — a true full sync.**
 
 Before, uploading an Excel only updated prices/data and added new items; anything you had

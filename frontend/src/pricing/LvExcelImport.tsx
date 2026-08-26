@@ -244,8 +244,15 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
         return;
       }
       setBusy(`Checking ${rows.length.toLocaleString()} rows against the price list…`);
-      setPreview(await api.pricing.lvImportPreview(rows));
+      const p = await api.pricing.lvImportPreview(rows);
+      setPreview(p);
       setTab("updates");
+      // Pre-tick "remove missing items" only when the file clearly IS the whole list —
+      // i.e. it recognised at least as many items as it would remove. A part-list upload
+      // (few matches, many would-be removals) leaves it unticked, so it can never wipe the
+      // catalogue by surprise; the uploader still confirms with Apply either way.
+      const sm = p.summary;
+      setIncludeRemovals(sm.removals > 0 && sm.removals <= sm.updates + sm.unchanged);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not read that file.");
     } finally {
