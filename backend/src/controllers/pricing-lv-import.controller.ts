@@ -97,7 +97,7 @@ const APPLIABLE_FIELDS: Record<FieldChange["field"], string> = {
 const NUMERIC_FIELDS = new Set<FieldChange["field"]>(["poles", "cuP", "cuC"]);
 
 export interface DiffEntry {
-  kind: "update" | "add";
+  kind: "update" | "add" | "remove";
   entity: "LvComponent" | "LvEnclosure";
   entityId?: string;
   code: string;
@@ -191,6 +191,10 @@ export async function postLvImportPreview(req: Request, res: Response) {
     const seen = new Set<string>();
     let duplicates = 0;
     let nameClashes = 0;
+    // Component ids the uploaded file refers to (by code OR by description match),
+    // whether it changes them or not. Anything active + coded that is NOT in here is a
+    // candidate to retire (full-sync removals) — see after the loop.
+    const matched = new Set<string>();
 
     type Comp = (typeof components)[number];
     type Encl = (typeof enclosures)[number];
@@ -303,6 +307,7 @@ export async function postLvImportPreview(req: Request, res: Response) {
         const useEurN = eurN > 0 ? eurN : 0;
         const useEgpN = eurN > 0 ? 0 : egpN;
         if (hits.length === 1) {
+          matched.add(hits[0].id); // the file refers to this component — never a removal
           const entry = diffForExisting(hits[0], undefined, row, useEurN, useEgpN);
           if (entry) diff.push({ ...entry, noCode: true });
           else unchanged++;
@@ -347,6 +352,7 @@ export async function postLvImportPreview(req: Request, res: Response) {
       const existing = comp ?? encl;
 
       if (existing) {
+        if (comp) matched.add(comp.id); // the file refers to this component — never a removal
         const entry = diffForExisting(comp, encl, row, useEur, useEgp);
         if (entry) diff.push(entry);
         else unchanged++;
@@ -385,9 +391,32 @@ export async function postLvImportPreview(req: Request, res: Response) {
       names.claim(label, pendingItem(label, row.code.trim()));
     }
 
+    // Full-sync removals: an ACTIVE, coded component the file never mentioned is one
+    // the catalogue should stop offering. Retiring it (active=false) is reversible —
+    // the row, its name and its price history stay, and quotations already sent are
+    // untouched — so this is a soft delete, never a hard one. Code-less items ("Space
+    // for MCB", CTs) match on description, not code, and are never swept up here;
+    // enclosures are structural (their name encodes cell dimensions) and are left
+    // alone. Held apart from the headline counts and applied ONLY if the uploader ticks
+    // the opt-in, so a partial file can never silently empty the catalogue.
+    const removals: DiffEntry[] = components
+      .filter((c) => c.active && c.ref && !matched.has(c.id))
+      .map((c) => ({
+        kind: "remove" as const,
+        entity: "LvComponent" as const,
+        entityId: c.id,
+        code: c.ref,
+        label: c.d || c.n || c.ref,
+        fromEur: c.eur,
+        fromEgp: c.egp,
+        eur: c.eur,
+        egp: c.egp,
+      }));
+    diff.push(...removals);
+
     // Code-less rows are held apart: they are shown for review and applied only if
     // the uploader ticks them, so they never inflate the headline counts.
-    const coded = diff.filter((d) => !d.noCode);
+    const coded = diff.filter((d) => !d.noCode && d.kind !== "remove");
     const noCodeEntries = diff.filter((d) => d.noCode);
     const updates = coded.filter((d) => d.kind === "update");
     const additions = coded.filter((d) => d.kind === "add");
@@ -397,6 +426,8 @@ export async function postLvImportPreview(req: Request, res: Response) {
       rowsRead: rows.length,
       updates: updates.length,
       additions: additions.length,
+      // Active coded items absent from the file — retired on apply, only if opted in.
+      removals: removals.length,
       // Rows with no item code, matched on description instead — opt-in.
       noCodeUpdates: noCodeEntries.filter((d) => d.kind === "update").length,
       noCodeAdditions: noCodeEntries.filter((d) => d.kind === "add").length,
@@ -437,9 +468,10 @@ export async function postLvImportPreview(req: Request, res: Response) {
       summary,
       updates: updates.slice(0, DETAIL_CAP),
       additions: additions.slice(0, DETAIL_CAP),
+      removals: removals.slice(0, DETAIL_CAP),
       noCodeItems: noCodeEntries.slice(0, DETAIL_CAP),
       warnings: warnings.slice(0, 50),
-      truncated: updates.length > DETAIL_CAP || additions.length > DETAIL_CAP,
+      truncated: updates.length > DETAIL_CAP || additions.length > DETAIL_CAP || removals.length > DETAIL_CAP,
       expiresAt: batch.expiresAt,
     });
   } catch (e) {
@@ -464,14 +496,19 @@ export async function postLvImportApply(req: Request, res: Response) {
       return res.status(410).json({ error: "That preview is over an hour old — please upload the file again." });
     }
 
-    // Code-less rows apply only when the uploader ticked them in the preview.
+    // Code-less rows and full-sync removals each apply only when the uploader ticked
+    // their opt-in in the preview — both are held out of the default apply.
     const includeNoCode = req.body?.includeNoCode === true;
-    const diff = (JSON.parse(batch.diff) as DiffEntry[]).filter((d) => includeNoCode || !d.noCode);
+    const includeRemovals = req.body?.includeRemovals === true;
+    const diff = (JSON.parse(batch.diff) as DiffEntry[]).filter((d) =>
+      d.kind === "remove" ? includeRemovals : includeNoCode || !d.noCode,
+    );
     const by = req.userEmail ?? "";
     const actorId = req.userId ?? null;
 
     let updated = 0;
     let added = 0;
+    let removed = 0;
     let skipped = 0;
     /** Rows the name rule refused here, in words, for the person who pressed Apply. */
     const nameClashes: string[] = [];
@@ -488,6 +525,25 @@ export async function postLvImportApply(req: Request, res: Response) {
     let nextSortIndex = (last?.sortIndex ?? -1) + 1;
 
     for (const d of diff) {
+      // Full-sync removal: retire an active component the file left out. Soft delete —
+      // the row and history stay, so it is reversible and quotations already sent keep
+      // their frozen prices. Mirrors the /retire endpoint's audit trail.
+      if (d.kind === "remove" && d.entityId) {
+        const cur = await prisma.lvComponent.findUnique({ where: { id: d.entityId } });
+        if (!cur || !cur.active) { skipped++; continue; } // gone or already retired
+        await prisma.lvComponent.update({ where: { id: cur.id }, data: { active: false, updatedBy: by } });
+        await prisma.priceChange.create({
+          data: {
+            domain: "LV", entity: "LvComponent", entityId: cur.id,
+            label: cur.d || cur.n || cur.ref, field: "__retired",
+            oldValue: "offered", newValue: "retired",
+            actorId, actorEmail: by,
+          },
+        });
+        removed++;
+        continue;
+      }
+
       if (d.kind === "update" && d.entityId) {
         if (d.entity === "LvComponent") {
           // Re-read so the audit records what the price actually was, even if it
@@ -645,9 +701,12 @@ export async function postLvImportApply(req: Request, res: Response) {
     // Live immediately — changing a price and it reaching a quotation are one act.
     // The publish guards are RMU-side, so an unrelated gap there can stop an LV import
     // from reaching anyone. Pass the reason back rather than reporting a bare failure.
-    const pub = await publishCurrentPricesDetailed(by, `Spreadsheet import: ${updated} updated, ${added} added`);
+    const pub = await publishCurrentPricesDetailed(
+      by,
+      `Spreadsheet import: ${updated} updated, ${added} added${removed ? `, ${removed} removed` : ""}`,
+    );
     res.json({
-      ok: true, updated, added, skipped,
+      ok: true, updated, added, removed, skipped,
       // Named one by one: "N were skipped" is not something anyone can act on.
       nameClashes: nameClashes.slice(0, 50),
       published: pub.version !== null, version: pub.version, blockers: pub.blockers,

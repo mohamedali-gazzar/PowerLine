@@ -136,13 +136,16 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
   const [dl, setDl] = useState(""); // "Download current" progress text
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<LvImportPreview | null>(null);
-  const [tab, setTab] = useState<"updates" | "additions" | "noCode" | "warnings">("updates");
+  const [tab, setTab] = useState<"updates" | "additions" | "removals" | "noCode" | "warnings">("updates");
   const [done, setDone] = useState("");
   // Rows the name rule refused at apply time — the catalogue can have moved on
   // since the preview, so these are not always the ones the preview flagged.
   const [notes, setNotes] = useState<string[]>([]);
   // Rows with no item code are matched on description and applied only if ticked.
   const [includeNoCode, setIncludeNoCode] = useState(false);
+  // Full-sync removals (items not in the file) are retired only if the uploader ticks
+  // this — default off, so a partial file can never empty the catalogue by surprise.
+  const [includeRemovals, setIncludeRemovals] = useState(false);
 
   const pickFile = () => {
     setError("");
@@ -255,10 +258,10 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
     setBusy("Applying…");
     setError("");
     try {
-      const r = await api.pricing.lvImportApply(preview.batchId, includeNoCode);
+      const r = await api.pricing.lvImportApply(preview.batchId, includeNoCode, includeRemovals);
       setPreview(null);
       setNotes(r.nameClashes ?? []);
-      const head = `${r.updated.toLocaleString()} item(s) updated, ${r.added} item(s) added`;
+      const head = `${r.updated.toLocaleString()} item(s) updated, ${r.added} item(s) added${r.removed ? `, ${r.removed.toLocaleString()} removed` : ""}`;
       if (r.published) {
         setDone(`${head} — live in quotations now.`);
       } else {
@@ -286,8 +289,10 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
 
   const s = preview?.summary;
   const noCodeTotal = (s?.noCodeUpdates ?? 0) + (s?.noCodeAdditions ?? 0);
-  // The code-less rows count towards Apply only once they are ticked.
-  const applyCount = (s ? s.updates + s.additions : 0) + (includeNoCode ? noCodeTotal : 0);
+  const removalsTotal = s?.removals ?? 0;
+  // Code-less rows and removals count towards Apply only once each is ticked.
+  const applyCount =
+    (s ? s.updates + s.additions : 0) + (includeNoCode ? noCodeTotal : 0) + (includeRemovals ? removalsTotal : 0);
 
   return (
     <>
@@ -349,9 +354,10 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
               </p>
 
               {/* Headline counts */}
-              <div className="grid gap-2 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
                 <Stat label="Items to update" value={s.updates.toLocaleString()} tone="brand" />
                 <Stat label="New items to add" value={String(s.additions)} tone="brand" />
+                <Stat label="Items to remove" value={(s.removals ?? 0).toLocaleString()} tone={(s.removals ?? 0) > 0 ? "danger" : undefined} hint="not in this file" />
                 <Stat label="Already correct" value={s.unchanged.toLocaleString()} />
                 <Stat label="Left untouched" value={String(s.blankKept)} hint="blank price cell" />
               </div>
@@ -414,6 +420,27 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
                 </label>
               )}
 
+              {/* Full sync: items in the catalogue that this file leaves out. Opt-in and
+                  destructive-but-reversible, so it gets a caution style and its own confirm. */}
+              {removalsTotal > 0 && (
+                <label className="mt-2 flex cursor-pointer items-start gap-2.5 rounded-lg border border-red-300 bg-red-50 p-2.5 dark:border-red-400/40 dark:bg-red-500/10">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-red-600"
+                    checked={includeRemovals} onChange={(e) => setIncludeRemovals(e.target.checked)} />
+                  <span className="text-xs text-ink">
+                    <b>
+                      {removalsTotal.toLocaleString()} catalogue item{removalsTotal === 1 ? " is" : "s are"} not in this file
+                    </b>{" "}
+                    — tick to remove {removalsTotal === 1 ? "it" : "them"}. Removed items stop being offered and drop out of
+                    new quotations; offers already sent keep their prices, and a removal can be undone from the price list.
+                    Check {removalsTotal === 1 ? "it" : "them"} in the{" "}
+                    <button type="button" onClick={() => setTab("removals")} className="font-bold underline underline-offset-2">
+                      To remove
+                    </button>{" "}
+                    tab first. Make sure this is your <b>full</b> price list, not a part of it.
+                  </span>
+                </label>
+              )}
+
               {(s.unpriced > 0 || s.duplicates > 0) && (
                 <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs font-semibold text-amber-800 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">
                   ⚠ Skipped:{" "}
@@ -428,22 +455,27 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
 
               {/* Detail */}
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {(["updates", "additions", "noCode", "warnings"] as const).map((t) => {
+                {(["updates", "additions", "removals", "noCode", "warnings"] as const).map((t) => {
                   const n =
                     t === "updates" ? preview.updates.length
                     : t === "additions" ? preview.additions.length
+                    : t === "removals" ? (preview.removals?.length ?? 0)
                     : t === "noCode" ? (preview.noCodeItems?.length ?? 0)
                     : preview.warnings.length;
                   if (t === "noCode" && !n) return null;
+                  const label = t === "noCode" ? "No item code" : t === "removals" ? "To remove" : t;
+                  const isRemovals = t === "removals";
                   return (
                     <button
                       key={t}
                       onClick={() => setTab(t)}
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${t === "noCode" ? "" : "capitalize"} ${
-                        tab === t ? "border-brand bg-brand text-white" : "border-line bg-white text-muted hover:border-brand/40"
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${t === "noCode" || isRemovals ? "" : "capitalize"} ${
+                        tab === t
+                          ? isRemovals ? "border-red-500 bg-red-500 text-white" : "border-brand bg-brand text-white"
+                          : "border-line bg-white text-muted hover:border-brand/40"
                       }`}
                     >
-                      {t === "noCode" ? "No item code" : t} ({n})
+                      {label} ({n})
                     </button>
                   );
                 })}
@@ -472,7 +504,7 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
                       </tr>
                     </thead>
                     <tbody>
-                      {(tab === "updates" ? preview.updates : tab === "noCode" ? preview.noCodeItems ?? [] : preview.additions).map((d, i) => {
+                      {(tab === "updates" ? preview.updates : tab === "removals" ? preview.removals ?? [] : tab === "noCode" ? preview.noCodeItems ?? [] : preview.additions).map((d, i) => {
                         // A data-only row keeps its price — show it as untouched, not as a move.
                         const priceHeld = tab !== "additions" && d.priceMoved === false;
                         return (
@@ -510,21 +542,27 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
                             </td>
                           )}
                           <td className="whitespace-nowrap px-3 py-1.5 text-right font-semibold text-ink">
-                            {priceHeld ? <span className="font-normal text-muted">kept</span> : money(d.eur, d.egp)}
+                            {d.kind === "remove" ? (
+                              <span className="text-red-600 dark:text-red-400">Removed</span>
+                            ) : priceHeld ? (
+                              <span className="font-normal text-muted">kept</span>
+                            ) : (
+                              money(d.eur, d.egp)
+                            )}
                           </td>
                           {tab !== "additions" && (
                             <td
                               className={`whitespace-nowrap px-3 py-1.5 text-right font-semibold ${
-                                (d.pct ?? 0) > 0 ? "text-amber-700 dark:text-amber-300" : "text-muted"
+                                d.kind === "remove" ? "text-red-600 dark:text-red-400" : (d.pct ?? 0) > 0 ? "text-amber-700 dark:text-amber-300" : "text-muted"
                               }`}
                             >
-                              {d.kind === "add" ? "new" : priceHeld ? "—" : pct(d.pct)}
+                              {d.kind === "remove" ? "remove" : d.kind === "add" ? "new" : priceHeld ? "—" : pct(d.pct)}
                             </td>
                           )}
                         </tr>
                         );
                       })}
-                      {(tab === "updates" ? preview.updates : tab === "noCode" ? preview.noCodeItems ?? [] : preview.additions).length === 0 && (
+                      {(tab === "updates" ? preview.updates : tab === "removals" ? preview.removals ?? [] : tab === "noCode" ? preview.noCodeItems ?? [] : preview.additions).length === 0 && (
                         <tr>
                           <td colSpan={5} className="p-4 text-center text-muted">
                             Nothing in this list.
@@ -563,11 +601,15 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
   );
 }
 
-function Stat({ label, value, tone, hint }: { label: string; value: string; tone?: "brand"; hint?: string }) {
+function Stat({ label, value, tone, hint }: { label: string; value: string; tone?: "brand" | "danger"; hint?: string }) {
+  const toneCls =
+    tone === "brand" ? "border-brand/40 bg-brand-tint"
+    : tone === "danger" ? "border-red-300 bg-red-50 dark:border-red-400/40 dark:bg-red-500/10"
+    : "border-line bg-white";
   return (
-    <div className={`rounded-lg border p-2.5 ${tone === "brand" ? "border-brand/40 bg-brand-tint" : "border-line bg-white"}`}>
+    <div className={`rounded-lg border p-2.5 ${toneCls}`}>
       <div className="text-[10px] font-bold uppercase tracking-wider text-muted">{label}</div>
-      <div className="mt-0.5 text-lg font-extrabold text-ink">{value}</div>
+      <div className={`mt-0.5 text-lg font-extrabold ${tone === "danger" ? "text-red-700 dark:text-red-300" : "text-ink"}`}>{value}</div>
       {hint && <div className="text-[10px] text-muted/70">{hint}</div>}
     </div>
   );

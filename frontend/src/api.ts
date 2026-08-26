@@ -333,7 +333,7 @@ export interface LvImportFieldChange {
 }
 
 export interface LvImportDiff {
-  kind: "update" | "add";
+  kind: "update" | "add" | "remove";
   entity: "LvComponent" | "LvEnclosure";
   code: string;
   label: string;
@@ -354,6 +354,8 @@ export interface LvImportSummary {
   rowsRead: number;
   updates: number;
   additions: number;
+  /** Active coded items the uploaded file left out — retired on apply, only if opted in. */
+  removals: number;
   unchanged: number;
   /** Priced items whose cell was left blank — the existing price was kept. */
   blankKept: number;
@@ -386,6 +388,8 @@ export interface LvImportPreview {
   summary: LvImportSummary;
   updates: LvImportDiff[];
   additions: LvImportDiff[];
+  /** Active items absent from the file, for review before they are retired. */
+  removals: LvImportDiff[];
   /** Rows with no item code, for review before they are included. */
   noCodeItems: LvImportDiff[];
   warnings: string[];
@@ -786,10 +790,10 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ rows }),
       }),
-    lvImportApply: (batchId: string, includeNoCode = false) =>
-      request<{ ok: true; updated: number; added: number; skipped: number; nameClashes?: string[]; published: boolean; version: number | null; blockers?: string[] }>(
+    lvImportApply: (batchId: string, includeNoCode = false, includeRemovals = false) =>
+      request<{ ok: true; updated: number; added: number; removed: number; skipped: number; nameClashes?: string[]; published: boolean; version: number | null; blockers?: string[] }>(
         `/pricing/lv/import/${batchId}/apply`,
-        { method: "POST", body: JSON.stringify({ includeNoCode }) },
+        { method: "POST", body: JSON.stringify({ includeNoCode, includeRemovals }) },
       ),
     lvImportCancel: (batchId: string) =>
       request<{ ok: true }>(`/pricing/lv/import/${batchId}/cancel`, { method: "POST" }),

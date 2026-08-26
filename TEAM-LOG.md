@@ -23,6 +23,27 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-25 · Mohamed's side · Claude
 
+**✅ The Excel price update can now REMOVE items that are no longer in your sheet — a true full sync.**
+
+Before, uploading an Excel only updated prices/data and added new items; anything you had
+deleted from the sheet stayed in the catalogue. Now the review screen ("Review before applying")
+also shows an **Items to remove** count and a **To remove** tab listing every catalogue item that
+your file leaves out. Removing is opt-in and safe:
+
+- You must tick a clearly-worded box ("N catalogue items are not in this file — tick to remove
+  them") before any removal happens — so uploading a *part* of the list can never wipe the rest by
+  accident. Nothing is removed unless you both tick it and press Apply.
+- "Remove" means the item stops being offered and drops out of new quotations. Offers already sent
+  keep their prices, and a removal can be undone any time from the price list (it's a soft delete —
+  the row and its history stay). Items that never had an item code (Space-for-MCB, CTs) and the
+  enclosures/cells are left alone — only coded components are synced this way.
+
+Verified end-to-end on the real catalogue: the review correctly flagged exactly the missing item,
+did nothing when the box was unticked, retired it when ticked, and restoring it worked. Backend +
+frontend build green, 291 + 38 tests pass.
+
+## 2026-08-25 · Mohamed's side · Claude
+
 **✅ You can now insert a page break at any row of the Technical Offer, to balance the pages.**
 
 The offer fills each A4 page automatically, which sometimes left an ugly near-empty page (e.g.
