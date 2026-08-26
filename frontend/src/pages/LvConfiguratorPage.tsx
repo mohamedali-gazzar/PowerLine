@@ -6121,16 +6121,25 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   // group's ×N so a component added by dragging scales like the rest — same as the group's "+ Add".
   const applyGroupScaling = (arr: PanelComponent[], idx: number) => {
     const c = arr[idx];
-    if (isSpacer(c) || c.group) return; // only loose rows adopt a group by position
+    if (isSpacer(c)) return;
     let prev = "", next = ""; // infer the group from same-section grouped neighbours (mirrors effectiveGroups)
-    for (let j = idx - 1; j >= 0 && arr[j].section === c.section; j--) { if (isSpacer(arr[j])) continue; const g = arr[j].group; if (g) { prev = g; break; } }
-    for (let j = idx + 1; j < arr.length && arr[j].section === c.section; j++) { if (isSpacer(arr[j])) continue; const g = arr[j].group; if (g) { next = g; break; } }
+    for (let j = idx - 1; j >= 0 && arr[j].section === c.section; j--) { if (isSpacer(arr[j]) || arr[j].id === c.id) continue; const g = arr[j].group; if (g) { prev = g; break; } }
+    for (let j = idx + 1; j < arr.length && arr[j].section === c.section; j++) { if (isSpacer(arr[j]) || arr[j].id === c.id) continue; const g = arr[j].group; if (g) { next = g; break; } }
     const grp = prev && prev === next ? prev : "";
-    if (!grp) return;
-    const members = arr.filter((x) => x.section === c.section && !isSpacer(x) && x.group === grp);
+    // Nothing to do when the row isn't dropped inside a combination, or is already in that one.
+    // A row that ALREADY belongs to a different combination adopts the one it was dropped into —
+    // so a duplicated item dragged from "Source 1" into "Source 2" takes Source 2's header
+    // instead of staying under Source 1's. (Before, only loose rows could adopt a group here.)
+    if (!grp || (c.group || "") === grp) return;
+    const members = arr.filter((x) => x.section === c.section && !isSpacer(x) && x.id !== c.id && x.group === grp);
     const cid = members.find((m) => m.comboId)?.comboId;       // the combination instance (whole-combo select-all)
     const scalable = /\(Type \d+\)/.test(grp) || members.some((x) => x.comboScalable);
-    if (!scalable && !cid) return; // not a combination → inference already handles the display, nothing to apply
+    if (!scalable && !cid) {
+      // Target isn't a real combination (a bare group). Still adopt its name so a grouped row
+      // doesn't keep the old header, but carry no combo scaling/instance.
+      arr[idx] = { ...c, group: grp, comboScalable: false, baseQty: undefined };
+      return;
+    }
     const idPatch = cid ? { comboId: cid } : {};
     if (scalable) {
       const first = members[0];
@@ -6139,7 +6148,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       const base = c.baseQty ?? c.qty;
       arr[idx] = { ...c, group: grp, baseQty: base, qty: base * cq, comboScalable: true, ...idPatch };
     } else {
-      arr[idx] = { ...c, group: grp, ...idPatch }; // non-scalable combination — just join it
+      arr[idx] = { ...c, group: grp, comboScalable: false, baseQty: undefined, ...idPatch }; // non-scalable combination — just join it
     }
   };
   const dropOnRow = (targetId: string) => {

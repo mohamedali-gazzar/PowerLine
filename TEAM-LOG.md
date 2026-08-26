@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-25 · Mohamed's side · Claude
 
+**✅ Dragging an item into another combination now puts it under that combination's header.**
+
+If you duplicated an item inside a combination and dragged the copy into a different one, it kept
+the first combination's heading instead of joining the second. Cause: only "loose" (un-grouped)
+rows were allowed to adopt a combination by where you dropped them — a row that already belonged
+to a combination was left alone. Now a row dropped inside a different combination joins it: it
+takes that combination's name (and its ×N when it's a scalable combination). Verified: a YU copy
+duplicated in "Source 1" and dragged into "Source 2" ended up under Source 2. Build green, 38
+tests pass.
+
+## 2026-08-25 · Mohamed's side · Claude
+
 **✅ "Move to" (on selected rows) now offers both another section AND another combination.**
 
 When you select rows in a panel, the floating bar's **Move to** menu used to list only sections.
