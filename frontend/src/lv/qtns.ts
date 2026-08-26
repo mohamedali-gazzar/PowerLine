@@ -124,6 +124,18 @@ function normalize(state: LvState): LvState {
     );
     state.offerPageBreaks = (Array.isArray(state.offerPageBreaks) ? state.offerPageBreaks : []).filter((id) => compIds.has(id));
   }
+  // Sizing Review worksheet — default to an empty pad so the tab always opens.
+  {
+    const sr = state.sizingReview as { rows?: unknown; notes?: unknown } | undefined;
+    state.sizingReview = {
+      rows: Array.isArray(sr?.rows)
+        ? sr!.rows
+            .filter((r): r is { id?: unknown; label?: unknown; expr?: unknown } => !!r && typeof r === "object")
+            .map((r, i) => ({ id: String(r.id || `sr-${i}`), label: String(r.label ?? ""), expr: String(r.expr ?? "") }))
+        : [],
+      notes: typeof sr?.notes === "string" ? sr.notes : "",
+    };
+  }
   if (!Array.isArray(state.commercialTerms))
     state.commercialTerms = DEFAULT_COMMERCIAL_TERMS.map((x) => ({ ...x }));
   if (!Array.isArray(state.commercialTermsAr))

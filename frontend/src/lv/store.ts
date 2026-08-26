@@ -160,6 +160,12 @@ export interface OfferSeparator {
   beforePanelId: string;
   text: string;
 }
+/** One line of the Sizing Review worksheet: a label and an arithmetic expression. */
+export interface SizingReviewRow {
+  id: string;
+  label: string;
+  expr: string;
+}
 export interface LvState {
   project: LvProject;
   factors: Factors;
@@ -180,6 +186,11 @@ export interface LvState {
   // starts a new A4 page (with any section/group header that leads the component). Lets
   // the estimator balance pages instead of accepting a near-empty auto-break tail.
   offerPageBreaks?: string[];
+  // Sizing Review worksheet — a saved calculation pad (see the "Sizing Review" tab) where
+  // a reviewer records the sizing check (outgoings / incoming / …) as labelled calculation
+  // lines plus a conclusion. Written through its own endpoint so it can be edited while the
+  // quotation is locked for approval.
+  sizingReview?: { rows: SizingReviewRow[]; notes: string };
   // QTN kind chosen at creation: a normal panel quotation, a Standard EDMS
   // quotation (same workspace as "panels" — the kind only records which option
   // it was started from), or a spare-parts quotation whose single "Spare parts"

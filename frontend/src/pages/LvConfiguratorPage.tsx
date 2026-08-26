@@ -27,7 +27,7 @@ import {
   initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
-  type SpecNote, type SpecSubNote, type ProjectSpecKey,
+  type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow,
 } from "../lv/store";
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
@@ -71,8 +71,8 @@ import { panelPoles, POLE_CM, POLE_KINDS, GROUP_LABEL, KIND_LABEL, type PoleGrou
 import { stdPanel, applyStdPanel, STD_EDMS_KVA } from "../lv/standardEdms";
 import { stdAts, applyStdAts, stdAtsRatings, atsBreakersFor, type StdAtsVariant } from "../lv/standardAtsEdms";
 
-type Tab = "project" | "pricing" | "specs" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "summary";
-const TABS: Tab[] = ["project", "pricing", "specs", "panels", "technical", "commercial", "material", "spare", "selectivity"];
+type Tab = "project" | "pricing" | "specs" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "sizing" | "summary";
+const TABS: Tab[] = ["project", "pricing", "specs", "panels", "technical", "commercial", "material", "spare", "selectivity", "sizing"];
 
 /** Effective combination group per component (id → group). A component keeps its
  *  own group; an ungrouped one sitting between two same-group items (in the same
@@ -973,6 +973,7 @@ export default function LvConfiguratorPage() {
     ? [["project", "Project"], ["pricing", "Pricing Settings"], ["spare", "Spare Parts"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"], ["summary", "Summary"]]
     : [["project", "Project"], ["pricing", "Pricing Settings"], ["specs", "Specs"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"],
        ...(isEdmsQtn ? [] : [["selectivity", "Selectivity"] as [Tab, string]]),
+       ["sizing", "Sizing Review"],
        ["summary", "Summary"]];
   // The remembered tab can be one this QTN doesn't have (a QTN opened on
   // Selectivity and later turned into an EDMS one, or a kind whose tab set
@@ -1764,6 +1765,7 @@ export default function LvConfiguratorPage() {
         {activeTab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} />)}
         {activeTab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
         {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} />}
+        {activeTab === "sizing" && <SizingReviewTab key={rec?.id ?? "none"} s={s} qtnId={rec?.id ?? ""} />}
         {activeTab === "summary" && <SummaryTab s={s} up={up} />}
       </div>
     </div>
@@ -4644,6 +4646,166 @@ function StickyNote({ note, onChange, onMove, onResize, onDelete }: {
     </div>
   );
 }
+// Evaluate a plain arithmetic expression (+ − × ÷ and parentheses) for the Sizing Review
+// worksheet. Only digits, operators, dots, spaces and parentheses are allowed — no names,
+// no function calls — so running it is safe. Returns null for a blank or invalid line.
+function calcEval(expr: string): number | null {
+  const t = expr.trim();
+  if (!t || !/^[0-9+\-*/().\s]+$/.test(t)) return null;
+  try {
+    const v = Function(`"use strict";return(${t})`)() as unknown;
+    return typeof v === "number" && isFinite(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+// Sizing Review — a saved calculation pad for checking a panel's sizing (number of outgoings,
+// incomers, spare, …). The panel figures on the left come straight from the quotation; the
+// worksheet on the right is free calculation lines with a live result and running total, plus
+// a conclusion. It saves through its own endpoint (so a reviewer can use it while the QTN is
+// locked for approval) and is shared with everyone who opens the quotation.
+function SizingReviewTab({ s, qtnId }: { s: LvState; qtnId: string }) {
+  const [rows, setRows] = useState<SizingReviewRow[]>(() => s.sizingReview?.rows ?? []);
+  const [notes, setNotes] = useState<string>(() => s.sizingReview?.notes ?? "");
+  const [saved, setSaved] = useState<"" | "saving" | "saved">("");
+  const firstRender = useRef(true);
+  // Debounced autosave to the dedicated endpoint (never the locked main state).
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return; }
+    if (!qtnId) return;
+    setSaved("saving");
+    const t = setTimeout(() => {
+      api.qtns.sizingReview(qtnId, { rows, notes })
+        .then(() => setSaved("saved"))
+        .catch(() => setSaved(""));
+    }, 700);
+    return () => clearTimeout(t);
+  }, [rows, notes, qtnId]);
+
+  const addRow = () => setRows((r) => [...r, { id: uid(), label: "", expr: "" }]);
+  const setRow = (id: string, patch: Partial<SizingReviewRow>) =>
+    setRows((r) => r.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  const delRow = (id: string) => setRows((r) => r.filter((x) => x.id !== id));
+
+  // Running total of every line that evaluates to a number.
+  const total = rows.reduce((sum, r) => { const v = calcEval(r.expr); return v == null ? sum : sum + v; }, 0);
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+
+  // Panel figures pulled from the quotation — component count per section (outgoings /
+  // incoming / …) plus the busbar rating, so the reviewer checks the calc against reality.
+  const figures = s.panels.map((p) => {
+    const bySec = new Map<string, number>();
+    for (const sec of p.sections) if (p.components.some((c) => c.section === sec)) bySec.set(sec, 0);
+    for (const c of p.components) { if (isSpacer(c)) continue; bySec.set(c.section, (bySec.get(c.section) ?? 0) + 1); }
+    return { id: p.id, name: (p.name || "").trim() || "(unnamed panel)", ratingA: p.ratingA, sections: [...bySec.entries()] };
+  });
+
+  return (
+    <div className="animate-fade-up">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <div>
+          <h2 className="sec-head">Sizing Review</h2>
+          <p className="-mt-1 text-xs text-muted">
+            Check the panel sizing here. The figures on the left come from the quotation; the worksheet on the right
+            does the maths. It saves automatically and is shared with everyone who opens this quotation.
+          </p>
+        </div>
+        <span className="shrink-0 text-[11px] font-semibold text-muted">
+          {saved === "saving" ? "Saving…" : saved === "saved" ? "✓ Saved" : ""}
+        </span>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,320px)_1fr]">
+        {/* Panel figures from the quotation */}
+        <div className="card p-3">
+          <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-muted">Panel figures</div>
+          {figures.length === 0 ? (
+            <p className="text-xs text-muted">No panels in this quotation yet.</p>
+          ) : (
+            <ul className="space-y-2.5">
+              {figures.map((f) => (
+                <li key={f.id} className="rounded-lg border border-line p-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-sm font-semibold text-ink">{f.name}</span>
+                    {f.ratingA ? <span className="shrink-0 text-[11px] font-semibold text-brand-dark">{f.ratingA} A</span> : null}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted">
+                    {f.sections.length ? f.sections.map(([sec, n]) => (
+                      <span key={sec}><span className="font-semibold text-ink">{n}</span> {sec}</span>
+                    )) : <span>no components</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Worksheet */}
+        <div className="card p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-muted">Worksheet</div>
+            <span className="text-[10px] text-muted/70">Type a calculation, e.g. 8*3 + 2</span>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wider text-muted">
+                <th className="px-1 pb-1 font-bold">Item</th>
+                <th className="px-1 pb-1 font-bold">Calculation</th>
+                <th className="px-1 pb-1 text-right font-bold">Result</th>
+                <th className="px-1 pb-1"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const v = calcEval(r.expr);
+                const bad = r.expr.trim() !== "" && v == null;
+                return (
+                  <tr key={r.id} className="border-t border-line/70 align-middle">
+                    <td className="py-1 pr-1">
+                      <input className="input h-8 w-full px-2 text-sm" placeholder="e.g. Outgoings"
+                        value={r.label} onChange={(e) => setRow(r.id, { label: e.target.value })} />
+                    </td>
+                    <td className="py-1 pr-1">
+                      <input className={`input h-8 w-full px-2 text-sm font-mono ${bad ? "border-red-400" : ""}`} placeholder="e.g. 8*3 + 2"
+                        value={r.expr} onChange={(e) => setRow(r.id, { expr: e.target.value })} />
+                    </td>
+                    <td className="py-1 pr-1 text-right font-mono font-semibold text-ink">
+                      {v == null ? (bad ? <span className="text-red-500">?</span> : <span className="text-muted">—</span>) : fmt(v)}
+                    </td>
+                    <td className="py-1 text-right">
+                      <button type="button" className="px-1 text-red-500 hover:text-red-600" title="Remove line" onClick={() => delRow(r.id)}>✕</button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows.length === 0 && (
+                <tr><td colSpan={4} className="py-4 text-center text-xs text-muted">No calculation lines yet — add one below.</td></tr>
+              )}
+            </tbody>
+            {rows.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 border-line">
+                  <td className="py-1.5 pr-1 text-sm font-bold text-ink" colSpan={2}>Total</td>
+                  <td className="py-1.5 pr-1 text-right font-mono text-base font-extrabold text-brand-dark">{fmt(total)}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+          <button type="button" onClick={addRow} className="btn-ghost mt-2 h-8 px-3 text-xs">＋ Add line</button>
+
+          <div className="mt-4">
+            <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-muted">Conclusion / notes</div>
+            <textarea className="input min-h-[90px] w-full px-2 py-1.5 text-sm" placeholder="e.g. Sizing OK for 3200 A / needs 2 more outgoing ways…"
+              value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SummaryTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }) {
   const notes = s.summaryNotes ?? [];
   const setNotes = (next: SummaryNote[]) => up({ summaryNotes: next });

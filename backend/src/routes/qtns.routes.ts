@@ -10,6 +10,7 @@ import {
   create,
   update,
   activity,
+  putSizingReview,
   rename,
   remove,
   restore,
@@ -48,6 +49,7 @@ router.delete("/:id", remove); // hides it — never erases; see the controller
 router.post("/:id/restore", requirePerm("access.manage"), restore);
 router.post("/:id/duplicate", duplicate);
 router.post("/:id/activity", activity); // accrue active working time (owner/co-owner)
+router.put("/:id/sizing-review", putSizingReview); // reviewer's sizing calculation pad (editable while locked)
 
 // Workflow. submit/unsubmit are thin aliases over /transition so an older client
 // mid-rollout keeps working.

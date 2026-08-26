@@ -29,6 +29,19 @@ export const createQtnSchema = z.object({ number, state: z.unknown(), summary })
 export const updateQtnSchema = z.object({ state: stateObject, summary });
 export const numberSchema = z.object({ number });
 
+// Sizing Review worksheet — the reviewer's calculation pad, saved through its own endpoint.
+export const sizingReviewSchema = z.object({
+  rows: z
+    .array(z.object({
+      id: z.string().max(64),
+      label: z.string().max(200).default(""),
+      expr: z.string().max(200).default(""),
+    }))
+    .max(500)
+    .default([]),
+  notes: z.string().max(10000).default(""),
+});
+
 // Hand a quotation over to another user (transfer ownership).
 export const reassignSchema = z.object({
   toUserId: z.string().trim().min(1, "Pick a user to hand it to."),

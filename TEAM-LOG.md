@@ -23,6 +23,27 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-25 · Mohamed's side · Claude
 
+**✅ New "Sizing Review" tab — a calculation pad for checking a panel's sizing.**
+
+Every quotation now has a **Sizing Review** tab (next to Selectivity). It's a worksheet for the
+person reviewing the sizing:
+- On the left it lists each panel's real figures straight from the quotation — how many items in
+  each section (Main Incoming, Outgoings, Metering, …) and the busbar rating — so you check your
+  numbers against what's actually there.
+- On the right you add calculation lines: type a label ("Outgoings") and a calculation ("8*3 + 2")
+  and it shows the result instantly (supports + − × ÷ and brackets), with a running **Total**, plus
+  a Conclusion/notes box.
+- It **saves automatically** and is shared with everyone who opens the quotation, and — importantly
+  — it can be filled in **even while the quotation is locked for approval**, so the reviewer can
+  record their sizing check right there (it saves through its own channel, so it never touches the
+  frozen prices).
+
+Verified: figures pulled correctly, "8*3+2" gave 26 with a matching total, it saved and reloaded,
+and it saved fine on a quotation that was Waiting for approval. No database column added (it lives
+in the quotation's saved data). Builds green, 292 + 38 tests pass.
+
+## 2026-08-25 · Mohamed's side · Claude
+
 **✅ Dragging an item into another combination now puts it under that combination's header.**
 
 If you duplicated an item inside a combination and dragged the copy into a different one, it kept

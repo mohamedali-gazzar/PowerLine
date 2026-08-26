@@ -623,6 +623,13 @@ export const api = {
         body: JSON.stringify({ seconds }),
         keepalive,
       }),
+    /** Save the Sizing Review worksheet. Its own endpoint, so it can be written even while
+     *  the quotation is locked for approval (it's a note about the sizing, not priced content). */
+    sizingReview: (id: string, data: { rows: { id: string; label: string; expr: string }[]; notes: string }) =>
+      request<{ ok: true }>(`/qtns/${id}/sizing-review`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
     rename: (id: string, number: string) =>
       request<{ ok: boolean; error?: string }>(`/qtns/${id}/number`, {
         method: "PATCH",

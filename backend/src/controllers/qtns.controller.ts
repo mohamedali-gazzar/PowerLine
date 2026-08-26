@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma";
 import {
   createQtnSchema,
   updateQtnSchema,
+  sizingReviewSchema,
   numberSchema,
   reassignSchema,
   coworkSchema,
@@ -347,6 +348,27 @@ export async function activity(req: Request, res: Response) {
       select: { activeSeconds: true },
     });
     res.json({ activeSeconds: updated.activeSeconds });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+// PUT /api/qtns/:id/sizing-review  { rows, notes }
+// Sizing Review worksheet — a per-QTN calculation pad (see the "Sizing Review" tab). It lives
+// in the quotation state but is written through its OWN endpoint, so a reviewer can fill it in
+// while the quotation is locked for approval: it is a note ABOUT the sizing, not the priced
+// content the lock protects. Anyone who can SEE the quotation may edit it (a shared record).
+export async function putSizingReview(req: Request, res: Response) {
+  try {
+    const data = sizingReviewSchema.parse(req.body ?? {});
+    const q = await visibleQtn(req);
+    if (!q) return res.status(404).json({ error: "Quotation not found." });
+    // Read-modify-write only the sizingReview key, leaving the priced content untouched.
+    let state: Record<string, unknown> = {};
+    try { state = JSON.parse(q.state) as Record<string, unknown>; } catch { state = {}; }
+    state.sizingReview = data;
+    await prisma.lvQtn.update({ where: { id: q.id }, data: { state: JSON.stringify(state) } });
+    res.json({ ok: true });
   } catch (e) {
     fail(res, e);
   }
