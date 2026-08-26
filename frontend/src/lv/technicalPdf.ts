@@ -239,6 +239,15 @@ function paginatePanel(host: HTMLElement, headerEl: HTMLElement | null, panelEl:
     frameClone.appendChild(t);
     content.appendChild(frameClone);
     while (ri < rows.length) {
+      // Manual page break: an estimator-inserted marker row that starts a new page here.
+      // Never rendered itself — it just ends the current page so the rows after it (and any
+      // section/group header that leads them) begin the next. Ignored when the page is still
+      // empty, so a break at the very top can't produce a blank page.
+      if (rows[ri].hasAttribute("data-pagebreak")) {
+        ri++;
+        if (tb.childElementCount > 0) break;
+        continue;
+      }
       tb.appendChild(rows[ri].cloneNode(true));
       if (content.scrollHeight > content.clientHeight + 1) {
         if (tb.childElementCount > 1) {

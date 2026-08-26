@@ -176,6 +176,10 @@ export interface LvState {
   abbItemDiscounts: Record<string, number>;
   // Divider/separator pages for the Technical Offer, each rendered before its panel.
   offerSeparators?: OfferSeparator[];
+  // Manual page breaks in the Technical Offer: component ids before which the offer
+  // starts a new A4 page (with any section/group header that leads the component). Lets
+  // the estimator balance pages instead of accepting a near-empty auto-break tail.
+  offerPageBreaks?: string[];
   // QTN kind chosen at creation: a normal panel quotation, a Standard EDMS
   // quotation (same workspace as "panels" — the kind only records which option
   // it was started from), or a spare-parts quotation whose single "Spare parts"

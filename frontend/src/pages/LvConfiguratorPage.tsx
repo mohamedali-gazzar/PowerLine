@@ -2739,6 +2739,10 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
   const addSeparator = (beforePanelId: string) => up({ offerSeparators: [...separators, { id: uid(), beforePanelId, text: "" }] });
   const editSeparator = (id: string, text: string) => up({ offerSeparators: separators.map((x) => (x.id === id ? { ...x, text } : x)) });
   const removeSeparator = (id: string) => up({ offerSeparators: separators.filter((x) => x.id !== id) });
+  // Manual page breaks (Technical Offer): start a new A4 page before the marked component.
+  const pageBreaks = new Set(s.offerPageBreaks ?? []);
+  const togglePageBreak = (id: string) =>
+    up({ offerPageBreaks: pageBreaks.has(id) ? (s.offerPageBreaks ?? []).filter((x) => x !== id) : [...(s.offerPageBreaks ?? []), id] });
   // Eye toggle to hide the Brand column from the technical offer (and its PDF, since the
   // PDF is captured from this DOM). Hidden by default — a customer-facing offer does
   // not normally name the supplier, so showing it is the deliberate act.
@@ -3021,10 +3025,35 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                       const hasGroups = comps.some((c) => effGroup.get(c.id));
                       const rows: JSX.Element[] = [];
                       let dataRow = 0; // zebra counter — shade every other component row (per section)
+                      // Manual page-break markers (see togglePageBreak): a zero-content row the
+                      // paginator turns into a new A4 page. Emitted at the EARLIEST point for a
+                      // marked component — before its section/group header — so the header travels
+                      // to the new page with it. `brokeFor` keeps it to one marker per component.
+                      const firstComp = comps.find((c) => !isSpacer(c));
+                      const brokeFor = new Set<string>();
+                      const pushBreak = (c: PanelComponent) => {
+                        if (!pageBreaks.has(c.id) || brokeFor.has(c.id)) return;
+                        brokeFor.add(c.id);
+                        rows.push(
+                          <tr key={`pb-${c.id}`} data-pagebreak className="no-print">
+                            <td colSpan={hideBrand ? 4 : 5} className="px-2 py-1.5">
+                              <div className="flex items-center gap-2 text-[10.5px] font-bold uppercase tracking-wide" style={{ color: TRED }}>
+                                <span className="h-px flex-1" style={{ background: TRED, opacity: 0.45 }} />
+                                <button type="button" onClick={() => togglePageBreak(c.id)} title="Remove this page break"
+                                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 hover:bg-[#FEF3ED]" style={{ borderColor: TRED }}>
+                                  ✂ Page break <span aria-hidden>✕</span>
+                                </button>
+                                <span className="h-px flex-1" style={{ background: TRED, opacity: 0.45 }} />
+                              </div>
+                            </td>
+                          </tr>,
+                        );
+                      };
                       // Section header shows for multi-section panels, and whenever the
                       // section has combination sub-groups (Source 1 / 2 …) so the section
                       // context (e.g. Main Incoming) is never lost above the sub-headers.
-                      if (multiSection || hasGroups)
+                      if (multiSection || hasGroups) {
+                        if (firstComp) pushBreak(firstComp); // a break on the section's first row lands above its header
                         rows.push(
                           <tr key={`s-${sec}`} data-pdf-head style={{ breakInside: "avoid", breakAfter: "avoid" }}>
                             {sec.length > 40 ? (
@@ -3040,6 +3069,7 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                             )}
                           </tr>
                         );
+                      }
                       // Walk the section IN ORDER, mirroring the panels editor, so every
                       // component prints exactly where it sits in the panel. A combination
                       // sub-header (Source 1 / Source 2 / …) is emitted only when the running
@@ -3054,6 +3084,7 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                           curGroup = g;
                           // Combination sub-header under the section, at the start of each run.
                           if (g) {
+                            pushBreak(c); // a break on a group's first row lands above its sub-header
                             // Derive the combination multiplier (qty ÷ baseQty) so the offer
                             // sub-header still shows ×N, in sync with the editor. gf/gScalable
                             // read the first member the group actually claims in this section.
@@ -3074,16 +3105,25 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                             );
                           }
                         }
+                        if (!isSpacer(c)) pushBreak(c); // mid-run break: marker sits right above the row
                         rows.push(isSpacer(c) ? (
                           <tr key={c.id}>
                             <td colSpan={hideBrand ? 4 : 5} className="px-2 py-0.5 text-[12.5px] leading-[12.5px]">&nbsp;</td>
                           </tr>
                         ) : (
-                          <tr key={c.id} style={{ breakInside: "avoid" }} className={`align-middle ${dataRow++ % 2 === 1 ? "bg-[#f4f4f6]" : ""}`}>
+                          <tr key={c.id} style={{ breakInside: "avoid" }} className={`group align-middle ${dataRow++ % 2 === 1 ? "bg-[#f4f4f6]" : ""}`}>
                             <td className="px-2 py-1 text-center text-[12.5px] font-semibold leading-[15px]">{c.baseQty ?? c.qty}</td>
-                            <td className="px-2 py-1 text-[12.5px] leading-[15px]">
+                            <td className="relative px-2 py-1 text-[12.5px] leading-[15px]">
                               {c.name}
                               {c.comment && <div className="mt-0.5 text-[11px] italic leading-tight text-muted">{c.comment}</div>}
+                              {/* Insert a page break before this row (Technical Offer). Screen-only,
+                                  shown on row hover; hidden once a break exists (the marker row removes it). */}
+                              {!pageBreaks.has(c.id) && (
+                                <button type="button" onClick={() => togglePageBreak(c.id)}
+                                  title="Start a new A4 page before this row"
+                                  className="no-print absolute right-1 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 rounded-full border bg-white px-1.5 py-0.5 text-[10px] font-bold opacity-0 shadow-sm transition group-hover:opacity-100"
+                                  style={{ borderColor: TRED, color: TRED }}>✂ break</button>
+                              )}
                             </td>
                             <td className="px-2 py-1 text-center text-[12.5px] leading-[15px]">{c.adj}</td>
                             {!hideBrand && <td className="px-2 py-1 text-[12.5px] leading-[15px]">{c.brand}</td>}

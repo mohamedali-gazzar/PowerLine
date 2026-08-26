@@ -116,6 +116,14 @@ function normalize(state: LvState): LvState {
   // Technical-Offer divider pages: default to none, and drop any whose panel is gone.
   state.offerSeparators = (Array.isArray(state.offerSeparators) ? state.offerSeparators : [])
     .filter((sep) => Array.isArray(state.panels) && state.panels.some((p) => p.id === sep.beforePanelId));
+  // Manual Technical-Offer page breaks: default to none, and drop any whose component is
+  // gone (deleted / re-imported), so a stale id never forces a break on a missing row.
+  {
+    const compIds = new Set<string>(
+      Array.isArray(state.panels) ? state.panels.flatMap((p) => (Array.isArray(p.components) ? p.components.map((c) => c.id) : [])) : [],
+    );
+    state.offerPageBreaks = (Array.isArray(state.offerPageBreaks) ? state.offerPageBreaks : []).filter((id) => compIds.has(id));
+  }
   if (!Array.isArray(state.commercialTerms))
     state.commercialTerms = DEFAULT_COMMERCIAL_TERMS.map((x) => ({ ...x }));
   if (!Array.isArray(state.commercialTermsAr))

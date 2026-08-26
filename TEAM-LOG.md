@@ -23,6 +23,21 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-25 · Mohamed's side · Claude
 
+**✅ You can now insert a page break at any row of the Technical Offer, to balance the pages.**
+
+The offer fills each A4 page automatically, which sometimes left an ugly near-empty page (e.g.
+a single "Contactor for capacitor" alone on the last page). Now, in the Technical Offer's
+**✎ Edit** view, hovering a component row shows a small "✂ break" button — click it to start a
+new A4 page at that row. The break carries the row's section/group heading with it (so, say,
+the whole P.F.C. section jumps to the next page together, header and all), and it shows as a
+dashed "✂ Page break" line you can click again to remove. It applies to both the on-screen
+**🗎 A4 pages** view and the exported PDF (they share one layout engine), and it's saved with
+the quotation. No effect unless you add one; old quotations are untouched. Build green,
+38 tests pass. Verified on QTN-26-01479: a break before P.F.C. moved the whole section onto
+its own full page instead of stranding one item.
+
+## 2026-08-25 · Mohamed's side · Claude
+
 **✅ The Technical Offer now displays as real A4 pages on screen — exactly what the PDF produces.**
 
 Before: on screen a panel with a long component list showed as one tall sheet (it only split
