@@ -94,8 +94,10 @@ function effectiveGroups(comps: PanelComponent[]): Map<string, string> {
 }
 
 // Cross-panel clipboard for Copy/Paste of a whole combination (module-level so it survives
-// switching between panels; not persisted to the quotation).
-let comboClipboard: { label: string; comps: PanelComponent[] } | null = null;
+// switching between panels; not persisted to the quotation). `section` is where it was
+// copied FROM, so paste can put it back in the matching section rather than whatever
+// section happened to be active.
+let comboClipboard: { label: string; section: string; comps: PanelComponent[] } | null = null;
 
 // ── Keyboard field navigation (arrow keys move between fields by layout) ───────
 type ArrowKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
@@ -5601,12 +5603,23 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   const copyGroup = (group: string, sec: string) => {
     const members = p.components.filter((c) => c.section === sec && (effGroup.get(c.id) || "") === group);
     if (!members.length) return;
-    comboClipboard = { label: group, comps: members.map((c) => ({ ...c })) };
+    comboClipboard = { label: group, section: sec, comps: members.map((c) => ({ ...c })) };
     bumpClip((v) => v + 1);
   };
+  // Where a paste of the copied combination would land in THIS panel: the section it was
+  // copied from when this panel has one by that name (so a "Main Incoming" combo returns to
+  // Main Incoming, here or in another panel), else the section being worked in, else the
+  // first section. Never an unrelated section just because it was left active.
+  const pasteTargetSec = (): string =>
+    comboClipboard
+      ? (p.sections.includes(comboClipboard.section) ? comboClipboard.section
+        : p.sections.includes(p.activeSection) ? p.activeSection
+        : p.sections[0] ?? "")
+      : "";
   const pasteCombo = () => {
     if (!comboClipboard) return;
-    const sec = p.activeSection;
+    const sec = pasteTargetSec();
+    if (!sec) return;
     const used = new Set(p.components.filter((c) => c.section === sec && !isSpacer(c)).map((c) => effGroup.get(c.id) || "").filter(Boolean));
     let name = comboClipboard.label;
     for (let k = 2; used.has(name); k++) name = `${comboClipboard.label} (${k})`;
@@ -6383,7 +6396,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
         ))}
         {comboClipboard && (
           <button type="button" onClick={pasteCombo}
-            title={`Paste the copied “${comboClipboard.label}” into “${p.activeSection}”`}
+            title={`Paste the copied “${comboClipboard.label}” into “${pasteTargetSec()}”`}
             className="ml-1 rounded-full border border-brand/60 bg-brand-light px-2.5 py-1 text-[11px] font-bold text-brand-dark transition hover:bg-brand-tint">
             📋 Paste combination
           </button>

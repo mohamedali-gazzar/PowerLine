@@ -23,6 +23,19 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-25 · Mohamed's side · Claude
 
+**✅ Copy/Paste of a combination now lands in the right section.**
+
+The 📋 Copy on a combination (e.g. "Source 1" under Main Incoming) and "Paste combination"
+was dropping the copy into whatever section happened to be active last — so a Main-Incoming
+breaker combination could land in the P.F.C. capacitor section, which makes no sense. Now Paste
+puts the combination back into the section it was copied from — in the same panel or a different
+one — and only falls back to the section you're working in if that panel has no matching section.
+The paste button's tooltip shows exactly where it will go, and a duplicate keeps a unique name
+("Source 1 (2)"). Verified: with P.F.C. active, pasting a copied "Source 1" correctly landed in
+Main Incoming as "Source 1 (2)". Build green, 38 tests pass.
+
+## 2026-08-25 · Mohamed's side · Claude
+
 **✅ Removing items from the price list now actually takes effect and they disappear from view.**
 
 Follow-up to the full-sync removals: two things were making removed items look like they "still
