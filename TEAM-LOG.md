@@ -23,6 +23,19 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-25 · Mohamed's side · Claude
 
+**✅ The Technical Offer now displays as real A4 pages on screen — exactly what the PDF produces.**
+
+Before: on screen a panel with a long component list showed as one tall sheet (it only split
+into A4 pages inside the exported PDF), so the preview didn't match the printed document. Now
+the Technical Offer tab has a small switch at the top-left: **🗎 A4 pages** (the default) lays
+the offer out as true A4 pages — cover, notes, and each panel's components flowing across
+pages with a repeated header and "Page X of Y" — page-for-page identical to the PDF, because
+it runs the exact same page builder. **✎ Edit** brings back the continuous view for adding or
+changing notes and divider pages. The PDF export and printing are unchanged. Verified live:
+a big 40-panel quotation lays out to 47 clean A4 pages, and normal offers are instant.
+
+## 2026-08-25 · Mohamed's side · Claude
+
 **✅ A quotation sent for approval is now frozen for its creator — no more editing under the reviewer's feet.**
 
 Before: after an estimator sent a QTN for approval, they could keep editing it while the

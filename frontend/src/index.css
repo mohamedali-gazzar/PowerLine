@@ -253,6 +253,21 @@ input[type="number"] {
     border-radius: 4px;
     box-shadow: 0 1px 3px rgba(20, 20, 28, 0.08), 0 10px 30px rgba(20, 20, 28, 0.12);
   }
+  /* A4 "pages" preview — the paginator's page-blocks (plain divs) mounted for viewing.
+     Give each the same centered-sheet look as .a4-sheet so the preview reads as stacked
+     A4 pages identical to the PDF. */
+  .a4-preview { min-width: 210mm; }
+  .a4-preview > * {
+    flex: none;
+    border: 1px solid #e7e7eb;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(20, 20, 28, 0.08), 0 10px 30px rgba(20, 20, 28, 0.12);
+  }
+  /* A4 view hides the editable source on SCREEN only. Native print (Ctrl+P) reverts it
+     (the class is inert in print), so printing always targets the real offer, never a
+     blank page — and the on-screen preview is hidden from print (below). The compound
+     selector out-specifies `.offer-workspace > .print-area`, which sets display:flex. */
+  .offer-workspace > .print-area.a4-src-hidden { display: none; }
   /* Gray "workspace" canvas behind the sheets while editing (screen only). */
   .offer-workspace {
     background: #e2e4e8;
@@ -274,6 +289,9 @@ input[type="number"] {
     border-radius: 0 !important;
     overflow: visible !important;
   }
+  /* The on-screen A4 preview is a screen convenience; native print uses the (reverted)
+     editable source instead, so keep the preview out of the print job. */
+  .a4-preview { display: none !important; }
 }
 @media print {
   html,

@@ -480,13 +480,41 @@ export async function exportCommercialPdf(opts: ExportOpts): Promise<Blob | void
   }
 }
 
-export async function exportTechnicalPdf(opts: ExportOpts): Promise<Blob | void> {
-  const { printArea, filename } = opts;
+/**
+ * Build the Technical Offer as ordered A4 page-blocks (210 × 297 mm) inside `host`,
+ * in document order: cover, notes (paginated), then each panel (spec block on its
+ * first page, component rows flowing across pages) and divider page. Footers are
+ * stamped "Page X of Y". This is the single source of the page layout — the PDF
+ * export captures these blocks to images, and the on-screen "A4 view" mounts the
+ * very same blocks, so the preview is page-for-page identical to the file.
+ */
+export function buildTechnicalPages(printArea: HTMLElement, host: HTMLElement): HTMLElement[] {
   const cover = printArea.querySelector<HTMLElement>("[data-pdf-cover]");
   const header = printArea.querySelector<HTMLElement>("[data-pdf-header]");
   const notes = printArea.querySelector<HTMLElement>("[data-pdf-notes]");
   // Panels and divider pages together, in document order (dividers sit before their panel).
   const body = Array.from(printArea.querySelectorAll<HTMLElement>("[data-pdf-panel], [data-pdf-separator]"));
+
+  const pages: HTMLElement[] = [];
+  if (cover) pages.push(makeCoverPage(cover));
+  if (notes) pages.push(...paginateBlocks(host, header, Array.from(notes.children) as HTMLElement[]));
+  for (const el of body) {
+    if (el.hasAttribute("data-pdf-separator")) pages.push(makeSeparatorPage(el));
+    else pages.push(...paginatePanel(host, header, el));
+  }
+  if (!pages.length) return pages;
+
+  host.append(...pages); // ensure all mounted, in order (cover wasn't mounted yet)
+  const total = pages.length;
+  pages.forEach((p, i) => {
+    const f = p.querySelector<HTMLElement>(".pdf-footer");
+    if (f) f.textContent = `Page ${i + 1} of ${total}`; // cover has no .pdf-footer
+  });
+  return pages;
+}
+
+export async function exportTechnicalPdf(opts: ExportOpts): Promise<Blob | void> {
+  const { printArea, filename } = opts;
 
   // Off-screen host where page-blocks are laid out and measured, then captured.
   const host = document.createElement("div");
@@ -495,21 +523,8 @@ export async function exportTechnicalPdf(opts: ExportOpts): Promise<Blob | void>
   document.body.appendChild(host);
 
   try {
-    const pages: HTMLElement[] = [];
-    if (cover) pages.push(makeCoverPage(cover));
-    if (notes) pages.push(...paginateBlocks(host, header, Array.from(notes.children) as HTMLElement[]));
-    for (const el of body) {
-      if (el.hasAttribute("data-pdf-separator")) pages.push(makeSeparatorPage(el));
-      else pages.push(...paginatePanel(host, header, el));
-    }
+    const pages = buildTechnicalPages(printArea, host);
     if (!pages.length) return;
-
-    host.append(...pages); // ensure all mounted, in order (cover wasn't mounted yet)
-    const total = pages.length;
-    pages.forEach((p, i) => {
-      const f = p.querySelector<HTMLElement>(".pdf-footer");
-      if (f) f.textContent = `Page ${i + 1} of ${total}`; // cover has no .pdf-footer
-    });
 
     await new Promise((r) => setTimeout(r, 40)); // let layout settle
     await document.fonts.ready; // web fonts loaded before capture

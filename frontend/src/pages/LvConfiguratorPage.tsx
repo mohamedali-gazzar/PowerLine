@@ -2743,6 +2743,45 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
   // PDF is captured from this DOM). Hidden by default — a customer-facing offer does
   // not normally name the supplier, so showing it is the deliberate act.
   const [hideBrand, setHideBrand] = useState(true);
+  // How the Technical Offer is shown on screen. "a4" lays it out as real A4 pages —
+  // page-for-page identical to the exported PDF, because it runs the very same paginator.
+  // "edit" is the continuous flow where notes and divider pages are added/changed. Viewing
+  // defaults to A4 (what the customer actually receives).
+  const [techView, setTechView] = useState<"a4" | "edit">("a4");
+  const printRef = useRef<HTMLDivElement>(null);   // the live [data-pdf-root] source
+  const a4HostRef = useRef<HTMLDivElement>(null);  // where the built A4 pages are mounted
+  // Build the A4 pages from the (hidden) source whenever the offer or the view changes.
+  // The source stays in the DOM (display:none) so the PDF export still reads it, and so the
+  // paginator can clone its cover / notes / panels; the clones lay out for real inside the
+  // visible host, giving true A4 pagination on screen.
+  useEffect(() => {
+    if (techView !== "a4") return;
+    const src = printRef.current;
+    if (!src) return;
+    let cancelled = false;
+    void (async () => {
+      const { buildTechnicalPages } = await import("../lv/technicalPdf");
+      if (cancelled || !a4HostRef.current) return;
+      // A big offer (dozens of panels) blocks the main thread for a moment while pages are
+      // laid out. Show a note first, then yield a frame so it actually paints before the
+      // synchronous build freezes the tab. Done imperatively (no React state) so a re-render
+      // never wipes the pages we mount into this ref-managed host.
+      const note = document.createElement("div");
+      note.className = "py-16 text-sm font-semibold text-muted";
+      note.textContent = "Laying out A4 pages…";
+      a4HostRef.current.replaceChildren(note);
+      // Yield with a timer (not rAF, which pauses when the tab isn't compositing) so the
+      // note paints before the synchronous build, and the build still runs in any state.
+      await new Promise((r) => setTimeout(r, 0));
+      const host = a4HostRef.current;
+      if (cancelled || !host) return;
+      host.replaceChildren();
+      const pages = buildTechnicalPages(src, host);
+      // Drop editor-only chrome (screen buttons) so the preview reads as the finished document.
+      for (const p of pages) for (const el of Array.from(p.querySelectorAll<HTMLElement>(".no-print"))) el.remove();
+    })();
+    return () => { cancelled = true; a4HostRef.current?.replaceChildren(); };
+  }, [techView, hideBrand, s]);
   if (!s.panels.length) {
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Technical Offer is generated from them.</div>;
   }
@@ -2790,7 +2829,20 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
     <div className="animate-fade-up">
       <PrintBar label={`${s.panels.length} panel${s.panels.length > 1 ? "s" : ""} → multi-page PDF (tables flow across pages).`}
         docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} exportFn={exportPdf} />
-      <div className="no-print mb-2 flex justify-end">
+      <div className="no-print mb-2 flex items-center justify-between gap-2">
+        {/* View switch: A4 pages (what prints) vs the editable continuous flow. */}
+        <div className="inline-flex overflow-hidden rounded-lg border border-line text-xs font-semibold">
+          <button type="button" onClick={() => setTechView("a4")}
+            title="View the offer as real A4 pages — exactly what the PDF produces"
+            className={`px-3 py-1.5 transition ${techView === "a4" ? "bg-brand text-white" : "bg-white text-muted hover:text-brand"}`}>
+            🗎 A4 pages
+          </button>
+          <button type="button" onClick={() => setTechView("edit")}
+            title="Edit mode — add or change notes and divider pages (continuous view)"
+            className={`border-l border-line px-3 py-1.5 transition ${techView === "edit" ? "bg-brand text-white" : "bg-white text-muted hover:text-brand"}`}>
+            ✎ Edit
+          </button>
+        </div>
         <button type="button" onClick={() => setHideBrand((v) => !v)}
           title={hideBrand ? "Brand column is hidden in the offer — click to show it" : "Brand column is shown in the offer — click to hide it"}
           className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand">
@@ -2803,7 +2855,8 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
         </button>
       </div>
       <div className="offer-workspace">
-      <div data-pdf-root className="print-area space-y-6">
+      {techView === "a4" && <div ref={a4HostRef} className="print-area a4-preview flex flex-col items-center gap-6" />}
+      <div ref={printRef} data-pdf-root className={`print-area space-y-6${techView === "a4" ? " a4-src-hidden" : ""}`}>
         {/* Cover page (shared branded title page) — no footer on the cover */}
         <OfferCover s={s} qtnNo={qtnNo} kind="Technical" />
         {/* Notes page (editable: edit / add / remove lines) — after the cover */}
