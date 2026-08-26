@@ -5819,6 +5819,24 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   // The selection is a single existing combination when every selected row shares one non-empty group.
   const selGroupSet = new Set(p.components.filter((c) => selected.has(c.id) && !isSpacer(c)).map((c) => effGroup.get(c.id) || ""));
   const isSelCombo = selGroupSet.size === 1 && [...selGroupSet][0] !== "";
+  // Every existing combination in this panel (section + group), in document order — the
+  // "Move to → Other combination" targets. A combination the selection already fully occupies
+  // is left out (moving it into itself does nothing).
+  const panelCombos: { sec: string; group: string }[] = (() => {
+    const seen = new Set<string>();
+    const out: { sec: string; group: string }[] = [];
+    for (const c of p.components) {
+      if (isSpacer(c)) continue;
+      const g = effGroup.get(c.id) || "";
+      if (!g) continue;
+      const key = `${c.section}::${g}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (isSelCombo && selGroupSet.has(g)) continue; // don't offer the group the selection IS
+      out.push({ sec: c.section, group: g });
+    }
+    return out;
+  })();
   // Column-aware sum over the selected rows (QTY / UNIT COST / TOTAL) for the hover tooltip.
   const colSum = (col: "qty" | "unit" | "total") =>
     p.components.reduce((acc, c) => {
@@ -5905,6 +5923,32 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     const rest = p.components.filter((c) => !selected.has(c.id));
     let insertAt = rest.length; // target section empty → append at the end
     for (let i = rest.length - 1; i >= 0; i--) { if (rest[i].section === target) { insertAt = i + 1; break; } }
+    u({ components: [...rest.slice(0, insertAt), ...moved, ...rest.slice(insertAt)] });
+    clearSel();
+  };
+  // Move the selected rows INTO an existing combination — retag them with that group's name,
+  // section and instance id so they join it (and adopt its ×N when it is a scalable combo),
+  // dropped in right after the group's current members.
+  const moveSelToCombo = (sec: string, group: string) => {
+    if (!selected.size) return;
+    const secComps = p.components.filter((c) => c.section === sec);
+    const gf = secComps.find((x) => !isSpacer(x) && (effGroup.get(x.id) || "") === group);
+    const cid = gf?.comboId ?? uid();
+    const scalable = /\(Type \d+\)/.test(group) || !!gf?.comboScalable;
+    const n = scalable ? comboQtyOf(secComps, group) : 1;
+    const moved = p.components.filter((c) => selected.has(c.id)).map((c) => {
+      if (isSpacer(c)) return { ...c, section: sec };
+      const per = c.baseQty ?? c.qty;
+      return scalable
+        ? { ...c, section: sec, group, comboId: cid, comboScalable: true, baseQty: per, qty: per * n }
+        : { ...c, section: sec, group, comboId: cid, comboScalable: false };
+    });
+    const rest = p.components.filter((c) => !selected.has(c.id));
+    let insertAt = rest.length;
+    for (let i = rest.length - 1; i >= 0; i--) {
+      const c = rest[i];
+      if (c.section === sec && (effGroup.get(c.id) || "") === group) { insertAt = i + 1; break; }
+    }
     u({ components: [...rest.slice(0, insertAt), ...moved, ...rest.slice(insertAt)] });
     clearSel();
   };
@@ -6958,18 +7002,31 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                 <span className="text-base leading-none">⧉</span> Duplicate
               </button>
               <div className="relative">
-                <button type="button" onClick={() => setMoveOpen((v) => !v)} title="Move selected rows to another section"
+                <button type="button" onClick={() => setMoveOpen((v) => !v)} title="Move selected rows to another section or into another combination"
                   className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold text-ink transition hover:bg-surface ${moveOpen ? "bg-surface" : ""}`}>
                   <span className="text-base leading-none">↧</span> Move to
                   <svg width="9" height="9" viewBox="0 0 12 12" className="opacity-50" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>
                 {moveOpen && (
-                  <div className="absolute bottom-full left-1/2 z-50 mb-2 max-h-56 w-52 -translate-x-1/2 overflow-auto rounded-xl border border-line bg-white py-1 shadow-lift">
-                    <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-muted">Move to section</p>
+                  <div className="absolute bottom-full left-1/2 z-50 mb-2 max-h-72 w-56 -translate-x-1/2 overflow-auto rounded-xl border border-line bg-white py-1 shadow-lift">
+                    <p className="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">Other section</p>
                     {p.sections.map((sec) => (
                       <button key={sec} type="button" onClick={() => moveSelTo(sec)}
                         className="block w-full truncate px-3 py-1.5 text-left text-sm text-ink hover:bg-brand-tint">{sec}</button>
                     ))}
+                    <div className="my-1 h-px bg-line" />
+                    <p className="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">Other combination</p>
+                    {panelCombos.length ? (
+                      panelCombos.map(({ sec, group }) => (
+                        <button key={`${sec}::${group}`} type="button" onClick={() => moveSelToCombo(sec, group)}
+                          className="block w-full truncate px-3 py-1.5 text-left text-sm text-ink hover:bg-brand-tint">
+                          {group}
+                          {p.sections.length > 1 && <span className="text-muted"> · {sec}</span>}
+                        </button>
+                      ))
+                    ) : (
+                      <p className="px-3 py-1.5 text-xs italic text-muted">No other combination in this panel</p>
+                    )}
                   </div>
                 )}
               </div>

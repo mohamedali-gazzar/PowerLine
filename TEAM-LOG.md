@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-08-25 · Mohamed's side · Claude
 
+**✅ "Move to" (on selected rows) now offers both another section AND another combination.**
+
+When you select rows in a panel, the floating bar's **Move to** menu used to list only sections.
+It now has two groups: **Other section** (as before) and **Other combination** — the existing
+combinations in that panel (e.g. "Source 1 · Main Incoming"). Picking a combination moves the
+selected rows into it: they take that combination's section and name, sit right after its current
+members, and adopt its ×N if it's a scalable combination. Verified: two Metering rows moved into
+"Source 1" landed inside that combination and left Metering empty; undo restored it. Build green,
+38 tests pass.
+
+## 2026-08-25 · Mohamed's side · Claude
+
 **✅ Copy/Paste of a combination now lands in the right section.**
 
 The 📋 Copy on a combination (e.g. "Source 1" under Main Incoming) and "Paste combination"
