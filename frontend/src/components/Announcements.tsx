@@ -2,20 +2,39 @@ import { useEffect, useState } from "react";
 import type { Announcement } from "../api";
 import { activeForUsers, remaining, fmt } from "./announcementUtils";
 
-// Palette matches the app's brand orange (#F16722). Font is inherited from the
-// app so the card sits cohesively on the dashboard.
-const C = {
-  orange: "#F16722", orangeTint: "#FFF0E8", ink: "#2C2C2D", grey: "#8A8A8B", greyL: "#A0A09E",
-  line: "#EDECEA", card: "#FFFFFF",
-  redL: "#C0453F", amber: "#B7791F", amberT: "#FBF3E2", blue: "#3A63B8", blueT: "#EAF0FB", redT: "#FBEAE9",
+// Styled with the app's theme classes, not a fixed palette.
+//
+// This card used to carry its own hex colours in inline styles (white card, dark ink,
+// pale tints). Inline styles cannot respond to the theme, so in dark mode it stayed a
+// white block on a dark dashboard with the heading nearly invisible. Everything now
+// resolves through the same tokens as every other card — .card, text-ink, text-muted,
+// border-line — so it flips with the theme on its own.
+
+/** Per-type tag and icon colours. Both themes stated, because the tints are not tokens. */
+const TYPE: Record<string, { tag: string; iconBg: string; icon: string }> = {
+  News: {
+    tag: "bg-blue-50 text-blue-700 dark:bg-blue-400/15 dark:text-blue-300",
+    iconBg: "bg-blue-50 dark:bg-blue-400/15",
+    icon: "📢",
+  },
+  Maintenance: {
+    tag: "bg-amber-50 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300",
+    iconBg: "bg-amber-50 dark:bg-amber-400/15",
+    icon: "🛠️",
+  },
+  Alert: {
+    tag: "bg-red-50 text-red-700 dark:bg-red-400/15 dark:text-red-300",
+    iconBg: "bg-red-50 dark:bg-red-400/15",
+    icon: "⚠️",
+  },
 };
 
-const TYPE: Record<string, { tag: { bg: string; fg: string }; iconBg: string; icon: string }> = {
-  News: { tag: { bg: C.blueT, fg: C.blue }, iconBg: C.blueT, icon: "📢" },
-  Maintenance: { tag: { bg: C.amberT, fg: C.amber }, iconBg: C.amberT, icon: "🛠️" },
-  Alert: { tag: { bg: C.redT, fg: C.redL }, iconBg: C.redT, icon: "⚠️" },
+/** The coloured spine down the left of a row. */
+const PRIO_BORDER: Record<string, string> = {
+  High: "border-l-red-500 dark:border-l-red-400",
+  Medium: "border-l-amber-500 dark:border-l-amber-400",
+  Low: "border-l-muted/40",
 };
-const PRIO_BORDER: Record<string, string> = { High: C.redL, Medium: C.amber, Low: C.greyL };
 
 export default function Announcements({ items = [] }: { items?: Announcement[] }) {
   const [, tick] = useState(0);
@@ -29,29 +48,46 @@ export default function Announcements({ items = [] }: { items?: Announcement[] }
   if (active.length === 0) return null; // no empty card at the top of the dashboard
 
   return (
-    <div style={S.card}>
-      <div style={S.head}>
-        {/* Same heading as the "Waiting for your approval" card — the app's .sec-head
-            (16px bold with the short orange underline bar). */}
-        <h2 className="sec-head" style={{ marginBottom: 0 }}>Announcements</h2>
-        <span style={S.count}>{active.length} new</span>
+    <div className="card mb-5 p-5">
+      <div className="mb-3 flex items-center justify-between">
+        {/* Same heading as the "Waiting for your approval" card. */}
+        <h2 className="sec-head mb-0">Announcements</h2>
+        <span className="chip bg-brand-tint text-brand-dark">{active.length} new</span>
       </div>
-      <div style={S.list}>
+
+      <div className="flex flex-col gap-2.5">
         {active.map((a) => {
           const t = TYPE[a.type] || TYPE.News;
           const r = remaining(a);
           return (
-            <div key={a.id} style={{ ...S.ann, borderLeftColor: PRIO_BORDER[a.priority] || C.greyL }}>
-              <div style={{ ...S.icon, background: t.iconBg }}>{t.icon}</div>
-              <div style={{ flex: 1 }}>
-                <div style={S.annTop}>
-                  <span style={{ ...S.type, background: t.tag.bg, color: t.tag.fg }}>{a.type}</span>
-                  <span style={S.annTitle}>{a.title}</span>
-                </div>
-                {a.body && <div style={S.body}>{a.body}</div>}
-                <div style={S.foot}>Posted {fmt(a.start)}</div>
+            <div
+              key={a.id}
+              className={`flex items-start gap-3 rounded-lg border border-line border-l-[3px] bg-surface p-3 ${
+                PRIO_BORDER[a.priority] || PRIO_BORDER.Low
+              }`}
+            >
+              <div
+                className={`flex h-[34px] w-[34px] flex-none items-center justify-center rounded-lg text-[17px] ${t.iconBg}`}
+              >
+                {t.icon}
               </div>
-              <div style={{ ...S.remain, color: r.tone === "soon" ? C.amber : C.grey }}>{r.text}</div>
+              <div className="flex-1">
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <span className={`rounded-md px-2 py-0.5 text-[10.5px] font-semibold ${t.tag}`}>
+                    {a.type}
+                  </span>
+                  <span className="text-[13.5px] font-semibold text-ink">{a.title}</span>
+                </div>
+                {a.body && <p className="text-[12.5px] leading-relaxed text-muted">{a.body}</p>}
+                <p className="mt-1.5 text-[11px] text-muted/70">Posted {fmt(a.start)}</p>
+              </div>
+              <div
+                className={`self-center whitespace-nowrap text-[11px] font-semibold ${
+                  r.tone === "soon" ? "text-amber-600 dark:text-amber-400" : "text-muted"
+                }`}
+              >
+                {r.text}
+              </div>
             </div>
           );
         })}
@@ -59,18 +95,3 @@ export default function Announcements({ items = [] }: { items?: Announcement[] }
     </div>
   );
 }
-
-const S: Record<string, React.CSSProperties> = {
-  card: { background: C.card, borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.05)", padding: "16px 20px", marginBottom: 16, color: C.ink },
-  head: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  count: { fontSize: 12, fontWeight: 600, color: C.orange, background: C.orangeTint, padding: "3px 11px", borderRadius: 12 },
-  list: { display: "flex", flexDirection: "column", gap: 10 },
-  ann: { display: "flex", alignItems: "flex-start", gap: 12, border: `0.5px solid ${C.line}`, borderLeftWidth: 3, borderLeftStyle: "solid", borderRadius: 9, padding: "12px 14px", background: "#fff" },
-  icon: { width: 34, height: 34, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, flex: "none" },
-  annTop: { display: "flex", alignItems: "center", gap: 8, marginBottom: 3, flexWrap: "wrap" },
-  type: { fontSize: 10.5, fontWeight: 600, padding: "1px 8px", borderRadius: 6 },
-  annTitle: { fontSize: 13.5, fontWeight: 600 },
-  body: { fontSize: 12.5, color: C.grey, lineHeight: 1.5 },
-  foot: { fontSize: 11, color: C.greyL, marginTop: 6 },
-  remain: { fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", alignSelf: "center" },
-};
