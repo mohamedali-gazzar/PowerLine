@@ -31,6 +31,8 @@ import {
   RMU_CLASSES,
   RMU_RANGES,
   RMU_HISTORY,
+  TR_HISTORY,
+  GEAR_HISTORY,
   RMU_RINGS,
   RMU_TRANS,
   RMU_MEAS,
@@ -49,12 +51,26 @@ import {
 
 type Tab = "rmu" | "transformer" | "gear" | "read";
 
-const TABS: { id: Tab; label: string; hint: string }[] = [
-  { id: "rmu", label: "Ring main units", hint: "PSEC · PRAL" },
-  { id: "transformer", label: "Transformers", hint: "PDTR · POTR" },
-  { id: "gear", label: "MV switchgear", hint: "PLGear" },
+type Rev = { v: string; by: string; on: string };
+const latest = (h: Rev[]): Rev | undefined => h[h.length - 1];
+
+// Each system is its own document with its own author and revision. "Read a code"
+// spans all three, so it shows none.
+const TABS: { id: Tab; label: string; hint: string; rev?: Rev }[] = [
+  { id: "rmu", label: "Ring main units", hint: "PSEC · PRAL", rev: latest(RMU_HISTORY) },
+  { id: "transformer", label: "Transformers", hint: "PDTR · POTR", rev: latest(TR_HISTORY) },
+  { id: "gear", label: "MV switchgear", hint: "PLGear", rev: latest(GEAR_HISTORY) },
   { id: "read", label: "Read a code", hint: "paste anything" },
 ];
+
+/**
+ * The last digit of a transformer or switchgear code is fixed at 0.
+ *
+ * A code identifies a product, not an individual unit coming off the line, so there is
+ * nothing for the digit to count. Leaving it editable invited people to invent a number
+ * that meant nothing and then differed between two papers for the same product.
+ */
+const SERIAL = 0;
 
 // ── small shared pieces ──────────────────────────────────────────────────────
 
@@ -136,7 +152,10 @@ function Breakdown({ decoded }: { decoded: Decoded }) {
             <tr key={i} className="border-b border-line/60 last:border-0">
               <td className="py-2 pr-3 font-mono font-bold text-brand-darker">{s.chars}</td>
               <td className="py-2 pr-3 text-muted">{s.field}</td>
-              <td className="py-2 text-ink">{readable(s.meaning)}</td>
+              <td className="py-2 text-ink">
+                {readable(s.meaning)}
+                {s.note && <span className="ml-1 text-muted">— {s.note}</span>}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -376,9 +395,8 @@ function TransformerTab() {
   const [core, setCore] = useState("1");
   const [ip, setIp] = useState("21");
   const [acc, setAcc] = useState("0");
-  const [serial, setSerial] = useState(1);
 
-  const code = buildTrCode({ prefix, volt, kva, core, ip, acc, serial });
+  const code = buildTrCode({ prefix, volt, kva, core, ip, acc, serial: SERIAL });
   const decoded = decodeTr(code);
   const exact = ratingIsExact(kva);
   const shared = ratingSharedWith(kva);
@@ -475,9 +493,10 @@ function TransformerTab() {
             )}
           </Field>
 
-          <Field label="Serial" hint="One digit, 0 to 9.">
-            <NumberInput value={serial} onChange={setSerial} min={0} step={1} />
-          </Field>
+          <p className="text-xs text-muted/80">
+            The last digit is always <span className="font-mono font-semibold">0</span>. A code
+            names a product, not one unit off the line, so there is nothing for it to count.
+          </p>
         </div>
       </div>
 
@@ -521,9 +540,8 @@ function GearTab() {
   const [outgoing, setOutgoing] = useState(4);
   const [couplers, setCouplers] = useState("0");
   const [adapt, setAdapt] = useState("0");
-  const [serial, setSerial] = useState(1);
 
-  const code = buildGearCode({ volt, incoming, outgoing, couplers, adapt, serial });
+  const code = buildGearCode({ volt, incoming, outgoing, couplers, adapt, serial: SERIAL });
   const decoded = decodeGear(code);
 
   return (
@@ -552,9 +570,10 @@ function GearTab() {
           <Field label="Service panel">
             <Choice value={adapt} onChange={setAdapt} options={GEAR_ADAPT} />
           </Field>
-          <Field label="Serial" hint="One digit, 0 to 9.">
-            <NumberInput value={serial} onChange={setSerial} min={0} step={1} />
-          </Field>
+          <p className="text-xs text-muted/80">
+            The last digit is always <span className="font-mono font-semibold">0</span>. A code
+            names a product, not one unit off the line, so there is nothing for it to count.
+          </p>
           <p className="text-xs text-muted/80">
             This code uses letters as separators — I for incoming, O for outgoing, C for couplers,
             S for the service panel — so it is read by its pattern rather than by counting
@@ -638,7 +657,7 @@ function ReadTab() {
 
 export default function CodingGuidePage() {
   const [tab, setTab] = useState<Tab>("rmu");
-  const latest = RMU_HISTORY[RMU_HISTORY.length - 1];
+  const rev = TABS.find((t) => t.id === tab)?.rev;
 
   return (
     <div className="animate-fade-up space-y-4">
@@ -653,9 +672,9 @@ export default function CodingGuidePage() {
               read back to you part by part.
             </p>
           </div>
-          {latest && (
+          {rev && (
             <span className="chip bg-surface text-muted">
-              Rev {latest.v} · {latest.by} · {latest.on}
+              Rev {rev.v} · {rev.by} · {rev.on}
             </span>
           )}
         </div>

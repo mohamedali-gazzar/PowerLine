@@ -206,7 +206,11 @@ describe("transformer codes", () => {
 
   it("names the New Capital protection class rather than leaving it unexplained", () => {
     const d = decodeTr("PDTR2206312101");
-    expect(d.segments.find((s) => s.field === "Protection")?.problem).toMatch(/ACUD/);
+    // A note, deliberately NOT a problem: IP 21 is a valid class, so flagging it as a
+    // fault told people a correct code was wrong.
+    const ipSeg = d.segments.find((s) => s.field === "Protection");
+    expect(ipSeg?.note).toMatch(/ACUD/);
+    expect(ipSeg?.problem).toBeUndefined();
   });
 
   it("flags values outside the tables instead of inventing a meaning", () => {
@@ -270,5 +274,24 @@ describe("decoding anything that is pasted in", () => {
   it("handles an empty box without throwing", () => {
     expect(() => decodeAny("")).not.toThrow();
     expect(decodeAny("").ok).toBe(false);
+  });
+});
+
+describe("the serial digit", () => {
+  // The guide fixes it at 0: a code names a product, not one unit off the line. These two
+  // tests hold the only ways an invalid serial could still reach a code.
+
+  it("never grows past one character, however large the number handed in", () => {
+    expect(buildTrCode({ prefix: "PDTR", volt: "22", kva: 630, core: "1", ip: "21", acc: "0", serial: 42 })).toBe("PDTR2206312109");
+    // buildGearCode used to interpolate the raw number, so a serial of 12 produced
+    // PLG2I1O04C0S012 — a code its own reader then rejected as malformed.
+    expect(buildGearCode({ volt: "2", incoming: 1, outgoing: 4, couplers: "0", adapt: "0", serial: 12 })).toBe("PLG2I1O04C0S09");
+  });
+
+  it("reads a 0 as \"not used\" rather than \"unit 0\"", () => {
+    const tr = decodeTr(buildTrCode({ prefix: "PDTR", volt: "22", kva: 630, core: "1", ip: "21", acc: "0", serial: 0 }));
+    expect(tr.segments.find((s) => s.field === "Serial")?.meaning).toBe("not used");
+    const gear = decodeGear(buildGearCode({ volt: "2", incoming: 1, outgoing: 4, couplers: "0", adapt: "0", serial: 0 }));
+    expect(gear.segments.find((s) => s.field === "Serial")?.meaning).toBe("not used");
   });
 });

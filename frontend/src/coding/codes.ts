@@ -30,8 +30,13 @@ export interface Segment {
   chars: string;
   field: string;
   meaning: string;
-  /** Set when the value is outside the documented range. */
+  /** Set when the value is outside the documented range — shown to the reader as a fault. */
   problem?: string;
+  /**
+   * Something worth knowing about a perfectly valid value, e.g. which projects use a
+   * protection class. Kept apart from `problem` so a note never reads as an error.
+   */
+  note?: string;
 }
 
 export interface Decoded {
@@ -263,10 +268,10 @@ export function decodeTr(raw: string): Decoded {
       chars: ip,
       field: "Protection",
       meaning: ipRow ? ipRow[1] : "not a listed protection class",
+      // Valid class, but worth saying where it is used — a note, not a fault.
+      note: ipRow && ip === TR_IP_ACUD ? "Used for New Capital (ACUD) projects." : undefined,
       problem: ipRow
-        ? ip === TR_IP_ACUD
-          ? "Used for New Capital (ACUD) projects."
-          : undefined
+        ? undefined
         : "Listed classes are 00, 21 and 23. The letters IP are never written in the code.",
     },
     {
@@ -275,7 +280,12 @@ export function decodeTr(raw: string): Decoded {
       meaning: TR_ACC[acc] ?? "not a coded accessory option",
       problem: TR_ACC[acc] ? undefined : "0 is a bare unit, 1 is accessories fitted. 2-9 are unused.",
     },
-    { chars: serial, field: "Serial", meaning: `unit ${Number(serial)}` },
+    {
+      chars: serial,
+      field: "Serial",
+      // A code names a product, not one physical unit, so the digit is parked at 0.
+      meaning: Number(serial) === 0 ? "not used" : `unit ${Number(serial)}`,
+    },
   ];
 
   return {
@@ -302,7 +312,7 @@ export interface GearParts {
 
 export function buildGearCode(p: GearParts): string {
   const out = ("0" + Math.max(0, Math.floor(p.outgoing || 0))).slice(-2);
-  return `PLG${p.volt}I${Math.max(0, Math.floor(p.incoming || 0))}O${out}C${p.couplers}S${p.adapt}${p.serial}`;
+  return `PLG${p.volt}I${Math.max(0, Math.floor(p.incoming || 0))}O${out}C${p.couplers}S${p.adapt}${trSerial(p.serial)}`;
 }
 
 const GEAR_RE = /^PLG(\d)I(\d+)O(\d{2})C(\d)S(\d)(\d)$/;
@@ -348,7 +358,12 @@ export function decodeGear(raw: string): Decoded {
       meaning: aRow ? aRow[1] : "not a listed option",
       problem: aRow ? undefined : "0 none, 1 ABB, 2 Murge.",
     },
-    { chars: serial, field: "Serial", meaning: `unit ${Number(serial)}` },
+    {
+      chars: serial,
+      field: "Serial",
+      // A code names a product, not one physical unit, so the digit is parked at 0.
+      meaning: Number(serial) === 0 ? "not used" : `unit ${Number(serial)}`,
+    },
   ];
 
   const panels = Number(incoming) + Number(outgoing) + Number(couplers) + (adapt === "0" ? 0 : 1);

@@ -3606,6 +3606,17 @@ export const RMU_MEAS_TEXT: Record<string, string> = {
 // Code shape: {prefix}{kV}{rating}{winding}{ip}{accessories}{serial}
 //   e.g. PDTR22063 1 21 0 01  ->  PDTR2206312101
 
+/**
+ * Revision of the transformer coding document.
+ *
+ * The extracted guide carried a history table for the RMU document only, so the header
+ * used to show the RMU revision on every tab — which credited the wrong author for these
+ * two systems. Supplied by Mohamed (Gazzar), not extracted from the source file.
+ */
+export const TR_HISTORY: { v: string; by: string; on: string }[] = [
+  { v: "R1", by: "Gazzar", on: "15/08/2026" },
+];
+
 export const TR_KVA = [
   50, 63, 80, 100, 200, 300, 400, 500, 630, 800,
   1000, 1250, 1500, 1600, 2000, 2500, 3150,
@@ -3646,6 +3657,11 @@ export const TR_LEGACY: Record<number, string> = {
 // ── MV switchgear (PLGear) ───────────────────────────────────────────────────
 // Code shape: PLG{kV}I{incoming}O{outgoing}C{couplers}S{servicePanel}{serial}
 // Letter separators, so it is read by pattern rather than by fixed positions.
+
+/** Revision of the switchgear coding document. See the note on TR_HISTORY. */
+export const GEAR_HISTORY: { v: string; by: string; on: string }[] = [
+  { v: "R1", by: "Gazzar", on: "15/08/2026" },
+];
 
 export const GEAR_VOLTS: [code: string, label: string][] = [["2", "12"], ["4", "24"]];
 export const GEAR_COUPLERS: [code: string, label: string][] = [
