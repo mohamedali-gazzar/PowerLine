@@ -18,6 +18,7 @@ import {
   qtnStatus, statusWrite, isLocked, canMove, qtnAction,
   QTN_STATUSES, QTN_STATUS_LABEL, type QtnStatus,
 } from "../domain/qtnStatus";
+import { revisionOf, nextRevision, sequenceOf, baseOf, formatQtnNumber } from "../domain/qtnRevision";
 import { notify, notifyAll, approverIds } from "../services/notify.service";
 import { originOf } from "../services/email.service";
 
@@ -115,6 +116,10 @@ const record = (q: QtnRow) => {
   return {
     id: q.id,
     number: q.number,
+    // The number alone no longer identifies a quotation — several revisions share it.
+    // Amend returns this record, so without the revision the client cannot say which
+    // one it just opened.
+    revisionNo: q.revisionNo,
     createdAt: q.createdAt,
     updatedAt: q.updatedAt,
     submitted: q.submitted, // legacy mirror, kept for older clients mid-rollout
@@ -264,21 +269,33 @@ function summaryData(s?: Summary) {
   };
 }
 
-async function numberTaken(ownerId: string, number: string, exceptId?: string) {
-  const n = number.trim().toLowerCase();
-  const rows = await prisma.lvQtn.findMany({ where: { ownerId }, select: { id: true, number: true } });
-  return rows.some((r) => r.id !== exceptId && r.number.trim().toLowerCase() === n);
+/**
+ * Is this number already in use AT THE SAME REVISION?
+ *
+ * It used to compare the number alone, which is what made a revision impossible:
+ * renaming an amendment back to its own base was rejected because the original held
+ * that string. Two rows may share a number as long as their revisions differ.
+ */
+async function numberTaken(ownerId: string, number: string, exceptId?: string, rev = 0) {
+  const base = baseOf(number).toLowerCase();
+  const rows = await prisma.lvQtn.findMany({
+    where: { ownerId }, select: { id: true, number: true, revisionNo: true },
+  });
+  return rows.some((r) => {
+    if (r.id === exceptId) return false;
+    const got = revisionOf(r);
+    return got.base.toLowerCase() === base && got.rev === rev;
+  });
 }
 
 const yy = () => String(new Date().getFullYear() % 100).padStart(2, "0");
 
 async function nextNumber(ownerId: string): Promise<string> {
   const rows = await prisma.lvQtn.findMany({ where: { ownerId }, select: { number: true } });
+  // sequenceOf reads the last group of 3+ digits, so "QTN-24-00749-8" counts as 749.
+  // Reading the plain trailing digits made an amended quotation count as 8.
   let max = 0;
-  for (const r of rows) {
-    const m = /(\d+)\s*$/.exec(r.number);
-    if (m) max = Math.max(max, parseInt(m[1], 10));
-  }
+  for (const r of rows) max = Math.max(max, sequenceOf(r.number));
   return `QTN-${yy()}-${String(max + 1).padStart(4, "0")}`;
 }
 
@@ -379,8 +396,17 @@ export async function create(req: Request, res: Response) {
   try {
     const ownerId = req.userId as string;
     const { number, state, summary } = createQtnSchema.parse(req.body);
-    if (await numberTaken(ownerId, number)) {
-      return res.status(409).json({ error: "A quotation with this number already exists." });
+    // Check the revision this row will actually be written at, not revision 0.
+    // Checking at 0 while inserting at the summary's revision let a genuine clash
+    // through the guard and surface as a 500 from the unique constraint instead of
+    // the honest 409 below.
+    const rev = summary?.revisionNo ?? 0;
+    if (await numberTaken(ownerId, number, undefined, rev)) {
+      return res.status(409).json({
+        error: rev > 0
+          ? `Revision ${rev} of this quotation number already exists.`
+          : "A quotation with this number already exists.",
+      });
     }
     const q = await prisma.lvQtn.create({
       data: {
@@ -461,10 +487,22 @@ export async function update(req: Request, res: Response) {
       try { stored = JSON.parse(q.state) as StateLike; } catch { /* corrupt → treat as empty */ }
       toStore = mergeCoWork(stored, (state ?? {}) as StateLike, q.ownerId, req.userId as string);
     }
-    await prisma.lvQtn.update({
-      where: { id: q.id },
-      data: { state: JSON.stringify(toStore), ...summaryData(summary) },
-    });
+    /*
+     * The revision is part of the quotation's identity now, so a typed value that
+     * collides with another revision of the same job is dropped rather than saved.
+     *
+     * Without this, typing an existing revision into the Project tab would violate
+     * the [ownerId, number, revisionNo] constraint — and because this runs on the
+     * debounced autosave, the person would lose every keystroke from then on with
+     * no idea why. Amend is what sets a revision; typing one can only ever be a
+     * label, so the stored value wins any argument.
+     */
+    const data = { state: JSON.stringify(toStore), ...summaryData(summary) };
+    if (data.revisionNo !== q.revisionNo &&
+        (await numberTaken(q.ownerId, q.number, q.id, data.revisionNo))) {
+      data.revisionNo = q.revisionNo;
+    }
+    await prisma.lvQtn.update({ where: { id: q.id }, data });
     res.json({ ok: true });
   } catch (e) {
     fail(res, e);
@@ -487,7 +525,7 @@ export async function rename(req: Request, res: Response) {
         error: `This quotation is ${QTN_STATUS_LABEL[s]} and cannot be renamed.`,
       });
     }
-    if (await numberTaken(ownerId, number, q.id)) {
+    if (await numberTaken(ownerId, number, q.id, revisionOf(q).rev)) {
       return res.json({ ok: false, error: "A quotation with this number already exists." });
     }
     await prisma.lvQtn.update({ where: { id: q.id }, data: { number: number.trim() } });
@@ -601,6 +639,137 @@ export async function duplicate(req: Request, res: Response) {
       });
     }
     res.status(201).json(record(q));
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+/** The state JSON with the Project tab's Revision No. set to `rev`. */
+function stateAtRevision(state: string, rev: number): string {
+  /*
+   * The offer documents print the Project tab's revision, and the client recomputes
+   * the revisionNo column from it on the next save. Copying the state untouched would
+   * therefore print the OLD revision on the new offer, and then quietly reset the
+   * column back to it.
+   */
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = JSON.parse(state) as Record<string, unknown>;
+  } catch {
+    return state; // Corrupt state is copied verbatim — losing it would be worse.
+  }
+  const project = parsed.project;
+  if (project === null || typeof project !== "object") return state;
+  (project as Record<string, unknown>).revisionNo = String(rev);
+  return JSON.stringify(parsed);
+}
+
+// POST /api/qtns/:id/amend
+/**
+ * Cancel this revision and open the next one.
+ *
+ * The source becomes CANCELLED and an exact copy is created as a DRAFT carrying the
+ * SAME number with the next revision — "QTN-24-00749" rev 8 becomes rev 9.
+ *
+ * This replaces a client-side sequence (duplicate → rename) that could not do the job:
+ * duplicate assigned a fresh number first, the rename back to the original number was
+ * rejected as a duplicate, and nothing marked the source cancelled — the list merely
+ * INFERRED it by spotting a higher revision among the rows it happened to have loaded.
+ * Doing it here in one transaction means a half-finished amend cannot leave a cancelled
+ * quotation with no replacement, or two live revisions of one job.
+ */
+export async function amend(req: Request, res: Response) {
+  try {
+    const q = await writableQtn(req);
+    if (!q) return res.status(404).json({ error: "Quotation not found." });
+
+    const access = await accessOf(req.userId);
+    const mine = q.ownerId === req.userId;
+    const may = access.perms.has("qtn.amendAll" as Perm) ||
+      (mine && access.perms.has("qtn.amendOwn" as Perm));
+    if (!may) {
+      return res.status(403).json({
+        error: mine
+          ? "You do not have permission to amend a quotation."
+          : "You can only amend your own quotations.",
+      });
+    }
+
+    const from = qtnStatus(q);
+    if (from === "CANCELLED") {
+      return res.status(409).json({
+        error: "This revision is already cancelled. Amend the live one instead.",
+        status: from,
+      });
+    }
+
+    const { base } = revisionOf(q);
+    // Every revision of this job. `startsWith` is only a prefilter — nextRevision
+    // compares the parsed base exactly, so a near-miss like QTN-24-0074 is discarded.
+    const siblings = await prisma.lvQtn.findMany({
+      where: { ownerId: q.ownerId, number: { startsWith: base } },
+      select: { number: true, revisionNo: true },
+    });
+    const rev = nextRevision(q, siblings);
+
+    const files = await prisma.lvAttachment.findMany({ where: { qtnId: q.id } });
+    const mates = await prisma.lvQtnCoOwner.findMany({
+      where: { qtnId: q.id }, select: { userId: true },
+    });
+
+    const created = await prisma.$transaction(async (tx) => {
+      await tx.lvQtn.update({
+        where: { id: q.id },
+        data: statusWrite("CANCELLED", q.submittedAt),
+      });
+      const next = await tx.lvQtn.create({
+        data: {
+          ownerId: q.ownerId,
+          number: base,
+          revisionNo: rev,
+          state: stateAtRevision(q.state, rev),
+          projectName: q.projectName,
+          customer: q.customer,
+          panelsCount: q.panelsCount,
+          totalEgp: q.totalEgp,
+          // The legacy single co-owner slot travels with it too; coOwnersOf() unions
+          // the two, so dropping it would silently remove someone's access.
+          coOwnerId: q.coOwnerId,
+          ...statusWrite("DRAFT", null),
+        },
+      });
+      // The amendment is the same job continuing, so the people sharing it keep it.
+      if (mates.length) {
+        await tx.lvQtnCoOwner.createMany({
+          data: mates.map((m) => ({ qtnId: next.id, userId: m.userId })),
+        });
+      }
+      if (files.length) {
+        await tx.lvAttachment.createMany({
+          data: files.map((f) => ({
+            qtnId: next.id, name: f.name, mime: f.mime, size: f.size, data: f.data,
+            byEmail: f.byEmail,
+          })),
+        });
+      }
+      return next;
+    });
+
+    const actorEmail = (await prisma.user.findUnique({
+      where: { id: req.userId as string }, select: { email: true },
+    }))?.email ?? "";
+    const label = formatQtnNumber(base, rev);
+    await logEvent({
+      qtn: q, action: "CANCEL", from, to: "CANCELLED",
+      note: `Superseded by ${label}.`, actorId: req.userId, actorEmail,
+    });
+    await logEvent({
+      qtn: { ...created, owner: q.owner }, action: "AMEND", from: null, to: "DRAFT",
+      note: `Revision ${rev} of ${formatQtnNumber(base, revisionOf(q).rev)}.`,
+      actorId: req.userId, actorEmail,
+    });
+
+    res.status(201).json(record(created));
   } catch (e) {
     fail(res, e);
   }

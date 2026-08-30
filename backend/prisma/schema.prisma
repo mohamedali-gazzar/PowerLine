@@ -283,8 +283,14 @@ model LvQtn {
 
   attachments LvAttachment[]
 
-  @@unique([ownerId, number])
+  /// A quotation is identified by its number AND its revision, not the number alone.
+  /// It used to be [ownerId, number], which made a revision impossible: amending
+  /// QTN-24-00749 could not produce a second QTN-24-00749, so Amend was forced to
+  /// invent a different number and a manual rename was rejected as a duplicate.
+  @@unique([ownerId, number, revisionNo])
   @@index([ownerId])
+  /// Amend looks up every revision of one job.
+  @@index([ownerId, number])
   @@index([status])
   @@index([status, updatedAt])
 }

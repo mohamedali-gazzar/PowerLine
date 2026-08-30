@@ -182,8 +182,15 @@ export default function LvQtnListPage() {
     return () => clearInterval(t);
   }, []);
 
-  // LV QTN numbers superseded by a higher revision — shown as "Cancelled". Numbers
-  // repeat across users, so revisions are matched within one owner's numbering only.
+  /*
+   * Cancelled quotations, for rows written BEFORE the status existed.
+   *
+   * The server now marks a superseded revision CANCELLED when it is amended, and that
+   * is the truth. This inference stays only for the older rows that were amended by
+   * the previous client-side flow and never got a status — it guesses by spotting a
+   * higher revision of the same number, which is only as good as the rows that happen
+   * to be loaded, so it can never be the primary answer.
+   */
   const cancelledIds = useMemo(() => {
     const byOwner = new Map<string, QtnListItem[]>();
     for (const x of qtns ?? []) {
@@ -210,7 +217,9 @@ export default function LvQtnListPage() {
         activeSeconds: x.activeSeconds ?? 0,
         statusKey: st, statusLabel: QTN_STATUS_LABEL[st], statusStyle: QTN_STATUS_STYLE[st],
         ownerEmail: x.ownerEmail, ownerName: x.ownerName, approverEmail: x.approverEmail,
-        removedAt: x.removedAt, removedBy: x.removedBy, cancelled: cancelledIds.has(x.id),
+        removedAt: x.removedAt, removedBy: x.removedBy,
+        // The real status first; the legacy guess only for rows that never got one.
+        cancelled: x.status === "CANCELLED" || cancelledIds.has(x.id),
         revisionNo: x.revisionNo, lv: x,
       };
     });
@@ -359,11 +368,12 @@ export default function LvQtnListPage() {
     e.stopPropagation();
     if (!(await confirm({
       title: `Amend ${number}`,
-      message: `This opens a new revision to work on, and cancels ${number}.`,
+      message: `${number} becomes Cancelled, and an exact copy opens as a Draft with the ` +
+        `same number and the next revision.`,
       confirmLabel: "Open a revision",
     }))) return;
     setActionErr("");
-    const rec = await amendQtn(id, number);
+    const rec = await amendQtn(id);
     if (rec) navigate(`/lv/qtn/${rec.id}`);
     else setActionErr(`Could not amend ${number}.`);
   };

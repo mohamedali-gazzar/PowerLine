@@ -1,6 +1,9 @@
 // The QTN approval state machine, and the single owner of the legacy
 // `submitted` / `submittedAt` mirror columns.
 //
+// Amending any of them cancels the source and opens the next revision as a DRAFT.
+// CANCELLED is terminal: a superseded revision is kept for the record, never reworked.
+//
 //   DRAFT ──request──▶ WAITING_APPROVAL ──approve──▶ APPROVED ──submit──▶ SUBMITTED
 //     ▲                    │        │                    │                    │
 //     │                    │        └──withdraw──────────┴────────────────────┘
@@ -15,6 +18,8 @@ export const QTN_STATUSES = [
   "RETURNED",
   "APPROVED",
   "SUBMITTED",
+  /** Superseded by a later revision. Terminal — kept for the record, never edited. */
+  "CANCELLED",
 ] as const;
 export type QtnStatus = (typeof QTN_STATUSES)[number];
 
@@ -24,6 +29,7 @@ export const QTN_STATUS_LABEL: Record<QtnStatus, string> = {
   RETURNED: "Returned for revision",
   APPROVED: "Approved — waiting for submission",
   SUBMITTED: "Submitted",
+  CANCELLED: "Cancelled",
 };
 
 /** Allowed moves. Anything not listed here is rejected with a 409. */
@@ -35,10 +41,13 @@ export const QTN_TRANSITIONS: Record<QtnStatus, QtnStatus[]> = {
   // approval (un-approve) while it hasn't been submitted yet.
   APPROVED: ["SUBMITTED", "DRAFT", "WAITING_APPROVAL"],
   SUBMITTED: ["DRAFT"], // reopen — requires qtn.reopen
+  // Terminal. A superseded revision is history; the work continues on the amendment
+  // that replaced it, so there is nothing to move it to.
+  CANCELLED: [],
 };
 
 /** Statuses in which the quotation's CONTENT is frozen. */
-export const QTN_LOCKED: QtnStatus[] = ["WAITING_APPROVAL", "APPROVED", "SUBMITTED"];
+export const QTN_LOCKED: QtnStatus[] = ["WAITING_APPROVAL", "APPROVED", "SUBMITTED", "CANCELLED"];
 
 /** The action name recorded in the audit trail for a given move. */
 export function qtnAction(from: QtnStatus, to: QtnStatus): string {
@@ -46,6 +55,7 @@ export function qtnAction(from: QtnStatus, to: QtnStatus): string {
   if (to === "APPROVED") return "APPROVE";
   if (to === "RETURNED") return "RETURN";
   if (to === "SUBMITTED") return "SUBMIT";
+  if (to === "CANCELLED") return "CANCEL";
   if (to === "DRAFT") return from === "SUBMITTED" ? "REOPEN" : "WITHDRAW";
   return "UPDATE";
 }
@@ -83,6 +93,9 @@ export function statusWrite(to: QtnStatus, prevSubmittedAt: Date | null) {
   return {
     status: to,
     statusAt: now,
+    // `submitted` tracks the CURRENT state, so a cancelled revision is no longer a
+    // live submission — but `submittedAt` below is left alone, so the dashboard's
+    // history of the week it was actually submitted in cannot be rewritten.
     submitted: to === "SUBMITTED",
     submittedAt: to === "SUBMITTED" ? prevSubmittedAt ?? now : prevSubmittedAt,
     ...(to === "WAITING_APPROVAL" ? { submittedForApprovalAt: now } : {}),

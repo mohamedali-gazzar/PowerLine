@@ -376,18 +376,20 @@ export function supersededNumbers(numbers: string[]): Set<string> {
   return out;
 }
 
-/** Amend a QTN: create the next revision (a copy renamed to "…-N+1") and return it.
- *  The source is thereby superseded — a higher revision now exists. */
-export async function amendQtn(id: string, sourceNumber: string): Promise<QtnRecord | null> {
-  const { base } = parseRevision(sourceNumber);
-  let maxRev = parseRevision(sourceNumber).rev;
+/**
+ * Amend a QTN: cancel this revision and open the next one, keeping the number.
+ *
+ * One server call. This used to duplicate, then read the whole quotation list to guess
+ * the next revision, then rename — three steps that could each fail on their own. It
+ * guessed from the number STRING, so a quotation whose revision lived in the revisionNo
+ * column looked like revision 0 and was offered "-1"; and the rename back to the
+ * original number was rejected as a duplicate, leaving the copy under a stranger's
+ * number. The server now does the whole thing in one transaction.
+ */
+export async function amendQtn(id: string): Promise<QtnRecord | null> {
   try {
-    const list = await listQtns();
-    for (const q of list) { const p = parseRevision(q.number); if (p.base === base) maxRev = Math.max(maxRev, p.rev); }
-  } catch { /* fall back to the source's own revision */ }
-  const target = `${base}-${maxRev + 1}`;
-  const copy = await duplicateQtn(id);
-  if (!copy) return null;
-  const res = await renameQtn(copy.id, target);
-  return res.ok ? { ...copy, number: target } : copy;
+    return toRecord(await api.qtns.amend(id));
+  } catch {
+    return null;
+  }
 }

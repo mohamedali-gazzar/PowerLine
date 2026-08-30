@@ -22,13 +22,14 @@ import {
 } from "./qtnStatus";
 
 describe("the set of statuses", () => {
-  it("is exactly these five, in this order", () => {
+  it("is exactly these six, in this order", () => {
     expect(QTN_STATUSES).toEqual([
       "DRAFT",
       "WAITING_APPROVAL",
       "RETURNED",
       "APPROVED",
       "SUBMITTED",
+      "CANCELLED",
     ]);
   });
 
@@ -71,8 +72,14 @@ describe("allowed moves", () => {
     for (const [from, to] of rejected) {
       expect(canMove(from, to), `${from} -> ${to} must be rejected`).toBe(false);
     }
-    // Sanity: the matrix is 5x5 with 10 legal moves, so 15 are illegal.
-    expect(rejected).toHaveLength(15);
+    // Sanity: the matrix is 6x6 with 10 legal moves, so 26 are illegal.
+    expect(rejected).toHaveLength(26);
+  });
+
+  it("makes CANCELLED terminal — a superseded revision is never reworked", () => {
+    // The work continues on the amendment that replaced it, so there is nowhere to go.
+    expect(QTN_TRANSITIONS.CANCELLED).toEqual([]);
+    for (const to of QTN_STATUSES) expect(canMove("CANCELLED", to)).toBe(false);
   });
 
   it("never allows a status to move to itself", () => {
@@ -90,8 +97,11 @@ describe("allowed moves", () => {
 });
 
 describe("which statuses freeze the quotation's content", () => {
-  it("locks waiting, approved and submitted; leaves draft and returned editable", () => {
-    expect(QTN_LOCKED).toEqual(["WAITING_APPROVAL", "APPROVED", "SUBMITTED"]);
+  it("locks waiting, approved, submitted and cancelled; leaves draft and returned editable", () => {
+    expect(QTN_LOCKED).toEqual(["WAITING_APPROVAL", "APPROVED", "SUBMITTED", "CANCELLED"]);
+    // A superseded revision is a record of what was quoted. Editing it would rewrite
+    // history that the live revision was derived from.
+    expect(isLocked("CANCELLED")).toBe(true);
     expect(isLocked("WAITING_APPROVAL")).toBe(true);
     expect(isLocked("APPROVED")).toBe(true);
     expect(isLocked("SUBMITTED")).toBe(true);

@@ -96,7 +96,7 @@ export interface QtnSummaryInput {
 /** The approval states a quotation moves through. Mirrors the server's
  *  domain/qtnStatus.ts — the server is the authority; this is for rendering. */
 export const QTN_STATUSES = [
-  "DRAFT", "WAITING_APPROVAL", "RETURNED", "APPROVED", "SUBMITTED",
+  "DRAFT", "WAITING_APPROVAL", "RETURNED", "APPROVED", "SUBMITTED", "CANCELLED",
 ] as const;
 export type QtnStatus = (typeof QTN_STATUSES)[number];
 
@@ -106,6 +106,7 @@ export const QTN_STATUS_LABEL: Record<QtnStatus, string> = {
   RETURNED: "Returned for revision",
   APPROVED: "Approved — waiting for submission",
   SUBMITTED: "Submitted",
+  CANCELLED: "Cancelled",
 };
 
 /** Badge colours, keyed by status. */
@@ -115,6 +116,8 @@ export const QTN_STATUS_STYLE: Record<QtnStatus, string> = {
   RETURNED: "bg-red-100 text-red-700",
   APPROVED: "bg-sky-100 text-sky-700",
   SUBMITTED: "bg-green-100 text-green-700",
+  // Muted on purpose: a cancelled revision is history, not something to act on.
+  CANCELLED: "bg-slate-200 text-slate-500 line-through",
 };
 
 /** Workflow fields the server attaches to every QTN payload. */
@@ -641,6 +644,10 @@ export const api = {
     restore: (id: string) => request<{ ok: true }>(`/qtns/${id}/restore`, { method: "POST" }),
     duplicate: (id: string) =>
       request<QtnRecordDto>(`/qtns/${id}/duplicate`, { method: "POST" }),
+    /** Cancel this revision and open the next one, same number. One server call —
+     *  it used to be duplicate-then-rename here, which could half-succeed. */
+    amend: (id: string) =>
+      request<QtnRecordDto>(`/qtns/${id}/amend`, { method: "POST" }),
     /** Every non-draft quotation, all users — the LV Offers History list.
      *  `includeRemoved` also returns hidden ones; the server ignores it without
      *  access.manage, so it can never widen what someone is allowed to see. */
