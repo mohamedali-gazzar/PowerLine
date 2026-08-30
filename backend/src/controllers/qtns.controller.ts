@@ -18,7 +18,9 @@ import {
   qtnStatus, statusWrite, isLocked, canMove, qtnAction,
   QTN_STATUSES, QTN_STATUS_LABEL, type QtnStatus,
 } from "../domain/qtnStatus";
-import { revisionOf, nextRevision, sequenceOf, baseOf, formatQtnNumber } from "../domain/qtnRevision";
+import {
+  revisionOf, nextRevision, revisionTaken, sequenceOf, baseOf, formatQtnNumber,
+} from "../domain/qtnRevision";
 import { notify, notifyAll, approverIds } from "../services/notify.service";
 import { originOf } from "../services/email.service";
 
@@ -703,14 +705,24 @@ export async function amend(req: Request, res: Response) {
       });
     }
 
-    const { base } = revisionOf(q);
-    // Every revision of this job. `startsWith` is only a prefilter — nextRevision
+    const { base, rev: currentRev } = revisionOf(q);
+    const rev = currentRev + 1;
+    // Every revision of this job. `startsWith` is only a prefilter — revisionTaken
     // compares the parsed base exactly, so a near-miss like QTN-24-0074 is discarded.
     const siblings = await prisma.lvQtn.findMany({
       where: { ownerId: q.ownerId, number: { startsWith: base } },
-      select: { number: true, revisionNo: true },
+      select: { id: true, number: true, revisionNo: true },
     });
-    const rev = nextRevision(q, siblings);
+    if (revisionTaken(base, rev, siblings)) {
+      // Refuse rather than skipping to the next free number. Amending a revision that
+      // has already been superseded is a mistake worth naming, and renumbering would
+      // hide it behind a sequence with a hole in it.
+      return res.status(409).json({
+        error: `${formatQtnNumber(base, rev)} already exists. This is revision ${currentRev}, ` +
+          `which has already been amended — open the latest revision and amend that one.`,
+        status: from,
+      });
+    }
 
     const files = await prisma.lvAttachment.findMany({ where: { qtnId: q.id } });
     const mates = await prisma.lvQtnCoOwner.findMany({
@@ -771,6 +783,13 @@ export async function amend(req: Request, res: Response) {
 
     res.status(201).json(record(created));
   } catch (e) {
+    // Two people amending the same revision at the same moment: one wins, the other
+    // hits the unique key. That is a conflict, not a server fault.
+    if (typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002") {
+      return res.status(409).json({
+        error: "Somebody else just created that revision. Reload and open the latest one.",
+      });
+    }
     fail(res, e);
   }
 }

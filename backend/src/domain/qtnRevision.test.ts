@@ -3,7 +3,9 @@
 // and renaming it back to the same base collided with the original.
 
 import { describe, it, expect } from "vitest";
-import { baseOf, revisionOf, formatQtnNumber, nextRevision, sequenceOf } from "./qtnRevision";
+import {
+  baseOf, revisionOf, formatQtnNumber, nextRevision, revisionTaken, sequenceOf,
+} from "./qtnRevision";
 
 describe("reading a revision", () => {
   it("reads it from the column — the shape that was being missed", () => {
@@ -48,29 +50,44 @@ describe("reading a revision", () => {
 describe("choosing the next revision", () => {
   const src = { number: "QTN-24-00749", revisionNo: 8 };
 
-  it("follows the CURRENT revision — the whole point of the fix", () => {
-    expect(nextRevision(src, [src])).toBe(9);
+  it("steps exactly one — 8 amends to 9", () => {
+    expect(nextRevision(src)).toBe(9);
   });
 
-  it("counts every sibling, so two amendments cannot collide", () => {
-    const siblings = [
-      { number: "QTN-24-00749", revisionNo: 8 },
-      { number: "QTN-24-00749", revisionNo: 9 }, // somebody already amended it
-      { number: "QTN-24-00749-3", revisionNo: 0 }, // and an old-style one exists too
-    ];
-    expect(nextRevision(src, siblings)).toBe(10);
-  });
-
-  it("ignores quotations for other jobs", () => {
-    expect(nextRevision(src, [{ number: "QTN-24-00750", revisionNo: 40 }])).toBe(9);
-  });
-
-  it("works from the source alone when the sibling list is empty", () => {
-    expect(nextRevision(src, [])).toBe(9);
+  it("NEVER skips, even when a later revision already exists", () => {
+    // This is the regression. It used to take one past the HIGHEST revision, so a
+    // stray "QTN-24-00749-9" made amending 8 produce 10 and left a hole in the
+    // sequence. The caller refuses the clash instead; renumbering is not its job.
+    expect(nextRevision(src)).toBe(9);
+    expect(nextRevision({ number: "QTN-24-00749-8", revisionNo: 0 })).toBe(9);
   });
 
   it("takes an original to revision 1", () => {
-    expect(nextRevision({ number: "QTN-26-0001", revisionNo: 0 }, [])).toBe(1);
+    expect(nextRevision({ number: "QTN-26-0001", revisionNo: 0 })).toBe(1);
+  });
+});
+
+describe("spotting a revision that is already taken", () => {
+  const rows = [
+    { number: "QTN-24-00749", revisionNo: 8 },
+    { number: "QTN-24-00749-9", revisionNo: 0 }, // written by the old amend flow
+    { number: "QTN-24-00750", revisionNo: 9 }, // a different job
+  ];
+
+  it("finds one stored in the column", () => {
+    expect(revisionTaken("QTN-24-00749", 8, rows)).toBeTruthy();
+  });
+
+  it("finds one stored in the number string", () => {
+    expect(revisionTaken("QTN-24-00749", 9, rows)).toBeTruthy();
+  });
+
+  it("says nothing is there when the revision is free", () => {
+    expect(revisionTaken("QTN-24-00749", 10, rows)).toBeUndefined();
+  });
+
+  it("does not confuse another job that happens to share a revision", () => {
+    expect(revisionTaken("QTN-24-00751", 9, rows)).toBeUndefined();
   });
 });
 

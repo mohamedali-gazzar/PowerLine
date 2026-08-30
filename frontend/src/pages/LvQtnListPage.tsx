@@ -373,9 +373,12 @@ export default function LvQtnListPage() {
       confirmLabel: "Open a revision",
     }))) return;
     setActionErr("");
-    const rec = await amendQtn(id);
-    if (rec) navigate(`/lv/qtn/${rec.id}`);
-    else setActionErr(`Could not amend ${number}.`);
+    try {
+      const rec = await amendQtn(id);
+      navigate(`/lv/qtn/${rec.id}`);
+    } catch (e2) {
+      setActionErr((e2 as Error).message || `Could not amend ${number}.`);
+    }
   };
 
   // ── RMU actions ───────────────────────────────────────────────────────────────

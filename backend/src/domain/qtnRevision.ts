@@ -56,23 +56,31 @@ export function formatQtnNumber(base: string, rev: number): string {
 }
 
 /**
- * The revision an amendment should take: one past the highest that exists.
+ * The revision an amendment takes: exactly one past the one being amended.
  *
- * Counted across every row sharing the base, not just the one being amended — two
- * amendments of the same quotation must not both land on the same revision. The
- * source's own revision is included so it still works when the list is incomplete.
+ * Strictly +1 — revision 8 amends to 9, never to 10.
+ *
+ * This used to be one past the HIGHEST revision that existed, which skipped: with an
+ * old "QTN-24-00749-9" row lying around from the previous amend flow, amending
+ * revision 8 produced 10 and the sequence gained a hole. Stepping over a revision is
+ * also the wrong answer to the situation — somebody amending 8 while 9 exists is
+ * working from a superseded copy and needs telling, not quietly renumbering. The
+ * caller checks revisionTaken() and refuses.
  */
-export function nextRevision(
-  source: { number: string; revisionNo?: number | null },
-  siblings: { number: string; revisionNo?: number | null }[],
-): number {
-  const { base, rev } = revisionOf(source);
-  let max = rev;
-  for (const s of siblings) {
-    const r = revisionOf(s);
-    if (r.base === base) max = Math.max(max, r.rev);
-  }
-  return max + 1;
+export function nextRevision(source: { number: string; revisionNo?: number | null }): number {
+  return revisionOf(source).rev + 1;
+}
+
+/** The row already holding this revision of this base, if any. */
+export function revisionTaken<T extends { number: string; revisionNo?: number | null }>(
+  base: string,
+  rev: number,
+  rows: T[],
+): T | undefined {
+  return rows.find((r) => {
+    const got = revisionOf(r);
+    return got.base === base && got.rev === rev;
+  });
 }
 
 /**

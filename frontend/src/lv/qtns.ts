@@ -386,10 +386,10 @@ export function supersededNumbers(numbers: string[]): Set<string> {
  * original number was rejected as a duplicate, leaving the copy under a stranger's
  * number. The server now does the whole thing in one transaction.
  */
-export async function amendQtn(id: string): Promise<QtnRecord | null> {
-  try {
-    return toRecord(await api.qtns.amend(id));
-  } catch {
-    return null;
-  }
+export async function amendQtn(id: string): Promise<QtnRecord> {
+  // Deliberately NOT caught. The server refuses an amend for reasons a person can act
+  // on — the revision already exists, the quotation is already cancelled, you lack the
+  // permission — and swallowing them into a null turned every one of those into the
+  // same useless "Could not amend".
+  return toRecord(await api.qtns.amend(id));
 }
