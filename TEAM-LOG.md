@@ -21,6 +21,60 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-08-30 · Mohamed's side · Claude
+
+**The product coding guide is now a screen in the app — "Coding guide" in the sidebar.**
+
+Mohamed had a separate web page the engineers wrote ("Powerline – Product Coding Systems",
+revision R1 by Yasser El-Sayed) explaining how our product codes are put together. It was a
+loose file on his computer that nobody else could reach. It is now part of the app, in our
+own colours and layout, and it works in dark mode like every other screen.
+
+### What you can do with it
+
+Open **Coding guide** in the sidebar. There are four tabs:
+
+- **Ring main units** (PSEC, PRAL) — tick the options and the code writes itself. It also
+  tells you whether that exact code is one of the **864 the engineers have signed off**, and
+  lets you search that approved list.
+- **Transformers** (PDTR, POTR)
+- **MV switchgear** (PLGear)
+- **Read a code** — paste any code you already have and it explains it part by part.
+
+### Three things worth knowing
+
+**1. It cannot drift away from the app.** The old page carried its own copy of the rules, so
+if the app ever changed, the guide would quietly start teaching the wrong thing. Now the
+rules sit in one tested file, and there is an automatic check that rebuilds **all 864
+approved codes** and fails if a single one stops working. Nobody has to remember to check.
+
+**2. It tells you when a code cannot be trusted.** The old page had warnings buried in
+paragraphs. Now they appear next to the code itself:
+
+- **63 kVA cannot be written exactly.** The rating field is kVA divided by ten, so 63
+  becomes `006`, which reads back as **60 kVA**. Anyone reading that code alone gets the
+  wrong number — the real rating has to come from the paperwork. The screen says so.
+- **Reserved and unknown values are flagged** instead of being shown as if they were fine.
+
+**3. ⚠️ HEADS-UP — a real gap between the guide and the app.** The app can put **CHINT**
+(supplier code `CH`) on a PRAL ring main unit, and it does — that is a genuine product code.
+But the engineers' guide has no CHINT row, so if you paste one of those codes into the guide
+it will say "unknown supplier". The code is not wrong; the guide is incomplete.
+
+❓ QUESTION FOR MOHAMED: please ask the engineers for the CHINT wording (the equivalent of
+"ABB, Air LBS, NAL") so the guide can explain those codes too. Adding it is one line — but
+the wording has to be theirs, not invented by us.
+
+Two smaller gaps in their data are shown honestly rather than hidden: specification `30` has
+no description yet (shown as "Reserved — not in use yet"), and the JGGY and GRL SF6 model
+numbers were left as `###` in their document (shown as "model not stated yet").
+
+### Nothing else was touched
+
+Only three files changed outside the new folder: the sidebar button, the route, and the new
+page. No existing screen, price, or quotation was affected. The guide is downloaded only
+when someone opens it, so it does not slow the app down for everyone else.
+
 ## 2026-08-25 · Mohamed's side · Claude
 
 **✅ New "Sizing Review" tab — a calculation pad for checking a panel's sizing.**

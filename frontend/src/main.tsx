@@ -21,6 +21,9 @@ const PcssSelectorPage = React.lazy(() => import("./pages/PcssSelectorPage"));
 const AccessCenterPage = React.lazy(() => import("./pages/AccessCenterPage"));
 // Announcements manager — owner only, opened rarely.
 const AnnouncementsAdminPage = React.lazy(() => import("./pages/AnnouncementsAdminPage"));
+// Coding guide — reference material carrying the whole approved code range, read now and
+// then rather than every day, so it stays out of the first load.
+const CodingGuidePage = React.lazy(() => import("./pages/CodingGuidePage"));
 // Brand fonts — self-hosted via @fontsource so local dev stays offline-capable.
 import "@fontsource/poppins/300.css";
 import "@fontsource/poppins/400.css";
@@ -91,6 +94,14 @@ function Gate() {
           element={
             <React.Suspense fallback={<div className="skeleton h-64" />}>
               <AnnouncementsAdminPage />
+            </React.Suspense>
+          }
+        />
+        <Route
+          path="coding"
+          element={
+            <React.Suspense fallback={<div className="skeleton h-64" />}>
+              <CodingGuidePage />
             </React.Suspense>
           }
         />

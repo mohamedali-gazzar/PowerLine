@@ -54,6 +54,16 @@ const megaphoneIcon = (
     <path d="M8 15v3a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-2" />
   </svg>
 );
+// A barcode — the product coding guide.
+const codingIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 5v14" />
+    <path d="M7 5v14" />
+    <path d="M11 5v14" />
+    <path d="M16 5v14" />
+    <path d="M21 5v14" />
+  </svg>
+);
 // A document with a pencil — the draft the user is currently working on.
 const draftIcon = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -183,6 +193,10 @@ export default function App() {
             <NavLink to="/pricing" title="Price list" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>
               <span className="shrink-0">{priceIcon}</span>
               <span className={lbl}>Price list</span>
+            </NavLink>
+            <NavLink to="/coding" title="Coding guide" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>
+              <span className="shrink-0">{codingIcon}</span>
+              <span className={lbl}>Coding guide</span>
             </NavLink>
             {can("announcements.manage") && (
               <NavLink to="/announcements" title="Announcements" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>
