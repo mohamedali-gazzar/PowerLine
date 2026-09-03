@@ -23,7 +23,7 @@ import {
   decodeGear,
   decodeAny,
 } from "./codes";
-import { RMU_RANGES, RMU_CLASSES, RMU_SPECS, RMU_EXAMPLES, TR_KVA } from "./data";
+import { RMU_RANGES, RMU_CLASSES, RMU_SPECS, RMU_EXAMPLES, TR_KVA, GEAR_COUPLER_PANELS } from "./data";
 
 describe("RMU codes", () => {
   it("builds the documented shape", () => {
@@ -239,7 +239,26 @@ describe("switchgear codes", () => {
     expect(d.summary).toContain("12 kV");
     expect(d.summary).toContain("1 incoming");
     expect(d.summary).toContain("4 outgoing");
-    expect(d.summary).toContain("7 panels"); // 1 + 4 + 1 coupler + 1 service panel
+    // 1 incoming + 4 outgoing + (1 coupler = 2 panels) + 1 service panel.
+    expect(d.summary).toContain("8 panels");
+  });
+
+  it("counts a bus coupler as TWO panels, because it brings its bus riser", () => {
+    // This was wrong: the count added one panel per coupler, so every lineup with a
+    // coupler was understated by one. The code counts couplers; the panels they take up
+    // is a fact about the product that the code does not carry.
+    expect(GEAR_COUPLER_PANELS).toBe(2);
+    // Same lineup, coupler removed: two panels fewer.
+    expect(decodeGear("PLG2I1O04C0S11").summary).toContain("6 panels");
+    // Two couplers add four panels, not two.
+    expect(decodeGear("PLG2I1O04C2S11").summary).toContain("10 panels");
+    // …and the reader says so, as a note rather than a fault.
+    const seg = decodeGear("PLG2I1O04C1S11").segments.find((s) => s.field === "Bus couplers");
+    expect(seg?.note).toMatch(/bus riser/i);
+    expect(seg?.problem).toBeUndefined();
+    // No coupler, nothing to explain.
+    expect(decodeGear("PLG2I1O04C0S11").segments.find((s) => s.field === "Bus couplers")?.note)
+      .toBeUndefined();
   });
 
   it("does not count a service panel that is not fitted", () => {

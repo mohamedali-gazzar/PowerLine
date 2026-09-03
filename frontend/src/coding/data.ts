@@ -3669,6 +3669,14 @@ export const GEAR_COUPLERS: [code: string, label: string][] = [
   ["1", "one bus coupler"],
   ["2", "two bus couplers"],
 ];
+/**
+ * How many physical panels one bus coupler occupies in the lineup.
+ *
+ * TWO: the bus coupler panel itself plus its bus riser. The code counts couplers, not
+ * panels, so anything working out a panel count has to multiply — the guide used to add
+ * one per coupler and understated every lineup that had one.
+ */
+export const GEAR_COUPLER_PANELS = 2;
 export const GEAR_ADAPT: [code: string, label: string][] = [
   ["0", "no service panel"],
   ["1", "ABB LBS service panel"],

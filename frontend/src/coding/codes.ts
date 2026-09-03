@@ -22,6 +22,7 @@ import {
   TR_KVA,
   GEAR_ADAPT,
   GEAR_COUPLERS,
+  GEAR_COUPLER_PANELS,
   GEAR_VOLTS,
 } from "./data";
 
@@ -350,6 +351,15 @@ export function decodeGear(raw: string): Decoded {
       chars: `C${couplers}`,
       field: "Bus couplers",
       meaning: cRow ? cRow[1] : "not a listed option",
+      // Each coupler occupies two panels, which the code does not say on its own — the
+      // number here counts couplers, not the panels they take up.
+      note:
+        cRow && Number(couplers) > 0
+          ? `Each bus coupler is ${GEAR_COUPLER_PANELS} panels: the bus coupler and its bus riser` +
+            (Number(couplers) > 1
+              ? `, so ${couplers} couplers take ${Number(couplers) * GEAR_COUPLER_PANELS} panels.`
+              : ".")
+          : undefined,
       problem: cRow ? undefined : "0, 1 or 2 couplers.",
     },
     {
@@ -366,14 +376,20 @@ export function decodeGear(raw: string): Decoded {
     },
   ];
 
-  const panels = Number(incoming) + Number(outgoing) + Number(couplers) + (adapt === "0" ? 0 : 1);
+  // A bus coupler is TWO panels — the coupler and its bus riser — so the coupler digit
+  // cannot be added straight into a panel count. This used to add one per coupler and
+  // understated every lineup that had one.
+  const couplerPanels = Number(couplers) * GEAR_COUPLER_PANELS;
+  const panels = Number(incoming) + Number(outgoing) + couplerPanels + (adapt === "0" ? 0 : 1);
   return {
     ok: true,
     code,
     segments,
     summary:
       `MV switchgear at ${voltRow ? voltRow[1] : volt} kV: ${Number(incoming)} incoming, ` +
-      `${Number(outgoing)} outgoing, ${cRow ? cRow[1] : couplers}, ${aRow ? aRow[1] : adapt} — ` +
+      `${Number(outgoing)} outgoing, ${cRow ? cRow[1] : couplers}` +
+      (couplerPanels > 0 ? ` (${couplerPanels} panels with the bus riser)` : "") +
+      `, ${aRow ? aRow[1] : adapt} — ` +
       `${panels} panel${panels === 1 ? "" : "s"} in total.`,
   };
 }
