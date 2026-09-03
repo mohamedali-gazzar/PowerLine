@@ -3231,6 +3231,23 @@ function CustomItemsEditor({
     [next[i], next[j]] = [next[j], next[i]];
     write(next);
   };
+  // Drag-to-reorder, using the same grip handle and drop cue as the component rows on
+  // the Panels tab, so reordering an offer works the way reordering already does here.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const dropRow = (targetId: string) => {
+    const dId = dragId;
+    setDragId(null);
+    setOverId(null);
+    if (!dId || dId === targetId) return;
+    const arr = [...items];
+    const from = arr.findIndex((r) => r.id === dId);
+    const to = arr.findIndex((r) => r.id === targetId);
+    if (from < 0 || to < 0) return;
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    write(arr);
+  };
 
   if (readOnly) {
     return (
@@ -3242,7 +3259,7 @@ function CustomItemsEditor({
 
   return (
     <div className="card mb-4 p-4 no-print">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <h2 className="sec-head mb-0 pb-0">Offer lines</h2>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5 text-xs font-semibold text-muted">
@@ -3267,11 +3284,16 @@ function CustomItemsEditor({
         </div>
       </div>
 
+      <p className="mb-3 text-xs text-muted">
+        Drag a line by its handle to move it, or use the arrows. The order here is the order
+        the customer sees.
+      </p>
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-muted">
-              <th className="w-8 pb-2" />
+              <th className="w-16 pb-2">Order</th>
               <th className="pb-2 pr-2">Description</th>
               <th className="w-20 pb-2 pr-2 text-center">Qty</th>
               <th className="w-32 pb-2 pr-2 text-right">Unit price ({cur})</th>
@@ -3281,8 +3303,44 @@ function CustomItemsEditor({
           </thead>
           <tbody>
             {items.map((r, i) => (
-              <tr key={r.id} className="border-b border-line/60 align-top">
-                <td className="py-2 pr-1 text-xs font-bold text-muted">{i + 1}</td>
+              <tr
+                key={r.id}
+                onDragOver={(e) => { if (dragId && dragId !== r.id) { e.preventDefault(); if (overId !== r.id) setOverId(r.id); } }}
+                onDragLeave={() => { if (overId === r.id) setOverId(null); }}
+                onDrop={(e) => { e.preventDefault(); dropRow(r.id); }}
+                className={`border-b border-line/60 align-top ${dragId === r.id ? "opacity-40" : ""} ${
+                  overId === r.id ? "border-t-2 border-t-brand" : ""
+                }`}
+              >
+                <td className="py-2 pr-1">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      draggable
+                      onDragStart={(e) => { setDragId(r.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", r.id); } catch { /* older browsers */ } }}
+                      onDragEnd={() => { setDragId(null); setOverId(null); }}
+                      title="Drag to move this line"
+                      className="inline-flex cursor-grab select-none p-0.5 text-muted/70 transition-colors hover:text-brand active:cursor-grabbing"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
+                        <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
+                        <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
+                      </svg>
+                    </span>
+                    <span className="text-xs font-bold text-muted">{i + 1}</span>
+                  </div>
+                  {/* Keyboard- and touch-friendly alternative to dragging. Sized as a real
+                      click target rather than a decoration — the first version of these was
+                      15px and nobody found it. */}
+                  <div className="mt-1.5 flex items-center gap-1">
+                    <button type="button" aria-label={`Move line ${i + 1} up`} title="Move up"
+                      className="flex h-6 w-6 items-center justify-center rounded border border-line text-xs text-muted transition-colors hover:border-brand/60 hover:text-brand disabled:opacity-25 disabled:hover:border-line disabled:hover:text-muted"
+                      disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+                    <button type="button" aria-label={`Move line ${i + 1} down`} title="Move down"
+                      className="flex h-6 w-6 items-center justify-center rounded border border-line text-xs text-muted transition-colors hover:border-brand/60 hover:text-brand disabled:opacity-25 disabled:hover:border-line disabled:hover:text-muted"
+                      disabled={i === items.length - 1} onClick={() => move(i, 1)}>↓</button>
+                  </div>
+                </td>
                 <td className="py-2 pr-2">
                   <textarea
                     className="input min-h-[38px] py-1.5 text-sm"
@@ -3313,12 +3371,9 @@ function CustomItemsEditor({
                   {fmtEgp((r.qty * r.unitPrice) / (rate || 1))}
                 </td>
                 <td className="py-2 pt-3">
-                  <div className="flex items-center justify-end gap-1">
-                    <button type="button" className="btn-ghost px-2 py-1 text-xs disabled:opacity-30"
-                      disabled={i === 0} onClick={() => move(i, -1)} title="Move up">↑</button>
-                    <button type="button" className="btn-ghost px-2 py-1 text-xs disabled:opacity-30"
-                      disabled={i === items.length - 1} onClick={() => move(i, 1)} title="Move down">↓</button>
+                  <div className="flex items-center justify-end">
                     <button type="button" className="btn-ghost px-2 py-1 text-xs text-red-600"
+                      aria-label={`Remove line ${i + 1}`}
                       onClick={() => remove(r.id)} title="Remove this line">✕</button>
                   </div>
                 </td>
