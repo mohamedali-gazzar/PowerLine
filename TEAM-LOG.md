@@ -21,6 +21,56 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-03 · Mohamed's side · Claude
+
+**New quotation type: "Custom Commercial Offer" — you write the offer lines yourself.**
+
+On the Home dashboard, **+ New QTN** now has a fifth card: **Custom Commercial Offer**.
+It asks for a quotation number exactly like the others, then opens a workspace with
+**only two tabs — Project and Commercial Offer**.
+
+### Why only two tabs
+
+This type configures nothing. There are no panels, so Panels, Pricing Settings,
+Technical Offer, Material List, Selectivity, Sizing Review and Summary would all be
+empty screens. They are hidden rather than shown blank.
+
+### What you do on the Commercial tab
+
+Type your own lines: a description, a quantity and a unit price. Add lines, delete
+them, move them up and down. The total, the VAT and the grand total are worked out for
+you, and the USD/EGP switch works the same as everywhere else.
+
+Because there is no Pricing Settings tab on this type, the **VAT %** and the **EGP per
+USD** rate are edited on the Commercial tab itself — otherwise the total on its only
+screen could not be made correct.
+
+### The customer's document does not change
+
+Deliberately identical to every other quotation: the same branded cover page, the same
+price table layout, and the same **General Terms & Conditions** in English and Arabic,
+still editable and still resettable. Only where the rows come from is different.
+
+### For whoever picks this up next
+
+- The type is a new `kind` on `LvState`, called `"custom"`, alongside `panels`, `edms`
+  and `spare`. If you add another kind, **you must list it in the normaliser in
+  `qtns.ts`** — a kind missing from that list is silently turned back into `"panels"`
+  the next time the quotation loads, and every check against it stops matching. The
+  code says so; I hit nothing because of it, but it is the trap in that file.
+- Prices are stored in **EGP**, like every other price in the state, and converted for
+  display. That is what makes the currency switch convert the offer rather than re-read
+  the same numbers as a different currency.
+- The lines are summed inside `grandTotals()`, so the history list, the dashboard
+  figures and the saved summary all pick the total up without knowing this type exists.
+  Nothing on those pages was changed.
+
+Checked end to end on a real quotation: created it, typed two lines, confirmed
+$32,148 appeared in Offer History, switched currency, reloaded the page and confirmed
+both the two-tab layout and the typed lines survived. No console errors. 71 tests pass,
+typecheck clean, build green.
+
+
 ## 2026-08-30 · Mohamed's side · Claude
 
 **The product coding guide is now a screen in the app — "Coding guide" in the sidebar.**
