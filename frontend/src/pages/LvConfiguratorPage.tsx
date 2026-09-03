@@ -24,10 +24,10 @@ import {
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog,
+  initialState, calcPanel, grandTotals, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
-  type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow,
+  type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow, type CustomOfferItem,
 } from "../lv/store";
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
@@ -967,9 +967,16 @@ export default function LvConfiguratorPage() {
   // Standard EDMS quotations quote panels only — no Spare Parts / LCP / KWHM cells,
   // so the "Auxiliary Panels" menu is not offered on them.
   const isEdmsQtn = s.kind === "edms";
+  const isCustomQtn = s.kind === "custom";
   // The tabs this QTN kind actually has. A spare-parts QTN swaps Panels for Spare
   // Parts and has no Specs/Selectivity; Standard EDMS carries no coordination study.
-  const tabs: [Tab, string][] = isSpareQtn
+  // A Custom Commercial Offer configures nothing, so it has no Panels, no Pricing
+  // Settings and no Technical Offer — the two tabs it does have are the only ones with
+  // anything on them. Its VAT and exchange rate are edited on the Commercial tab itself,
+  // since Pricing Settings (where they normally live) is not shown.
+  const tabs: [Tab, string][] = isCustomQtn
+    ? [["project", "Project"], ["commercial", "Commercial Offer"]]
+    : isSpareQtn
     ? [["project", "Project"], ["pricing", "Pricing Settings"], ["spare", "Spare Parts"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"], ["summary", "Summary"]]
     : [["project", "Project"], ["pricing", "Pricing Settings"], ["specs", "Specs"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"],
        ...(isEdmsQtn ? [] : [["selectivity", "Selectivity"] as [Tab, string]]),
@@ -1398,7 +1405,7 @@ export default function LvConfiguratorPage() {
           </div>
           <h1 className="flex items-center gap-3 text-2xl font-extrabold tracking-tight">
             <span className="code-chip">{offerLabel}</span>
-            {s.project.name || "LV Quotation"}
+            {s.project.name || (isCustomQtn ? "Custom Commercial Offer" : "LV Quotation")}
           </h1>
           <p className="text-sm text-muted">
             {fmtEgp(totals.sell)} EGP excl. VAT
@@ -1762,7 +1769,7 @@ export default function LvConfiguratorPage() {
             addLabel="+ Add cell" emptyLabel="No spare cells yet." emptyAddLabel="+ Add your first cell" />
         )}
         {activeTab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} />)}
-        {activeTab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} />)}
+        {activeTab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} readOnly={readOnly} />)}
         {activeTab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
         {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} />}
         {activeTab === "sizing" && <SizingReviewTab key={rec?.id ?? "none"} s={s} qtnId={rec?.id ?? ""} />}
@@ -3188,18 +3195,169 @@ function TermsEditor({ value, onSave, rtl }: { value: TermsSection[]; onSave: (v
   );
 }
 
-function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void }) {
+/**
+ * The offer lines of a Custom Commercial Offer, typed by hand.
+ *
+ * Screen only (`no-print`) — the A4 sheet below renders the same rows read-only, so the
+ * customer's document is the one the app already prints for every other quotation.
+ *
+ * Prices are held in EGP and shown in the selected currency, matching how panel prices
+ * behave, so switching USD/EGP converts the offer rather than silently re-reading the
+ * same figures as a different currency.
+ *
+ * VAT and the exchange rate are edited here because a custom quotation has no Pricing
+ * Settings tab — without them the total on this one screen could not be made correct.
+ */
+function CustomItemsEditor({
+  s, up, cur, rate, readOnly,
+}: {
+  s: LvState;
+  up: (patch: Partial<LvState>) => void;
+  cur: "USD" | "EGP";
+  rate: number;
+  readOnly?: boolean;
+}) {
+  const items = s.customItems ?? [];
+  const write = (next: CustomOfferItem[]) => up({ customItems: next });
+  const patch = (id: string, p: Partial<CustomOfferItem>) =>
+    write(items.map((r) => (r.id === id ? { ...r, ...p } : r)));
+  const add = () =>
+    write([...items, { id: `ci-${Date.now()}-${items.length}`, description: "", qty: 1, unitPrice: 0 }]);
+  const remove = (id: string) => write(items.filter((r) => r.id !== id));
+  const move = (i: number, by: number) => {
+    const j = i + by;
+    if (j < 0 || j >= items.length) return;
+    const next = [...items];
+    [next[i], next[j]] = [next[j], next[i]];
+    write(next);
+  };
+
+  if (readOnly) {
+    return (
+      <div className="card mb-3 p-3 text-xs text-muted no-print">
+        This quotation is locked, so the offer lines can no longer be edited.
+      </div>
+    );
+  }
+
+  return (
+    <div className="card mb-4 p-4 no-print">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="sec-head mb-0 pb-0">Offer lines</h2>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-muted">
+            VAT %
+            <input
+              className="input w-20 py-1 text-sm"
+              type="number" min={0} step={1}
+              value={Math.round((s.factors.vat ?? 0) * 100)}
+              onChange={(e) =>
+                up({ factors: { ...s.factors, vat: (Number(e.target.value) || 0) / 100 } })}
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-muted">
+            EGP per USD
+            <input
+              className="input w-24 py-1 text-sm"
+              type="number" min={0} step="0.01"
+              value={s.factors.usd ?? 0}
+              onChange={(e) => up({ factors: { ...s.factors, usd: Number(e.target.value) || 0 } })}
+            />
+          </label>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-muted">
+              <th className="w-8 pb-2" />
+              <th className="pb-2 pr-2">Description</th>
+              <th className="w-20 pb-2 pr-2 text-center">Qty</th>
+              <th className="w-32 pb-2 pr-2 text-right">Unit price ({cur})</th>
+              <th className="w-32 pb-2 pr-2 text-right">Total ({cur})</th>
+              <th className="w-24 pb-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((r, i) => (
+              <tr key={r.id} className="border-b border-line/60 align-top">
+                <td className="py-2 pr-1 text-xs font-bold text-muted">{i + 1}</td>
+                <td className="py-2 pr-2">
+                  <textarea
+                    className="input min-h-[38px] py-1.5 text-sm"
+                    rows={2}
+                    placeholder="What are you quoting for this line?"
+                    value={r.description}
+                    onChange={(e) => patch(r.id, { description: e.target.value })}
+                  />
+                </td>
+                <td className="py-2 pr-2">
+                  <input
+                    className="input py-1.5 text-center text-sm"
+                    type="number" min={0} step={1}
+                    value={r.qty}
+                    onChange={(e) => patch(r.id, { qty: Number(e.target.value) || 0 })}
+                  />
+                </td>
+                <td className="py-2 pr-2">
+                  <input
+                    className="input py-1.5 text-right text-sm"
+                    type="number" min={0} step="0.01"
+                    // Typed in the displayed currency, stored in EGP.
+                    value={rate ? Number((r.unitPrice / rate).toFixed(2)) : 0}
+                    onChange={(e) => patch(r.id, { unitPrice: (Number(e.target.value) || 0) * rate })}
+                  />
+                </td>
+                <td className="py-2 pr-2 pt-4 text-right text-sm font-semibold text-ink">
+                  {fmtEgp((r.qty * r.unitPrice) / (rate || 1))}
+                </td>
+                <td className="py-2 pt-3">
+                  <div className="flex items-center justify-end gap-1">
+                    <button type="button" className="btn-ghost px-2 py-1 text-xs disabled:opacity-30"
+                      disabled={i === 0} onClick={() => move(i, -1)} title="Move up">↑</button>
+                    <button type="button" className="btn-ghost px-2 py-1 text-xs disabled:opacity-30"
+                      disabled={i === items.length - 1} onClick={() => move(i, 1)} title="Move down">↓</button>
+                    <button type="button" className="btn-ghost px-2 py-1 text-xs text-red-600"
+                      onClick={() => remove(r.id)} title="Remove this line">✕</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={6} className="py-6 text-center text-sm text-muted">
+                  No lines yet — add the first one below.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <button type="button" className="btn btn-ghost mt-3 text-sm" onClick={add}>+ Add line</button>
+    </div>
+  );
+}
+
+function CommercialTab({ s, qtnNo, up, readOnly }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void; readOnly?: boolean }) {
   const { confirm, dialogs } = useDialogs();
   // RPT-1: selling currency — default USD; EGP-based prices convert via the Pricing rate.
   // Stored on the quotation, not in this tab, so the ERP export quotes in the same
   // currency the customer was quoted in.
   const cur = s.offerCurrency ?? "USD";
   const setCur = (c: "USD" | "EGP") => up({ offerCurrency: c });
-  if (!s.panels.length) {
+  // A custom offer has no panels by design — its lines are typed on this tab, so the
+  // "add panels first" guard would lock the only screen it has.
+  const custom = s.kind === "custom";
+  if (!custom && !s.panels.length) {
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Commercial Offer is generated from them.</div>;
   }
+  const items = s.customItems ?? [];
   const calcs: [LvPanel, PanelCalc][] = s.panels.map((p) => [p, calcPanel(p, s.factors, s.abbItemDiscounts)]);
-  const subtotal = calcs.reduce((t, [, c]) => t + c.totalSell, 0);
+  const subtotal = custom
+    ? customItemsTotal(s)
+    : calcs.reduce((t, [, c]) => t + c.totalSell, 0);
   const vat = subtotal * s.factors.vat;
   const rate = cur === "USD" ? (s.factors.usd || 1) : 1; // EGP per unit of display currency
   const m = (egp: number) => fmtEgp(egp / rate);
@@ -3214,7 +3372,9 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
   return (
     <div className="animate-fade-up">
       {dialogs}
-      <PrintBar label="Prices follow the Pricing Settings tab (rates, ABB discount, factor) live."
+      <PrintBar label={custom
+        ? "You write these lines yourself — nothing is priced from a panel."
+        : "Prices follow the Pricing Settings tab (rates, ABB discount, factor) live."}
         docTitle={offerTitle("CO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} exportFn={exportPdf} />
       <div className="mb-3 flex items-center gap-2 no-print">
         <span className="text-xs font-semibold text-muted">Currency</span>
@@ -3225,6 +3385,7 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
           ))}
         </div>
       </div>
+      {custom && <CustomItemsEditor s={s} up={up} cur={cur} rate={rate} readOnly={readOnly} />}
       <div className="offer-workspace">
       <div data-co-root className="print-area space-y-6">
         {/* Cover page — same branded cover as the Technical Offer */}
@@ -3242,15 +3403,26 @@ function CommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch
             </tr>
           </thead>
           <tbody>
-            {calcs.map(([p, c], i) => (
-              <tr key={p.id} className="border-b border-line/60 align-top">
-                <td className="py-1.5 pr-2 font-bold text-muted">{i + 1}</td>
-                <td className="py-1.5 pr-2"><b>{p.name}</b></td>
-                <td className="py-1.5 pr-2 text-center font-semibold">{p.qty}</td>
-                <td className="py-1.5 pr-2 text-right">{m(c.sellUnit)}</td>
-                <td className="py-1.5 text-right font-semibold">{m(c.totalSell)}</td>
-              </tr>
-            ))}
+            {custom
+              ? items.map((r, i) => (
+                  <tr key={r.id} className="border-b border-line/60 align-top">
+                    <td className="py-1.5 pr-2 font-bold text-muted">{i + 1}</td>
+                    {/* whitespace-pre-line so a multi-line description prints as typed */}
+                    <td className="py-1.5 pr-2 whitespace-pre-line"><b>{r.description}</b></td>
+                    <td className="py-1.5 pr-2 text-center font-semibold">{r.qty}</td>
+                    <td className="py-1.5 pr-2 text-right">{m(r.unitPrice)}</td>
+                    <td className="py-1.5 text-right font-semibold">{m(r.qty * r.unitPrice)}</td>
+                  </tr>
+                ))
+              : calcs.map(([p, c], i) => (
+                  <tr key={p.id} className="border-b border-line/60 align-top">
+                    <td className="py-1.5 pr-2 font-bold text-muted">{i + 1}</td>
+                    <td className="py-1.5 pr-2"><b>{p.name}</b></td>
+                    <td className="py-1.5 pr-2 text-center font-semibold">{p.qty}</td>
+                    <td className="py-1.5 pr-2 text-right">{m(c.sellUnit)}</td>
+                    <td className="py-1.5 text-right font-semibold">{m(c.totalSell)}</td>
+                  </tr>
+                ))}
           </tbody>
         </table>
         <div data-pdf-totals className="ml-auto mt-6 w-72 space-y-1 text-sm">

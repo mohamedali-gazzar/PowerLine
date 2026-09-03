@@ -112,7 +112,24 @@ function normalize(state: LvState): LvState {
   // the explicit kinds and must survive the round-trip — anything else normalises
   // to "panels". Adding a kind means listing it here, or it is silently downgraded
   // on the next load and every check against it stops matching.
-  if (state.kind !== "spare" && state.kind !== "edms") state.kind = "panels";
+  if (state.kind !== "spare" && state.kind !== "edms" && state.kind !== "custom") state.kind = "panels";
+  // Custom Commercial Offer lines. Defaulted for every kind so the array is never
+  // undefined downstream; only a "custom" quotation ever puts anything in it.
+  {
+    // The server stores whatever it was handed, so nothing here can be trusted to have
+    // the declared shape — same reason sizingReview above re-reads its own rows.
+    const raw = state.customItems as unknown;
+    state.customItems = (Array.isArray(raw) ? raw : [])
+      .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+      .map((r, i) => ({
+        id: String(r.id || `ci-${i}`),
+        description: String(r.description ?? ""),
+        // Coerced on load: a half-saved state could hold a string or null here, and one
+        // NaN in the total stops every autosave silently (see summaryOf).
+        qty: Number(r.qty) || 0,
+        unitPrice: Number(r.unitPrice) || 0,
+      }));
+  }
   // Technical-Offer divider pages: default to none, and drop any whose panel is gone.
   state.offerSeparators = (Array.isArray(state.offerSeparators) ? state.offerSeparators : [])
     .filter((sep) => Array.isArray(state.panels) && state.panels.some((p) => p.id === sep.beforePanelId));
@@ -292,10 +309,15 @@ export async function getQtn(id: string): Promise<QtnRecord | null> {
 
 export async function createQtn(
   number: string,
-  kind: "panels" | "edms" | "spare" = "panels"
+  kind: "panels" | "edms" | "spare" | "custom" = "panels"
 ): Promise<QtnRecord> {
   const state = initialState();
   state.kind = kind;
+  if (kind === "custom") {
+    // A custom offer prices nothing itself — it opens with one empty line to type into,
+    // so the Commercial tab is never an empty screen with no obvious next move.
+    state.customItems = [{ id: `ci-${Date.now()}`, description: "", qty: 1, unitPrice: 0 }];
+  }
   if (kind === "edms") {
     // Standard EDMS quotes to a fixed house standard. Seeding the Specs tab (rather
     // than a panel) is what makes it stick: every panel added later is created

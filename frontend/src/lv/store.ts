@@ -166,6 +166,20 @@ export interface SizingReviewRow {
   label: string;
   expr: string;
 }
+/**
+ * One hand-written line on a Custom Commercial Offer.
+ *
+ * `unitPrice` is EGP, like every other price held in the state. The Commercial tab
+ * converts for display, so the USD/EGP toggle behaves exactly as it does on a panel
+ * quotation instead of silently re-reading the same number as a different currency.
+ */
+export interface CustomOfferItem {
+  id: string;
+  description: string;
+  qty: number;
+  unitPrice: number;
+}
+
 export interface LvState {
   project: LvProject;
   factors: Factors;
@@ -195,7 +209,10 @@ export interface LvState {
   // quotation (same workspace as "panels" — the kind only records which option
   // it was started from), or a spare-parts quotation whose single "Spare parts"
   // cell drives all offers.
-  kind?: "panels" | "edms" | "spare";
+  kind?: "panels" | "edms" | "spare" | "custom";
+  /** Commercial Offer lines typed by hand. Only a "custom" quotation uses these — it
+   *  has no panels, so the offer table is written rather than generated from them. */
+  customItems?: CustomOfferItem[];
   // Free-form sticky notes on the "Summary" tab (draggable/editable annotations).
   summaryNotes?: SummaryNote[];
   // Free-text "Record Results" box on the Pricing Settings tab.
@@ -1233,9 +1250,29 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   const sellUnit = (factor > 0 ? unitCostOps / factor : unitCostOps) * (1 + (f.safetyFactor || 0));
   return { compCost, enclCost, cuConnCost, busbarCost, busbarKg, kits, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
 }
+/**
+ * The hand-written Commercial Offer lines, in EGP.
+ *
+ * A blank row (the one a user just added) contributes 0 rather than NaN — one NaN here
+ * reaches summaryOf(), which the server rejects, and a fire-and-forget autosave then
+ * fails silently and loses work. See the note on summaryOf in qtns.ts.
+ */
+export function customItemsTotal(s: LvState): number {
+  let t = 0;
+  for (const r of s.customItems ?? []) {
+    const v = (Number(r.qty) || 0) * (Number(r.unitPrice) || 0);
+    if (Number.isFinite(v)) t += v;
+  }
+  return t;
+}
+
 export function grandTotals(s: LvState) {
   let sell = 0;
   s.panels.forEach((p) => (sell += calcPanel(p, s.factors, s.abbItemDiscounts).totalSell));
+  // A custom quotation has no panels and prices its offer from these instead. Adding it
+  // here rather than at each call site means the history list, the dashboard figures and
+  // the saved summary all pick it up without knowing the kind exists.
+  sell += customItemsTotal(s);
   const vat = sell * s.factors.vat;
   return { sell, vat, incl: sell + vat };
 }

@@ -26,12 +26,15 @@ const BLANK_RMU: RmuConfigInput = {
 };
 
 export type DeskScope = "lv" | "mv" | "all";
-type Flow = "lv-panels" | "lv-edms" | "rmu" | "pcss";
+type Flow = "lv-panels" | "lv-edms" | "rmu" | "pcss" | "custom";
 type QtnType = { key: string; label: string; icon: string; hint: string; desk: "lv" | "mv"; flow: Flow };
 
 const TYPES: QtnType[] = [
   { key: "lv", label: "LV Panels", icon: "📊", hint: "Low-voltage panels & switchboards", desk: "lv", flow: "lv-panels" },
   { key: "edms", label: "Standard EDMS", icon: "📋", hint: "Standard EDMS — same workspace as LV", desk: "lv", flow: "lv-edms" },
+  // Nothing is configured or costed — the estimator types the offer lines. Project and
+  // Commercial Offer are its only two tabs.
+  { key: "custom", label: "Custom Commercial Offer", icon: "✍️", hint: "Type your own items and prices", desk: "lv", flow: "custom" },
   { key: "rmu", label: "RMU", icon: "⚡", hint: "Ring Main Unit offer (MV)", desk: "mv", flow: "rmu" },
   { key: "pcss", label: "P-CSS Selector", icon: "🏗️", hint: "Compact secondary substation selector", desk: "mv", flow: "pcss" },
 ];
@@ -95,7 +98,8 @@ export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClo
         navigate(`/offers/${offer.id}/edit`);
         return;
       }
-      const rec = await createQtn(number, pick.flow === "lv-edms" ? "edms" : "panels");
+      const kind = pick.flow === "lv-edms" ? "edms" : pick.flow === "custom" ? "custom" : "panels";
+      const rec = await createQtn(number, kind);
       onClose();
       navigate(`/lv/qtn/${rec.id}`);
     } catch (e) {
