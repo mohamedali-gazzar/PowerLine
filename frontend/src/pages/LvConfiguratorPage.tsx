@@ -4309,6 +4309,8 @@ function FactorInput({ value, global, onChange, className, title }: {
 function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: string, patch: Partial<LvPanel>) => void }) {
   const f = s.factors;
   const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
+  const { notify, dialogs } = useDialogs();
+  const sizeWarnRef = useRef(false); // one warning per editing session (the flag below makes it once per panel)
   const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
   const priceOf = (c: PanelComponent) => componentPriceEgp(c, f);
   const G = p.noGroups || 0;
@@ -4319,6 +4321,19 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
   const unitWord = isKwhm ? "KWHM" : "group";
   const unitPlural = isKwhm ? "KWHM" : "groups";
   const perRow = isKwhm ? "KWHM/row" : "groups-per-row";
+  // A manual change to the default components (add / change / remove / re-quantify) leaves the
+  // auto-computed enclosure size — worked out from the number of groups/KWHM, not the actual
+  // rows — possibly wrong. Warn ONCE per panel so the estimator re-checks the sizing. Changing
+  // the count / family / content re-sizes on its own, so those never warn.
+  const warnSizingOnce = () => {
+    if (sizeWarnRef.current || p.sizingWarned) return;
+    sizeWarnRef.current = true;
+    u({ sizingWarned: true });
+    void notify({
+      title: "Re-check the panel size",
+      message: `You changed the default ${unitPlural} setup. The enclosure size above is worked out automatically from the number of ${unitPlural}, so it may no longer be right — please check the Sizing.`,
+    });
+  };
 
   const isDouble = p.panelsSizing?.layout === "Double";
   const fam = p.panelsSizing?.family ?? "SR-Basic";   // enclosure family (SR-Basic by default)
@@ -4363,8 +4378,10 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
     applyBox(patch, G, fam, cont);
     u(patch);
   };
-  const setQty = (id: string, n: number) =>
+  const setQty = (id: string, n: number) => {
+    warnSizingOnce();
     u({ components: p.components.map((c) => (c.id === id ? { ...c, qty: Math.max(1, Math.round(n) || 1) } : c)) });
+  };
 
   // Component rows are editable like a panel: add (search), change (✎) and remove (✕).
   const [pending, setPending] = useState<PanelComponent | null>(null);
@@ -4381,17 +4398,19 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
   const pickComp = (c: DbComponent) => { setPending(toPanelComponent(c, ownSection, 1)); setPendQty(""); };
   const confirmAdd = () => {
     if (!pending) return;
+    warnSizingOnce();
     u({ components: [...p.components, { ...pending, qty: Math.max(1, parseInt(pendQty, 10) || 1) }] });
     setPending(null); setPendQty("");
     requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true }));
   };
   const cancelAdd = () => { setPending(null); setPendQty(""); };
   const changeComp = (id: string, c: DbComponent) => {
+    warnSizingOnce();
     const nc = toPanelComponent(c, ownSection, 1);
     u({ components: p.components.map((r) => (r.id === id ? { ...nc, id: r.id, qty: r.qty } : r)) });
     setEditId(null);
   };
-  const delRow = (id: string) => u({ components: p.components.filter((c) => c.id !== id) });
+  const delRow = (id: string) => { warnSizingOnce(); u({ components: p.components.filter((c) => c.id !== id) }); };
   // Drag-to-reorder component rows (grip handle).
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
@@ -4807,6 +4826,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
         </table>
       </div>
 
+      {dialogs}
     </div>
   );
 }

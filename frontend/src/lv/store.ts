@@ -116,6 +116,9 @@ export interface LvPanel {
   edmsEdited?: boolean;
   spare?: boolean;        // this cell is the Spare-parts list (no sizing/specs; components + copper only)
   spareKind?: string;     // which spare-list variant the cell is: "spare" | "lcp" | "kwhm"
+  // LCP/KWHM: set once we have warned that a manual change to the default components may have
+  // invalidated the auto-computed enclosure size (the warning shows once per panel).
+  sizingWarned?: boolean;
   noGroups?: number;      // LCP: control groups / KWHM: number of meters — drives auto-fill + auto-sizing
   content?: string;       // KWHM: what each meter unit contains (KWHM / KWHM+MDRC / KWHM+MOULDED_CASE)
   cablesEgp?: number;     // LCP/KWHM: cables cost, EGP — manual

@@ -23,6 +23,20 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-06 · Mohamed's side · Claude
 
+**LCP / KWHM: a one-time reminder to re-check the size after you change the defaults.**
+
+The enclosure size for an LCP or KWHM panel is worked out automatically from the number of
+groups / meters — not from the actual component rows. So if you hand-edit the auto-filled
+components (add / change / remove one, or change a quantity), the auto-size may no longer be
+right. Now the first time you make such a change on a panel, a small pop-up says "Re-check the
+panel size" pointing you to the Sizing box. It shows **once per panel** (a remembered mark, so it
+won't nag on every later change or after a reload). Changing the count / family / layout still
+re-sizes on its own and never warns. No database column (the mark lives in the quotation's saved
+data). Verified on a real LCP panel: the pop-up showed on the first quantity change and did NOT
+show on the second. Build green, 76 tests pass.
+
+## 2026-09-06 · Mohamed's side · Claude
+
 **P.F.C fix: a fixed-only capacitor bank no longer gets a Power Factor Controller.**
 
 Building a P.F.C combination with only **fixed** steps (no variable steps) was wrongly adding a
