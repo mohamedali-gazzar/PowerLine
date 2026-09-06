@@ -95,6 +95,17 @@ function normalize(state: LvState): LvState {
   state.factors ??= base.factors;
   if (!Array.isArray(state.panels)) state.panels = [];
 
+  // Panel groups (organisational only) — legacy quotations have none. Coerce to the
+  // declared shape (the server stores whatever it was handed) and drop any dangling
+  // groupId (a panel pointing at a group that no longer exists) so it renders ungrouped.
+  state.groups = ((Array.isArray(state.groups) ? state.groups : []) as unknown[])
+    .filter((g): g is Record<string, unknown> => !!g && typeof g === "object")
+    .map((r, i) => ({ id: String(r.id || `g-${i}`), name: String(r.name ?? ""), order: Number(r.order) || 0 }));
+  {
+    const gids = new Set(state.groups.map((g) => g.id));
+    for (const p of state.panels) if (p?.groupId && !gids.has(p.groupId)) p.groupId = undefined;
+  }
+
   // Merge in any factor key added since this QTN was saved. Without this a new
   // key is `undefined` on every server-loaded quotation and turns the whole
   // calculation chain into NaN — critical now that factors can change centrally.
@@ -309,10 +320,14 @@ export async function getQtn(id: string): Promise<QtnRecord | null> {
 
 export async function createQtn(
   number: string,
-  kind: "panels" | "edms" | "spare" | "custom" = "panels"
+  kind: "panels" | "edms" | "spare" | "custom" = "panels",
+  supportEngineer = ""
 ): Promise<QtnRecord> {
   const state = initialState();
   state.kind = kind;
+  // Default the Sales Support Engineer to whoever is creating the quotation (the offer's
+  // support contact + approval routing). Still editable from the Project tab's dropdown.
+  if (supportEngineer.trim()) state.project.supportEngineer = supportEngineer.trim();
   if (kind === "custom") {
     // A custom offer prices nothing itself — it opens with one empty line to type into,
     // so the Commercial tab is never an empty screen with no obvious next move.

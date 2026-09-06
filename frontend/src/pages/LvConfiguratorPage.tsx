@@ -25,6 +25,7 @@ import {
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog,
+  panelLayout, panelNumbers, commonNamePrefix, resortByGroup, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, reorderPanelGroup,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
   type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow, type CustomOfferItem,
@@ -2933,6 +2934,18 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
               <div data-pdf-panel data-offer-panel={p.id} className="a4-sheet flex flex-col px-8 pb-3 pt-6"
                 style={pi < s.panels.length - 1 ? { breakAfter: "page" } : undefined}>
               <PageHeader s={s} qtnRef={qtnRef} />
+              {/* Group heading divider — printed above the FIRST panel of each panel group
+                  (grouping is organisational only; it changes no figure). */}
+              {(() => {
+                const g = p.groupId ? (s.groups ?? []).find((x) => x.id === p.groupId) : null;
+                const isFirst = !!g && (pi === 0 || s.panels[pi - 1]?.groupId !== p.groupId);
+                return isFirst && g ? (
+                  <div className="mb-2 mt-1 flex items-center gap-3 rounded-md px-3 py-2 text-white" style={{ background: TRED }}>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">Group</span>
+                    <span className="text-base font-extrabold uppercase tracking-wide">{g.name}</span>
+                  </div>
+                ) : null;
+              })()}
               {/* Back to this panel in the Panels tab (screen only — stripped from the PDF) */}
               <div className="no-print -mt-1 mb-1 flex justify-end">
                 <button type="button" onClick={() => onBackToPanel(p.id)} title={`Back to “${p.name}” in Panels`}
@@ -3477,15 +3490,26 @@ function CommercialTab({ s, qtnNo, up, readOnly }: { s: LvState; qtnNo: string; 
                     <td className="py-1.5 text-right font-semibold">{m(r.qty * r.unitPrice)}</td>
                   </tr>
                 ))
-              : calcs.map(([p, c], i) => (
-                  <tr key={p.id} className="border-b border-line/60 align-top">
-                    <td className="py-1.5 pr-2 font-bold text-muted">{i + 1}</td>
-                    <td className="py-1.5 pr-2"><b>{p.name}</b></td>
-                    <td className="py-1.5 pr-2 text-center font-semibold">{p.qty}</td>
-                    <td className="py-1.5 pr-2 text-right">{m(c.sellUnit)}</td>
-                    <td className="py-1.5 text-right font-semibold">{m(c.totalSell)}</td>
-                  </tr>
-                ))}
+              : calcs.map(([p, c], i) => {
+                  const g = p.groupId ? (s.groups ?? []).find((x) => x.id === p.groupId) : null;
+                  const firstOfGroup = !!g && (i === 0 || calcs[i - 1]?.[0].groupId !== p.groupId);
+                  return (
+                    <Fragment key={p.id}>
+                      {firstOfGroup && g && (
+                        <tr>
+                          <td colSpan={5} className="border-l-4 border-[#F16722] bg-[#FEF3ED] px-2 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-brand-dark">{g.name}</td>
+                        </tr>
+                      )}
+                      <tr className="border-b border-line/60 align-top">
+                        <td className="py-1.5 pr-2 font-bold text-muted">{i + 1}</td>
+                        <td className="py-1.5 pr-2"><b>{p.name}</b></td>
+                        <td className="py-1.5 pr-2 text-center font-semibold">{p.qty}</td>
+                        <td className="py-1.5 pr-2 text-right">{m(c.sellUnit)}</td>
+                        <td className="py-1.5 text-right font-semibold">{m(c.totalSell)}</td>
+                      </tr>
+                    </Fragment>
+                  );
+                })}
           </tbody>
         </table>
         <div data-pdf-totals className="ml-auto mt-6 w-72 space-y-1 text-sm">
@@ -3609,6 +3633,11 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
             <L>Sales support engineer <span className="text-red-500">*</span></L>
             <select className={`input cursor-pointer ${pr.supportEngineer ? "" : "ring-1 ring-red-400"}`} value={pr.supportEngineer} onChange={(e) => upPr({ supportEngineer: e.target.value })}>
               <option value="">— select —</option>
+              {/* Keep the current value selectable even if it isn't a registered support
+                  engineer — e.g. the default filled in from the creator's own account. */}
+              {pr.supportEngineer && !staff.supportEngineers.some((p) => p.name === pr.supportEngineer) && (
+                <option value={pr.supportEngineer}>{pr.supportEngineer}</option>
+              )}
               {staff.supportEngineers.map((p) => <option key={p.name}>{p.name}</option>)}
             </select>
           </div>
@@ -5265,8 +5294,43 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
     const arr = [...s.panels];
     const [moved] = arr.splice(from, 1);
     arr.splice(to, 0, moved);
-    up({ panels: arr });
+    // Adopt the group of wherever it was dropped — drag a panel into a group's rows to join
+    // it, or into the ungrouped area to leave. Then re-sort so groups stay contiguous and the
+    // continuous 1..n numbering follows the new order.
+    const neighbour = to > 0 ? arr[to - 1] : arr[to + 1];
+    moved.groupId = neighbour?.groupId;
+    up({ panels: resortByGroup(arr, s.groups ?? []) });
   });
+  // ── Panel grouping (organisational only — no pricing effect) ────────────────
+  const groups = s.groups ?? [];
+  const numbers = panelNumbers(s);
+  const layout = panelLayout(s);
+  const [selMode, setSelMode] = useState(false);
+  const [selPanels, setSelPanels] = useState<Set<string>>(new Set());
+  const [editGroupId, setEditGroupId] = useState<string | null>(null);
+  const [editGroupVal, setEditGroupVal] = useState("");
+  const [naming, setNaming] = useState<{ ids: string[]; name: string } | null>(null);
+  const COLLAPSE_KEY = "pl.panelGroupCollapsed";
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "[]") as string[]); } catch { return new Set(); }
+  });
+  const toggleCollapse = (id: string) => setCollapsed((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...next])); } catch { /* storage blocked — non-fatal */ }
+    return next;
+  });
+  const toggleSel = (id: string) => setSelPanels((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const exitSel = () => { setSelMode(false); setSelPanels(new Set()); setNaming(null); };
+  const nameOf = (id: string) => s.panels.find((p) => p.id === id)?.name || "";
+  const openNaming = (ids: string[]) => setNaming({ ids, name: commonNamePrefix(ids.map(nameOf)) });
+  const doCreateGroup = (ids: string[], name: string) => { if (name.trim()) { up(createPanelGroup(s, name, ids)); exitSel(); } };
+  const doMoveTo = (ids: string[], gid: string | null) => { up(movePanelsToGroup(s, ids, gid)); exitSel(); };
+  const doDeleteGroup = (gid: string) => {
+    const g = groups.find((x) => x.id === gid);
+    const n = s.panels.filter((p) => p.groupId === gid).length;
+    if (window.confirm(`Delete the group "${g?.name}" and its ${n} panel${n === 1 ? "" : "s"}? This can't be undone.`)) up(deletePanelGroup(s, gid));
+  };
   if (!s.panels.length) {
     return (
       <div className="card p-12 text-center animate-fade-up">
@@ -5292,73 +5356,144 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
     <div className="grid items-start gap-5 lg:grid-cols-[260px_1fr] animate-fade-up">
       {/* panel list — sticks below the tab header, with its own scroll (independent of the editor) */}
       <div className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
-        {s.panels.map((p, i) => {
-          const active = p.id === s.selectedId;
-          return (
-            <div key={p.id} ref={setRowRef(i)}
-              className={`mb-1.5 rounded-lg border px-2 py-1.5 transition-colors duration-150 ${
-                p.highlight
-                  ? `bg-yellow-200 hover:bg-yellow-300 ${active ? "border-brand" : "border-yellow-400"}`
-                  : active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
-              } ${freshIds?.has(p.id) ? "animate-flash-new" : ""}`}>
-              {/* Icons sit inline after a short name; a long name pushes them to wrap onto a
-                  second line, right-aligned (flex-wrap + ml-auto). */}
-              <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
-                {/* name group — kept together; the name shows in full (wraps only if very long) */}
-                <div className="flex min-w-0 items-center gap-1">
-                  <span
-                    {...handleProps(i)}
-                    title="Drag to reorder"
-                    className="shrink-0 select-none px-0.5 text-muted/50 transition-colors hover:text-brand">
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                      <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
-                      <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
-                      <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
-                    </svg>
-                  </span>
-                  <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{i + 1}</span>
-                  {panelBadge && (() => { const b = panelBadge(p); return (
-                    <span title={`Owner: ${b.title}${b.mine ? " (you)" : ""}`}
-                      className={`grid h-5 min-w-[1.25rem] shrink-0 place-items-center rounded-full px-1 text-[10px] font-bold ${b.mine ? "bg-emerald-500 text-white" : "bg-amber-400 text-amber-950"}`}>
-                      {b.text}
+        {/* New-group / select-mode header */}
+        <div className="mb-2 flex items-center justify-between gap-2">
+          {selMode ? (
+            <>
+              <span className="text-xs font-semibold text-brand-dark">Tick panels, then Group / Move…</span>
+              <button className="text-xs text-muted hover:text-ink" onClick={exitSel}>Cancel</button>
+            </>
+          ) : (
+            <button className="flex items-center gap-1 text-xs font-semibold text-brand-dark hover:underline"
+              onClick={() => { setSelMode(true); setSelPanels(new Set()); }}>
+              <span className="text-sm leading-none">⊞</span> New group
+            </button>
+          )}
+        </div>
+        {(() => {
+          let idx = -1; // running index into s.panels (display order) for setRowRef / numbering
+          const row = (p: LvPanel) => {
+            idx++;
+            const i = idx;
+            const active = p.id === s.selectedId;
+            const num = numbers.get(p.id) ?? i + 1;
+            const checked = selPanels.has(p.id);
+            return (
+              <div key={p.id} ref={setRowRef(i)}
+                className={`mb-1.5 rounded-lg border px-2 py-1.5 transition-colors duration-150 ${
+                  p.highlight
+                    ? `bg-yellow-200 hover:bg-yellow-300 ${active ? "border-brand" : "border-yellow-400"}`
+                    : active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
+                } ${freshIds?.has(p.id) ? "animate-flash-new" : ""} ${checked ? "ring-2 ring-brand ring-offset-1" : ""}`}>
+                <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
+                  <div className="flex min-w-0 items-center gap-1">
+                    {selMode && (
+                      <input type="checkbox" checked={checked} onChange={() => toggleSel(p.id)}
+                        className="mr-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-brand" title="Select for grouping" />
+                    )}
+                    <span
+                      {...handleProps(i)}
+                      title="Drag to reorder — or into a group's rows to add it"
+                      className="shrink-0 select-none px-0.5 text-muted/50 transition-colors hover:text-brand">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
+                        <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
+                        <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
+                      </svg>
                     </span>
-                  ); })()}
-                  <button onClick={() => up({ selectedId: p.id })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
-                    <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{p.name.trim() || "(unnamed panel)"}</div>
-                  </button>
+                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{num}</span>
+                    {panelBadge && (() => { const b = panelBadge(p); return (
+                      <span title={`Owner: ${b.title}${b.mine ? " (you)" : ""}`}
+                        className={`grid h-5 min-w-[1.25rem] shrink-0 place-items-center rounded-full px-1 text-[10px] font-bold ${b.mine ? "bg-emerald-500 text-white" : "bg-amber-400 text-amber-950"}`}>
+                        {b.text}
+                      </span>
+                    ); })()}
+                    <button onClick={() => selMode ? toggleSel(p.id) : up({ selectedId: p.id })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
+                      <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{p.name.trim() || "(unnamed panel)"}</div>
+                    </button>
+                  </div>
+                  <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                    <button onClick={() => onOpenInOffer(p.id)} title="Open this panel in the Technical Offer"
+                      className="shrink-0 rounded p-0.5 text-muted transition-colors hover:bg-white hover:text-brand-dark">
+                      <JumpArrow />
+                    </button>
+                    <button onClick={() => upPanel(p.id, { highlight: !p.highlight })}
+                      title={p.highlight ? "Remove highlight" : "Highlight panel"}
+                      className={`shrink-0 rounded p-0.5 transition-colors hover:bg-white ${p.highlight ? "text-yellow-600" : "text-muted hover:text-yellow-600"}`}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="m9 11-6 6v3h9l3-3" />
+                        <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
+                      </svg>
+                    </button>
+                    <button onClick={() => onClone(p.id)} title="Duplicate panel"
+                      className="shrink-0 rounded p-0.5 text-sm text-muted transition-colors hover:bg-white hover:text-brand-dark">⧉</button>
+                    <button onClick={() => onDel(p.id)} title="Delete panel"
+                      className="shrink-0 rounded p-0.5 text-sm text-red-500 transition-colors hover:bg-white">✕</button>
+                  </div>
                 </div>
-                {/* action icons (smaller) — inline when the name is short, else wrapped below-right */}
-                <div className="ml-auto flex shrink-0 items-center gap-0.5">
-                  <button onClick={() => onOpenInOffer(p.id)} title="Open this panel in the Technical Offer"
-                    className="shrink-0 rounded p-0.5 text-muted transition-colors hover:bg-white hover:text-brand-dark">
-                    <JumpArrow />
-                  </button>
-                  <button onClick={() => upPanel(p.id, { highlight: !p.highlight })}
-                    title={p.highlight ? "Remove highlight" : "Highlight panel"}
-                    className={`shrink-0 rounded p-0.5 transition-colors hover:bg-white ${p.highlight ? "text-yellow-600" : "text-muted hover:text-yellow-600"}`}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="m9 11-6 6v3h9l3-3" />
-                      <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
-                    </svg>
-                  </button>
-                  <button onClick={() => onClone(p.id)} title="Duplicate panel"
-                    className="shrink-0 rounded p-0.5 text-sm text-muted transition-colors hover:bg-white hover:text-brand-dark">⧉</button>
-                  <button onClick={() => onDel(p.id)} title="Delete panel"
-                    className="shrink-0 rounded p-0.5 text-sm text-red-500 transition-colors hover:bg-white">✕</button>
-                </div>
+                {(() => { const twin = nameClashOf(s, p); return twin ? (
+                  <p className="mt-0.5 pl-1 text-[10px] font-bold text-red-600" title={panelNameClashMessage(twin, s.panels)}>
+                    ⚠ Same name as Panel {(numbers.get(twin.id) ?? s.panels.indexOf(twin) + 1)}
+                  </p>
+                ) : null; })()}
               </div>
-              {/* A clash is a property of a PAIR, so it has to be visible from the list —
-                  otherwise it is only found by opening each panel in turn. This is also
-                  the only place a clash arriving from a co-worker's 15-second merge, or
-                  carried in by a duplicated quotation, shows itself without hunting. */}
-              {(() => { const twin = nameClashOf(s, p); return twin ? (
-                <p className="mt-0.5 pl-1 text-[10px] font-bold text-red-600" title={panelNameClashMessage(twin, s.panels)}>
-                  ⚠ Same name as Panel {s.panels.indexOf(twin) + 1}
-                </p>
-              ) : null; })()}
-            </div>
-          );
-        })}
+            );
+          };
+          const sorted = groups.slice().sort((a, b) => a.order - b.order);
+          return layout.map((sec) => {
+            if (sec.group) {
+              const g = sec.group;
+              const isCol = collapsed.has(g.id);
+              const total = sec.panels.reduce((sum, p) => sum + calcPanel(p, s.factors, s.abbItemDiscounts).totalSell, 0);
+              const gi = sorted.findIndex((x) => x.id === g.id);
+              return (
+                <div key={g.id} className="mb-1.5">
+                  {/* 42px orange header strip — same look as the BOM combination row */}
+                  <div className="flex h-[42px] items-center gap-1.5 rounded-lg border border-[#F16722]/35 bg-[#FFF3EC] pr-1" style={{ borderLeft: "4px solid #F16722" }}>
+                    <button onClick={() => toggleCollapse(g.id)} title={isCol ? "Expand" : "Collapse"} className="shrink-0 pl-1.5 text-brand-dark/70 hover:text-brand-dark">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+                        style={{ transform: isCol ? "rotate(-90deg)" : "none", transition: "transform .15s" }} aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+                    </button>
+                    {editGroupId === g.id ? (
+                      <input autoFocus value={editGroupVal}
+                        onChange={(e) => setEditGroupVal(e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        onBlur={() => { up(renamePanelGroup(s, g.id, editGroupVal)); setEditGroupId(null); }}
+                        onKeyDown={(e) => { if (e.key === "Enter") { up(renamePanelGroup(s, g.id, editGroupVal)); setEditGroupId(null); } else if (e.key === "Escape") setEditGroupId(null); }}
+                        className="h-6 min-w-0 flex-1 rounded border border-brand px-1.5 text-[13px] font-bold uppercase tracking-wide text-[#F16722] focus:outline-none" />
+                    ) : (
+                      <button onClick={() => toggleCollapse(g.id)} title={g.name} className="min-w-0 flex-1 truncate text-left text-[13px] font-bold uppercase tracking-wide text-[#F16722]">{g.name}</button>
+                    )}
+                    <span className="shrink-0 rounded-full bg-[#F16722]/15 px-1.5 text-[11px] font-bold text-brand-dark">{sec.panels.length}</span>
+                    <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold tabular-nums text-brand-dark/80">{fmtEgp(total)}</span>
+                    <div className="flex shrink-0 items-center">
+                      <button onClick={() => up(reorderPanelGroup(s, g.id, -1))} disabled={gi <= 0} title="Move group up" className="rounded px-0.5 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark disabled:opacity-25">↑</button>
+                      <button onClick={() => up(reorderPanelGroup(s, g.id, 1))} disabled={gi >= sorted.length - 1} title="Move group down" className="rounded px-0.5 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark disabled:opacity-25">↓</button>
+                      <button onClick={() => { setEditGroupId(g.id); setEditGroupVal(g.name); }} title="Rename group" className="rounded px-0.5 text-xs text-brand-dark/60 hover:bg-white hover:text-brand-dark">✎</button>
+                      <button onClick={() => up(duplicatePanelGroup(s, g.id))} title="Duplicate group (deep-copy its panels)" className="rounded px-0.5 text-sm text-brand-dark/60 hover:bg-white hover:text-brand-dark">⧉</button>
+                      <button onClick={() => up(ungroupPanelGroup(s, g.id))} title="Ungroup — keep the panels" className="rounded px-0.5 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">⊟</button>
+                      <button onClick={() => doDeleteGroup(g.id)} title="Delete group and its panels" className="rounded px-0.5 text-sm text-red-500 hover:bg-white">✕</button>
+                    </div>
+                  </div>
+                  {!isCol && (
+                    <div className="ml-1.5 mt-1 border-l-2 border-[#F16722]/40 pl-2">
+                      {sec.panels.map(row)}
+                      {sec.panels.length === 0 && <p className="py-1 pl-1 text-[11px] italic text-muted">No panels yet — drag one in, or use “Move to…”.</p>}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            return (
+              <div key="__ungrouped">
+                {groups.length > 0 && sec.panels.length > 0 && (
+                  <div className="mb-1 mt-2 px-1 text-[10px] font-bold uppercase tracking-wide text-muted/70">Ungrouped</div>
+                )}
+                {sec.panels.map(row)}
+              </div>
+            );
+          });
+        })()}
         <button className="btn-ghost mt-1 w-full" onClick={onAdd}>{addLabel}</button>
         {onAddSpare && (
           <AddSpareMenu onAddSpare={onAddSpare} wrap="mt-1 w-full"
@@ -5370,6 +5505,46 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
           </div>
         )}
       </div>
+
+      {/* Docked multi-select bar (grouping) — portalled to body so `position:fixed` isn't
+          trapped by the card's transform (same rule as the BOM selection bar). */}
+      {selMode && selPanels.size > 0 && createPortal(
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
+          <div className="flex items-center gap-2 rounded-2xl border border-line bg-white py-2 pl-3 pr-2 shadow-lift animate-pop">
+            <span className="whitespace-nowrap text-sm font-semibold text-ink">{selPanels.size} selected</span>
+            <button onClick={() => openNaming([...selPanels])}
+              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-dark">
+              <span className="text-base leading-none">⊞</span> Group
+            </button>
+            {groups.length > 0 && (
+              <select value="" onChange={(e) => { const v = e.target.value; if (v) doMoveTo([...selPanels], v === "__ungroup" ? null : v); }}
+                title="Move the selected panels into an existing group"
+                className="h-8 cursor-pointer rounded-full border border-line bg-white px-2 text-sm text-ink focus:border-brand focus:outline-none">
+                <option value="">Move to…</option>
+                {groups.slice().sort((a, b) => a.order - b.order).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                <option value="__ungroup">— Ungrouped —</option>
+              </select>
+            )}
+            <button onClick={exitSel} title="Cancel" className="rounded-full px-2 py-1.5 text-sm font-semibold text-muted transition hover:bg-surface hover:text-ink">✕</button>
+          </div>
+        </div>, document.body)}
+      {/* New-group name prompt — focused, pre-filled with the common prefix of the picked names. */}
+      {naming && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onMouseDown={() => setNaming(null)}>
+          <div className="w-80 max-w-full rounded-2xl border border-line bg-white p-4 shadow-lift animate-pop" onMouseDown={(e) => e.stopPropagation()}>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">Group name</label>
+            <input autoFocus value={naming.name}
+              onChange={(e) => setNaming({ ...naming, name: e.target.value })}
+              onFocus={(e) => e.target.select()}
+              onKeyDown={(e) => { if (e.key === "Enter") doCreateGroup(naming.ids, naming.name); else if (e.key === "Escape") setNaming(null); }}
+              placeholder="e.g. SMDB" className="input" />
+            <p className="mt-1 text-[11px] text-muted">{naming.ids.length} panel{naming.ids.length === 1 ? "" : "s"} · grouping is organisational only — prices don't change.</p>
+            <div className="mt-3 flex justify-end gap-2">
+              <button className="btn-ghost px-3 py-1.5 text-sm" onClick={() => setNaming(null)}>Cancel</button>
+              <button className="btn-primary px-3 py-1.5 text-sm disabled:opacity-40" disabled={!naming.name.trim()} onClick={() => doCreateGroup(naming.ids, naming.name)}>Create group</button>
+            </div>
+          </div>
+        </div>, document.body)}
 
       {/* editor — its own scroll area so the panel list and editor scroll independently.
           LCP / KWHM cells use the LcpEditor; any other spare cell the stripped SpareEditor;

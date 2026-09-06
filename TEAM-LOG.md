@@ -23,6 +23,36 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-06 · Mohamed's side · Claude
 
+**Panels can now be grouped in the quotation sidebar (e.g. SMDB-1 + SMDB-2 under "SMDB").**
+
+A new optional layer for organising a quotation: put related panels — main or auxiliary — under a
+named group. It's purely organisational; it changes no price, sizing or total. In the Panels tab
+sidebar, groups show first (an orange header with a collapse arrow, the group name, how many
+panels, and their combined selling total, plus rename / duplicate / ungroup / delete and up/down to
+reorder groups), their panels indented under an orange rail, then an "Ungrouped" list. To make a
+group: click "New group", tick the panels, then "Group" (the name box pre-fills with the shared
+start of the names, e.g. "SMDB"); or drag a panel into a group's rows. Duplicate deep-copies the
+panels; ungroup keeps them; delete asks first and removes the group and its panels. Panels are
+still numbered 1…N straight through, groups don't restart the count. The group name prints as a
+heading on the Technical and Commercial offer PDFs. Old quotations open exactly as before, and
+imported panels arrive ungrouped. No database change. Build green, 81 frontend tests pass.
+
+Note on Excel: the group heading is on the two offer PDFs, not the Excel exports — the Material
+List Excel is an aggregated parts list (no per-panel rows) and the ERP CSV is a strict import file,
+so a coloured group band doesn't fit either. A dedicated per-panel Excel with group bands can be
+added if wanted.
+
+## 2026-09-06 · Mohamed's side · Claude
+
+**New quotations pre-fill the Sales Support Engineer with the creator's own name.**
+
+When you start a new quotation, the "Sales Support Engineer" field now defaults to your own account
+name instead of "— select —", so the mandatory field is usually already filled. It stays fully
+editable from the dropdown, and if your name isn't in the registered support-engineer list it's
+added as a selectable option so it still shows. Only affects newly created quotations.
+
+## 2026-09-06 · Mohamed's side · Claude
+
 **The "P.F.C" combinations Excel now DRIVES the P.F.C combination — like MCC does.**
 
 Until now the P.F.C sheet on the Combinations tab was only a reference copy: editing it changed

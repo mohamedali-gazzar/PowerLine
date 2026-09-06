@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { createQtn } from "../lv/qtns";
 import { api } from "../api";
+import { useAuth } from "../auth/AuthContext";
 import type { OfferInput, RmuConfigInput } from "../types";
 import { QtnNumberInput, qtnPrefix, isValidQtn } from "./QtnNumberInput";
 
@@ -42,6 +43,7 @@ const LETTERS: Record<"lv" | "mv", string> = { lv: "LV", mv: "MV" };
 
 export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClose: () => void }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const items = desk === "all" ? TYPES : TYPES.filter((t) => t.desk === desk);
   const [pick, setPick] = useState<QtnType | null>(null);
   const [step, setStep] = useState<"choose" | "number">("choose");
@@ -99,7 +101,7 @@ export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClo
         return;
       }
       const kind = pick.flow === "lv-edms" ? "edms" : pick.flow === "custom" ? "custom" : "panels";
-      const rec = await createQtn(number, kind);
+      const rec = await createQtn(number, kind, user?.name || "");
       onClose();
       navigate(`/lv/qtn/${rec.id}`);
     } catch (e) {

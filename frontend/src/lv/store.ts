@@ -105,6 +105,10 @@ export interface LvPanel {
   copperTool: CopperTool; // RPT-1: per-rating copper lengths (Cells → Copper Tool)
   draft: string;          // RPT-1: per-panel scratchpad — never included in outputs
   highlight?: boolean;    // yellow highlighter toggle in the panel list (UI marker only)
+  /** Optional grouping in the quotation sidebar — one flat level, one group per panel.
+   *  References LvGroup.id in LvState.groups; absent/null = ungrouped. Organisational
+   *  only: never affects pricing, sizing or the continuous panel numbering. */
+  groupId?: string | null;
   // "Standard Panels" view (Components card) — the choices that define a standard panel.
   stdTrKva?: string;      // transformer rating, kVA
   stdPfc?: string;        // "Yes" | "No" — power-factor correction included
@@ -183,6 +187,15 @@ export interface CustomOfferItem {
   unitPrice: number;
 }
 
+/** One organisational group of panels in the quotation sidebar (e.g. "SMDB", "LP").
+ *  One flat level, one group per panel; purely organisational — no effect on pricing,
+ *  sizing or numbering. Holds either main or auxiliary panels. */
+export interface LvGroup {
+  id: string;
+  name: string;
+  order: number;
+}
+
 export interface LvState {
   project: LvProject;
   factors: Factors;
@@ -190,6 +203,8 @@ export interface LvState {
   supportEngineers: string[];
   panels: LvPanel[];
   selectedId: string | null;
+  /** Optional panel groups (organisational only). Absent on legacy quotations = none. */
+  groups?: LvGroup[];
   notesGeneral: string[];          // editable "General Notes" page (after the cover)
   notesAdditional: string[];       // editable "Additional Notes" page
   commercialTerms: TermsSection[];   // editable "General Terms & Conditions" — English
@@ -765,6 +780,7 @@ export function initialState(): LvState {
     supportEngineers: [...DEFAULT_SUPPORT_ENGINEERS],
     panels: [],
     selectedId: null,
+    groups: [],
     notesGeneral: [...DEFAULT_GENERAL_NOTES],
     notesAdditional: [],
     commercialTerms: DEFAULT_COMMERCIAL_TERMS.map((s) => ({ ...s })),
@@ -1042,6 +1058,135 @@ export function duplicatePanel(p: LvPanel, name: string): LvPanel {
     name,
     components: p.components.map((c) => ({ ...c, id: uid() })),
   };
+}
+
+// ── Panel grouping (organisational only — never affects pricing or sizing) ────
+// Both main and auxiliary panels can be grouped; one flat level, one group per panel.
+const UNGROUPED_RANK = 1e9; // ungrouped panels sort after every group
+
+/** Panels in DISPLAY order: grouped first (by group.order, keeping each group's own
+ *  member order), then the ungrouped ones. Stable, so order within a group and among the
+ *  ungrouped is preserved. Keeping s.panels physically in THIS order is the invariant that
+ *  makes the continuous 1..n numbering (array index + 1) correct in the sidebar AND every
+ *  export with no per-site change — call it after any grouping mutation. */
+export function resortByGroup(panels: LvPanel[], groups: LvGroup[]): LvPanel[] {
+  const rank = new Map(groups.map((g) => [g.id, g.order]));
+  const r = (p: LvPanel) => (p.groupId && rank.has(p.groupId) ? (rank.get(p.groupId) as number) : UNGROUPED_RANK);
+  return panels
+    .map((p, i) => [p, i] as const)
+    .sort((a, b) => r(a[0]) - r(b[0]) || a[1] - b[1])
+    .map(([p]) => p);
+}
+
+/** The sidebar / export layout: one section per group (in order), then the ungrouped one.
+ *  Empty groups keep their header; the ungrouped section shows only when it has panels, or
+ *  when there are no groups at all (legacy quotation = a plain flat list, unchanged). */
+export function panelLayout(s: LvState): { group: LvGroup | null; panels: LvPanel[] }[] {
+  const groups = [...(s.groups ?? [])].sort((a, b) => a.order - b.order);
+  const known = new Set(groups.map((g) => g.id));
+  const out: { group: LvGroup | null; panels: LvPanel[] }[] = [];
+  for (const g of groups) out.push({ group: g, panels: s.panels.filter((p) => p.groupId === g.id) });
+  const ungrouped = s.panels.filter((p) => !p.groupId || !known.has(p.groupId));
+  if (ungrouped.length || groups.length === 0) out.push({ group: null, panels: ungrouped });
+  return out;
+}
+
+/** 1-based display number for every panel, continuous across groups (array = display order). */
+export function panelNumbers(s: LvState): Map<string, number> {
+  const m = new Map<string, number>();
+  s.panels.forEach((p, i) => m.set(p.id, i + 1));
+  return m;
+}
+
+/** Longest common prefix of the names, trimmed of trailing separators — so
+ *  ["SMDB-1","SMDB-2"] → "SMDB". Pre-fills a new group's name field. */
+export function commonNamePrefix(names: string[]): string {
+  const clean = names.map((n) => (n || "").trim()).filter(Boolean);
+  if (!clean.length) return "";
+  let pre = clean[0];
+  for (const n of clean.slice(1)) {
+    let i = 0;
+    while (i < pre.length && i < n.length && pre[i] === n[i]) i++;
+    pre = pre.slice(0, i);
+    if (!pre) break;
+  }
+  return pre.replace(/[\s\-_/.]+$/, "").trim();
+}
+
+/** A group name not already used (case-insensitive); appends " 2", " 3"… on a clash. */
+export function uniqueGroupName(wanted: string, groups: LvGroup[], exceptId?: string): string {
+  const base = (wanted || "Group").trim() || "Group";
+  const taken = new Set(groups.filter((g) => g.id !== exceptId).map((g) => g.name.trim().toLowerCase()));
+  if (!taken.has(base.toLowerCase())) return base;
+  for (let n = 2; ; n++) { const c = `${base} ${n}`; if (!taken.has(c.toLowerCase())) return c; }
+}
+
+/** Create a group over the given panels. Returns the state patch (groups + resorted panels). */
+export function createPanelGroup(s: LvState, name: string, panelIds: string[]): Partial<LvState> {
+  const groups = [...(s.groups ?? [])];
+  const order = groups.reduce((m, g) => Math.max(m, g.order), -1) + 1;
+  const g: LvGroup = { id: `g_${uid()}`, name: uniqueGroupName(name, groups), order };
+  const ids = new Set(panelIds);
+  const panels = s.panels.map((p) => (ids.has(p.id) ? { ...p, groupId: g.id } : p));
+  const nextGroups = [...groups, g];
+  return { groups: nextGroups, panels: resortByGroup(panels, nextGroups) };
+}
+
+/** Move panels into a group, or ungroup them (groupId = null). */
+export function movePanelsToGroup(s: LvState, panelIds: string[], groupId: string | null): Partial<LvState> {
+  const ids = new Set(panelIds);
+  const panels = s.panels.map((p) => (ids.has(p.id) ? { ...p, groupId: groupId ?? undefined } : p));
+  return { panels: resortByGroup(panels, s.groups ?? []) };
+}
+
+/** Rename a group. */
+export function renamePanelGroup(s: LvState, groupId: string, name: string): Partial<LvState> {
+  const nm = name.trim();
+  return { groups: (s.groups ?? []).map((g) => (g.id === groupId ? { ...g, name: nm || g.name } : g)) };
+}
+
+/** Ungroup: its panels return to ungrouped, and the now-empty group is removed. */
+export function ungroupPanelGroup(s: LvState, groupId: string): Partial<LvState> {
+  const panels = s.panels.map((p) => (p.groupId === groupId ? { ...p, groupId: undefined } : p));
+  const groups = (s.groups ?? []).filter((g) => g.id !== groupId);
+  return { groups, panels: resortByGroup(panels, groups) };
+}
+
+/** Delete a group AND its panels. Fixes selectedId if the open panel was removed. */
+export function deletePanelGroup(s: LvState, groupId: string): Partial<LvState> {
+  const panels = s.panels.filter((p) => p.groupId !== groupId);
+  const groups = (s.groups ?? []).filter((g) => g.id !== groupId);
+  const patch: Partial<LvState> = { groups, panels: resortByGroup(panels, groups) };
+  if (s.selectedId && !panels.some((p) => p.id === s.selectedId)) patch.selectedId = panels[0]?.id ?? null;
+  return patch;
+}
+
+/** Duplicate a group: deep-copy its panels into a new group placed right after it. */
+export function duplicatePanelGroup(s: LvState, groupId: string): Partial<LvState> {
+  const src = (s.groups ?? []).find((g) => g.id === groupId);
+  if (!src) return {};
+  const order = src.order + 1;
+  const bumped = (s.groups ?? []).map((g) => (g.order >= order ? { ...g, order: g.order + 1 } : g));
+  const ng: LvGroup = { id: `g_${uid()}`, name: uniqueGroupName(`${src.name} (copy)`, s.groups ?? []), order };
+  const copies: LvPanel[] = [];
+  const pool = [...s.panels];
+  for (const p of s.panels.filter((x) => x.groupId === groupId)) {
+    const c: LvPanel = { ...duplicatePanel(p, nextDuplicateName(p.name, pool)), groupId: ng.id };
+    copies.push(c); pool.push(c);
+  }
+  const groups = [...bumped, ng];
+  return { groups, panels: resortByGroup([...s.panels, ...copies], groups) };
+}
+
+/** Reorder a group up (-1) or down (+1) among the groups. */
+export function reorderPanelGroup(s: LvState, groupId: string, dir: -1 | 1): Partial<LvState> {
+  const groups = [...(s.groups ?? [])].sort((a, b) => a.order - b.order);
+  const i = groups.findIndex((g) => g.id === groupId);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= groups.length) return {};
+  [groups[i], groups[j]] = [groups[j], groups[i]];
+  const renumbered = groups.map((g, k) => ({ ...g, order: k }));
+  return { groups: renumbered, panels: resortByGroup(s.panels, renumbered) };
 }
 
 // ── Main-busbar copper (kg) — auto rule for sheet-metal panel systems ─────────
