@@ -7118,9 +7118,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
         <table className="w-full table-fixed text-[13px]">
           <colgroup>
             <col style={{ width: 24 }} />
+            <col style={{ width: 64 }} />
             <col />
             <col style={{ width: 132 }} />
-            <col style={{ width: 64 }} />
             <col style={{ width: 80 }} />
             <col style={{ width: 112 }} />
             <col style={{ width: 92 }} />
@@ -7130,9 +7130,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
           <thead>
             <tr className="text-left text-[12px] uppercase tracking-wide text-brand">
               <th className="py-1"></th>
+              <th className="py-1 pr-2">Qty</th>
               <th className="py-1 pr-2">Description</th>
               <th className="py-1 pr-2">Ref</th>
-              <th className="py-1 pr-2">Qty</th>
               <th className="py-1 pr-2">Adj.</th>
               <th className="py-1 pr-2">Note</th>
               <th className="py-1 pr-2 text-right">Unit cost</th>
@@ -7198,9 +7198,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                 {/* Shared column widths so every per-section table lines up (RPT-1) */}
                 <colgroup>
                   <col style={{ width: 24 }} />
+                  <col style={{ width: 64 }} />
                   <col />
                   <col style={{ width: 132 }} />
-                  <col style={{ width: 64 }} />
                   <col style={{ width: 80 }} />
                   <col style={{ width: 112 }} />
                   <col style={{ width: 92 }} />
@@ -7256,20 +7256,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                           <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
                         </svg>
                       </td>
-                      <td className="max-w-[330px] py-1 pr-2">
-                        {c.name}
-                        {editComp === c.id && (
-                          <ComponentEditSelect current={c} panelCount={s.panels.length}
-                            onPick={(nc, scope) => {
-                              if (scope === "all") replaceComponent(c.ref, c.name, nc, new Set(s.panels.map((pp) => pp.id)));
-                              else if (scope === "panel") replaceComponent(c.ref, c.name, nc, new Set([p.id]));
-                              else replaceComp(c.id, nc); // this item only
-                              setEditComp(null);
-                            }}
-                            onClose={() => setEditComp(null)} />
-                        )}
-                      </td>
-                      <td className="py-1 pr-2 text-[11px] text-muted">{c.ref}</td>
                       <td className="py-1 pr-2"
                         onMouseEnter={(e) => { if (selected.has(c.id)) setHoverSum({ col: "qty", x: e.clientX, y: e.clientY }); }}
                         onMouseLeave={() => setHoverSum(null)}>
@@ -7290,6 +7276,20 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                             onChange={(e) => setComp(c.id, { qty: Math.max(0, parseFloat(e.target.value) || 0) })} />
                         )}
                       </td>
+                      <td className="max-w-[330px] py-1 pr-2">
+                        {c.name}
+                        {editComp === c.id && (
+                          <ComponentEditSelect current={c} panelCount={s.panels.length}
+                            onPick={(nc, scope) => {
+                              if (scope === "all") replaceComponent(c.ref, c.name, nc, new Set(s.panels.map((pp) => pp.id)));
+                              else if (scope === "panel") replaceComponent(c.ref, c.name, nc, new Set([p.id]));
+                              else replaceComp(c.id, nc); // this item only
+                              setEditComp(null);
+                            }}
+                            onClose={() => setEditComp(null)} />
+                        )}
+                      </td>
+                      <td className="py-1 pr-2 text-[11px] text-muted">{c.ref}</td>
                       <td className="py-1 pr-2"><input className="input h-7 px-1.5 text-xs" value={c.adj} placeholder="—"
                         onChange={(e) => setComp(c.id, { adj: e.target.value })} /></td>
                       <td className="py-1 pr-2"><input className="input h-7 px-1.5 text-xs" value={c.note} placeholder="—"
@@ -7337,38 +7337,36 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                           rows.push(
                             <tr key={`grp-${sec}-${g}`} className="align-middle">
                               <td className="py-1" />
-                              {/* Description column — combination name (+2px vs the rows) */}
-                              <td className="py-1 pr-2">
-                                {editGroup === `${sec}|${g}` ? (
-                                  <input autoFocus value={editGroupVal}
-                                    onChange={(e) => setEditGroupVal(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") { renameGroup(g, sec, editGroupVal); setEditGroup(null); }
-                                      else if (e.key === "Escape") setEditGroup(null);
-                                    }}
-                                    onBlur={() => { renameGroup(g, sec, editGroupVal); setEditGroup(null); }}
-                                    className="h-6 w-full rounded border border-brand px-1.5 text-[13px] uppercase tracking-wide text-brand-dark focus:outline-none" />
-                                ) : (
-                                  <span className="text-[13px] font-normal leading-tight text-brand-dark underline underline-offset-2">
-                                    <span className="uppercase tracking-wide">{g}</span>{scalable ? `, QTY (${cq}) each contain:` : ""}
-                                    <button type="button" title="Rename combination"
-                                      onClick={() => { setEditGroupVal(g); setEditGroup(`${sec}|${g}`); }}
-                                      className="ml-1.5 rounded px-1 leading-none text-brand-dark/50 no-underline hover:bg-white hover:text-brand-dark">✎</button>
-                                  </span>
-                                )}
-                              </td>
-                              {/* Reference column — "Combination qty" label (bigger + bold) */}
-                              <td className="py-1 pr-2 text-right">
-                                {scalable && <span className="whitespace-nowrap text-[13px] font-bold text-muted">Combination qty</span>}
-                              </td>
-                              {/* Qty column — the combination-qty box, aligned with the row Qty inputs */}
-                              <td className="py-1 pr-2">
-                                {scalable && (
-                                  <input type="number" min={1} value={cq}
-                                    onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
-                                    className="input h-7 px-1.5 text-center text-xs"
-                                    title="Quantity of the whole combination — scales all its items" />
-                                )}
+                              {/* Combination header — the "Combination qty" phrase first, then the qty box, then the name */}
+                              <td colSpan={3} className="py-1 pr-2">
+                                <div className="flex items-center gap-2">
+                                  {scalable && <span className="whitespace-nowrap text-[13px] font-bold text-muted">Combination qty</span>}
+                                  {scalable && (
+                                    <input type="number" min={1} value={cq}
+                                      onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
+                                      className="input h-7 w-16 shrink-0 px-1.5 text-center text-xs"
+                                      title="Quantity of the whole combination — scales all its items" />
+                                  )}
+                                  <div className="min-w-0 flex-1">
+                                    {editGroup === `${sec}|${g}` ? (
+                                      <input autoFocus value={editGroupVal}
+                                        onChange={(e) => setEditGroupVal(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") { renameGroup(g, sec, editGroupVal); setEditGroup(null); }
+                                          else if (e.key === "Escape") setEditGroup(null);
+                                        }}
+                                        onBlur={() => { renameGroup(g, sec, editGroupVal); setEditGroup(null); }}
+                                        className="h-6 w-full rounded border border-brand px-1.5 text-[13px] uppercase tracking-wide text-brand-dark focus:outline-none" />
+                                    ) : (
+                                      <span className="text-[13px] font-normal leading-tight text-brand-dark underline underline-offset-2">
+                                        <span className="uppercase tracking-wide">{g}</span>{scalable ? `, QTY (${cq}) each contain:` : ""}
+                                        <button type="button" title="Rename combination"
+                                          onClick={() => { setEditGroupVal(g); setEditGroup(`${sec}|${g}`); }}
+                                          className="ml-1.5 rounded px-1 leading-none text-brand-dark/50 no-underline hover:bg-white hover:text-brand-dark">✎</button>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               </td>
                               {/* Adj → Total columns — actions on the left, "Move to" pushed to the right */}
                               <td colSpan={4} className="py-1 pr-1">

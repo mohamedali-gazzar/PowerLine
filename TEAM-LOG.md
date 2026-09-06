@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-06 · Mohamed's side · Claude
 
+**Quantity column moved to the front of the panel components table.**
+
+In the panel's component list, the "Qty" column now sits at the very start — right after the drag
+handle and before the description — instead of being between the reference and the adjustment
+columns. The header, every component row and the combination header rows all moved together so the
+numbers still line up. On a combination's header row the "Combination qty" wording now reads first,
+followed by its number box and then the combination name (before, that wording was stranded to the
+right of the name). Nothing else changed — same icons, colours, prices and totals — and the printed
+Technical Offer and the Excel/ERP export are untouched. Build green.
+
+## 2026-09-06 · Mohamed's side · Claude
+
 **Undo now reaches much further back.**
 
 Undo/Redo only remembered the last 60 changes, and because typing in a box records one step per
