@@ -298,7 +298,12 @@ export const PFC_DEFAULT: PfcInput = {
   kvar: 300, cbRating: 0, fixedSteps: 1, fixedKvar: 50, var1Steps: 5, var1Kvar: 50, var2Steps: 0, var2Kvar: 50,
 };
 
-const CAP_25 = "25 KVAR";
+// The 25-kVAR / 400 V capacitor used to size every P.F.C. bank. Named EXACTLY as it
+// appears on the price list so it resolves to that one row — not a fuzzy "25 KVAR"
+// match, which grabbed whichever "25 kVAR" capacitor happened to sit first in the
+// catalogue (e.g. the retired Hitachi one) regardless of what the price list now uses.
+// Change this string if the price-list name of the 400 V 25-kVAR capacitor changes.
+const CAP_25 = "Capacitor 25 kVAR @ 400V";
 const fuseFor = (k: 25 | 50) => (k === 25 ? "HRC Fuse 63A" : "HRC Fuse 125A");
 const contactorFor = (k: 25 | 50) =>
   k === 25 ? "CONTACTOR FOR CAPACITOR- 30 KVAR 220-230V 50Hz" : "CONTACTOR FOR CAPACITOR- 50 KVAR  220-230V 50Hz";

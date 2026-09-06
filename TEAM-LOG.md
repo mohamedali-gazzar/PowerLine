@@ -23,6 +23,24 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-06 · Mohamed's side · Claude
 
+**P.F.C combination now uses the RTR 25-kVAR capacitor, not the old Hitachi one.**
+
+When you build a Power-Factor-Correction combination, the capacitor line was always coming out as
+"Hitachi Capacitor 25 kVAR @ 400V" even after the price list was changed to the RTR capacitor
+("Capacitor 25 kVAR @ 400V", brand RTR). Reason: the P.F.C builder looked the capacitor up by the
+loose text "25 KVAR" and picked whichever 25-kVAR capacitor sat first in the price list — the old
+Hitachi one. It now asks for the exact price-list name "Capacitor 25 kVAR @ 400V", so it resolves
+to the RTR row (with its price and reference). Verified by generating a P.F.C bank: the capacitor
+now reads "Capacitor 25 kVAR @ 400V -RTR" and is priced. Build green, P.F.C tests pass.
+
+Note for whoever changes capacitors again: the P.F.C combination's parts are defined in the app's
+code (`frontend/src/lv/combos.ts`), and the "P.F.C" Excel on the Combinations tab is only a
+reference copy that the app does NOT read when building — unlike MCC, which is driven by its
+uploaded sheet. So to swap the P.F.C capacitor, either keep the price-list name
+"Capacitor 25 kVAR @ 400V" (and just edit its price/brand), or ask for a code change.
+
+## 2026-09-06 · Mohamed's side · Claude
+
 **Quantity column moved to the front of the panel components table.**
 
 In the panel's component list, the "Qty" column now sits at the very start — right after the drag
