@@ -64,12 +64,33 @@ export interface Factors {
 }
 export const DEFAULT_FACTORS = factorsJson as Factors;
 
+/** P.F.C parts map — the price-list names + per-step counts the capacitor-bank
+ *  builder uses. Owner-editable via the "P.F.C" combinations sheet and served with
+ *  the catalogue (COMBOS.pfc). The sizing MATH stays in code (see buildPfc); this is
+ *  only which catalogue item plays each role and how many. Every field is optional so
+ *  a partial sheet still works — buildPfc fills the gaps from PFC_PARTS. */
+export interface PfcParts {
+  capacitor: string;        // the 25-kVAR / 400 V capacitor unit (a 50-kVAR step = 2 of these)
+  fuse25: string;           // fuse for a 25-kVAR step
+  fuse50: string;           // fuse for a 50-kVAR step
+  fusesPerStep: number;     // fuses per step (default 3)
+  fuseBase: string;         // fuse base
+  basesPerStep: number;     // fuse bases per step (default 3)
+  contactor25: string;      // capacitor contactor for a 25-kVAR variable step
+  contactor50: string;      // capacitor contactor for a 50-kVAR variable step
+  controllers: { desc: string; maxVarSteps: number }[]; // pick the first whose capacity ≥ variable steps
+  ventilation: { qty: number; desc: string }[];         // cubicle ventilation, added once
+}
+
 export interface CombosData {
   ats: Record<"1oo2" | "2oo3", Record<string, { group: string; items: { qty: number; desc: string }[] }[]>>;
   photocell: { ratings: { a: number; contactor: string; aux: string }[]; fixed: { qty: number; desc: string }[] };
   mcc: { combos: { kind: string; kw: string; type: number; parts: string[] }[]; control: { qty: number; desc: string }[] };
   wd: { frame: string; poles: string; fp: string; mp: string }[];
   motorized: Record<string, string[]>;
+  // P.F.C parts map — absent until the "P.F.C" sheet is uploaded; buildPfc falls back
+  // to its built-in defaults (PFC_PARTS) when a field or the whole section is missing.
+  pfc?: Partial<PfcParts>;
   // Standard ATS EDMS — stored as the uploaded workbook's sheets (cell for cell) and
   // consumed by standardAtsEdms.ts, which parses them into the ATS variants. Absent
   // until the workbook is uploaded on the Combinations tab (then the built-in default

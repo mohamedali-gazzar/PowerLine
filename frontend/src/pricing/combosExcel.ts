@@ -31,6 +31,8 @@
 // that quietly drops rows the configurator needs. See "Refusals" near the bottom.
 
 import * as XLSX from "xlsx";
+import type { PfcParts } from "../lv/catalog";
+import { PFC_PARTS } from "../lv/combos";
 
 /** One section of combos.json, ready to hand to api.pricing.lvComboSave. */
 export interface ParsedComboSection {
@@ -537,14 +539,51 @@ function parseMotorized(rows: Rows): Record<string, string[]> {
 }
 
 // ── P.F.C (power-factor correction) ──────────────────────────────────────────
-// The P.F.C workbook is a sizing sheet, not a parts template like the others: a
-// worked example on the left, a parts list in the middle, reference lists down
-// the side. The app still works the capacitor bank out for itself and does not
-// consume this — it is kept as an editable REFERENCE that round-trips through
-// Excel. So it is stored as the sheet's own grid, cell for cell, verbatim.
-function parsePfc(rows: Rows): { grid: unknown[][] } {
-  const grid = rows.map((row) => (Array.isArray(row) ? row.map((c) => (c === undefined ? null : c)) : []));
-  return { grid };
+// A STRUCTURED parts map that the capacitor-bank builder reads (frontend buildPfc):
+// column A is the role, column B the exact price-list name, column C a number (fuses
+// or bases per step, a controller's max variable steps, or a ventilation quantity).
+// Anything the sheet omits falls back to the builder's defaults. A sheet that does not
+// look like the parts map (an old free-form reference) is kept verbatim as a grid so
+// nothing is lost — the builder then just uses its defaults.
+function parsePfc(rows: Rows): Partial<PfcParts> | { grid: unknown[][] } {
+  const out: Partial<PfcParts> = {};
+  const controllers: { desc: string; maxVarSteps: number }[] = [];
+  const ventilation: { qty: number; desc: string }[] = [];
+  let matched = 0;
+  for (const row of rows) {
+    if (!Array.isArray(row)) continue;
+    const role = normKey(row[0]);
+    const name = clean(row[1]);
+    const n = num(row[2]);
+    if (!role) continue;
+    if (role.includes("fuse") && role.includes("base")) {
+      if (name) out.fuseBase = name;
+      if (n && n > 0) out.basesPerStep = n;
+      matched++;
+    } else if (role.includes("fuse")) {
+      if (role.includes("50")) { if (name) out.fuse50 = name; } else if (name) out.fuse25 = name;
+      if (n && n > 0) out.fusesPerStep = n;
+      matched++;
+    } else if (role.includes("contactor")) {
+      if (role.includes("50")) { if (name) out.contactor50 = name; } else if (name) out.contactor25 = name;
+      matched++;
+    } else if (role.includes("capacitor")) {
+      if (name) out.capacitor = name;
+      matched++;
+    } else if (role.includes("controller")) {
+      if (name) { controllers.push({ desc: name, maxVarSteps: n && n > 0 ? n : 9999 }); matched++; }
+    } else if (role.includes("ventilation") || role.includes("fan") || role.includes("filter") || role.includes("thermostat")) {
+      if (name) { ventilation.push({ qty: n && n > 0 ? n : 1, desc: name }); matched++; }
+    }
+  }
+  // Fewer than two recognised rows → this isn't the parts map (probably the old
+  // free-form sheet). Keep it verbatim as a grid so nothing is lost.
+  if (matched < 2) {
+    return { grid: rows.map((row) => (Array.isArray(row) ? row.map((c) => (c === undefined ? null : c)) : [])) };
+  }
+  if (controllers.length) out.controllers = controllers;
+  if (ventilation.length) out.ventilation = ventilation;
+  return out;
 }
 
 // ── Standard LV EDMS ─────────────────────────────────────────────────────────
@@ -1070,17 +1109,32 @@ function motorizedGrid(value: unknown): Grid {
 }
 
 // ── P.F.C tab ────────────────────────────────────────────────────────────────
-// The mirror of parsePfc: the stored grid, written straight back cell for cell.
+// The mirror of parsePfc: the parts map written as a labelled table the engineers can
+// edit — role in column A, exact price-list name in column B, a number in column C. A
+// stored value that isn't the parts map (an old free-form grid, or none yet) is written
+// from the built-in defaults, so the download is always a valid, ready-to-edit template.
 function pfcGrid(value: unknown): Grid {
   const o = asObj(value);
-  const grid = o && Array.isArray(o.grid) ? (o.grid as Grid) : null;
-  if (!grid || grid.length === 0) {
-    // Never hand over an empty workbook — it would look like a backup of nothing.
-    throw new Error(
-      "There is no P.F.C reference to write yet, so no Excel file was made. Load a P.F.C workbook first. Nothing was changed.",
-    );
-  }
-  return grid;
+  const mapped = !!(o && (o.capacitor || o.fuse25 || o.controllers || o.ventilation));
+  const p: PfcParts = mapped ? { ...PFC_PARTS, ...(o as Partial<PfcParts>) } : PFC_PARTS;
+  const g: Grid = [];
+  let r = 0;
+  const row = (a: string, b: string, c: number | string = "") => {
+    put(g, r, 0, a);
+    put(g, r, 1, b);
+    if (c !== "" && c !== undefined) put(g, r, 2, c);
+    r++;
+  };
+  row("Part", "Price-list name (exact)", "Per step / limit");
+  row("Capacitor (25 kVAR unit)", p.capacitor);
+  row("Fuse — 25 kVAR step", p.fuse25, p.fusesPerStep);
+  row("Fuse — 50 kVAR step", p.fuse50, p.fusesPerStep);
+  row("Fuse base", p.fuseBase, p.basesPerStep);
+  row("Contactor — 25 kVAR step", p.contactor25);
+  row("Contactor — 50 kVAR step", p.contactor50);
+  for (const c of p.controllers) row("Controller (up to N variable steps)", c.desc, c.maxVarSteps >= 9999 ? "" : c.maxVarSteps);
+  for (const v of p.ventilation) row("Ventilation", v.desc, v.qty);
+  return g;
 }
 
 // ── Standard LV EDMS sheets ──────────────────────────────────────────────────
@@ -1122,7 +1176,7 @@ const SECTION_BLURB: Record<string, string> = {
   photocell: "the photocell contactor for each breaker rating, and the fixed parts",
   wd: "the withdrawable kits — the fixed part and the moving part of each one",
   motorized: "the motorised breaker parts, listed down a column per breaker frame",
-  pfc: "the power-factor-correction sizing sheet — kept as a reference, cell for cell",
+  pfc: "the power-factor-correction parts map — which price-list item plays each role, and how many",
   stdlvedms: "the standard LV EDMS panels, one sheet per transformer size — a reference",
   stdatsedms: "the standard ATS panels for EDMS, one sheet per rating and breaker — the app builds from these",
 };
@@ -1173,11 +1227,13 @@ const SECTION_NOTES: Record<string, string[]> = {
     "replaces what the app has, so anything you leave out is dropped.",
   ],
   pfc: [
-    "PFC tab: this is a REFERENCE the app keeps for you — it is not used to build a",
-    "quotation. The app still sizes the capacitor bank itself from the kVAR and the",
-    "number of steps. Edit the cells freely and load the file back to update the",
-    "reference; the layout is kept as-is. Cell formatting (colours, merged cells) is",
-    "not stored — only the values in the cells are.",
+    "PFC tab: a PARTS MAP the app builds from. Column A is the role, column B the EXACT",
+    "price-list name of the item to use, column C a number (fuses or bases per step, a",
+    "controller's largest variable-step count, or a ventilation quantity). The app still",
+    "works out HOW MANY of each from the kVAR and the number of steps — this file only",
+    "sets WHICH item plays each role. A name that is not on the price list is flagged when",
+    "you load the file. Leave a row out to keep the app's built-in default for it. Only",
+    "the cell values are stored, not colours or merged cells.",
   ],
   stdlvedms: [
     "This is a REFERENCE the app keeps for you — it is not used to build the",

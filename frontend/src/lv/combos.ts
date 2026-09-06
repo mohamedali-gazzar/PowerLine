@@ -1,7 +1,7 @@
 // Circuit-combination generators (RPT-03). Each returns editable line items —
 // "All auto-selected components are default recommendations only."
 
-import { COMBOS, COMPONENTS, findByName, type DbComponent } from "./catalog";
+import { COMBOS, COMPONENTS, findByName, type DbComponent, type PfcParts } from "./catalog";
 
 export interface ComboLine {
   qty: number;
@@ -298,15 +298,51 @@ export const PFC_DEFAULT: PfcInput = {
   kvar: 300, cbRating: 0, fixedSteps: 1, fixedKvar: 50, var1Steps: 5, var1Kvar: 50, var2Steps: 0, var2Kvar: 50,
 };
 
-// The 25-kVAR / 400 V capacitor used to size every P.F.C. bank. Named EXACTLY as it
-// appears on the price list so it resolves to that one row — not a fuzzy "25 KVAR"
-// match, which grabbed whichever "25 kVAR" capacitor happened to sit first in the
-// catalogue (e.g. the retired Hitachi one) regardless of what the price list now uses.
-// Change this string if the price-list name of the 400 V 25-kVAR capacitor changes.
-const CAP_25 = "Capacitor 25 kVAR @ 400V";
-const fuseFor = (k: 25 | 50) => (k === 25 ? "HRC Fuse 63A" : "HRC Fuse 125A");
-const contactorFor = (k: 25 | 50) =>
-  k === 25 ? "CONTACTOR FOR CAPACITOR- 30 KVAR 220-230V 50Hz" : "CONTACTOR FOR CAPACITOR- 50 KVAR  220-230V 50Hz";
+// P.F.C parts — the price-list name for each role, plus the per-step counts. These are
+// the built-in DEFAULTS; the owner can override any of them by uploading the "P.F.C"
+// combinations sheet, which lands in COMBOS.pfc. Each name is written EXACTLY as it
+// appears on the price list so it resolves to that one row (findByName), not a fuzzy
+// match that could grab, say, a retired "25 kVAR" capacitor sitting first in the list.
+export const PFC_PARTS: PfcParts = {
+  capacitor: "Capacitor 25 kVAR @ 400V",
+  fuse25: "HRC Fuse 63A",
+  fuse50: "HRC Fuse 125A",
+  fusesPerStep: 3,
+  fuseBase: "Fuse Base 160A",
+  basesPerStep: 3,
+  contactor25: "CONTACTOR FOR CAPACITOR- 30 KVAR 220-230V 50Hz",
+  contactor50: "CONTACTOR FOR CAPACITOR- 50 KVAR  220-230V 50Hz",
+  controllers: [
+    { desc: "Power Factor Controller 6 step RVC-6", maxVarSteps: 6 },
+    { desc: "Power Factor Controller 12 step RVC-12", maxVarSteps: 12 },
+  ],
+  ventilation: [
+    { qty: 1, desc: "Fan" },
+    { qty: 2, desc: "Filter" },
+    { qty: 1, desc: "Thermostat" },
+  ],
+};
+
+/** The P.F.C parts to build with: the uploaded sheet (COMBOS.pfc) laid over the
+ *  defaults, field by field, so a sheet that sets only some parts still works and an
+ *  absent sheet leaves the build exactly as it was. */
+export function pfcParts(): PfcParts {
+  const s = COMBOS.pfc;
+  if (!s) return PFC_PARTS;
+  const pos = (n: unknown, d: number) => (typeof n === "number" && n > 0 ? n : d);
+  return {
+    capacitor: s.capacitor || PFC_PARTS.capacitor,
+    fuse25: s.fuse25 || PFC_PARTS.fuse25,
+    fuse50: s.fuse50 || PFC_PARTS.fuse50,
+    fusesPerStep: pos(s.fusesPerStep, PFC_PARTS.fusesPerStep),
+    fuseBase: s.fuseBase || PFC_PARTS.fuseBase,
+    basesPerStep: pos(s.basesPerStep, PFC_PARTS.basesPerStep),
+    contactor25: s.contactor25 || PFC_PARTS.contactor25,
+    contactor50: s.contactor50 || PFC_PARTS.contactor50,
+    controllers: Array.isArray(s.controllers) && s.controllers.length ? s.controllers : PFC_PARTS.controllers,
+    ventilation: Array.isArray(s.ventilation) && s.ventilation.length ? s.ventilation : PFC_PARTS.ventilation,
+  };
+}
 
 export function pfcTotalKvar(i: PfcInput): number {
   return i.fixedSteps * i.fixedKvar + i.var1Steps * i.var1Kvar + i.var2Steps * i.var2Kvar;
@@ -326,47 +362,47 @@ export function pfcHeader(i: PfcInput): string {
   return `P.F.C. [${inner}] = ${pfcTotalKvar(i)} KVAR`;
 }
 
-/** Per the database sheet: capacitors are counted as 25 kVAR units (a 50 kVAR step = 2×25),
- *  3 fuses + 3 bases per step, one contactor per variable step, controller(s) by variable steps. */
+/** The capacitor bank. The SIZING is fixed engineering — capacitors counted as 25-kVAR
+ *  units (a 50-kVAR step = 2×25), fuses + bases per step, one contactor per variable
+ *  step, controllers by variable-step count. The PART NAMES and per-step counts come
+ *  from pfcParts() — the uploaded "P.F.C" sheet, or the built-in defaults. */
 export function buildPfc(i: PfcInput, cb?: DbComponent): ComboLine[] {
   const out: ComboLine[] = [];
+  const P = pfcParts();
   // RPT-1: every P.F.C. line is grouped under the generated header.
   const header = pfcHeader(i);
+  const line = (qty: number, name: string) =>
+    out.push({ qty, desc: name, comp: findByName(name), groupLabel: header });
   // RPT-1: mandatory main P.F.C. circuit breaker — the chosen catalogue breaker
   // (with its price/ref) when selected, else a generic line from the entered rating.
   if (cb) {
     out.push({ qty: 1, desc: cb.n, comp: cb, groupLabel: header });
   } else if (i.cbRating > 0) {
-    const cbName = `P.F.C. Circuit Breaker ${i.cbRating}A`;
-    out.push({ qty: 1, desc: cbName, comp: findByName(cbName), groupLabel: header });
+    line(1, `P.F.C. Circuit Breaker ${i.cbRating}A`);
   }
   const block = (steps: number, kv: 25 | 50, withContactor: boolean) => {
     if (steps <= 0) return;
     const capUnits = steps * (kv === 50 ? 2 : 1);
-    out.push({ qty: capUnits, desc: CAP_25, comp: findByName(CAP_25), groupLabel: header });
-    out.push({ qty: steps * 3, desc: fuseFor(kv), comp: findByName(fuseFor(kv)), groupLabel: header });
-    out.push({ qty: steps * 3, desc: "Fuse Base 160A", comp: findByName("Fuse Base 160A"), groupLabel: header });
-    if (withContactor)
-      out.push({ qty: steps, desc: contactorFor(kv), comp: findByName(contactorFor(kv)), groupLabel: header });
+    line(capUnits, P.capacitor);
+    line(steps * P.fusesPerStep, kv === 25 ? P.fuse25 : P.fuse50);
+    line(steps * P.basesPerStep, P.fuseBase);
+    if (withContactor) line(steps, kv === 25 ? P.contactor25 : P.contactor50);
   };
   block(i.fixedSteps, i.fixedKvar, false);
   block(i.var1Steps, i.var1Kvar, true);
   block(i.var2Steps, i.var2Kvar, true);
 
-  // A Power Factor Controller only switches VARIABLE steps — a fixed-only bank has nothing
-  // to switch, so it gets no controller. (The old `else if (varSteps <= 12)` fired on
-  // varSteps === 0 too and wrongly added an RVC-12 to every fixed-only bank.)
+  // A Power Factor Controller only switches VARIABLE steps — a fixed-only bank has
+  // nothing to switch, so it gets none. Pick the first controller whose capacity covers
+  // the variable-step count; if the count exceeds every controller, add them all.
   const varSteps = i.var1Steps + i.var2Steps;
-  const ctl: string[] = [];
-  if (varSteps > 0 && varSteps <= 6) ctl.push("Power Factor Controller 6 step RVC-6");
-  else if (varSteps > 6 && varSteps <= 12) ctl.push("Power Factor Controller 12 step RVC-12");
-  else if (varSteps > 12) ctl.push("Power Factor Controller 6 step RVC-6", "Power Factor Controller 12 step RVC-12");
-  ctl.forEach((c) => out.push({ qty: 1, desc: c, comp: findByName(c), groupLabel: header }));
-  // P.F.C. cubicle ventilation — always add 1 fan + 2 filters + 1 thermostat by default.
-  // Names match the P.F.C combinations workbook ("Fan", "Filter", "Thermostat"); the
-  // price list must carry the same names for these to price (see the "no price" flag).
-  for (const [qty, name] of [[1, "Fan"], [2, "Filter"], [1, "Thermostat"]] as const)
-    out.push({ qty, desc: name, comp: findByName(name), groupLabel: header });
+  if (varSteps > 0) {
+    const ordered = [...P.controllers].sort((a, b) => a.maxVarSteps - b.maxVarSteps);
+    const one = ordered.find((c) => varSteps <= c.maxVarSteps);
+    (one ? [one] : ordered).forEach((c) => line(1, c.desc));
+  }
+  // P.F.C. cubicle ventilation — added once. Names must match the price list to price.
+  P.ventilation.forEach((v) => line(v.qty, v.desc));
   return out;
 }
 

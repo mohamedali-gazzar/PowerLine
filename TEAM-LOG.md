@@ -23,6 +23,28 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-06 · Mohamed's side · Claude
 
+**The "P.F.C" combinations Excel now DRIVES the P.F.C combination — like MCC does.**
+
+Until now the P.F.C sheet on the Combinations tab was only a reference copy: editing it changed
+nothing, because the app built the capacitor bank from parts written into the code. Now the sheet
+is a PARTS MAP the app actually reads. Each row is: the ROLE (column A), the EXACT price-list name
+of the item to use (column B), and a number (column C) — fuses/bases per step, a controller's
+largest step count, or a ventilation quantity. The roles are: the 25-kVAR capacitor, the fuse and
+contactor for a 25-kVAR and for a 50-kVAR step, the fuse base, the power-factor controllers, and
+the fan/filter/thermostat. Download the "P.F.C" file from the Combinations tab to get the sheet
+already filled in with today's parts, change a name or number, and load it back — the change shows
+up the next time a P.F.C combination is generated. Anything you leave out keeps the app's built-in
+default, so a half-filled sheet is safe. A name that isn't on the price list is flagged when you
+load the file.
+
+The app still works out HOW MANY of each part from the kVAR and the number of steps — the sheet
+only sets WHICH item plays each role. Nothing changes until you upload a new sheet: the built-in
+parts (including the RTR "Capacitor 25 kVAR @ 400V") are the starting point. Verified end to end:
+loading a sheet with a different capacitor made the generated P.F.C bank use that capacitor.
+Frontend + backend build green; 81 frontend and 311 backend tests pass (5 new P.F.C tests).
+
+## 2026-09-06 · Mohamed's side · Claude
+
 **P.F.C combination now uses the RTR 25-kVAR capacitor, not the old Hitachi one.**
 
 When you build a Power-Factor-Correction combination, the capacitor line was always coming out as

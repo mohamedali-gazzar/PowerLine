@@ -58,23 +58,41 @@ const SECTION_SCHEMA: Record<ComboSection, z.ZodTypeAny> = {
 const isSection = (s: string): s is ComboSection =>
   (COMBO_SECTIONS as readonly string[]).includes(s);
 
-// ── EXTRA reference sections (P.F.C, Standard LV EDMS) ───────────────────────
-// These are stored, listed, edited and downloaded on the Combinations tab like the
-// real combinations, but are deliberately NOT in COMBO_SECTIONS. The app does not
-// consume them (P.F.C: the app sizes the bank itself; Standard LV EDMS: the standard
-// panels are built in code), and keeping them out of that list leaves
-// combosForPayload's completeness guard — and the served catalogue — untouched. Each
-// is stored as the workbook's own cells, so none needs a modelled shape.
-//   pfc        — one sheet  → { grid: cell[][] }
-//   stdlvedms  — many sheets → { sheets: { name, grid: cell[][] }[] }
+// ── EXTRA sections stored on the Combinations tab, outside COMBO_SECTIONS ─────
+// Kept out of COMBO_SECTIONS so combosForPayload's completeness guard (which counts
+// only the real combinations) is untouched — but every stored row IS served in the
+// payload, so the CLIENT can still consume any of these. Whether it does varies:
+//   pfc        — a STRUCTURED parts map the capacitor-bank builder reads (buildPfc).
+//   stdatsedms — sheets the Standard ATS builder reads (standardAtsEdms.ts).
+//   stdlvedms  — many sheets → { sheets: { name, grid: cell[][] }[] } — a pure
+//                reference; the standard LV panels are still built in code.
 const grid2d = z.array(z.array(z.any()));
 const REFERENCE: Record<string, { label: string; schema: z.ZodTypeAny; summary: (v: unknown) => string }> = {
   pfc: {
     label: "P.F.C — power-factor correction",
-    schema: z.object({ grid: grid2d }),
+    // The P.F.C sheet is now a STRUCTURED parts map that the capacitor-bank builder
+    // reads (frontend buildPfc), not a free-form reference grid. Every field is optional
+    // so a partial sheet passes and missing parts fall back to the builder's defaults;
+    // `.passthrough()` keeps any extra columns a sheet happens to carry (e.g. an old grid).
+    schema: z
+      .object({
+        capacitor: z.string().optional(),
+        fuse25: z.string().optional(),
+        fuse50: z.string().optional(),
+        fusesPerStep: z.number().optional(),
+        fuseBase: z.string().optional(),
+        basesPerStep: z.number().optional(),
+        contactor25: z.string().optional(),
+        contactor50: z.string().optional(),
+        controllers: z.array(z.object({ desc: z.string(), maxVarSteps: z.number() })).optional(),
+        ventilation: z.array(z.object({ qty: z.number(), desc: z.string() })).optional(),
+      })
+      .passthrough(),
     summary: (v) => {
-      const g = (v as { grid?: unknown[] } | null)?.grid;
-      return Array.isArray(g) ? `reference sheet · ${g.length} rows` : "reference sheet";
+      const o = (v as Record<string, unknown> | null) ?? {};
+      const ctl = Array.isArray(o.controllers) ? o.controllers.length : 0;
+      const vent = Array.isArray(o.ventilation) ? o.ventilation.length : 0;
+      return o.capacitor ? `parts map · ${ctl} controllers, ${vent} vent parts` : "parts map (defaults)";
     },
   },
   stdlvedms: {
@@ -110,7 +128,7 @@ const schemaFor = (s: string): z.ZodTypeAny | null =>
 const summariseAny = (s: string, value: unknown): string =>
   isReference(s) ? REFERENCE[s].summary(value) : isSection(s) ? summarise(s, value) : "";
 const descriptionsAny = (s: string, value: unknown): string[] =>
-  isSection(s) ? descriptionsIn(s, value) : []; // references name no components
+  isSection(s) ? descriptionsIn(s, value) : s === "pfc" ? pfcDescriptions(value) : []; // other references name no components
 
 /** A one-line summary per section, so the tab can show "110 starters" not "[object]". */
 export function summarise(section: ComboSection, value: unknown): string {
@@ -161,6 +179,16 @@ function descriptionsIn(section: ComboSection, value: unknown): string[] {
     /* a malformed section is already rejected by the schema */
   }
   return [...new Set(out.map((d) => (d ?? "").trim()).filter(Boolean))];
+}
+
+/** The price-list names a P.F.C parts map refers to, so an upload naming a part the
+ *  catalogue doesn't carry is flagged just like the real combinations. */
+function pfcDescriptions(value: unknown): string[] {
+  const o = (value as Record<string, any>) ?? {};
+  const out: unknown[] = [o.capacitor, o.fuse25, o.fuse50, o.fuseBase, o.contactor25, o.contactor50];
+  for (const c of Array.isArray(o.controllers) ? o.controllers : []) out.push(c?.desc);
+  for (const v of Array.isArray(o.ventilation) ? o.ventilation : []) out.push(v?.desc);
+  return [...new Set(out.map((d) => (d ?? "").toString().trim()).filter(Boolean))];
 }
 
 /**
@@ -257,13 +285,17 @@ async function unresolved(descs: string[]): Promise<string[]> {
 export async function seedCombosIfMissing(by = "seed"): Promise<number> {
   const have = new Set((await prisma.lvCombo.findMany({ select: { section: true } })).map((r) => r.section));
   let written = 0;
-  for (let i = 0; i < COMBO_SECTIONS.length; i++) {
-    const section = COMBO_SECTIONS[i];
-    if (have.has(section)) continue;
+  // Seed every KNOWN section the bundled file carries — the real combinations, plus any
+  // reference section that ships a default (P.F.C's parts map). Sections stored only once
+  // uploaded (Standard LV / ATS EDMS) are absent from the bundle and are skipped.
+  const sortIndexOf = (section: string) =>
+    isSection(section) ? COMBO_SECTIONS.indexOf(section) : COMBO_SECTIONS.length + REFERENCE_SECTIONS.indexOf(section);
+  for (const section of Object.keys(bundledCombos as Record<string, unknown>)) {
+    if (!isKnownSection(section) || have.has(section)) continue;
     const value = (bundledCombos as Record<string, unknown>)[section];
     if (value === undefined) continue;
     await prisma.lvCombo.create({
-      data: { section, payload: JSON.stringify(value), sortIndex: i, updatedBy: by },
+      data: { section, payload: JSON.stringify(value), sortIndex: sortIndexOf(section), updatedBy: by },
     });
     written++;
   }
