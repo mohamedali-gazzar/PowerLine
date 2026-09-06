@@ -348,10 +348,13 @@ export function buildPfc(i: PfcInput, cb?: DbComponent): ComboLine[] {
   block(i.var1Steps, i.var1Kvar, true);
   block(i.var2Steps, i.var2Kvar, true);
 
+  // A Power Factor Controller only switches VARIABLE steps — a fixed-only bank has nothing
+  // to switch, so it gets no controller. (The old `else if (varSteps <= 12)` fired on
+  // varSteps === 0 too and wrongly added an RVC-12 to every fixed-only bank.)
   const varSteps = i.var1Steps + i.var2Steps;
   const ctl: string[] = [];
   if (varSteps > 0 && varSteps <= 6) ctl.push("Power Factor Controller 6 step RVC-6");
-  else if (varSteps <= 12) ctl.push("Power Factor Controller 12 step RVC-12");
+  else if (varSteps > 6 && varSteps <= 12) ctl.push("Power Factor Controller 12 step RVC-12");
   else if (varSteps > 12) ctl.push("Power Factor Controller 6 step RVC-6", "Power Factor Controller 12 step RVC-12");
   ctl.forEach((c) => out.push({ qty: 1, desc: c, comp: findByName(c), groupLabel: header }));
   // P.F.C. cubicle ventilation — always add 1 fan + 2 filters + 1 thermostat by default.

@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-06 · Mohamed's side · Claude
 
+**P.F.C fix: a fixed-only capacitor bank no longer gets a Power Factor Controller.**
+
+Building a P.F.C combination with only **fixed** steps (no variable steps) was wrongly adding a
+"Power Factor Controller 12 step RVC-12" line. A controller switches the *variable* steps in and
+out — a fixed bank has nothing to switch, so it needs none. The rule now is: no variable steps →
+no controller; 1–6 variable steps → RVC-6; 7–12 → RVC-12; more than 12 → both. (The old code had
+`else if (var steps ≤ 12)`, which also caught *zero* steps and added an RVC-12 to every fixed-only
+bank.) Added tests for all four cases. Verified: a 1 × 50 kVAR fixed bank now builds 7 items with
+no controller; 4 variable steps → RVC-6, 8 → RVC-12. Build green, 76 tests pass.
+
+## 2026-09-06 · Mohamed's side · Claude
+
 **Revision No. and OPTY No. are now required fields.**
 
 On the Project tab, **Revision No.** and **OPTY No.** now carry the same red ✱ as Project name,
