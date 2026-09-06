@@ -21,6 +21,18 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-06 · Mohamed's side · Claude
+
+**Revision No. and OPTY No. are now required fields.**
+
+On the Project tab, **Revision No.** and **OPTY No.** now carry the same red ✱ as Project name,
+Customer, QTN No. and Sales support engineer — the box shows a red outline until it's filled. And
+like those fields, an offer can't be generated until both are entered: the Technical / Commercial /
+Material tabs show "Revision No. is required" / "OPTY No. is required" until they're filled on the
+Project tab. Nothing else changes — you can still open and edit the quotation; it only blocks
+producing an offer with them blank. Verified: the red outline shows when empty and clears when
+filled, and the offer unblocks once both are in. Build green, 72 tests pass.
+
 ## 2026-09-03 · Mohamed's side · Claude
 
 **New quotation type: "Custom Commercial Offer" — you write the offer lines yourself.**

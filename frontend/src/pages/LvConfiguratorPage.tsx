@@ -1014,6 +1014,8 @@ export default function LvConfiguratorPage() {
     ...(s.project.name.trim() ? [] : ["Project name is required — fill it on the Project tab."]),
     ...(s.project.customer.trim() ? [] : ["Customer is required — fill it on the Project tab."]),
     ...(qtnNum.trim() ? [] : ["QTN number is required — set it on the Project tab."]),
+    ...((s.project.revisionNo || "").trim() ? [] : ["Revision No. is required — fill it on the Project tab."]),
+    ...((s.project.optyNo || "").trim() ? [] : ["OPTY No. is required — fill it on the Project tab."]),
     ...(s.project.supportEngineer.trim() ? [] : ["Sales support engineer is required — pick one on the Project tab."]),
     ...s.panels.flatMap((p, i) =>
       p.spare ? [] : panelInvalid(p).map((msg) => `${panelLabel(p, i)}: ${msg}`)),
@@ -3593,10 +3595,10 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
                 onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setQtnDraft(qtnNum); setQtnErr(""); } }} />
               {qtnErr && <p className="mt-1 text-[11px] font-semibold text-red-600">{qtnErr}</p>}
             </div>
-            <div><L>Revision No.</L><input className="input" value={pr.revisionNo} onChange={(e) => upPr({ revisionNo: e.target.value })} /></div>
+            <div><L>Revision No. <span className="text-red-500">*</span></L><input className={`input ${(pr.revisionNo || "").trim() ? "" : "ring-1 ring-red-400"}`} value={pr.revisionNo} onChange={(e) => upPr({ revisionNo: e.target.value })} /></div>
           </div>
           {/* Row 2 right: OPTY No. */}
-          <div><L>OPTY No.</L><input className="input" value={pr.optyNo} onChange={(e) => upPr({ optyNo: e.target.value })} /></div>
+          <div><L>OPTY No. <span className="text-red-500">*</span></L><input className={`input ${(pr.optyNo || "").trim() ? "" : "ring-1 ring-red-400"}`} value={pr.optyNo} onChange={(e) => upPr({ optyNo: e.target.value })} /></div>
           <div>
             <L>Sales support engineer <span className="text-red-500">*</span></L>
             <select className={`input cursor-pointer ${pr.supportEngineer ? "" : "ring-1 ring-red-400"}`} value={pr.supportEngineer} onChange={(e) => upPr({ supportEngineer: e.target.value })}>
