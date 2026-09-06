@@ -5444,7 +5444,6 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
             if (sec.group) {
               const g = sec.group;
               const isCol = collapsed.has(g.id);
-              const total = sec.panels.reduce((sum, p) => sum + calcPanel(p, s.factors, s.abbItemDiscounts).totalSell, 0);
               const gi = sorted.findIndex((x) => x.id === g.id);
               return (
                 <div key={g.id} className="mb-1.5">
@@ -5465,8 +5464,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
                       <button onClick={() => toggleCollapse(g.id)} title={g.name} className="min-w-0 flex-1 truncate text-left text-[13px] font-bold uppercase tracking-wide text-[#F16722]">{g.name}</button>
                     )}
                     <span className="shrink-0 rounded-full bg-[#F16722]/15 px-1.5 text-[11px] font-bold text-brand-dark">{sec.panels.length}</span>
-                    <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold tabular-nums text-brand-dark/80">{fmtEgp(total)}</span>
-                    <div className="flex shrink-0 items-center">
+                    <div className="ml-auto flex shrink-0 items-center">
                       <button onClick={() => up(reorderPanelGroup(s, g.id, -1))} disabled={gi <= 0} title="Move group up" className="rounded px-0.5 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark disabled:opacity-25">↑</button>
                       <button onClick={() => up(reorderPanelGroup(s, g.id, 1))} disabled={gi >= sorted.length - 1} title="Move group down" className="rounded px-0.5 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark disabled:opacity-25">↓</button>
                       <button onClick={() => { setEditGroupId(g.id); setEditGroupVal(g.name); }} title="Rename group" className="rounded px-0.5 text-xs text-brand-dark/60 hover:bg-white hover:text-brand-dark">✎</button>

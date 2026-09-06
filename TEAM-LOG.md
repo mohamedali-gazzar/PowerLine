@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-06 · Mohamed's side · Claude
 
+**Panel-group header no longer shows a price.** Dropped the rolled-up selling total from the group
+header strip in the sidebar — it now shows just the group name, the panel count, and the action
+buttons. (Grouping stays organisational only; nothing else changed.)
+
+## 2026-09-06 · Mohamed's side · Claude
+
 **Panels can now be grouped in the quotation sidebar (e.g. SMDB-1 + SMDB-2 under "SMDB").**
 
 A new optional layer for organising a quotation: put related panels — main or auxiliary — under a
