@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-06 · Mohamed's side · Claude
 
+**Incoming / Outgoings: a component you add now goes ABOVE the combinations, not below.**
+
+In the Main Incoming and Outgoings sections, the loose individual items belong before the
+combinations (Source 1/2, starters, …). Adding a component used to drop it at the bottom of the
+section, under the combinations. Now, if the section has a combination, the new component is
+inserted just before the first one — so the plain items stay together at the top and the
+combinations follow. Applies to a single add, a bulk paste, and the auto-added neutral sensor;
+other sections are unchanged (still add to the end). Verified: on a Main Incoming with Source 1/2,
+a newly added "Selector" landed above Source 1. Build green, 76 tests pass.
+
+## 2026-09-06 · Mohamed's side · Claude
+
 **LCP / KWHM: a one-time reminder to re-check the size after you change the defaults.**
 
 The enclosure size for an LCP or KWHM panel is worked out automatically from the number of

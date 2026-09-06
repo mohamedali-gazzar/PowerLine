@@ -6618,6 +6618,17 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     requestAnimationFrame(() => requestAnimationFrame(() => {
       cardRef.current?.querySelector(`tr[data-cid="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
     }));
+  // Adding a LOOSE component: in the Incoming / Outgoings sections the individual items belong
+  // BEFORE the combinations (Source 1/2, starters, …), so a newly added component is inserted
+  // just ahead of that section's first combination rather than at the end. Any other section
+  // keeps the old behaviour (append to the end of the section).
+  const insertLoose = (arr: PanelComponent[], nc: PanelComponent, sec: string): PanelComponent[] => {
+    if (/incoming|outgoing/i.test(sec)) {
+      const idx = arr.findIndex((x) => x.section === sec && !isSpacer(x) && (effGroup.get(x.id) || "") !== "");
+      if (idx >= 0) { const out = [...arr]; out.splice(idx, 0, nc); return out; }
+    }
+    return [...arr, nc];
+  };
   // A 3-pole LSIG breaker senses the neutral OUTSIDE the breaker, so it needs an
   // external neutral current sensor — after adding one, offer to add the matching
   // sensor (frame + rating) to the same section. Returns the sensor to add, or null.
@@ -6641,7 +6652,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       if (lastIdx >= 0) arr.splice(lastIdx + 1, 0, row); else arr.push(row);
       u({ components: arr });
     } else {
-      u({ components: [...p.components, row] });
+      u({ components: insertLoose(p.components, row, sec) });
     }
     setNeutralPrompt(null);
   };
@@ -6669,7 +6680,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       return;
     }
     const nc = toPanelComponent(c, p.activeSection, base);
-    u({ components: [...p.components, nc] });
+    u({ components: insertLoose(p.components, nc, p.activeSection) });
     const sensor = externalNeutralCT(c.n);
     if (sensor) setNeutralPrompt({ breaker: c.n, sensor, sec: p.activeSection, qty: base });
     setQ("");
@@ -6724,7 +6735,16 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       return;
     }
     const added = matched.map((r) => toPanelComponent(r.match!, p.activeSection, Math.max(1, r.qty)));
-    if (added.length) u({ components: [...p.components, ...added] });
+    if (added.length) {
+      // Same rule as a single add: in Incoming / Outgoings the pasted items go before the
+      // section's first combination; elsewhere they append to the end of the section.
+      const sec = p.activeSection;
+      const idx = /incoming|outgoing/i.test(sec)
+        ? p.components.findIndex((x) => x.section === sec && !isSpacer(x) && (effGroup.get(x.id) || "") !== "")
+        : -1;
+      if (idx >= 0) { const out = [...p.components]; out.splice(idx, 0, ...added); u({ components: out }); }
+      else u({ components: [...p.components, ...added] });
+    }
     setPastePreview(null);
     setPasteMsg(`Added ${added.length} component${added.length === 1 ? "" : "s"} to “${p.activeSection}”${missing ? ` · ${missing} skipped (not found)` : ""}`);
     refocusSearch();
