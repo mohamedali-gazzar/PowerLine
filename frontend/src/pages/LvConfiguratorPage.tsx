@@ -74,6 +74,12 @@ import { stdAts, applyStdAts, stdAtsRatings, atsBreakersFor, type StdAtsVariant 
 type Tab = "project" | "pricing" | "specs" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "sizing" | "summary";
 const TABS: Tab[] = ["project", "pricing", "specs", "panels", "technical", "commercial", "material", "spare", "selectivity", "sizing"];
 
+// How many edits Undo/Redo can step through. Text fields record one step PER KEYSTROKE, so the
+// old 60 was used up after a few words and undo felt short-lived; 1000 reaches far further back.
+// Each step shares the unchanged parts of the previous one (only the edited slice is new), so the
+// memory cost is small even on a big quotation.
+const HISTORY_CAP = 1000;
+
 /** Effective combination group per component (id → group). A component keeps its
  *  own group; an ungrouped one sitting between two same-group items (in the same
  *  section) inherits that group — so moving an item into a Source 1 run joins it. */
@@ -724,12 +730,12 @@ export default function LvConfiguratorPage() {
   const apply = (updater: (old: LvState) => LvState) =>
     setHist((h) => {
       const next = updater(h.present);
-      return next === h.present ? h : { past: [...h.past, h.present].slice(-60), present: next, future: [] };
+      return next === h.present ? h : { past: [...h.past, h.present].slice(-HISTORY_CAP), present: next, future: [] };
     });
   const undo = () =>
-    setHist((h) => (!readOnly && h.past.length ? { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future].slice(0, 60) } : h));
+    setHist((h) => (!readOnly && h.past.length ? { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future].slice(0, HISTORY_CAP) } : h));
   const redo = () =>
-    setHist((h) => (!readOnly && h.future.length ? { past: [...h.past, h.present].slice(-60), present: h.future[0], future: h.future.slice(1) } : h));
+    setHist((h) => (!readOnly && h.future.length ? { past: [...h.past, h.present].slice(-HISTORY_CAP), present: h.future[0], future: h.future.slice(1) } : h));
   const canUndo = !readOnly && hist.past.length > 0;
   const canRedo = !readOnly && hist.future.length > 0;
   // "Apply changes" from the price-list changelog: re-price this quotation to the current

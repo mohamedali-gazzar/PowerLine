@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-06 · Mohamed's side · Claude
 
+**Undo now reaches much further back.**
+
+Undo/Redo only remembered the last 60 changes, and because typing in a box records one step per
+keystroke, that was used up after a few words — so undo felt short-lived. Raised the memory to
+the last 1000 changes (about 16× more). It costs almost no extra memory because each step shares
+the unchanged parts of the one before it. Verified: undo/redo still steps through edits correctly
+and returns to the starting point. Build green, 76 tests pass.
+
+## 2026-09-06 · Mohamed's side · Claude
+
 **Active-time now stops once a quotation is sent for approval or submitted.**
 
 The "active working time" counter should only add up real editing time. It already stopped on
