@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-06 · Mohamed's side · Claude
 
+**Active-time now stops once a quotation is sent for approval or submitted.**
+
+The "active working time" counter should only add up real editing time. It already stopped on
+screen once a quotation was locked (waiting for approval / approved / submitted), but the server
+would still accept a stray time update from a lingering page. Now the server refuses them too: a
+quotation that is Waiting for approval, Approved or Submitted accrues no more time — only Draft /
+Returned quotations do. Same rule applied to RMU offers. Verified: sending 50 seconds to a
+Waiting and to a Submitted quotation added nothing; drafts are unaffected. Build green, 311 tests
+pass.
+
+## 2026-09-06 · Mohamed's side · Claude
+
 **Incoming / Outgoings: a component you add now goes ABOVE the combinations, not below.**
 
 In the Main Incoming and Outgoings sections, the loose individual items belong before the

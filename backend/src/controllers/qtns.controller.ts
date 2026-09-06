@@ -360,7 +360,10 @@ export async function activity(req: Request, res: Response) {
     const seconds = Number.isFinite(raw) ? Math.min(Math.max(Math.round(raw), 0), 3600) : 0;
     const q = await writableQtn(req);
     if (!q) return res.status(404).json({ error: "Quotation not found." });
-    if (seconds <= 0) return res.json({ activeSeconds: q.activeSeconds ?? 0 });
+    // Only real editing time counts. Once a quotation is waiting for approval, approved or
+    // submitted it is no longer being built, so ignore any deltas a lingering client still
+    // sends — the timer only accrues while it is an editable Draft / Returned quotation.
+    if (isLocked(qtnStatus(q)) || seconds <= 0) return res.json({ activeSeconds: q.activeSeconds ?? 0 });
     const updated = await prisma.lvQtn.update({
       where: { id: q.id },
       data: { activeSeconds: { increment: seconds } },

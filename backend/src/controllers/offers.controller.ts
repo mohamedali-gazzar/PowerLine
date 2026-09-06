@@ -192,7 +192,10 @@ export async function offerActivity(req: Request, res: Response) {
     const raw = Number((req.body ?? {}).seconds);
     const seconds = Number.isFinite(raw) ? Math.min(Math.max(Math.round(raw), 0), 3600) : 0;
     const current = (existing as { activeSeconds?: number }).activeSeconds ?? 0;
-    if (seconds <= 0) return res.json({ activeSeconds: current });
+    // Only real editing time counts — a waiting / approved / submitted offer is not being
+    // worked on, so ignore any deltas a lingering client still sends.
+    const st = offerStatus(existing);
+    if ((st !== "DRAFT" && st !== "RETURNED") || seconds <= 0) return res.json({ activeSeconds: current });
     const updated = await prisma.offer.update({
       where: { id: existing.id },
       data: { activeSeconds: { increment: seconds } },
