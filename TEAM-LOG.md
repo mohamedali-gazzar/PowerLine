@@ -23,6 +23,24 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-07 · Mohamed's side · Claude
 
+**"Go to ERP" now includes the revision (e.g. QTN-26-00399-3).**
+
+The "Go to ERP" button was opening the quotation by its plain number and leaving the revision off, so
+a revised quotation (e.g. QTN-26-01831-**1**) opened the wrong record in the ERP. It now includes the
+revision — revision 00 stays plain (…/QTN-26-01831), revision 01/02/03… add the suffix
+(…/QTN-26-01831-1, …-2, …-3). Verified on a revision-3 quotation; build green.
+
+## 2026-09-07 · Mohamed's side · Claude
+
+**A cancelled quotation no longer keeps counting "active working time".**
+
+Opening a **Cancelled** quotation kept the ⏱ working-time timer running (and saving time to it). A
+cancelled quotation is finished, so it's now treated as read-only the moment it opens — the timer stays
+off, the same as a submitted or approved one. Normal draft quotations still count their time as before.
+Verified on a cancelled quotation (timer off) and a draft (timer on); build green.
+
+## 2026-09-07 · Mohamed's side · Claude
+
 **The "＋ Page" and "↗ Panel" buttons in the A4 view now match the Edit view.**
 
 Two tidy-ups on the Technical Offer's "A4 pages" view: the **"＋ Page"** button is now a clean dashed

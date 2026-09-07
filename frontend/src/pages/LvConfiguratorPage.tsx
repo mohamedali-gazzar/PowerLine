@@ -439,7 +439,10 @@ export default function LvConfiguratorPage() {
   // qtn.editWaiting — which the estimator's own Tendering role carries — kept editing while it
   // was under review, so the reviewer was revising a moving target. To edit again the owner
   // must Withdraw it (→ Draft), or a reviewer must Return it (→ Returned).
-  const readOnly = (lockedByStatus && !reviewSandbox) || cancelled;
+  // `status === "CANCELLED"` is checked directly (not just via the superseded-number heuristic in
+  // `cancelled`): a cancelled quotation is terminal and must be read-only from the first render —
+  // otherwise the active-time badge keeps ticking on it while the heuristic loads (or never flags it).
+  const readOnly = (lockedByStatus && !reviewSandbox) || cancelled || status === "CANCELLED";
 
   // Renames the QTN on the backend (unique, non-empty). Edited from the Project tab.
   const renameQtnNumber = async (n: string): Promise<{ ok: boolean; error?: string }> => {
@@ -1400,9 +1403,11 @@ export default function LvConfiguratorPage() {
   // re-computes whenever the number or revision changes; never typed by hand.
   const linkRevNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
   const offerLabel = linkRevNum > 0 ? `${qtnNum}-${linkRevNum}` : qtnNum;
-  // ERP deep link for this quotation: the ERP addresses a quotation by its NUMBER
-  // (QTN-YY-NNNNN). Normalise the prefix so "26-01951" and "QTN-26-01951" both work.
-  const erpNo = qtnNum ? `QTN-${qtnNum.trim().replace(/^QTN-/i, "")}` : "";
+  // ERP deep link for this quotation: the ERP addresses a quotation by its NUMBER *including the
+  // revision* (QTN-YY-NNNNN-R, e.g. QTN-26-00399-3) — the ERP treats each revision as its own
+  // record. Reuse offerLabel (the number with the revision already folded in: rev 00 → plain,
+  // rev 01 → "-1", …) and normalise the prefix so "26-01951" and "QTN-26-01951" both work.
+  const erpNo = offerLabel ? `QTN-${offerLabel.trim().replace(/^QTN-/i, "")}` : "";
   const erpUrl = erpNo ? `https://pl.powerline.com.eg/app/quotation/${erpNo}` : "";
   // Copy the offer URL as a hyperlink named by that label. The URL reads by QTN number —
   // /lv/qtn/<QTN number>/<record id> — so the number is the visible name in the address, while the
