@@ -23,6 +23,19 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-07 · Mohamed's side · Claude
 
+**"Go to ERP" jump, and the panel ↔ Technical-Offer jumps behave properly.**
+
+- After you press **Copy link** on a quotation, a **"↗ Go to ERP"** button appears next to it. It
+  opens that quotation in the ERP — `https://pl.powerline.com.eg/app/quotation/QTN-<number>`, built
+  from the quotation's own number (so QTN-26-01831 → …/QTN-26-01831).
+- Clicking a panel's **↗** arrow (Panels list) now jumps to **that panel** on the Technical Offer,
+  not the top of it. It used to scroll before the offer pages finished drawing, so it landed at the
+  start; now it waits for the panel's page and re-scrolls once the pages settle.
+- The **"↗ Panel"** button on each offer page (back to that panel) is now **pinned** at the top-right
+  while you scroll, so the jump back is always in reach instead of scrolling away.
+
+## 2026-09-07 · Mohamed's side · Claude
+
 **Pricing Settings → Panel pricing: clearer columns; and the panel's ÷ factor reads bigger.**
 
 Two small display tweaks (no numbers changed):

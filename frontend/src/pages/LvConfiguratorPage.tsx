@@ -329,6 +329,7 @@ export default function LvConfiguratorPage() {
   });
   const [matAbbOnly, setMatAbbOnly] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false); // "Copy offer link" feedback flash
+  const [showErp, setShowErp] = useState(false); // reveal "Go to ERP" once the link has been copied
   // RPT-1: the QTN number is editable after creation (kept unique per user).
   const [qtnNum, setQtnNum] = useState("");
   // Where this quotation sits in the approval workflow. The server owns it; the
@@ -1293,12 +1294,31 @@ export default function LvConfiguratorPage() {
   const openPanelInPanels = (panelId: string) => { up({ selectedId: panelId }); goToTab(isSpareQtn ? "spare" : "panels"); };
   useLayoutEffect(() => {
     const jump = jumpPanelRef.current;
-    if (jump && tab === "technical") {
-      jumpPanelRef.current = null;
-      const el = document.querySelector<HTMLElement>(`[data-offer-panel="${CSS.escape(jump)}"]`);
-      if (el) { window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - 76)); return; } // 76px ≈ sticky tab header
+    if (!(jump && tab === "technical")) {
+      window.scrollTo(0, scrollByTab.current[tab] ?? 0); // restore the entered tab's position
+      return;
     }
-    window.scrollTo(0, scrollByTab.current[tab] ?? 0); // restore the entered tab's position
+    jumpPanelRef.current = null;
+    // The Technical Offer builds its A4 pages on the tab switch and keeps reflowing as its
+    // tables and fonts settle, so a panel's final position is NOT known on the first frame.
+    // Scrolling once then would land on the top of the offer, not the panel. So: poll for the
+    // panel's page, scroll to it, then re-scroll a couple of times to absorb the late reflow.
+    let cancelled = false;
+    const scrollToPanel = (): boolean => {
+      const el = document.querySelector<HTMLElement>(`[data-offer-panel="${CSS.escape(jump)}"]`);
+      if (el) window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - 76)); // 76px ≈ sticky tab header
+      return !!el;
+    };
+    let frames = 0;
+    const tick = () => {
+      if (cancelled) return;
+      if (scrollToPanel() || frames++ > 40) return; // found & scrolled, or give up after ~0.7s
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    const t1 = window.setTimeout(scrollToPanel, 300);
+    const t2 = window.setTimeout(scrollToPanel, 700);
+    return () => { cancelled = true; window.clearTimeout(t1); window.clearTimeout(t2); };
   }, [tab]);
 
   // Arrow-key navigation between form fields, based on their on-screen layout —
@@ -1363,6 +1383,10 @@ export default function LvConfiguratorPage() {
   // re-computes whenever the number or revision changes; never typed by hand.
   const linkRevNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
   const offerLabel = linkRevNum > 0 ? `${qtnNum}-${linkRevNum}` : qtnNum;
+  // ERP deep link for this quotation: the ERP addresses a quotation by its NUMBER
+  // (QTN-YY-NNNNN). Normalise the prefix so "26-01951" and "QTN-26-01951" both work.
+  const erpNo = qtnNum ? `QTN-${qtnNum.trim().replace(/^QTN-/i, "")}` : "";
+  const erpUrl = erpNo ? `https://pl.powerline.com.eg/app/quotation/${erpNo}` : "";
   // Copy the offer URL as a hyperlink named by that label. The URL reads by QTN number —
   // /lv/qtn/<QTN number>/<record id> — so the number is the visible name in the address, while the
   // exact record id is the last path segment for a collision-proof lookup (QTN numbers are only
@@ -1389,6 +1413,7 @@ export default function LvConfiguratorPage() {
       try { await navigator.clipboard.writeText(plain); } catch { /* clipboard unavailable */ }
     }
     setLinkCopied(true);
+    setShowErp(true); // now offer the jump straight to the ERP for pasting/checking
     window.setTimeout(() => setLinkCopied(false), 1800);
   };
 
@@ -1581,6 +1606,13 @@ export default function LvConfiguratorPage() {
               className="rounded-full border border-line bg-white px-4 py-1.5 text-xs font-bold text-ink hover:border-brand/50 hover:text-brand-dark no-print">
               {linkCopied ? "✓ Copied" : "🔗 Copy link"}
             </button>
+            {showErp && erpUrl && (
+              <a href={erpUrl} target="_blank" rel="noopener noreferrer"
+                title={`Open this quotation in the ERP — ${erpUrl}`}
+                className="inline-flex items-center gap-1 rounded-full border border-brand bg-brand-light px-4 py-1.5 text-xs font-bold text-brand-dark transition-colors hover:bg-brand hover:text-white no-print">
+                ↗ Go to ERP
+              </a>
+            )}
             {erpCount > 0 && (
               <button onClick={exportErpCsv}
                 title={`Download ${erpCount} panel${erpCount > 1 ? "s" : ""} as an ERPNext "Bulk Edit Items" CSV for your ERP`}
@@ -2946,10 +2978,12 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
                   </div>
                 ) : null;
               })()}
-              {/* Back to this panel in the Panels tab (screen only — stripped from the PDF) */}
-              <div className="no-print -mt-1 mb-1 flex justify-end">
+              {/* Back to this panel in the Panels tab (screen only — stripped from the PDF).
+                  Sticky so the jump stays pinned top-right and is ALWAYS reachable while
+                  scrolling a long panel/offer, not just at the top of each sheet. */}
+              <div className="no-print sticky top-16 z-20 -mt-1 mb-1 flex justify-end">
                 <button type="button" onClick={() => onBackToPanel(p.id)} title={`Back to “${p.name}” in Panels`}
-                  className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold shadow-sm transition hover:bg-[#FEF3ED]"
+                  className="inline-flex items-center gap-1 rounded-full border bg-white px-2.5 py-1 text-[11px] font-bold shadow-sm transition hover:bg-[#FEF3ED]"
                   style={{ borderColor: TRED, color: TRED }}>
                   <JumpArrow /> Panel
                 </button>
