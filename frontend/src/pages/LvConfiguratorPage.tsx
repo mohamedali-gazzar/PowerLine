@@ -2794,6 +2794,330 @@ function SeparatorPage({ text, onChange, onRemove }: { text: string; onChange: (
   );
 }
 
+// A free editable "scratch pad" table shown in the empty gutter beside the Technical Offer, so the
+// estimator can jot side-calculations while reviewing the offer. Screen-only (no-print) and NEVER
+// part of the offer or the PDF — it lives outside the printed source. It's kept per-quotation in the
+// browser (localStorage), so it survives tab switches and reloads but is private to this machine and
+// never sent to the server. Numeric columns auto-sum in the footer.
+function OfferScratchPad({ storageKey, title, defaultHeight }: { storageKey: string; title?: string; defaultHeight: number }) {
+  const COLS = 4;
+  const DEFAULT_HEADERS = ["Item", "Qty", "Value", "Total"];
+  const DEFAULT_W = 300, MIN_W = 200, MIN_H = 140;
+  const blankRow = () => Array<string>(COLS).fill("");
+  type Data = { headers: string[]; rows: string[][]; w?: number; h?: number; dx?: number; dy?: number };
+  const fresh = (): Data => ({ headers: [...DEFAULT_HEADERS], rows: [] });
+  // Pad (or trim) a saved table to the current column count so an older pad gains the new column.
+  const asNum = (v: unknown) => (typeof v === "number" ? v : undefined);
+  const normalize = (d: Data): Data => ({
+    headers: Array.from({ length: COLS }, (_, i) => d.headers[i] ?? DEFAULT_HEADERS[i] ?? ""),
+    rows: (d.rows || []).map((row) => Array.from({ length: COLS }, (_, i) => row[i] ?? "")),
+    w: asNum(d.w), h: asNum(d.h), dx: asNum(d.dx), dy: asNum(d.dy),
+  });
+  const load = (): Data => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) { const d = JSON.parse(raw); if (d && Array.isArray(d.headers) && Array.isArray(d.rows)) return normalize(d as Data); }
+    } catch { /* private window / cleared storage — start fresh */ }
+    return fresh();
+  };
+  const [data, setData] = useState<Data>(load);
+  const boxFrom = (d: Data) => ({ w: d.w ?? DEFAULT_W, h: d.h ?? defaultHeight, dx: d.dx ?? 0, dy: d.dy ?? 0 });
+  const [box, setBox] = useState(() => boxFrom(data));
+  const boxRef = useRef(box); boxRef.current = box; // latest geometry, read on drag-release
+  // Reload content + geometry when the panel (key) changes; persist on every edit.
+  useEffect(() => { const d = load(); setData(d); setBox(boxFrom(d)); }, [storageKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify(data)); } catch { /* ignore */ } }, [data, storageKey]);
+
+  // Typing in a not-yet-existing row grows the stored data to reach it (the grid shows more rows than
+  // are stored, so the empty area is fillable without an "add row" button).
+  const setCell = (r: number, c: number, v: string) => setData((d) => {
+    const rows = d.rows.length > r ? d.rows.slice() : [...d.rows, ...Array.from({ length: r - d.rows.length + 1 }, blankRow)];
+    return { ...d, rows: rows.map((row, ri) => (ri === r ? row.map((cell, ci) => (ci === c ? v : cell)) : row)) };
+  });
+  const setHeader = (c: number, v: string) => setData((d) => ({ ...d, headers: d.headers.map((h, i) => (i === c ? v : h)) }));
+  const clearAll = () => setData((d) => ({ ...fresh(), w: d.w, h: d.h, dx: d.dx, dy: d.dy })); // keep geometry, clear content
+
+  // Move (drag the title bar) and resize (drag the bottom-right grip) — "press and pull". Geometry is
+  // stored per-panel, so each pad remembers where you put it and how big you made it.
+  const persist = (b: typeof box) => setData((d) => ({ ...d, w: b.w, h: b.h, dx: b.dx, dy: b.dy }));
+  const drag = (onDelta: (mx: number, my: number) => void) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    const sx = e.clientX, sy = e.clientY;
+    const onMove = (ev: MouseEvent) => onDelta(ev.clientX - sx, ev.clientY - sy);
+    const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); persist(boxRef.current); };
+    window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+  };
+  const startMove = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("button,input")) return; // let Clear / cell inputs work
+    const dx0 = box.dx, dy0 = box.dy;
+    drag((mx, my) => setBox((b) => ({ ...b, dx: dx0 + mx, dy: dy0 + my })))(e);
+  };
+  const startResize = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const w0 = box.w, h0 = box.h;
+    drag((mx, my) => setBox((b) => ({ ...b, w: Math.max(MIN_W, w0 + mx), h: Math.max(MIN_H, h0 + my) })))(e);
+  };
+
+  // Cells accept equations: type an arithmetic expression (optionally starting with "=") such as
+  // "=2*160" or "10+5%*200" — while editing you see the formula, and when you leave the cell it shows
+  // the computed result. The raw formula is what's stored, so it re-computes on reload. Only digits and
+  // + - * / ( ) . % are ever evaluated; anything containing letters stays as plain text.
+  const [editing, setEditing] = useState<{ r: number; c: number } | null>(null); // the cell being typed in
+  const COL_LETTERS = ["A", "B", "C", "D"];
+  const addr = (r: number, c: number) => `${COL_LETTERS[c] ?? ""}${r + 1}`; // (0,0) → "A1"
+  const cellAt = (ri: number, ci: number) => data.rows[ri]?.[ci] ?? "";
+  // Evaluate a cell like a spreadsheet: a formula (starts with "=") may reference other cells by their
+  // address — column letter A–D + row number, e.g. "=A1+B2*C1". References resolve recursively (a
+  // referenced cell may itself be a formula); circular references resolve to 0. `seen` guards the cycle.
+  const evalRaw = (raw: string, seen: Set<string>): string => {
+    const t = (raw ?? "").trim();
+    if (!t) return "";
+    const isFormula = t.startsWith("=");
+    const body = isFormula ? t.slice(1) : t;
+    const looksLikeRef = /[A-Za-z]+\d+/.test(body);
+    if (!isFormula) {
+      if (looksLikeRef) return raw; // plain text that merely looks like a ref (e.g. "MCCB250")
+      if (!/[+\-*/%]/.test(body) || !/^[0-9+\-*/().%\s]+$/.test(body)) return raw; // number / text
+    }
+    try {
+      let ex = body.replace(/([A-Za-z]+)(\d+)/g, (_m, col: string, row: string) => {
+        const ci = col.length === 1 ? col.toUpperCase().charCodeAt(0) - 65 : -1;
+        const ri = parseInt(row, 10) - 1;
+        if (ci < 0 || ci >= COLS || ri < 0) throw new Error("bad ref");
+        const key = ri + "," + ci;
+        if (seen.has(key)) return "0"; // circular reference → treat as 0
+        const n = parseFloat(evalRaw(cellAt(ri, ci), new Set(seen).add(key)));
+        return "(" + (isFinite(n) ? n : 0) + ")";
+      });
+      ex = ex.replace(/(\d+(?:\.\d+)?)\s*%/g, "($1/100)"); // "20%" → (20/100)
+      if (!/^[0-9+\-*/().%\s]+$/.test(ex)) return raw; // anything non-math left over → keep as text
+      const val = Function(`"use strict"; return (${ex});`)() as unknown;
+      if (typeof val === "number" && isFinite(val)) return String(Math.round(val * 1e6) / 1e6);
+    } catch { /* bad formula / ref → keep the raw text */ }
+    return raw;
+  };
+  const evaluate = (raw: string) => evalRaw(raw, new Set());
+  const isEditing = (ri: number, ci: number) => !!editing && editing.r === ri && editing.c === ci;
+  // Selected cell shows the VALUE; only the cell being edited shows the raw formula (the formula bar
+  // above the grid is where you read/write equations, Excel-style).
+  const shown = (ri: number, ci: number) => (isEditing(ri, ci) ? cellAt(ri, ci) : evaluate(cellAt(ri, ci)));
+  // Fill the visible area with empty cells (no manual "add row") — enough rows to cover the height.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [fillRows, setFillRows] = useState(10);
+  useEffect(() => {
+    const el = scrollRef.current; if (!el) return;
+    const th = el.querySelector("thead");
+    const theadH = th ? th.getBoundingClientRect().height : 26;
+    const oneRow = el.querySelector("tbody tr");
+    const rowH = oneRow ? oneRow.getBoundingClientRect().height : 25.5;
+    setFillRows(Math.max(4, Math.floor((el.clientHeight - theadH - 2) / rowH)));
+  }, [box.h]);
+  const nRows = Math.max(data.rows.length, fillRows);
+  const cellCls = "w-full bg-transparent px-1.5 py-1 text-xs outline-none focus:bg-brand-tint/40";
+
+  // Excel-style fill handle: click a cell, then drag the little square at its bottom-right corner down —
+  // the cells below get a COPY of this cell's equation, with relative references shifted per row (so
+  // "=A1+B1" filled down becomes "=A2+B2", "=A3+B3", …). Plain numbers/text are copied as-is.
+  const tbodyRef = useRef<HTMLTableSectionElement>(null);
+  const [sel, setSel] = useState<{ r: number; c: number } | null>(null);
+  const [fillTo, setFillTo] = useState<number | null>(null);
+  const shiftRefs = (raw: string, dRow: number): string => {
+    if (!raw.startsWith("=")) return raw; // not a formula → copy verbatim
+    return raw.replace(/([A-Za-z]+)(\d+)/g, (m, col: string, row: string) => {
+      if (col.length !== 1) return m;
+      const nr = parseInt(row, 10) + dRow;
+      return nr >= 1 ? `${col}${nr}` : m;
+    });
+  };
+  const fillDown = (c: number, from: number, to: number, srcRaw: string) => setData((d) => {
+    const need = to + 1;
+    const rows = d.rows.length >= need ? d.rows.slice() : [...d.rows, ...Array.from({ length: need - d.rows.length }, blankRow)];
+    return { ...d, rows: rows.map((row, ri) => (ri > from && ri <= to ? row.map((cell, ci) => (ci === c ? shiftRefs(srcRaw, ri - from) : cell)) : row)) };
+  });
+  const startFill = (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    if (!sel) return;
+    const { r: from, c } = sel;
+    const src = cellAt(from, c); // copy the raw equation (refs shifted per row in fillDown)
+    const rowUnder = (ev: MouseEvent) => {
+      const body = tbodyRef.current; if (!body) return from;
+      let target = from;
+      for (const tr of Array.from(body.querySelectorAll<HTMLElement>("tr[data-r]"))) {
+        if (ev.clientY >= tr.getBoundingClientRect().top) target = Math.max(from, Number(tr.dataset.r));
+      }
+      return target;
+    };
+    const onMove = (ev: MouseEvent) => setFillTo(rowUnder(ev));
+    const onUp = (ev: MouseEvent) => {
+      window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp);
+      const to = rowUnder(ev); setFillTo(null);
+      if (to > from) fillDown(c, from, to, src);
+    };
+    window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+  };
+
+  // Range selection: press a cell and drag across others (or shift-click) to select a block, then act
+  // on it — Σ sum, Delete (clear), or Copy. Anchor = where the drag started, focus = where it is now.
+  const [range, setRange] = useState<{ ar: number; ac: number; fr: number; fc: number } | null>(null);
+  const dragging = useRef(false);
+  const norm = (rg: NonNullable<typeof range>) => ({ r1: Math.min(rg.ar, rg.fr), r2: Math.max(rg.ar, rg.fr), c1: Math.min(rg.ac, rg.fc), c2: Math.max(rg.ac, rg.fc) });
+  const inRange = (ri: number, ci: number) => { if (!range) return false; const n = norm(range); return ri >= n.r1 && ri <= n.r2 && ci >= n.c1 && ci <= n.c2; };
+  const multi = !!range && (range.ar !== range.fr || range.ac !== range.fc);
+  // Building a formula by pointing: the reference the arrows/clicks are currently placing. `base` is the
+  // formula text before it, so moving the pointer just replaces the tail reference.
+  const [point, setPoint] = useState<{ er: number; ec: number; pr: number; pc: number; base: string } | null>(null);
+  const wantsRef = (raw: string) => raw.startsWith("=") && /[-+*/(%=]\s*$/.test(raw); // ends with =, +, (, …
+  const startSelect = (ri: number, ci: number) => (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest(".fill-handle")) return; // the fill grip runs its own drag
+    e.preventDefault(); // manage selection ourselves (no native text-drag between cells)
+    // Point-and-click a reference into a formula being edited in another cell (Excel style).
+    if (editing && (editing.r !== ri || editing.c !== ci)) {
+      const eraw = cellAt(editing.r, editing.c);
+      const inPt = !!point && point.er === editing.r && point.ec === editing.c;
+      if (eraw.startsWith("=") && (inPt || wantsRef(eraw))) {
+        const base = inPt ? point!.base : eraw;
+        setPoint({ er: editing.r, ec: editing.c, pr: ri, pc: ci, base });
+        setCell(editing.r, editing.c, base + addr(ri, ci));
+        focusCell(editing.r, editing.c);
+        return;
+      }
+    }
+    (e.currentTarget as HTMLInputElement).focus();
+    if (e.shiftKey && range) { setRange({ ...range, fr: ri, fc: ci }); return; }
+    setEditing(null); setPoint(null); // a plain click leaves any edit and selects the cell
+    setSel({ r: ri, c: ci });
+    setRange({ ar: ri, ac: ci, fr: ri, fc: ci });
+    dragging.current = true;
+    const onUp = () => { dragging.current = false; window.removeEventListener("mouseup", onUp); };
+    window.addEventListener("mouseup", onUp);
+  };
+  const overCell = (ri: number, ci: number) => { if (dragging.current) setRange((rg) => (rg ? { ...rg, fr: ri, fc: ci } : rg)); };
+  // Excel-style keyboard nav: Enter / ↓ move to the cell directly below, ↑ to the one above.
+  const focusCell = (r: number, c: number) => tbodyRef.current?.querySelector<HTMLInputElement>(`tr[data-r="${r}"] td:nth-child(${c + 2}) input`)?.focus();
+  const eachInRange = (fn: (ri: number, ci: number) => void) => { if (!range) return; const n = norm(range); for (let r = n.r1; r <= n.r2; r++) for (let c = n.c1; c <= n.c2; c++) fn(r, c); };
+  let sumSel = 0; eachInRange((r, c) => { const v = parseFloat(evaluate(cellAt(r, c))); if (isFinite(v)) sumSel += v; });
+  const deleteSel = () => setData((d) => { if (!range) return d; const n = norm(range); return { ...d, rows: d.rows.map((row, ri) => (ri >= n.r1 && ri <= n.r2 ? row.map((cell, ci) => (ci >= n.c1 && ci <= n.c2 ? "" : cell)) : row)) }; });
+  const copySel = () => { if (!range) return; const n = norm(range); const lines: string[] = []; for (let r = n.r1; r <= n.r2; r++) { const cols: string[] = []; for (let c = n.c1; c <= n.c2; c++) cols.push(evaluate(cellAt(r, c))); lines.push(cols.join("\t")); } try { void navigator.clipboard?.writeText(lines.join("\n")); } catch { /* clipboard blocked */ } };
+  const actBtn = "rounded-md border border-line bg-white px-1.5 py-0.5 text-[11px] font-semibold text-muted transition";
+
+  return (
+    <div className="offer-scratch no-print relative flex flex-col overflow-hidden rounded-xl2 border border-line bg-white shadow-lift"
+      style={{ width: box.w, height: box.h, transform: `translate(${box.dx}px, ${box.dy}px)` }}>
+      <div onMouseDown={startMove} title="Drag to move"
+        className="scratch-titlebar flex shrink-0 cursor-move items-center justify-between gap-2 border-b border-line bg-surface px-3 py-2">
+        <p className="min-w-0 truncate text-sm font-extrabold uppercase tracking-wide text-brand-dark">🧮 Scratch pad{title ? ` · ${title}` : ""}</p>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {multi && (
+            <>
+              <span title="Sum of the selected cells" className="rounded bg-brand-tint px-1.5 py-0.5 text-[11px] font-bold text-brand-dark">Σ {sumSel.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+              <button type="button" onClick={deleteSel} title="Clear the selected cells" className={`${actBtn} hover:text-red-600`}>Delete</button>
+              <button type="button" onClick={copySel} title="Copy the selected cells" className={`${actBtn} hover:text-brand`}>Copy</button>
+            </>
+          )}
+          <button type="button" onClick={clearAll} title="Clear the whole table" className={`${actBtn} hover:text-red-600`}>Clear</button>
+        </div>
+      </div>
+      {/* Formula bar — the address of the selected cell + its raw content (edit equations here). */}
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-line bg-white px-2 py-1">
+        <span className="w-7 shrink-0 text-center text-[11px] font-bold text-muted">{sel ? `${COL_LETTERS[sel.c]}${sel.r + 1}` : "—"}</span>
+        <span className="shrink-0 italic text-muted">ƒ</span>
+        <input value={sel ? cellAt(sel.r, sel.c) : ""}
+          onFocus={() => sel && setEditing(sel)}
+          onBlur={() => setEditing(null)}
+          onChange={(e) => sel && setCell(sel.r, sel.c, e.target.value)}
+          placeholder={sel ? "value or =formula (e.g. =A1+B2)" : "select a cell"}
+          className="min-w-0 flex-1 bg-transparent px-1 py-0.5 text-xs outline-none placeholder:text-muted/50" />
+      </div>
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-hidden p-2">
+        <table className="w-full table-fixed border-collapse">
+          <colgroup>
+            <col style={{ width: "22px" }} />
+            {COL_LETTERS.map((_, c) => <col key={c} />)}
+          </colgroup>
+          <thead>
+            {/* Column letters A–D — the addresses used in formulas, e.g. =A1+B2 */}
+            <tr>
+              <th className="border border-line bg-surface" />
+              {COL_LETTERS.map((L, c) => (
+                <th key={c} className="border border-line bg-surface px-1 py-0.5 text-center text-[10px] font-bold text-muted">{L}</th>
+              ))}
+            </tr>
+            {/* Editable column labels */}
+            <tr>
+              <th className="border border-line bg-surface" />
+              {data.headers.map((h, c) => (
+                <th key={c} className="border border-line p-0">
+                  <input value={h} onChange={(e) => setHeader(c, e.target.value)} aria-label={`Column ${COL_LETTERS[c]} title`}
+                    className="w-full bg-surface px-1.5 py-1 text-center text-xs font-bold text-brand-dark outline-none" />
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody ref={tbodyRef}>
+            {Array.from({ length: nRows }).map((_, ri) => (
+              <tr key={ri} data-r={ri}>
+                <td className="select-none border border-line bg-surface px-1 py-1 text-center text-[10px] font-semibold text-muted">{ri + 1}</td>
+                {Array.from({ length: COLS }).map((__, ci) => {
+                  const active = !!sel && sel.r === ri && sel.c === ci && !multi;
+                  const inFill = fillTo != null && sel != null && ci === sel.c && ri > sel.r && ri <= fillTo;
+                  const seld = inRange(ri, ci);
+                  const isPoint = !!point && point.pr === ri && point.pc === ci;
+                  return (
+                    <td key={ci} onMouseEnter={() => overCell(ri, ci)}
+                      className={`relative border border-line p-0 ${inFill || (seld && multi) ? "bg-brand-tint/50" : ""} ${active ? "ring-2 ring-inset ring-brand" : ""} ${isPoint ? "outline-dashed outline-2 -outline-offset-2 outline-brand" : ""}`}>
+                      <input value={shown(ri, ci)}
+                        readOnly={!isEditing(ri, ci)}
+                        onMouseDown={startSelect(ri, ci)}
+                        onFocus={() => setSel({ r: ri, c: ci })}
+                        onDoubleClick={() => setEditing({ r: ri, c: ci })}
+                        onKeyDown={(e) => {
+                          const ed = isEditing(ri, ci);
+                          const raw = cellAt(ri, ci);
+                          const inPt = !!point && point.er === ri && point.ec === ci;
+                          const isArrow = e.key.startsWith("Arrow");
+                          // Arrows move between cells when not editing, or when editing a plain value; only a
+                          // formula being written keeps arrows for point-mode reference picking.
+                          const nav = !ed || !raw.startsWith("=");
+                          if (inPt && !isArrow) setPoint(null); // any other key locks the reference in
+                          // Point mode: while editing a formula, arrows pick a cell whose reference is inserted.
+                          if (ed && raw.startsWith("=") && isArrow) {
+                            const move = (r: number, c: number): [number, number] =>
+                              e.key === "ArrowUp" ? [Math.max(0, r - 1), c] : e.key === "ArrowDown" ? [r + 1, c]
+                                : e.key === "ArrowLeft" ? [r, Math.max(0, c - 1)] : [r, Math.min(COLS - 1, c + 1)];
+                            if (inPt) { e.preventDefault(); const [pr, pc] = move(point!.pr, point!.pc); setPoint({ ...point!, pr, pc }); setCell(ri, ci, point!.base + addr(pr, pc)); return; }
+                            if (wantsRef(raw)) { e.preventDefault(); const [pr, pc] = move(ri, ci); setPoint({ er: ri, ec: ci, pr, pc, base: raw }); setCell(ri, ci, raw + addr(pr, pc)); return; }
+                          }
+                          if (e.key === "Enter") { e.preventDefault(); setPoint(null); setEditing(null); focusCell(ri + 1, ci); }
+                          else if (e.key === "Escape") { e.preventDefault(); setPoint(null); setEditing(null); }
+                          else if (nav && e.key === "ArrowDown") { e.preventDefault(); setEditing(null); focusCell(ri + 1, ci); }
+                          else if (nav && e.key === "ArrowUp") { e.preventDefault(); setEditing(null); focusCell(Math.max(0, ri - 1), ci); }
+                          else if (nav && e.key === "ArrowLeft") { e.preventDefault(); setEditing(null); focusCell(ri, Math.max(0, ci - 1)); }
+                          else if (nav && e.key === "ArrowRight") { e.preventDefault(); setEditing(null); focusCell(ri, Math.min(COLS - 1, ci + 1)); }
+                          else if (!ed && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); setEditing({ r: ri, c: ci }); setCell(ri, ci, e.key); }
+                        }}
+                        onChange={(e) => setCell(ri, ci, e.target.value)} className={cellCls} />
+                      {active && (
+                        <span onMouseDown={startFill} title="Drag down to fill the cells below with this value"
+                          className="fill-handle absolute bottom-0 right-0 z-10 h-2 w-2 cursor-crosshair rounded-[1px] border border-white bg-brand" />
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div onMouseDown={startResize} title="Drag to resize"
+        className="absolute bottom-0 right-0 flex h-4 w-4 cursor-nwse-resize items-end justify-end p-0.5 text-muted">
+        <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1">
+          <path d="M10 3 3 10M10 6 6 10M10 9 9 10" strokeLinecap="round" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 type NotesKey = "notesGeneral" | "notesAdditional";
 function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void; onBackToPanel: (id: string) => void }) {
   // Editable notes page (after the cover): edit / add / remove lines.
@@ -2820,8 +3144,17 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
   // "edit" is the continuous flow where notes and divider pages are added/changed. Viewing
   // defaults to A4 (what the customer actually receives).
   const [techView, setTechView] = useState<"a4" | "edit">("a4");
+  // Scratch pad in the left gutter — a private calculation table (see OfferScratchPad). Default on;
+  // the open/closed choice is remembered per machine so closing it stays closed.
+  const [showScratch, setShowScratch] = useState<boolean>(() => {
+    try { return localStorage.getItem("pl-offer-scratch-open") !== "0"; } catch { return true; }
+  });
+  const toggleScratch = () => setShowScratch((v) => { const n = !v; try { localStorage.setItem("pl-offer-scratch-open", n ? "1" : "0"); } catch { /* ignore */ } return n; });
+  // One scratch-pad slot per panel's first A4 page — a React table portalled into each (see below).
+  const [scratchSlots, setScratchSlots] = useState<{ pid: string; name: string; el: HTMLElement; defaultH: number }[]>([]);
   const printRef = useRef<HTMLDivElement>(null);   // the live [data-pdf-root] source
   const a4HostRef = useRef<HTMLDivElement>(null);  // where the built A4 pages are mounted
+  const scratchCleanupRef = useRef<(() => void) | null>(null); // disconnect the slot-reposition observer
   // Build the A4 pages from the (hidden) source whenever the offer or the view changes.
   // The source stays in the DOM (display:none) so the PDF export still reads it, and so the
   // paginator can clone its cover / notes / panels; the clones lay out for real inside the
@@ -2857,6 +3190,8 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
       // arrow). Added here (not in buildTechnicalPages) and marked no-print, so they show ONLY in
       // this on-screen preview — the PDF export builds its own pages and strips no-print.
       const jumpSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"></path><path d="M7 7h10v10"></path></svg>';
+      host.style.position = "relative"; // positioning context for the per-panel scratch-pad slots
+      const slotRecs: { pid: string; name: string; slot: HTMLElement; page: HTMLElement; defaultH: number }[] = [];
       for (const page of pages) {
         const pid = page.getAttribute("data-offer-page");
         if (!pid) continue;
@@ -2887,9 +3222,54 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
         jump.innerHTML = `${jumpSvg} Panel`;
         jump.addEventListener("click", () => onBackToPanel(pid));
         page.appendChild(jump);
+        // A per-panel scratch-pad slot in the left gutter, aligned to this panel's page. Appended to
+        // the HOST (not the page, whose overflow:hidden would clip it) and absolutely positioned; a
+        // React calculation table is portalled into it below.
+        const slot = document.createElement("div");
+        slot.className = "no-print";
+        slot.style.position = "absolute";
+        // The preview gives every direct child of .a4-preview a "page-sheet" border+shadow; this slot
+        // is only a positioning container, so strip it — just the pad inside should show a card.
+        slot.style.border = "none"; slot.style.boxShadow = "none"; slot.style.borderRadius = "0"; slot.style.background = "transparent";
+        host.appendChild(slot);
+        // Default pad height ≈ from the "Main Incoming" row down to the bottom of the panel's page.
+        const dhLeaf = [...page.querySelectorAll("td,th,span,div,p")].find((e) => e.children.length === 0 && /Main Incoming/i.test(e.textContent || ""));
+        const dhAnchor = (dhLeaf && (dhLeaf.closest("tr") || dhLeaf)) || [...page.querySelectorAll("table")].find((t) => /Description/i.test(t.textContent || ""));
+        const dhTop = dhAnchor ? dhAnchor.getBoundingClientRect().top - page.getBoundingClientRect().top : 300;
+        const defaultH = Math.max(220, Math.round(page.offsetHeight - dhTop + 52));
+        slotRecs.push({ pid, name: nm, slot, page, defaultH });
       }
+      // Align each slot to the left of its panel page. The pages keep reflowing as fonts and tables
+      // settle, so realign on any host resize and a few times just after the build.
+      const SCRATCH_W = 300, GAP = 14;
+      const reposition = () => {
+        for (const r of slotRecs) {
+          const pageTop = r.page.getBoundingClientRect().top;
+          // Anchor row: the offer's "Main Incoming" row (fall back to the Qty/Description table).
+          const leaf = [...r.page.querySelectorAll("td,th,span,div,p")].find((e) => e.children.length === 0 && /Main Incoming/i.test(e.textContent || ""));
+          const anchor = (leaf && (leaf.closest("tr") || leaf)) || [...r.page.querySelectorAll("table")].find((t) => /Description/i.test(t.textContent || ""));
+          const anchorOffset = anchor ? anchor.getBoundingClientRect().top - pageTop : 0;
+          // Line the pad's column-header row up with that anchor row. Measure the title bar HEIGHT
+          // (not its position) so it stays transform-invariant — otherwise a user drag would be undone.
+          const bar = r.slot.querySelector<HTMLElement>(".scratch-titlebar");
+          const theadOffset = bar ? bar.getBoundingClientRect().height + 9 : 52;
+          r.slot.style.top = `${r.page.offsetTop + anchorOffset - theadOffset}px`;
+          r.slot.style.left = `${Math.max(4, r.page.offsetLeft - SCRATCH_W - GAP)}px`;
+        }
+      };
+      reposition();
+      const ro = new ResizeObserver(reposition);
+      ro.observe(host);
+      const timers = [120, 400, 1000].map((ms) => window.setTimeout(reposition, ms));
+      scratchCleanupRef.current = () => { ro.disconnect(); for (const t of timers) window.clearTimeout(t); };
+      if (!cancelled) setScratchSlots(slotRecs.map((r) => ({ pid: r.pid, name: r.name, el: r.slot, defaultH: r.defaultH })));
     })();
-    return () => { cancelled = true; a4HostRef.current?.replaceChildren(); };
+    return () => {
+      cancelled = true;
+      scratchCleanupRef.current?.(); scratchCleanupRef.current = null;
+      setScratchSlots([]);
+      a4HostRef.current?.replaceChildren();
+    };
   }, [techView, hideBrand, s]);
   if (!s.panels.length) {
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Technical Offer is generated from them.</div>;
@@ -2952,19 +3332,32 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
             ✎ Edit
           </button>
         </div>
-        <button type="button" onClick={() => setHideBrand((v) => !v)}
-          title={hideBrand ? "Brand column is hidden in the offer — click to show it" : "Brand column is shown in the offer — click to hide it"}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-            <circle cx="12" cy="12" r="3" />
-            {hideBrand && <line x1="3" y1="3" x2="21" y2="21" />}
-          </svg>
-          {hideBrand ? "Show brand" : "Hide brand"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={toggleScratch}
+            title={showScratch ? "Hide the scratch-pad calculator" : "Show a scratch-pad calculator in the left margin"}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${showScratch ? "border-brand/40 bg-brand-tint/40 text-brand" : "border-line bg-white text-muted hover:border-brand/40 hover:text-brand"}`}>
+            🧮 Scratch pad
+          </button>
+          <button type="button" onClick={() => setHideBrand((v) => !v)}
+            title={hideBrand ? "Brand column is hidden in the offer — click to show it" : "Brand column is shown in the offer — click to hide it"}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-muted transition hover:border-brand/40 hover:text-brand">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+              <circle cx="12" cy="12" r="3" />
+              {hideBrand && <line x1="3" y1="3" x2="21" y2="21" />}
+            </svg>
+            {hideBrand ? "Show brand" : "Hide brand"}
+          </button>
+        </div>
       </div>
       <div className="offer-workspace">
       {techView === "a4" && <div ref={a4HostRef} className="print-area a4-preview flex flex-col items-center gap-6" />}
+      {/* One editable scratch-pad calculation table portalled into each panel's slot (built in the
+          effect above). Screen-only and per-panel — kept in the browser, never in the offer or PDF. */}
+      {showScratch && techView === "a4" && scratchSlots.map((sl) => createPortal(
+        <OfferScratchPad key={sl.pid} storageKey={`pl-offer-scratch-${qtnNo}-${sl.pid}`} title={sl.name} defaultHeight={sl.defaultH} />,
+        sl.el,
+      ))}
       <div ref={printRef} data-pdf-root className={`print-area space-y-6${techView === "a4" ? " a4-src-hidden" : ""}`}>
         {/* Cover page (shared branded title page) — no footer on the cover */}
         <OfferCover s={s} qtnNo={qtnNo} kind="Technical" />

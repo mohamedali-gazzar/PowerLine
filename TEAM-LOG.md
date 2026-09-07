@@ -23,6 +23,28 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-07 · Mohamed's side · Claude
 
+**New: a calculation "scratch pad" beside every panel in the Technical Offer.**
+
+Each panel in the Technical Offer (the "A4 pages" view) now has a small editable table to its left, next
+to the panel's "Main Incoming" list, for doing side-calculations while you review the offer. It behaves
+like a tiny spreadsheet:
+
+- Columns **A–D** and numbered rows, with a **formula bar** above the grid.
+- Cells accept **equations** and **cell references** — e.g. `=A1+B1`, `=C1*2`, `10+5%*200`. Click a
+  formula cell → the value shows in the cell, the equation shows in the bar.
+- **Build formulas by pointing:** type `=` then press the arrow keys (or click cells) to insert their
+  references. Arrows / clicking also just move between cells; Enter moves down.
+- **Drag a cell's corner (fill handle) down** to copy its equation with the references shifted per row
+  (`=A1+B1` → `=A2+B2` → …).
+- **Drag across cells** to select a block, then **Σ Sum / Delete / Copy** it.
+- **Drag the title bar to move it, the bottom-right corner to resize it**; toggle it on/off with the
+  "🧮 Scratch pad" button.
+
+It is **completely private and never part of the offer** — not printed, not in the PDF, and saved only
+in this browser (per panel). Build green.
+
+## 2026-09-07 · Mohamed's side · Claude
+
 **"Go to ERP" now includes the revision (e.g. QTN-26-00399-3).**
 
 The "Go to ERP" button was opening the quotation by its plain number and leaving the revision off, so
