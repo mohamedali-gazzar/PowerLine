@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-07 · Mohamed's side · Claude
 
+**Follow-up fix: an enclosure row uploaded with a code that an old component already uses now adds the enclosure.**
+
+Right after the enclosure-import change went live, adding "Local (Sheet Metal) · L1800×800×300" from
+Excel still came out as a *component* and didn't appear in the enclosure search. Cause: a component
+with the same code (`Local-1800.800.300`) had been added earlier — back when only components could be
+imported — and the upload matched that existing component by code first. Now a row marked (or inferred)
+as an Enclosure is matched ONLY against enclosures, never a component that happens to share the code, so
+re-uploading adds the enclosure. The leftover component then shows up as a normal "to remove" item, so
+ticking removals on a full-list upload retires it. Verified. Build green, 311 backend tests pass.
+
+## 2026-09-07 · Mohamed's side · Claude
+
 **The price-list Excel is now the source of truth for ENCLOSURES too — add / retire / edit by download-edit-upload.**
 
 The download-edit-upload flow on the Price list already handled components (add new, change

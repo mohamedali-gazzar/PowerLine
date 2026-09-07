@@ -406,8 +406,15 @@ export async function postLvImportPreview(req: Request, res: Response) {
       const useEur = eur > 0 ? eur : 0;
       const useEgp = eur > 0 ? 0 : egp;
 
-      const comp = compByRef.get(code);
-      const encl = enclByRef.get(code) ?? (rowIsEnclosure(row) ? enclByFamName.get(famNameKey(row.type, row.description)) : undefined);
+      // A row marked (or inferred) as an ENCLOSURE is matched ONLY against enclosures — never a
+      // component, even if a component happens to share its code. This is what lets a re-upload
+      // ADD the enclosure instead of updating a stale component that was created under the same
+      // code back when enclosures could not be imported (and which then reads as a removal).
+      const isEnc = rowIsEnclosure(row);
+      const comp = isEnc ? undefined : compByRef.get(code);
+      const encl = isEnc
+        ? (enclByRef.get(code) ?? enclByFamName.get(famNameKey(row.type, row.description)))
+        : enclByRef.get(code);
       const existing = comp ?? encl;
 
       if (existing) {
@@ -431,7 +438,7 @@ export async function postLvImportPreview(req: Request, res: Response) {
       }
       // A brand-new ENCLOSURE (its family sits in the Type column, or the Kind column says
       // so). Identity is [family, name]; a clash there is caught at apply.
-      if (rowIsEnclosure(row)) {
+      if (isEnc) {
         diff.push({
           kind: "add", entity: "LvEnclosure", code: row.code.trim(),
           label: `${row.type.trim()} · ${row.description.trim()}`,
