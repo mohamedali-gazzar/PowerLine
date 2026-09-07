@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-07 · Mohamed's side · Claude
 
+**The "＋ Page" and "↗ Panel" buttons in the A4 view now match the Edit view.**
+
+Two tidy-ups on the Technical Offer's "A4 pages" view: the **"＋ Page"** button is now a clean dashed
+pill — the grey bar that sat behind it is gone (it was accidentally picking up the "floating sheet" look
+the preview gives every page). And the **"↗ Panel"** button now sits neatly in the white space at the
+top-right of the panel — below the header, above the table — instead of overlapping the first table row,
+and uses the same arrow icon as the Edit view. Screen-only; the printed PDF is unchanged. Build green.
+
+## 2026-09-07 · Mohamed's side · Claude
+
 **Approval comments are now a two-way chat — the creator can reply when re-sending.**
 
 When a reviewer returns a quotation (or an RMU offer) with comments, the person who made it now sees a

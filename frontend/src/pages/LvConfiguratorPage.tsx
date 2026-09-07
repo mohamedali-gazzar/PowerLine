@@ -2846,18 +2846,22 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
       const pages = buildTechnicalPages(src, host);
       // Drop editor-only chrome (screen buttons) so the preview reads as the finished document.
       for (const p of pages) for (const el of Array.from(p.querySelectorAll<HTMLElement>(".no-print"))) el.remove();
-      // …then put back the two controls the estimator wants in the A4 view too: a "+ Page"
-      // divider-insert and a "↗ Panel" jump, as one small toolbar row above each panel's first
-      // page. Added here (not inside buildTechnicalPages) and marked no-print, so they show ONLY
-      // in this on-screen preview — the PDF export builds its own pages from the source and strips
-      // no-print, so the file stays clean. A plain flex row (not absolute) so nothing can escape
-      // the page shell (pageEl() is not position:relative) or overlap the header/date.
+      // …then put back the two controls the estimator wants in the A4 view too, styled EXACTLY
+      // like the Edit view: a left-aligned dashed "+ Page" pill above each panel, and a "↗ Panel"
+      // jump pinned to the top-right INSIDE the panel's first page (the JumpArrow icon, not a text
+      // arrow). Added here (not in buildTechnicalPages) and marked no-print, so they show ONLY in
+      // this on-screen preview — the PDF export builds its own pages and strips no-print.
+      const jumpSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"></path><path d="M7 7h10v10"></path></svg>';
       for (const page of pages) {
         const pid = page.getAttribute("data-offer-page");
         if (!pid) continue;
         const nm = s.panels.find((x) => x.id === pid)?.name ?? "";
-        const bar = document.createElement("div");
-        bar.className = "no-print mb-1 flex w-[210mm] max-w-full items-center justify-between gap-2";
+        // "+ Page" — a standalone left-aligned dashed pill above the page (matches the Edit view).
+        const addWrap = document.createElement("div");
+        addWrap.className = "no-print -mb-3 flex w-[210mm] max-w-full";
+        // The preview styles every direct child of .a4-preview as a floating page-sheet
+        // (border + shadow). This wrapper is not a sheet — strip that so only the pill shows.
+        addWrap.style.border = "none"; addWrap.style.boxShadow = "none"; addWrap.style.borderRadius = "0"; addWrap.style.background = "transparent";
         const addBtn = document.createElement("button");
         addBtn.type = "button";
         addBtn.title = `Insert a divider page before “${nm}”`;
@@ -2865,15 +2869,19 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
         addBtn.style.borderColor = TRED; addBtn.style.color = TRED;
         addBtn.innerHTML = '<span class="text-sm leading-none">＋</span> Page';
         addBtn.addEventListener("click", () => addSeparator(pid));
+        addWrap.appendChild(addBtn);
+        host.insertBefore(addWrap, page);
+        // "↗ Panel" — pinned to the top-right INSIDE the page, like the Edit view's sticky pill.
+        page.style.position = "relative"; // positioning context for the absolute button
         const jump = document.createElement("button");
         jump.type = "button";
         jump.title = `Back to “${nm}” in Panels`;
-        jump.className = "inline-flex items-center gap-1 rounded-full border bg-white px-2.5 py-1 text-[11px] font-bold shadow-sm transition hover:bg-[#FEF3ED]";
+        jump.className = "no-print absolute z-20 inline-flex items-center gap-1 rounded-full border bg-white px-2.5 py-1 text-[11px] font-bold shadow-sm transition hover:bg-[#FEF3ED]";
         jump.style.borderColor = TRED; jump.style.color = TRED;
-        jump.textContent = "↗ Panel";
+        jump.style.top = "74px"; jump.style.right = "32px"; // in the white band below the header text, above the table (like the Edit view)
+        jump.innerHTML = `${jumpSvg} Panel`;
         jump.addEventListener("click", () => onBackToPanel(pid));
-        bar.append(addBtn, jump);
-        host.insertBefore(bar, page);
+        page.appendChild(jump);
       }
     })();
     return () => { cancelled = true; a4HostRef.current?.replaceChildren(); };
