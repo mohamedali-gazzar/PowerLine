@@ -1299,26 +1299,35 @@ export default function LvConfiguratorPage() {
       return;
     }
     jumpPanelRef.current = null;
-    // The Technical Offer builds its A4 pages on the tab switch and keeps reflowing as its
-    // tables and fonts settle, so a panel's final position is NOT known on the first frame.
-    // Scrolling once then would land on the top of the offer, not the panel. So: poll for the
-    // panel's page, scroll to it, then re-scroll a couple of times to absorb the late reflow.
+    // The Technical Offer builds its A4 pages on the tab switch and keeps GROWING as its cover,
+    // notes and tables render and fonts settle. Scrolling once, straight away, aims at a target
+    // that is still near the top (the document is short), so the browser clamps it and you land at
+    // the START of the offer. Fix: keep re-scrolling to the panel every ~120 ms until its absolute
+    // position stops moving (three steady reads = layout finished), capped at 3 s so it can never
+    // loop. Deterministic on the final layout, not on one lucky frame.
     let cancelled = false;
-    const scrollToPanel = (): boolean => {
-      const el = document.querySelector<HTMLElement>(`[data-offer-panel="${CSS.escape(jump)}"]`);
-      if (el) window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - 76)); // 76px ≈ sticky tab header
-      return !!el;
-    };
-    let frames = 0;
-    const tick = () => {
+    let lastTop = NaN;
+    let steady = 0;
+    const attempt = () => {
       if (cancelled) return;
-      if (scrollToPanel() || frames++ > 40) return; // found & scrolled, or give up after ~0.7s
-      requestAnimationFrame(tick);
+      // The A4 preview and the raw flow view are two different DOM copies (one is hidden), so
+      // aim at whichever is actually VISIBLE: the A4 page (data-offer-page, tagged by the
+      // paginator) or the flow-view source (data-offer-panel). Targeting the hidden copy was
+      // exactly why the jump landed at the top of the offer.
+      const el = [...document.querySelectorAll<HTMLElement>(
+        `[data-offer-page="${CSS.escape(jump)}"], [data-offer-panel="${CSS.escape(jump)}"]`,
+      )].find((e) => e.offsetParent !== null);
+      if (el) {
+        const absTop = el.getBoundingClientRect().top + window.scrollY; // position within the document
+        window.scrollTo(0, Math.max(0, absTop - 80)); // 80px ≈ the sticky tab header
+        if (Math.abs(absTop - lastTop) < 2) { if (++steady >= 3) return; } else steady = 0;
+        lastTop = absTop;
+      }
+      window.setTimeout(attempt, 120);
     };
-    requestAnimationFrame(tick);
-    const t1 = window.setTimeout(scrollToPanel, 300);
-    const t2 = window.setTimeout(scrollToPanel, 700);
-    return () => { cancelled = true; window.clearTimeout(t1); window.clearTimeout(t2); };
+    attempt();
+    const stop = window.setTimeout(() => { cancelled = true; }, 3000);
+    return () => { cancelled = true; window.clearTimeout(stop); };
   }, [tab]);
 
   // Arrow-key navigation between form fields, based on their on-screen layout —

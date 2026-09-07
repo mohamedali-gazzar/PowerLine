@@ -219,6 +219,13 @@ function paginatePanel(host: HTMLElement, headerEl: HTMLElement | null, panelEl:
   do {
     const { page, content } = contentPage(headerEl);
     host.appendChild(page);
+    if (first) {
+      // Tag this panel's FIRST A4 page with the panel id, so the sidebar "↗ open in offer"
+      // jump can scroll to the panel in the VISIBLE A4 preview (the source block that carries
+      // data-offer-panel is hidden while the A4 view is shown).
+      const pid = panelEl.getAttribute("data-offer-panel");
+      if (pid) page.setAttribute("data-offer-page", pid);
+    }
     if (first && specblock) {
       const sb = specblock.cloneNode(true) as HTMLElement;
       neutralize(sb);

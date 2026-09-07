@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-07 · Mohamed's side · Claude
 
+**Fixed for real: the panel ↗ arrow now lands on that panel in the Technical Offer, not the top.**
+
+The first attempt didn't work because of how the offer is drawn: the A4 preview you see is built as
+separate pages, while the copy that carried the panel markers is a HIDDEN duplicate (the app keeps it
+to build the pages and the PDF). The jump was scrolling to the hidden copy, whose position reads as 0,
+so it always went to the start. Now each panel's first A4 page is labelled with the panel, and the jump
+scrolls to whichever copy is actually on screen. Verified: MDB's arrow lands on MDB's page, LP's arrow
+on LP's page. Build green.
+
+## 2026-09-07 · Mohamed's side · Claude
+
 **"Go to ERP" jump, and the panel ↔ Technical-Offer jumps behave properly.**
 
 - After you press **Copy link** on a quotation, a **"↗ Go to ERP"** button appears next to it. It
