@@ -3806,6 +3806,7 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
     return { p, currentFactor, calc, newFactor, previewTotalEgp, dirty: stagedSf != null && stagedSf !== p.sellFactor, custom: p.sellFactor > 0 };
   });
   const totalSell = rows.reduce((t, r) => t + r.previewTotalEgp, 0);
+  const totalCost = rows.reduce((t, r) => t + r.calc.unitCostOps * safetyMul * r.p.qty, 0);
   const dirtyRows = rows.filter((r) => r.dirty);
   // Copy the Total cost column as plain integers, one per line (paste straight into Excel).
   const copyTotalCost = async () => {
@@ -3884,7 +3885,7 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
               <th className="py-1.5 pr-2 text-center">Qty</th>
               <th className="w-40 py-1.5 px-3 text-center">
                 <span className="inline-flex items-center gap-1.5">
-                  Total cost ({cur})
+                  Unit cost ({cur})
                   <button type="button" onClick={copyTotalCost} title="Copy this column — one value per line"
                     className={`grid h-5 w-5 place-items-center rounded transition-colors ${copied ? "text-green-600" : "text-muted hover:text-brand-dark"}`}>
                     {copied ? (
@@ -3902,6 +3903,7 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
               <th className="w-40 py-1.5 px-3 text-center">Unit selling ({cur})</th>
               <th className="py-1.5 pr-2 text-center">Target selling ({cur})</th>
               <th className="w-24 py-1.5 px-3 text-center">New factor</th>
+              <th className="w-40 py-1.5 px-3 text-right">Total cost ({cur})</th>
               <th className="py-1.5 text-right">Total selling ({cur})</th>
             </tr>
           </thead>
@@ -3917,6 +3919,7 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
           <tfoot>
             <tr className="border-t-2 border-brand text-sm font-bold">
               <td className="py-2 pr-2" colSpan={7}>Total selling (excl. VAT)</td>
+              <td className="py-2 px-3 text-right text-muted">{m(totalCost)}</td>
               <td className="py-2 text-right text-brand-dark">{m(totalSell)}</td>
             </tr>
           </tfoot>
@@ -3986,6 +3989,7 @@ function PanelTargetRow({ name, qty, unitCost, factor, custom, dirty, sellUnit, 
           : <span className={newRisky ? "font-bold text-red-600" : "font-bold text-brand-dark"}
               title={newRisky ? "Above 0.95 — thin margin (price ≈ cost)" : "Factor needed to reach your target"}>{newFactor}</span>}
       </td>
+      <td className="py-1.5 px-3 text-right font-semibold text-muted">{m(unitCost * qty)}</td>
       <td className="py-1.5 text-right font-semibold">{m(totalSell)}</td>
     </tr>
   );
@@ -5801,9 +5805,9 @@ function PanelEditor({ s, p, up, upPanel }: {
             Total Cost<br /><b>{fmtEgp(calc.unitCostOps * (1 + (s.factors.safetyFactor || 0)))} EGP</b>
             <div className="mt-0.5 text-[10px] font-normal text-muted">+ operations {Math.round((s.factors.operations || 0) * 1000) / 10}% + safety {Math.round((s.factors.safetyFactor || 0) * 1000) / 10}%</div>
           </div>
-          <div className="rounded-lg bg-brand-light p-2.5 text-brand-dark">
-            Unit Selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b>
-            <div className="mt-0.5 text-[10px] font-normal text-brand-dark/70">÷ factor {p.sellFactor > 0 ? p.sellFactor : s.factors.factor}</div>
+          <div className="flex flex-col rounded-lg bg-brand-light p-2.5 text-brand-dark">
+            <div>Unit Selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
+            <div className="mt-auto pt-1.5 text-sm font-semibold text-brand-dark/80">÷ factor {p.sellFactor > 0 ? p.sellFactor : s.factors.factor}</div>
           </div>
           <div className="rounded-lg bg-brand p-2.5 text-white">Unit Selling (USD)<br /><b>{fmtEgp(s.factors.usd > 0 ? calc.sellUnit / s.factors.usd : 0)} USD</b></div>
         </div>

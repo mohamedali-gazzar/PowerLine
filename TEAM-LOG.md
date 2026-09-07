@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-07 · Mohamed's side · Claude
 
+**Pricing Settings → Panel pricing: clearer columns; and the panel's ÷ factor reads bigger.**
+
+Two small display tweaks (no numbers changed):
+- The "Total cost" column in the Panel pricing table is renamed to **"Unit cost"** — it always showed
+  the per-panel unit cost, so the label now matches it — and a new **"Total cost"** column (unit cost ×
+  quantity) is added just before "Total selling", with both totals summed in the footer row.
+- On a panel's cost breakdown, the small "÷ factor 0.7289" line under Unit Selling (EGP) is now larger
+  and sits at the bottom of the card instead of tucked right under the number.
+
+## 2026-09-07 · Mohamed's side · Claude
+
 **Follow-up fix: an enclosure row uploaded with a code that an old component already uses now adds the enclosure.**
 
 Right after the enclosure-import change went live, adding "Local (Sheet Metal) · L1800×800×300" from
