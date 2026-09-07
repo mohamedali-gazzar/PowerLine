@@ -19,6 +19,9 @@ import { api, type LvImportPreview, type LvImportRow, type LvRow } from "../api"
  *  (The blank-template download was removed on 13 Aug 2026; these columns are still
  *  the export header, so the name is kept to avoid churn across the parser.) */
 export const EMPTY_TEMPLATE_COLUMNS = [
+  // Says which table a row belongs to. Written on download; on upload it routes a NEW row to
+  // the components or the enclosures list. Blank on an older sheet → inferred from the family.
+  "Kind",
   "Type",
   "Description",
   "Item Code",
@@ -45,6 +48,7 @@ export const EMPTY_TEMPLATE_COLUMNS = [
 const flat = (s: string) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
 const HEADER_ALIASES: Record<string, string> = {
+  "kind": "kind",
   "type": "type",
   "family": "family",
   "rating": "rating",
@@ -106,6 +110,7 @@ export function parseWorkbook(buf: ArrayBuffer): { rows: LvImportRow[]; missing:
     if (!code && !description) continue; // blank spacer line
 
     rows.push({
+      kind: String(mapped.kind ?? "").trim(),
       type: String(mapped.type ?? "").trim(),
       family: String(mapped.family ?? "").trim(),
       rating: String(mapped.rating ?? "").trim(),
@@ -168,7 +173,9 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
       const fetchAll = async (kind: "components" | "enclosures") => {
         const out: LvRow[] = [];
         for (let page = 0; ; page++) {
-          const r = await api.pricing.lvList({ kind, take, page });
+          // ACTIVE items only — the current price list. Retired items live in the archive and
+          // must not ride along, or a re-upload would keep re-adding them.
+          const r = await api.pricing.lvList({ kind, take, page, activeOnly: true });
           out.push(...r.rows);
           setDl(`Preparing… ${kind} ${out.length.toLocaleString()} / ${r.total.toLocaleString()}`);
           if (out.length >= r.total || r.rows.length === 0) break;
@@ -181,6 +188,7 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
       // Components carry Type/prices/weights/Brand; enclosures & cells carry their
       // family (→ Type), IP/Mounting/RAL and price. Both flow into one master sheet.
       const compBody = comps.map((r) => [
+        "Component",                                          // Kind
         r.t ?? "",                                            // Type
         r.d ?? "",                                            // Description
         r.ref ?? "",                                          // Item Code
@@ -194,6 +202,7 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
         r.brand === "ABB" && (r.eur ?? 0) > 0 ? "Yes" : "No", // ABB Discount (system rule)
       ]);
       const encBody = encs.map((r) => [
+        "Enclosure",   // Kind
         r.fam ?? "",   // Type ← enclosure family
         r.name ?? "",  // Description
         r.ref ?? "",   // Item Code
@@ -362,9 +371,12 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
 
               {/* Headline counts */}
               <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-                <Stat label="Items to update" value={s.updates.toLocaleString()} tone="brand" />
-                <Stat label="New items to add" value={String(s.additions)} tone="brand" />
-                <Stat label="Items to remove" value={(s.removals ?? 0).toLocaleString()} tone={(s.removals ?? 0) > 0 ? "danger" : undefined} hint="not in this file" />
+                <Stat label="Items to update" value={s.updates.toLocaleString()} tone="brand"
+                  hint={(s.updatesEncl ?? 0) > 0 ? `${(s.updates - (s.updatesEncl ?? 0)).toLocaleString()} comp · ${s.updatesEncl} encl` : undefined} />
+                <Stat label="New items to add" value={String(s.additions)} tone="brand"
+                  hint={(s.additionsEncl ?? 0) > 0 ? `${s.additions - (s.additionsEncl ?? 0)} comp · ${s.additionsEncl} encl` : undefined} />
+                <Stat label="Items to remove" value={(s.removals ?? 0).toLocaleString()} tone={(s.removals ?? 0) > 0 ? "danger" : undefined}
+                  hint={(s.removals ?? 0) > 0 ? ((s.removalsEncl ?? 0) > 0 ? `${(s.removals - (s.removalsEncl ?? 0)).toLocaleString()} comp · ${s.removalsEncl} encl` : "not in this file") : "not in this file"} />
                 <Stat label="Already correct" value={s.unchanged.toLocaleString()} />
                 <Stat label="Left untouched" value={String(s.blankKept)} hint="blank price cell" />
               </div>
@@ -373,6 +385,7 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
                 <p className="mt-3 rounded-lg border border-line bg-surface p-2.5 text-xs font-semibold text-ink">
                   {s.priceUpdates.toLocaleString()} price{s.priceUpdates === 1 ? "" : "s"} ·{" "}
                   {s.dataUpdates.toLocaleString()} data change{s.dataUpdates === 1 ? "" : "s"}
+                  {(s.descriptionChanges ?? 0) > 0 && <> · {s.descriptionChanges.toLocaleString()} description edit{s.descriptionChanges === 1 ? "" : "s"}</>}
                   {s.priceUpdates > 0 && (
                     <>
                       {" "}
@@ -524,7 +537,17 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
                             )}
                           </td>
                           <td className="px-3 py-1.5 text-ink">
+                            {d.entity === "LvEnclosure" && (
+                              <span className="mr-1.5 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 dark:bg-indigo-400/15 dark:text-indigo-200">Enclosure</span>
+                            )}
                             {d.label}
+                            {d.newName && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-400/15 dark:text-amber-200" title={`Description → ${d.newName}`}>
+                                  Description → {d.newName}
+                                </span>
+                              </div>
+                            )}
                             {!!d.fields?.length && (
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {d.fields.map((fc) => (

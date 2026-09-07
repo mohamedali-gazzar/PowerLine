@@ -313,6 +313,9 @@ export interface LvComboSection {
 
 /** One spreadsheet line, already parsed out of the workbook. */
 export interface LvImportRow {
+  /** "Component" / "Enclosure" — which table the row belongs to (the download stamps it;
+   *  blank on an older sheet, then inferred from the family). */
+  kind: string;
   type: string;
   family: string;
   rating: string;
@@ -349,6 +352,8 @@ export interface LvImportDiff {
   priceMoved?: boolean;
   /** Description / Brand / Type / Poles rewrites carried by this row. */
   fields?: LvImportFieldChange[];
+  /** New enclosure description (name) — enclosures keep name as identity, so it rides here. */
+  newName?: string;
   /** Row carried no item code and was matched on description — applied only on opt-in. */
   noCode?: boolean;
 }
@@ -357,6 +362,12 @@ export interface LvImportSummary {
   rowsRead: number;
   updates: number;
   additions: number;
+  /** Of the additions / updates / removals, how many are enclosures (the rest are components). */
+  additionsEncl: number;
+  updatesEncl: number;
+  removalsEncl: number;
+  /** Description edits (a component rename or an enclosure name change). */
+  descriptionChanges: number;
   /** Active coded items the uploaded file left out — retired on apply, only if opted in. */
   removals: number;
   unchanged: number;

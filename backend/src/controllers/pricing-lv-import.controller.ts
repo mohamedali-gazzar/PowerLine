@@ -47,6 +47,10 @@ const DETAIL_CAP = 300;
  *  Every data column a component carries is accepted — the template shipped
  *  Weight/Panel/Pole and Weight/Cell/Pole long before anything read them. */
 const rawRowSchema = z.object({
+  // "Component" / "Enclosure" — the download stamps it so a re-upload knows which table a
+  // row belongs to. Blank on an older sheet: the reader then infers an enclosure from its
+  // family (Type column) matching a known enclosure family.
+  kind: z.string().default(""),
   type: z.string().default(""),
   family: z.string().default(""),
   rating: z.string().default(""),
@@ -113,6 +117,9 @@ export interface DiffEntry {
   priceMoved?: boolean;
   /** Non-price columns this row would rewrite (components only). */
   fields?: FieldChange[];
+  /** New enclosure name/description when an enclosure row (matched by its stable code)
+   *  renames it. Enclosures keep name as identity, so their edits ride here, not `fields`. */
+  newName?: string;
   /** True when the sheet row carried no item code and was matched on description
    *  (or is a brand-new code-less item). Applied only if the uploader opts in. */
   noCode?: boolean;
@@ -156,10 +163,16 @@ export async function postLvImportPreview(req: Request, res: Response) {
           active: true, sortIndex: true,
         },
       }),
-      prisma.lvEnclosure.findMany({ select: { id: true, ref: true, name: true, eur: true, egp: true } }),
+      prisma.lvEnclosure.findMany({ select: { id: true, ref: true, fam: true, name: true, eur: true, egp: true, active: true } }),
     ]);
     const compByRef = new Map(components.filter((c) => c.ref).map((c) => [normRef(c.ref), c]));
     const enclByRef = new Map(enclosures.filter((e) => e.ref).map((e) => [normRef(e.ref), e]));
+    // Enclosures ALSO matched by their real identity [family, name]: most carry no item code,
+    // so ref alone would miss them on a re-upload and wrongly retire them. Plus the set of
+    // known enclosure families, used to route a brand-new row to the enclosure table.
+    const famNameKey = (fam: string, name: string) => `${normDesc(fam)}|${normDesc(name)}`;
+    const enclByFamName = new Map(enclosures.map((e) => [famNameKey(e.fam, e.name), e]));
+    const enclFams = new Set(enclosures.map((e) => normDesc(e.fam)));
     // Rows with no item code can only be matched on description, so index the
     // catalogue that way too. Ambiguous descriptions are never matched silently.
     const byDesc = new Map<string, typeof components>();
@@ -195,6 +208,17 @@ export async function postLvImportPreview(req: Request, res: Response) {
     // whether it changes them or not. Anything active + coded that is NOT in here is a
     // candidate to retire (full-sync removals) — see after the loop.
     const matched = new Set<string>();
+    // The same, for enclosures: any active enclosure NOT referenced by the file is a
+    // candidate to retire. Tracked separately because enclosures are a different table.
+    const matchedEncl = new Set<string>();
+    /** True when a sheet row describes an enclosure: it says so in the Kind column, or (on
+     *  an older sheet with no Kind) its family (Type column) is a known enclosure family. */
+    const rowIsEnclosure = (row: RawRow): boolean => {
+      const k = row.kind.trim().toLowerCase();
+      if (k === "enclosure" || k === "encl") return true;
+      if (k === "component" || k === "comp") return false;
+      return enclFams.has(normDesc(row.type));
+    };
 
     type Comp = (typeof components)[number];
     type Encl = (typeof enclosures)[number];
@@ -214,6 +238,7 @@ export async function postLvImportPreview(req: Request, res: Response) {
       // Driven off APPLIABLE_FIELDS, so adding a column to the catalogue means
       // adding one entry there and one alias in the sheet parser — not a new branch.
       const fields: FieldChange[] = [];
+      let enclNewName: string | undefined; // enclosure description edit (ride separately — name is identity)
       if (comp) {
         const sheet: Record<FieldChange["field"], string | number> = {
           d: row.description, brand: row.brand, t: row.type, f: row.family, r: row.rating,
@@ -261,12 +286,22 @@ export async function postLvImportPreview(req: Request, res: Response) {
             names.claim(rename.to, comp);
           }
         }
-      } else if (encl && row.description.trim() && row.description.trim() !== encl.name.trim()) {
-        // An enclosure's name is parsed for dimensions and is half its unique key.
-        warnings.push(`${shown}: enclosure description differs — left as is (cell matching parses that name). Price still updated.`);
+      } else if (encl) {
+        const nn = row.description.trim();
+        if (nn && nn !== encl.name.trim()) {
+          // An enclosure's name IS its identity (dimensions / cell matching parse it). Allow a
+          // rename only when the row is pinned by its stable code; a name-matched row carrying a
+          // different name is simply a different enclosure (handled as retire + add).
+          if (normRef(encl.ref) && normRef(encl.ref) === normRef(row.code)) {
+            enclNewName = nn;
+            warnings.push(`${shown}: enclosure description changed — it is parsed for size / cell matching, so check panels that use it.`);
+          } else {
+            warnings.push(`${shown}: enclosure description differs — left as is (matched by name, which is its key). Price still updated.`);
+          }
+        }
       }
 
-      if (!priceMoved && !fields.length) return null;
+      if (!priceMoved && !fields.length && !enclNewName) return null;
       return {
         kind: "update",
         entity: comp ? "LvComponent" : "LvEnclosure",
@@ -281,6 +316,7 @@ export async function postLvImportPreview(req: Request, res: Response) {
         pct: priceMoved && existing.eur > 0 && useEur > 0 ? ((useEur - existing.eur) / existing.eur) * 100 : undefined,
         priceMoved,
         fields,
+        newName: enclNewName,
       };
     };
 
@@ -297,15 +333,38 @@ export async function postLvImportPreview(req: Request, res: Response) {
           warnings.push("A row has neither an item code nor a description — nothing to match it on.");
           continue;
         }
+        const eurN = Number(row.eur) || 0;
+        const egpN = Number(row.egp) || 0;
+        const useEurN = eurN > 0 ? eurN : 0;
+        const useEgpN = eurN > 0 ? 0 : egpN;
+        // A code-less ENCLOSURE (most enclosures carry no item code). Match it by its real
+        // identity [family, name] so a re-upload never mistakes it for a component or a
+        // removal; if it's new, add it as an enclosure.
+        if (rowIsEnclosure(row)) {
+          const e = enclByFamName.get(famNameKey(row.type, row.description));
+          if (e) {
+            matchedEncl.add(e.id);
+            const entry = diffForExisting(undefined, e, row, useEurN, useEgpN);
+            if (entry) diff.push({ ...entry, noCode: true }); else unchanged++;
+            continue;
+          }
+          if (useEurN === 0 && useEgpN === 0) {
+            unpriced++;
+            warnings.push(`“${row.description.trim()}”: new enclosure with no price — not added (it would quote as free).`);
+            continue;
+          }
+          diff.push({
+            kind: "add", entity: "LvEnclosure", code: "",
+            label: `${row.type.trim()} · ${row.description.trim()}`,
+            eur: useEurN, egp: useEgpN, row, noCode: true,
+          });
+          continue;
+        }
         const hits = byDesc.get(key) ?? [];
         if (hits.length > 1) {
           warnings.push(`“${row.description.trim()}”: no item code and ${hits.length} items share that description — skipped, it cannot be matched safely.`);
           continue;
         }
-        const eurN = Number(row.eur) || 0;
-        const egpN = Number(row.egp) || 0;
-        const useEurN = eurN > 0 ? eurN : 0;
-        const useEgpN = eurN > 0 ? 0 : egpN;
         if (hits.length === 1) {
           matched.add(hits[0].id); // the file refers to this component — never a removal
           const entry = diffForExisting(hits[0], undefined, row, useEurN, useEgpN);
@@ -348,11 +407,12 @@ export async function postLvImportPreview(req: Request, res: Response) {
       const useEgp = eur > 0 ? 0 : egp;
 
       const comp = compByRef.get(code);
-      const encl = enclByRef.get(code);
+      const encl = enclByRef.get(code) ?? (rowIsEnclosure(row) ? enclByFamName.get(famNameKey(row.type, row.description)) : undefined);
       const existing = comp ?? encl;
 
       if (existing) {
         if (comp) matched.add(comp.id); // the file refers to this component — never a removal
+        else if (encl) matchedEncl.add(encl.id); // …or this enclosure
         const entry = diffForExisting(comp, encl, row, useEur, useEgp);
         if (entry) diff.push(entry);
         else unchanged++;
@@ -367,6 +427,16 @@ export async function postLvImportPreview(req: Request, res: Response) {
       }
       if (!row.description.trim()) {
         warnings.push(`${row.code}: new item with no description — not added.`);
+        continue;
+      }
+      // A brand-new ENCLOSURE (its family sits in the Type column, or the Kind column says
+      // so). Identity is [family, name]; a clash there is caught at apply.
+      if (rowIsEnclosure(row)) {
+        diff.push({
+          kind: "add", entity: "LvEnclosure", code: row.code.trim(),
+          label: `${row.type.trim()} · ${row.description.trim()}`,
+          eur: useEur, egp: useEgp, row,
+        });
         continue;
       }
       // A NEW item code with an EXISTING item's description is exactly how the
@@ -391,14 +461,14 @@ export async function postLvImportPreview(req: Request, res: Response) {
       names.claim(label, pendingItem(label, row.code.trim()));
     }
 
-    // Full-sync removals: an ACTIVE, coded component the file never mentioned is one
-    // the catalogue should stop offering. Retiring it (active=false) is reversible —
-    // the row, its name and its price history stay, and quotations already sent are
-    // untouched — so this is a soft delete, never a hard one. Code-less items ("Space
-    // for MCB", CTs) match on description, not code, and are never swept up here;
-    // enclosures are structural (their name encodes cell dimensions) and are left
-    // alone. Held apart from the headline counts and applied ONLY if the uploader ticks
-    // the opt-in, so a partial file can never silently empty the catalogue.
+    // Full-sync removals: an ACTIVE item the file never mentioned is one the catalogue should
+    // stop offering. Retiring it (active=false) is reversible — the row, its name and its price
+    // history stay, and quotations already sent are untouched — so this is a soft delete, never
+    // a hard one. Code-less COMPONENTS ("Space for MCB", CTs) match on description, not code, and
+    // are never swept up here. ENCLOSURES are matched by [family, name] (or code), so a full
+    // re-upload of the active list touches none — only a row the owner actually deleted is swept.
+    // Held apart from the headline counts and applied ONLY if the uploader ticks the opt-in, so a
+    // partial file can never silently empty the catalogue.
     const removals: DiffEntry[] = components
       .filter((c) => c.active && c.ref && !matched.has(c.id))
       .map((c) => ({
@@ -412,7 +482,20 @@ export async function postLvImportPreview(req: Request, res: Response) {
         eur: c.eur,
         egp: c.egp,
       }));
-    diff.push(...removals);
+    const enclRemovals: DiffEntry[] = enclosures
+      .filter((e) => e.active && !matchedEncl.has(e.id))
+      .map((e) => ({
+        kind: "remove" as const,
+        entity: "LvEnclosure" as const,
+        entityId: e.id,
+        code: e.ref,
+        label: `${e.fam} · ${e.name}`,
+        fromEur: e.eur,
+        fromEgp: e.egp,
+        eur: e.eur,
+        egp: e.egp,
+      }));
+    diff.push(...removals, ...enclRemovals);
 
     // Code-less rows are held apart: they are shown for review and applied only if
     // the uploader ticks them, so they never inflate the headline counts.
@@ -420,14 +503,22 @@ export async function postLvImportPreview(req: Request, res: Response) {
     const noCodeEntries = diff.filter((d) => d.noCode);
     const updates = coded.filter((d) => d.kind === "update");
     const additions = coded.filter((d) => d.kind === "add");
+    const allRemovals = diff.filter((d) => d.kind === "remove");
+    const isEncl = (d: DiffEntry) => d.entity === "LvEnclosure";
     const pcts = updates.map((u) => u.pct).filter((p): p is number => typeof p === "number").sort((a, b) => a - b);
 
     const summary = {
       rowsRead: rows.length,
       updates: updates.length,
       additions: additions.length,
-      // Active coded items absent from the file — retired on apply, only if opted in.
-      removals: removals.length,
+      // Split by kind, so the preview can head each list with "Added Enclosures", etc.
+      additionsEncl: additions.filter(isEncl).length,
+      updatesEncl: updates.filter(isEncl).length,
+      // Active items absent from the file — retired on apply, only if opted in.
+      removals: allRemovals.length,
+      removalsEncl: allRemovals.filter(isEncl).length,
+      // Description edits: a component rename, or an enclosure name change (rides on newName).
+      descriptionChanges: updates.filter((u) => u.fields?.some((f) => f.field === "d") || u.newName).length,
       // Rows with no item code, matched on description instead — opt-in.
       noCodeUpdates: noCodeEntries.filter((d) => d.kind === "update").length,
       noCodeAdditions: noCodeEntries.filter((d) => d.kind === "add").length,
@@ -468,10 +559,10 @@ export async function postLvImportPreview(req: Request, res: Response) {
       summary,
       updates: updates.slice(0, DETAIL_CAP),
       additions: additions.slice(0, DETAIL_CAP),
-      removals: removals.slice(0, DETAIL_CAP),
+      removals: allRemovals.slice(0, DETAIL_CAP),
       noCodeItems: noCodeEntries.slice(0, DETAIL_CAP),
       warnings: warnings.slice(0, 50),
-      truncated: updates.length > DETAIL_CAP || additions.length > DETAIL_CAP || removals.length > DETAIL_CAP,
+      truncated: updates.length > DETAIL_CAP || additions.length > DETAIL_CAP || allRemovals.length > DETAIL_CAP,
       expiresAt: batch.expiresAt,
     });
   } catch (e) {
@@ -523,12 +614,31 @@ export async function postLvImportApply(req: Request, res: Response) {
     // everything that already exists.
     const last = await prisma.lvComponent.findFirst({ orderBy: { sortIndex: "desc" }, select: { sortIndex: true } });
     let nextSortIndex = (last?.sortIndex ?? -1) + 1;
+    // Enclosures have their OWN sortIndex sequence (a separate table), so a new enclosure
+    // appends after the last enclosure, not the last component.
+    const lastEncl = await prisma.lvEnclosure.findFirst({ orderBy: { sortIndex: "desc" }, select: { sortIndex: true } });
+    let nextEnclSortIndex = (lastEncl?.sortIndex ?? -1) + 1;
 
     for (const d of diff) {
-      // Full-sync removal: retire an active component the file left out. Soft delete —
-      // the row and history stay, so it is reversible and quotations already sent keep
-      // their frozen prices. Mirrors the /retire endpoint's audit trail.
+      // Full-sync removal: retire an active item the file left out. Soft delete — the row and
+      // history stay, so it is reversible and quotations already sent keep their frozen prices.
+      // Mirrors the /retire endpoint's audit trail; handles both components and enclosures.
       if (d.kind === "remove" && d.entityId) {
+        if (d.entity === "LvEnclosure") {
+          const cur = await prisma.lvEnclosure.findUnique({ where: { id: d.entityId } });
+          if (!cur || !cur.active) { skipped++; continue; }
+          await prisma.lvEnclosure.update({ where: { id: cur.id }, data: { active: false, updatedBy: by } });
+          await prisma.priceChange.create({
+            data: {
+              domain: "LV", entity: "LvEnclosure", entityId: cur.id,
+              label: `${cur.fam} · ${cur.name}`, field: "__retired",
+              oldValue: "offered", newValue: "retired",
+              actorId, actorEmail: by,
+            },
+          });
+          removed++;
+          continue;
+        }
         const cur = await prisma.lvComponent.findUnique({ where: { id: d.entityId } });
         if (!cur || !cur.active) { skipped++; continue; } // gone or already retired
         await prisma.lvComponent.update({ where: { id: cur.id }, data: { active: false, updatedBy: by } });
@@ -628,14 +738,23 @@ export async function postLvImportApply(req: Request, res: Response) {
         } else {
           const cur = await prisma.lvEnclosure.findUnique({ where: { id: d.entityId } });
           if (!cur) { skipped++; continue; }
-          await prisma.lvEnclosure.update({
-            where: { id: cur.id },
-            data: { eur: d.eur, egp: d.egp, updatedBy: by },
-          });
+          const data: Record<string, unknown> = { eur: d.eur, egp: d.egp, updatedBy: by };
+          // Description (name) edit — set by diffForExisting only when the row was pinned by its
+          // stable code. Guard the [family, name] identity against an existing name.
+          if (d.newName && d.newName !== cur.name) {
+            const clash = await prisma.lvEnclosure.findFirst({ where: { fam: cur.fam, name: d.newName, NOT: { id: cur.id } } });
+            if (clash) {
+              nameClashes.push(`${cur.name}: could not rename to “${d.newName}” — that name is already used under ${cur.fam}.`);
+            } else {
+              data.name = d.newName;
+              data.search = searchText(cur.fam, d.newName, cur.ref, cur.abb, cur.ip, cur.mount);
+            }
+          }
+          await prisma.lvEnclosure.update({ where: { id: cur.id }, data });
           await prisma.priceChange.create({
             data: {
               domain: "LV", entity: "LvEnclosure", entityId: cur.id,
-              label: cur.name || cur.ref, field: "price",
+              label: `${cur.fam} · ${(data.name as string) ?? cur.name}`, field: data.name ? "price+description" : "price",
               oldValue: `${cur.eur} EUR / ${cur.egp} EGP`, newValue: `${d.eur} EUR / ${d.egp} EGP`,
               actorId, actorEmail: by,
             },
@@ -646,6 +765,36 @@ export async function postLvImportApply(req: Request, res: Response) {
       }
 
       if (d.kind === "add") {
+        // A brand-new ENCLOSURE. Identity is [family, name]; append on the enclosure sortIndex
+        // sequence. Dimensions are read from the name ("L1800x800x300" → 1800×800×300).
+        if (d.entity === "LvEnclosure") {
+          const r = d.row;
+          const fam = (r?.type ?? "").trim();
+          const name = (r?.description ?? d.label).trim();
+          if (!fam || !name) { skipped++; continue; }
+          if (await prisma.lvEnclosure.findFirst({ where: { fam, name } })) { skipped++; continue; }
+          const dm = name.replace(/^new/i, "").match(/(\d+)\s*[xX×]\s*(\d+)\s*[xX×]\s*(\d+)/);
+          const [H, W, D] = dm ? [Number(dm[1]), Number(dm[2]), Number(dm[3])] : [0, 0, 0];
+          const enc = await prisma.lvEnclosure.create({
+            data: {
+              sortIndex: nextEnclSortIndex++,
+              fam, name, ref: (r?.code ?? d.code ?? "").trim(),
+              eur: d.eur, egp: d.egp, H, W, D,
+              search: searchText(fam, name, (r?.code ?? "").trim()),
+              updatedBy: by,
+            },
+          });
+          await prisma.priceChange.create({
+            data: {
+              domain: "LV", entity: "LvEnclosure", entityId: enc.id,
+              label: `${fam} · ${name}`, field: "__created",
+              newValue: d.eur > 0 ? `${d.eur} EUR` : `${d.egp} EGP`,
+              actorId, actorEmail: by,
+            },
+          });
+          added++;
+          continue;
+        }
         // Guard against the same part being added twice by two overlapping imports.
         if (d.code && (await prisma.lvComponent.findFirst({ where: { ref: d.code } }))) {
           skipped++;

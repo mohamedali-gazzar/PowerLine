@@ -21,6 +21,35 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-07 · Mohamed's side · Claude
+
+**The price-list Excel is now the source of truth for ENCLOSURES too — add / retire / edit by download-edit-upload.**
+
+The download-edit-upload flow on the Price list already handled components (add new, change
+price/description, and retire an item you delete from the sheet). It now does the same for
+**enclosures**:
+
+- **Download Current Excel** now gives the **active** items only — components AND enclosures — and
+  adds a **"Kind"** column ("Component"/"Enclosure") so a re-upload knows which list each row belongs
+  to. Retired items are no longer included (they stay archived, out of the sheet).
+- **Add an enclosure**: type a new row (Kind = Enclosure, family in the Type column, e.g. "Local
+  (Sheet Metal)", the size as the description, a code and a price) and upload — it's created as a
+  real enclosure and is immediately available as a box when building a panel of that family. This is
+  the piece that was missing: before, any new row you added always became a *component*, so a new
+  enclosure never showed up in the panel box list.
+- **Edit an enclosure's price or description**, and **retire an enclosure** by deleting its row —
+  all the same as components. Retiring is reversible and never changes quotations already made.
+- The **preview before applying** now shows the split — added components / added enclosures, retired
+  components / retired enclosures, price changes and description changes — and each enclosure row is
+  tagged. Removals are still opt-in with a confirm, so a partial upload can't wipe the list.
+
+Old quotations are unaffected — each one keeps the exact item, description and price it was made
+with. Verified end to end: adding "Local (Sheet Metal) · L1800×800×300 @ 16,500" via upload made it
+live in the catalogue and available in the panel box list; price and description edits were detected.
+No database change. Build green, 311 backend + 81 frontend tests pass.
+
+Not built yet (say if wanted): a dedicated screen to browse/download the retired-items archive.
+
 ## 2026-09-06 · Mohamed's side · Claude
 
 **Panel-group header no longer shows a price.** Dropped the rolled-up selling total from the group
