@@ -23,6 +23,40 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-07 · Mohamed's side · Claude
 
+**Approval comments are now a two-way chat — the creator can reply when re-sending.**
+
+When a reviewer returns a quotation (or an RMU offer) with comments, the person who made it now sees a
+**conversation** instead of a single red note: the reviewer's comments and the creator's replies as chat
+bubbles (reviewer on the left, creator on the right), each with who wrote it and when. On a returned item
+the creator gets a **"Your reply"** box and a **"Reply & send for approval"** button — they read the
+comments, type a reply, choose who to send it to, and it goes back with the reply saved. The reviewer then
+sees the whole conversation, including the reply, before approving or returning again.
+
+One thing had to change on the server for this to work: when you re-sent for approval, the system was
+replacing your typed reply with "Sent to <name> for approval", so the reply was lost — it now keeps your
+reply (and shows it in the approver's notification). No change to the database, to prices, or to any
+existing quotation. Works on both LV quotations and RMU offers. Verified end-to-end on both; build green.
+
+## 2026-09-07 · Mohamed's side · Claude
+
+**P.F.C: you must now pick a circuit breaker before generating the combination.**
+
+On the "Existing / known P.F.C" tab, the **Generate combination** button now stays disabled until you
+select a real circuit breaker (a red note explains why). Before, typing a number in "C.B rating" was
+enough — but that produced a generic, un-priced breaker line. The breaker is now required, and editing the
+C.B rating no longer clears the breaker you picked. Verified; build green.
+
+## 2026-09-07 · Mohamed's side · Claude
+
+**The "＋ Page" and "↗ Panel" buttons now show in the A4-pages view too, not only in Edit.**
+
+In the Technical Offer, the small toolbar above each panel — **＋ Page** (insert a divider page before that
+panel) and **↗ Panel** (jump back to that panel in the Panels list) — now appears in the "A4 pages" view as
+well as "Edit". They never appear on the printed PDF. Verified: ↗ Panel lands on the right panel (MDB→MDB,
+LP→LP) and ＋ Page inserts a divider; build green.
+
+## 2026-09-07 · Mohamed's side · Claude
+
 **Fixed for real: the panel ↗ arrow now lands on that panel in the Technical Offer, not the top.**
 
 The first attempt didn't work because of how the offer is drawn: the A4 preview you see is built as

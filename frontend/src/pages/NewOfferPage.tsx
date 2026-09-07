@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api, QTN_STATUS_STYLE, type QtnStatus } from "../api";
+import { api, QTN_STATUS_STYLE, type QtnStatus, type QtnEventDto } from "../api";
 import {
   Field,
   TextInput,
@@ -13,6 +13,7 @@ import OfferView from "../components/OfferView";
 import OfferCover from "../components/OfferCover";
 import { QtnNumberInput, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
+import ApprovalChat from "../components/ApprovalChat";
 import ActiveTimeBadge from "../components/ActiveTimeBadge";
 import { useStaff, findPerson, SALES_MANAGER } from "../staff";
 import {
@@ -124,7 +125,7 @@ export default function NewOfferPage() {
   const [offerStatus, setOfferStatus] = useState<QtnStatus>("DRAFT");
   const [offerActiveSeconds, setOfferActiveSeconds] = useState(0); // hands-on time on this offer
   const [statusLabel, setStatusLabel] = useState("Draft");
-  const [returnReason, setReturnReason] = useState("");
+  const [approvalEvents, setApprovalEvents] = useState<QtnEventDto[]>([]); // return + re-send conversation
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [busy, setBusy] = useState(false); // send-for-approval in flight
   const [checking, setChecking] = useState(false);
@@ -411,7 +412,6 @@ export default function NewOfferPage() {
     setOfferStatus(st);
     setStatusLabel(o.statusLabel ?? st);
     setOfferActiveSeconds(o.activeSeconds ?? 0);
-    setReturnReason(o.returnReason ?? "");
     return st === "DRAFT" || st === "RETURNED";
   }
 
@@ -433,6 +433,17 @@ export default function NewOfferPage() {
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editId]);
+
+  // Load the approval conversation (return + re-send messages) for a returned offer being
+  // edited here. Owner/approver-gated → a 403 just leaves it empty.
+  useEffect(() => {
+    if (!editId) return;
+    let alive = true;
+    api.offerEvents(editId)
+      .then((evs) => { if (alive) setApprovalEvents(evs); })
+      .catch(() => { if (alive) setApprovalEvents([]); });
+    return () => { alive = false; };
+  }, [editId, offerStatus]);
 
   // Autosave (debounced) once hydrated and while the draft is still editable. The
   // signature guard skips no-op saves. buildPayload() always sends status:"DRAFT"
@@ -458,7 +469,7 @@ export default function NewOfferPage() {
 
   /** Send the draft for approval (flush the latest edits first), then open the
    *  read-only detail page with the approval bar — exactly like an LV quotation. */
-  async function sendForApproval(approverId: string) {
+  async function sendForApproval(approverId: string, note = "") {
     if (!editId) return;
     if (!projectName.trim() || !customer.trim() || !team.quotationNo.trim()) {
       setError("Project name, customer and QTN number are required before sending for approval.");
@@ -471,7 +482,7 @@ export default function NewOfferPage() {
       const payload = buildPayload();
       await api.updateOffer(editId, payload); // flush the latest state
       lastSavedSig.current = JSON.stringify(payload);
-      await api.transitionOffer(editId, "WAITING_APPROVAL", undefined, approverId);
+      await api.transitionOffer(editId, "WAITING_APPROVAL", note.trim() || undefined, approverId);
       navigate(`/offers/${editId}`);
     } catch (e) {
       setError((e as Error).message);
@@ -593,8 +604,8 @@ export default function NewOfferPage() {
             </div>
             <p className="mt-1 truncate text-sm text-muted">
               {projectName || "—"} · {customer || "—"}
-              {offerStatus === "RETURNED" && returnReason && (
-                <span className="ml-2 rounded bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">Returned: {returnReason}</span>
+              {offerStatus === "RETURNED" && (
+                <span className="ml-2 rounded bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">↩ Returned — reply and re-send below</span>
               )}
             </p>
           </div>
@@ -605,7 +616,8 @@ export default function NewOfferPage() {
             <button type="button" className="btn-ghost" onClick={checkForUpdates} disabled={checking}>
               {checking ? "Checking…" : "↻ Check for updates"}
             </button>
-            {editable && (
+            {offerStatus === "DRAFT" && (
+              // A returned offer is re-sent from the conversation box below (with a reply).
               <SendForApprovalMenu busy={busy} onSend={sendForApproval} />
             )}
           </div>
@@ -621,6 +633,16 @@ export default function NewOfferPage() {
           </button>
         </div>
       )}
+
+      {/* The approval conversation — reviewer comments + creator replies as a chat. On a
+          returned offer it carries the reply box + "Reply & send for approval". */}
+      <ApprovalChat
+        events={approvalEvents}
+        canReply={offerStatus === "RETURNED"}
+        busy={busy}
+        onReSend={(approverId, note) => sendForApproval(approverId, note)}
+        className="mb-4"
+      />
 
       {/* Tab bar (sticky), like the LV section */}
       <div className="sticky top-0 z-20 -mx-4 mb-5 bg-surface/85 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">

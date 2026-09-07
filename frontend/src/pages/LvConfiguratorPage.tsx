@@ -7,6 +7,7 @@ import CoWorkModal from "../components/CoWorkModal";
 import { maskQtn, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
 import ActiveTimeBadge from "../components/ActiveTimeBadge";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
+import ApprovalChat from "../components/ApprovalChat";
 import { useReviewLock } from "../hooks/useReviewLock";
 import { usePointerReorder } from "../hooks/usePointerReorder";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
@@ -346,7 +347,7 @@ export default function LvConfiguratorPage() {
   const [approvalWarns, setApprovalWarns] = useState<ExportCheck[] | null>(null);
   // Every "Return for revision" is kept as an audit event; this is the saved history
   // of those comments (newest first), shown on the quotation.
-  const [returnHistory, setReturnHistory] = useState<QtnEventDto[]>([]);
+  const [approvalEvents, setApprovalEvents] = useState<QtnEventDto[]>([]);
   const [returnOpen, setReturnOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
   const [coWorkOpen, setCoWorkOpen] = useState(false);
@@ -388,15 +389,15 @@ export default function LvConfiguratorPage() {
       .catch(() => { if (alive) navigate("/lv", { replace: true }); });
     return () => { alive = false; };
   }, [routeQtnId, navigate, tabKey]);
-  // Load the saved revision-comment history (all "Return for revision" events), and
-  // refresh it whenever the workflow status changes so a new return shows up at once.
-  // The endpoint is owner/approver-gated; a 403 just leaves the history empty.
+  // Load the approval conversation (every return + re-send event), and refresh it whenever
+  // the workflow status changes so a new message shows up at once. The endpoint is
+  // owner/approver-gated; a 403 just leaves the conversation empty.
   useEffect(() => {
     if (!routeQtnId) return;
     let alive = true;
     api.qtns.events(routeQtnId)
-      .then((evs) => { if (alive) setReturnHistory(evs.filter((e) => e.action === "RETURN")); })
-      .catch(() => { if (alive) setReturnHistory([]); });
+      .then((evs) => { if (alive) setApprovalEvents(evs); })
+      .catch(() => { if (alive) setApprovalEvents([]); });
     return () => { alive = false; };
   }, [routeQtnId, status]);
   // A revision is cancelled once a higher revision of the same base exists.
@@ -457,6 +458,9 @@ export default function LvConfiguratorPage() {
   // The approver chosen from the Send-for-approval dropdown, held across the multi-step
   // send flow (validation → warnings modal → transition).
   const sendApproverRef = useRef<string | null>(null);
+  // The creator's reply to the reviewer (typed in the approval conversation), carried
+  // through the same multi-step send flow and sent as the re-approval message.
+  const replyNoteRef = useRef<string>("");
   /** Move the quotation through the workflow. Surfaces the server's reason on
    *  refusal — the old submit/reopen handlers swallowed every error, so a rejected
    *  action looked like nothing happened at all. */
@@ -495,12 +499,15 @@ export default function LvConfiguratorPage() {
   // send, it carries its own "Send anyway" button and its own note, so the plain confirm
   // is skipped to avoid a second dialog saying the same thing.
   const runSendForApproval = (skipConfirm = false) =>
-    void doTransition("WAITING_APPROVAL", skipConfirm ? undefined : {
-      confirm: {
-        title: "Send for approval",
-        message: "You won't be able to edit this quotation while it is under review.",
-        confirmLabel: "Send for approval",
-      },
+    void doTransition("WAITING_APPROVAL", {
+      note: replyNoteRef.current || undefined, // the creator's reply, if any
+      ...(skipConfirm ? {} : {
+        confirm: {
+          title: "Send for approval",
+          message: "You won't be able to edit this quotation while it is under review.",
+          confirmLabel: "Send for approval",
+        },
+      }),
     });
   // Everything shown before a quotation is locked for review. It starts from the same
   // checks the offer export runs (empty panels, zero price, NO CELLS chosen, MISSING
@@ -546,8 +553,9 @@ export default function LvConfiguratorPage() {
     if (warns.length) { setApprovalWarns(warns); return; } // the modal confirms the send
     runSendForApproval();
   };
-  const sendForApproval = (approverId: string) => {
+  const sendForApproval = (approverId: string, note = "") => {
     sendApproverRef.current = approverId || null; // chosen from the dropdown; used in doTransition
+    replyNoteRef.current = note.trim(); // the creator's reply to the reviewer, if any
     if (!s.project.supportEngineer.trim()) {
       setWfError("Select a Sales support engineer on the Project tab before sending for approval.");
       setTab("project");
@@ -1478,7 +1486,7 @@ export default function LvConfiguratorPage() {
             <button className="btn-ghost" disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)">↶ Undo</button>
             <button className="btn-ghost" disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
             {/* Only the moves this user may actually make. */}
-            {!cancelled && (status === "DRAFT" || status === "RETURNED") && (
+            {!cancelled && status === "DRAFT" && (
               <SendForApprovalMenu busy={submitting} onSend={sendForApproval} />
             )}
             {!cancelled && status === "WAITING_APPROVAL" && canApprove && (
@@ -1720,30 +1728,24 @@ export default function LvConfiguratorPage() {
         onCancel={() => setCoWorkOpen(false)}
         onSet={doSetCoWorkers}
       />
-      {status === "RETURNED" && wf.returnReason && (
-        <div className="mb-4 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 no-print animate-fade-up">
+      {status === "RETURNED" && (
+        <div className="mb-2 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 no-print animate-fade-up">
           <p className="text-sm font-bold text-red-800">↩ Returned for revision</p>
-          <p className="mt-0.5 whitespace-pre-wrap text-sm text-red-800">{wf.returnReason}</p>
-          {wf.approverEmail && <p className="mt-1 text-[11px] text-red-700">— {wf.approverEmail}</p>}
-        </div>
-      )}
-      {returnHistory.length > 0 && (
-        <div className="mb-4 rounded-xl border border-line bg-white px-4 py-3 no-print animate-fade-up">
-          <p className="text-xs font-bold uppercase tracking-wide text-muted">
-            ↩ Revision history · {returnHistory.length} return{returnHistory.length === 1 ? "" : "s"} for revision
+          <p className="mt-0.5 text-sm text-red-800">
+            Read the reviewer's comments below, make your changes, then reply and send it back for approval.
           </p>
-          <ol className="mt-2 space-y-2">
-            {[...returnHistory].reverse().map((e) => (
-              <li key={e.id} className="rounded-lg border border-red-200 bg-red-50/70 px-3 py-2">
-                <p className="whitespace-pre-wrap text-sm text-red-900">{e.note || "(no comment)"}</p>
-                <p className="mt-1 text-[11px] text-red-700">
-                  — {e.actorEmail || "unknown"} · {new Date(e.createdAt).toLocaleString()}
-                </p>
-              </li>
-            ))}
-          </ol>
         </div>
       )}
+      {/* The approval conversation — the reviewer's return comments and the creator's
+          replies as a two-sided chat. On a returned quotation it also carries the reply
+          box + "Reply & send for approval" (the re-send moved here from the toolbar). */}
+      <ApprovalChat
+        events={approvalEvents}
+        canReply={status === "RETURNED"}
+        busy={submitting}
+        onReSend={(approverId, note) => sendForApproval(approverId, note)}
+        className="mb-4 animate-fade-up"
+      />
       {status === "WAITING_APPROVAL" && (
         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 no-print animate-fade-up">
           <p className="text-sm font-semibold text-amber-800">
@@ -2844,6 +2846,35 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
       const pages = buildTechnicalPages(src, host);
       // Drop editor-only chrome (screen buttons) so the preview reads as the finished document.
       for (const p of pages) for (const el of Array.from(p.querySelectorAll<HTMLElement>(".no-print"))) el.remove();
+      // …then put back the two controls the estimator wants in the A4 view too: a "+ Page"
+      // divider-insert and a "↗ Panel" jump, as one small toolbar row above each panel's first
+      // page. Added here (not inside buildTechnicalPages) and marked no-print, so they show ONLY
+      // in this on-screen preview — the PDF export builds its own pages from the source and strips
+      // no-print, so the file stays clean. A plain flex row (not absolute) so nothing can escape
+      // the page shell (pageEl() is not position:relative) or overlap the header/date.
+      for (const page of pages) {
+        const pid = page.getAttribute("data-offer-page");
+        if (!pid) continue;
+        const nm = s.panels.find((x) => x.id === pid)?.name ?? "";
+        const bar = document.createElement("div");
+        bar.className = "no-print mb-1 flex w-[210mm] max-w-full items-center justify-between gap-2";
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.title = `Insert a divider page before “${nm}”`;
+        addBtn.className = "inline-flex items-center gap-1.5 rounded-full border-2 border-dashed bg-white px-3.5 py-1.5 text-xs font-bold shadow-sm transition hover:bg-[#FEF3ED]";
+        addBtn.style.borderColor = TRED; addBtn.style.color = TRED;
+        addBtn.innerHTML = '<span class="text-sm leading-none">＋</span> Page';
+        addBtn.addEventListener("click", () => addSeparator(pid));
+        const jump = document.createElement("button");
+        jump.type = "button";
+        jump.title = `Back to “${nm}” in Panels`;
+        jump.className = "inline-flex items-center gap-1 rounded-full border bg-white px-2.5 py-1 text-[11px] font-bold shadow-sm transition hover:bg-[#FEF3ED]";
+        jump.style.borderColor = TRED; jump.style.color = TRED;
+        jump.textContent = "↗ Panel";
+        jump.addEventListener("click", () => onBackToPanel(pid));
+        bar.append(addBtn, jump);
+        host.insertBefore(bar, page);
+      }
     })();
     return () => { cancelled = true; a4HostRef.current?.replaceChildren(); };
   }, [techView, hideBrand, s]);
@@ -8214,7 +8245,7 @@ function PfcBuilder({ onPreview, syncKvar }: { onPreview: (l: ComboLine[], tag: 
           <L>C.B rating (A) <span className="text-[11px] font-normal text-muted">— auto</span></L>
           <input className={`input ${!i.cbRating ? "border-red-400 bg-red-50/40" : ""}`} inputMode="numeric"
             value={i.cbRating || ""} placeholder="e.g. 250"
-            onChange={(e) => { setI({ ...i, cbRating: parseInt(e.target.value.replace(/[^\d]/g, "")) || 0 }); setCb(null); }} />
+            onChange={(e) => setI({ ...i, cbRating: parseInt(e.target.value.replace(/[^\d]/g, "")) || 0 })} />
         </div>
 
         {/* Row 2 — fixed bank + first variable bank */}
@@ -8234,8 +8265,12 @@ function PfcBuilder({ onPreview, syncKvar }: { onPreview: (l: ComboLine[], tag: 
         {num("var2Steps", "Var. steps 2")}{kvarSel("var2Kvar", "Var.2 step kVAR")}
       </div>
 
-      <button className="btn-ghost mt-4 sm:px-6" disabled={!i.cbRating}
-        onClick={() => i.cbRating && onPreview(buildPfc(i, cb ?? undefined), "P.F.C")}>Generate combination</button>
+      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <button className="btn-ghost sm:px-6" disabled={!cb || !i.cbRating}
+          title={!cb ? "Select a P.F.C circuit breaker first — it is required." : undefined}
+          onClick={() => cb && i.cbRating && onPreview(buildPfc(i, cb), "P.F.C")}>Generate combination</button>
+        {!cb && <span className="text-[11px] font-semibold text-red-500">Select a P.F.C circuit breaker to continue — it is required.</span>}
+      </div>
     </div>
   );
 }

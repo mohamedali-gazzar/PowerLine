@@ -984,7 +984,9 @@ export async function transition(req: Request, res: Response) {
         const appr = await prisma.user.findUnique({ where: { id: rawId }, select: { id: true, email: true, name: true } });
         if (appr && appr.id !== q.ownerId) {
           sendApproverId = appr.id;
-          eventNote = `Sent to ${appr.name || appr.email} for approval`;
+          // Keep the sender's typed reply as the conversation message; only fall back to
+          // the generated "Sent to …" line when they re-sent without writing anything.
+          if (!note) eventNote = `Sent to ${appr.name || appr.email} for approval`;
         }
       }
     }
