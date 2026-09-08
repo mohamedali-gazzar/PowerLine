@@ -1835,7 +1835,7 @@ export default function LvConfiguratorPage() {
         {activeTab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} onScratch={upScratch} readOnly={sharedReadOnly} />)}
         {activeTab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} readOnly={readOnly} />)}
         {activeTab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
-        {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} qtnNo={qtnNum} />}
+        {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} qtnNo={qtnNum} onOpenPanel={openPanelInPanels} />}
         {activeTab === "sizing" && <SizingReviewTab key={rec?.id ?? "none"} s={s} qtnId={rec?.id ?? ""} />}
         {activeTab === "summary" && <SummaryTab s={s} up={up} />}
       </div>
@@ -5641,7 +5641,7 @@ function selMainIncomer(p: LvPanel): PanelComponent | undefined {
   const isBreaker = (c: PanelComponent) => /\b(ACB|MCCB|MCB)\b/i.test(c.type || "");
   return p.components.find((c) => !isSpacer(c) && isBreaker(c) && /incom/i.test(c.section || ""));
 }
-function SelectivityTab({ s, upPanel, qtnNo }: { s: LvState; upPanel: (id: string, patch: Partial<LvPanel>) => void; qtnNo: string }) {
+function SelectivityTab({ s, upPanel, qtnNo, onOpenPanel }: { s: LvState; upPanel: (id: string, patch: Partial<LvPanel>) => void; qtnNo: string; onOpenPanel: (id: string) => void }) {
   // "Fed From" column filter — "" = all. Kept per-QTN in localStorage so switching to another tab
   // and back (or reloading) keeps the last chosen source, not resetting to "All".
   const FKEY = `pl.selectivity.fedFilter.${qtnNo}`;
@@ -5718,10 +5718,17 @@ function SelectivityTab({ s, upPanel, qtnNo }: { s: LvState; upPanel: (id: strin
                         coin-toss. Kept compact — a table cell has no room for a
                         sentence, so the full message is on hover. */}
                     <td className={cell}>
-                      <input className={`${inp} ${nameClashOf(s, p) ? "bg-red-50 text-red-700 ring-1 ring-red-400" : ""}`}
-                        value={p.name} placeholder="Panel name"
-                        title={(() => { const t = nameClashOf(s, p); return t ? panelNameClashMessage(t, s.panels) : undefined; })()}
-                        onChange={(e) => upPanel(p.id, { name: e.target.value })} />
+                      <div className="flex items-center gap-1">
+                        <input className={`${inp} ${nameClashOf(s, p) ? "bg-red-50 text-red-700 ring-1 ring-red-400" : ""}`}
+                          value={p.name} placeholder="Panel name"
+                          title={(() => { const t = nameClashOf(s, p); return t ? panelNameClashMessage(t, s.panels) : undefined; })()}
+                          onChange={(e) => upPanel(p.id, { name: e.target.value })} />
+                        <button type="button" onClick={() => onOpenPanel(p.id)}
+                          title={`Open “${p.name.trim() || "this panel"}” in the Panels tab`}
+                          className="shrink-0 rounded p-0.5 text-muted transition-colors hover:bg-brand-tint hover:text-brand-dark">
+                          <JumpArrow />
+                        </button>
+                      </div>
                       {nameClashOf(s, p) && <span className="mt-0.5 block px-1 text-[10px] font-semibold text-red-600">Same name as another panel</span>}
                     </td>
                     <td className={`${cell} px-3 text-sm`} title="Read from this panel's Main Incoming breaker">{inc ? inc.name : <span className="text-muted/50">—</span>}</td>

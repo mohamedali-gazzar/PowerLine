@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Selectivity: a jump arrow beside each panel name opens that panel in the Panels tab.**
+
+Each row in the Selectivity table now has a small ↗ arrow next to the Panel Name. Clicking it jumps
+straight to that panel in the Panels tab, opened in the editor — so you can go from the coordination
+table to the exact panel you're working on in one click.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Selectivity: the "Fed From" filter is now remembered when you leave the tab and come back.**
 
 Picking a source in the Selectivity tab's "Fed From" filter used to reset to "All" whenever you
