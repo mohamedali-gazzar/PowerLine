@@ -8022,7 +8022,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                       onMouseEnter={() => onRowEnter(c.id)}
                       onDragOver={(e) => { if (dragId && dragId !== c.id) { e.preventDefault(); markDropOver(e.currentTarget); } }}
                       onDrop={(e) => { e.preventDefault(); dropOnRow(c.id); }}
-                      className={`border-t align-middle transition-colors ${
+                      className={`border-t align-middle transition-colors hover:bg-brand-tint/50 hover:font-bold ${
                         selected.has(c.id) ? "bg-[#FFF0E8]" : "border-line/70"
                       } ${dragId === c.id ? "opacity-40" : ""}`}>
                       <td

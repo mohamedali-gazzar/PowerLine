@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Panel editor: the component row under the mouse now goes bold.**
+
+Moving the mouse over any component in a panel's component list highlights that row — it turns bold
+with a faint tint — so you can see which component is under the cursor. Purely visual; nothing about
+the component or its price changes.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Panels: a "move out of group" button on each grouped panel.**
 
 Every panel that sits inside a group now has a small "move out of the group" arrow on its row (the
