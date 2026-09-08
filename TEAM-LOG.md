@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Approval conversation is now a button that opens the chat in a pop-up.**
+
+The "Approval conversation · N messages" block no longer sits open on the page taking up space. It's a
+button now — click it and the whole back-and-forth opens in a centred pop-up chat (reviewer on the left,
+you on the right), with the reply box inside it. Close with ✕ or Escape. Same for LV and RMU offers.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Custom Commercial Offer: an optional "Alternative offer" second page.**
 
 The Custom Commercial Offer tab has a new "Alternative offer" toggle next to "Offer lines". Off by
