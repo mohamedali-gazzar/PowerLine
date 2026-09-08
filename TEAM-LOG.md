@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Selectivity: the help sentence is replaced with a search bar.**
+
+The line of grey text under the Selectivity heading ("One row per panel — … Use the Fed From filter…")
+is gone. In its place is a **search box** that filters the table as you type — matching a panel's name,
+its Main Incoming breaker, or its Fed From. It has a clear (✕) button, works together with the Fed From
+dropdown, and is screen-only (nothing saved).
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Deleting a panel group now uses the PowerLine dialog, not the browser's grey box.**
 
 The "Delete the group … and its N panels?" confirmation was the browser's own popup (the ugly

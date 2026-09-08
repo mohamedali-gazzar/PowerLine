@@ -5680,22 +5680,36 @@ function SelectivityTab({ s, upPanel, qtnNo, onOpenPanel }: { s: LvState; upPane
     if (fedFilter && !fedOptions.includes(fedFilter)) setFedFilter("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fedFilter, fedOptions.join("")]);
+  // Free-text search box (replaces the old help sentence) — matches the panel name, its Main
+  // Incoming breaker, or its Fed From. Screen-only, not saved.
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
   // Panel-by-name → look up the "Fed From" (feeding) panel to read its incomer for the
   // "Incoming of Feeder" column.
   const byName = new Map(panels.map((x) => [x.name.trim(), x]));
   // Filtering by a source shows every panel fed from it AND the source panel itself
   // (the panel whose name matches) — so the whole feeder group is visible together.
   const rows = panels.map((p, i) => ({ p, no: i + 1 }))
-    .filter(({ p }) => !fedFilter || p.fedFrom.trim() === fedFilter || p.name.trim() === fedFilter);
+    .filter(({ p }) => !fedFilter || p.fedFrom.trim() === fedFilter || p.name.trim() === fedFilter)
+    .filter(({ p }) => !q || [p.name, p.fedFrom, selMainIncomer(p)?.name ?? ""].some((v) => (v || "").toLowerCase().includes(q)));
   const cell = "border border-line px-2 py-1 align-middle";
   const inp = "w-full min-w-0 bg-transparent px-1 py-0.5 text-sm text-ink outline-none rounded focus:bg-brand-tint/50 placeholder:text-muted/50";
   return (
     <div className="animate-fade-up">
       <div className="card p-5">
         <h2 className="sec-head">Selectivity</h2>
-        <p className="mb-3 text-xs text-muted">
-          One row per panel — main incoming breaker &amp; its adjustment. Use the <b>Fed From</b> filter in the header to list all panels fed by one source.
-        </p>
+        <div className="relative mb-3 max-w-sm">
+          <svg className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted/60" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+          </svg>
+          <input value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search panels — name, main incoming or fed from…"
+            className="input h-9 w-full pl-8 pr-8 text-sm" />
+          {search && (
+            <button type="button" onClick={() => setSearch("")} title="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-sm text-muted transition-colors hover:text-ink">✕</button>
+          )}
+        </div>
         {panels.length === 0 ? (
           <p className="rounded-lg bg-surface p-6 text-center text-sm text-muted">No panels yet — add panels first.</p>
         ) : (
@@ -5724,7 +5738,7 @@ function SelectivityTab({ s, upPanel, qtnNo, onOpenPanel }: { s: LvState; upPane
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={6} className={`${cell} py-4 text-center text-muted`}>No panels fed from “{fedFilter}”.</td></tr>
+                  <tr><td colSpan={6} className={`${cell} py-4 text-center text-muted`}>{q ? `No panels match “${search.trim()}”.` : `No panels fed from “${fedFilter}”.`}</td></tr>
                 ) : rows.map(({ p, no }) => {
                   // Main Incoming + Adj are read from THIS panel's main incoming breaker;
                   // Incoming of Feeder = the main incomer of the panel it is Fed From.
