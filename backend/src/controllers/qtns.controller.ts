@@ -666,6 +666,8 @@ function stateAtRevision(state: string, rev: number): string {
   const project = parsed.project;
   if (project === null || typeof project !== "object") return state;
   (project as Record<string, unknown>).revisionNo = String(rev);
+  // A revision is a fresh document — date it the day the amendment was created, not the original's date.
+  (project as Record<string, unknown>).date = new Date().toISOString().slice(0, 10);
   return JSON.stringify(parsed);
 }
 

@@ -21,6 +21,15 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-08 · Mohamed's side · Claude
+
+**Amending a quotation now dates the new revision today, not the old date.**
+
+When you cancel-and-amend a quotation, the new revision is a fresh document, so its offer **date** now
+shows the day you created the amendment instead of copying the original's old date. The revision number
+still bumps as before; only the date refreshes. Verified: an original dated 2020-01-01, amended, came out
+dated today. Build green.
+
 ## 2026-09-07 · Mohamed's side · Claude
 
 **The scratch pad is now saved WITH the quotation, so teammates see it.**
