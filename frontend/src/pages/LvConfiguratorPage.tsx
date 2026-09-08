@@ -6020,6 +6020,15 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
                     </button>
                   </div>
                   <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                    {!!p.groupId && groups.some((g) => g.id === p.groupId) && (
+                      <button onClick={() => up(movePanelsToGroup(s, [p.id], null))} title="Move this panel out of the group"
+                        className="shrink-0 rounded p-0.5 text-muted transition-colors hover:bg-white hover:text-brand-dark">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <polyline points="9 14 4 9 9 4" />
+                          <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                        </svg>
+                      </button>
+                    )}
                     <button onClick={() => onOpenInOffer(p.id)} title="Open this panel in the Technical Offer"
                       className="shrink-0 rounded p-0.5 text-muted transition-colors hover:bg-white hover:text-brand-dark">
                       <JumpArrow />

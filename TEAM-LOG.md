@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Panels: a "move out of group" button on each grouped panel.**
+
+Every panel that sits inside a group now has a small "move out of the group" arrow on its row (the
+first of the row's icons). Clicking it pops just that one panel back to the Ungrouped area, leaving
+the rest of the group untouched — a quick alternative to ticking it and using "Move to → Ungrouped".
+The button only shows on panels that are actually in a group.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Panels: click outside the panel list to drop the selection and leave select mode.**
 
 While ticking panels to group them, clicking anywhere outside the panel list (the panel form, empty
