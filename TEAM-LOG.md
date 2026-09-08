@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Replace component: "Select all" / "Unselect all" links for the panel picker.**
+
+In the "⇄ Replace component" window, when you choose "Selected panels" there are now **Select all** and
+**Unselect all** links next to the toggles. "Unselect all" clears every ticked panel; "Select all" ticks
+every panel that actually uses the component (it skips the ones marked "not used").
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Click a group to select it — the next "+ Add panel" then adds into that group.**
 
 Clicking a group's name now selects the group on its own: any open panel is deselected, the group's

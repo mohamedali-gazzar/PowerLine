@@ -8576,9 +8576,18 @@ function ReplaceComponentModal({ s, replaceComponent, factors, onClose }: {
               </div>
               <div>
                 <L>Apply to</L>
-                <div className="flex gap-2 text-xs">
+                <div className="flex items-center gap-2 text-xs">
                   <button type="button" onClick={() => setAllPanels(true)} className={`rounded-full border px-3 py-1 font-bold transition ${allPanels ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"}`}>All panels ({s.panels.length})</button>
                   <button type="button" onClick={() => setAllPanels(false)} className={`rounded-full border px-3 py-1 font-bold transition ${!allPanels ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"}`}>Selected panels</button>
+                  {!allPanels && (
+                    <span className="ml-auto flex items-center gap-2">
+                      <button type="button" onClick={() => setSel(new Set(s.panels.filter((pp) => instInPanel(pp) > 0).map((pp) => pp.id)))}
+                        className="font-semibold text-brand hover:underline">Select all</button>
+                      <span className="text-line">·</span>
+                      <button type="button" onClick={() => setSel(new Set())}
+                        className="font-semibold text-muted hover:text-ink hover:underline">Unselect all</button>
+                    </span>
+                  )}
                 </div>
                 {!allPanels && (
                   <div className="mt-2 max-h-44 space-y-0.5 overflow-auto rounded-lg border border-line p-2">
