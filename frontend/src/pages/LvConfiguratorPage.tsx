@@ -5830,6 +5830,30 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
   });
   const toggleSel = (id: string) => setSelPanels((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const exitSel = () => { setSelMode(false); setSelPanels(new Set()); setNaming(null); };
+  // Drag-select across the panel checkboxes — press one and hold, then drag down/up over the
+  // rows to select a contiguous range (anchor → cursor), exactly like the components list. A
+  // quick click on a checkbox (no drag) just toggles that one panel.
+  const panelDrag = useRef<{ anchorId: string; moved: boolean; onCheckbox: boolean } | null>(null);
+  const onPanelRowDown = (id: string, onCheckbox: boolean) => {
+    if (!selMode) return;
+    panelDrag.current = { anchorId: id, moved: false, onCheckbox };
+    const onUp = () => {
+      const d = panelDrag.current; panelDrag.current = null;
+      window.removeEventListener("mouseup", onUp);
+      if (d && !d.moved && d.onCheckbox) toggleSel(d.anchorId); // plain click on the box → toggle
+    };
+    window.addEventListener("mouseup", onUp);
+  };
+  const onPanelRowEnter = (id: string) => {
+    const d = panelDrag.current;
+    if (!d) return;
+    d.moved = true;
+    const ids = s.panels.map((p) => p.id);          // top-to-bottom display order
+    const a = ids.indexOf(d.anchorId), b = ids.indexOf(id);
+    if (a < 0 || b < 0) return;
+    const [lo, hi] = a < b ? [a, b] : [b, a];
+    setSelPanels(new Set(ids.slice(lo, hi + 1)));    // selection = the contiguous start→cursor range
+  };
   const nameOf = (id: string) => s.panels.find((p) => p.id === id)?.name || "";
   const openNaming = (ids: string[]) => setNaming({ ids, name: commonNamePrefix(ids.map(nameOf)) });
   const doCreateGroup = (ids: string[], name: string) => { if (name.trim()) { up(createPanelGroup(s, name, ids)); exitSel(); } };
@@ -5948,7 +5972,9 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
             const checked = selPanels.has(p.id);
             return (
               <div key={p.id} ref={setRowRef(i)}
-                className={`mb-1.5 rounded-lg border px-2 py-1.5 transition-colors duration-150 ${
+                onMouseDown={selMode ? (e) => { const t = e.target as HTMLElement; if (t.closest("[data-panelgrip]")) return; onPanelRowDown(p.id, !!t.closest("[data-rowcheck]")); } : undefined}
+                onMouseEnter={selMode ? () => onPanelRowEnter(p.id) : undefined}
+                className={`mb-1.5 rounded-lg border px-2 py-1.5 transition-colors duration-150 ${selMode ? "select-none" : ""} ${
                   p.highlight
                     ? `bg-yellow-200 hover:bg-yellow-300 ${active ? "border-brand" : "border-yellow-400"}`
                     : active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
@@ -5956,11 +5982,11 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
                 <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
                   <div className="flex min-w-0 items-center gap-1">
                     {selMode && (
-                      <input type="checkbox" checked={checked} onChange={() => toggleSel(p.id)}
-                        className="mr-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-brand" title="Select for grouping" />
+                      <input type="checkbox" data-rowcheck checked={checked} readOnly
+                        className="mr-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-brand" title="Select for grouping — or press and drag over the rows to select a range" />
                     )}
                     <span
-                      {...handleProps(i)}
+                      {...handleProps(i)} data-panelgrip
                       title="Drag to reorder — or into a group's rows to add it"
                       className="shrink-0 select-none px-0.5 text-muted/50 transition-colors hover:text-brand">
                       <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">

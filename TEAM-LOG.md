@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Panels: press a panel's tick box and drag over the rows to select a whole range.**
+
+In the panel list's group-select mode you can now press one panel's checkbox, hold, and drag up or
+down over the other panels to select everything in between — the same press-and-drag you already have
+in the components list. A plain single click still ticks just that one panel, and grabbing the dotted
+reorder grip still reorders the panel (it doesn't start a selection).
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Panels: reorder groups by dragging the dotted handle, instead of the ↑/↓ arrows.**
 
 The little up/down arrows on each group's orange header are gone. Instead every group header now
