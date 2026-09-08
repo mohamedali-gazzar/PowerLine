@@ -5864,20 +5864,42 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
     <div className="grid items-start gap-5 lg:grid-cols-[260px_1fr] animate-fade-up">
       {/* panel list — sticks below the tab header, with its own scroll (independent of the editor) */}
       <div className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
-        {/* New-group / select-mode header */}
-        <div className="mb-2 flex items-center justify-between gap-2">
-          {selMode ? (
-            <>
-              <span className="text-xs font-semibold text-brand-dark">Tick panels, then Group / Move…</span>
+        {/* New-group / select-mode header — the Group / Move-to actions live right here in
+            the panel list (they appear once panels are ticked), not in a floating bar. */}
+        {selMode ? (
+          <div className="mb-2 rounded-lg border border-brand/30 bg-brand-tint p-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-brand-dark">
+                {selPanels.size > 0 ? `${selPanels.size} selected` : "Tick panels, then Group / Move…"}
+              </span>
               <button className="text-xs text-muted hover:text-ink" onClick={exitSel}>Cancel</button>
-            </>
-          ) : (
+            </div>
+            {selPanels.size > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button onClick={() => openNaming([...selPanels])}
+                  className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-dark">
+                  <span className="text-base leading-none">⊞</span> Group
+                </button>
+                {groups.length > 0 && (
+                  <select value="" onChange={(e) => { const v = e.target.value; if (v) doMoveTo([...selPanels], v === "__ungroup" ? null : v); }}
+                    title="Move the selected panels into an existing group"
+                    className="h-8 cursor-pointer rounded-full border border-line bg-white px-2 text-sm text-ink focus:border-brand focus:outline-none">
+                    <option value="">Move to…</option>
+                    {groups.slice().sort((a, b) => a.order - b.order).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    <option value="__ungroup">— Ungrouped —</option>
+                  </select>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="mb-2 flex items-center justify-between gap-2">
             <button className="flex items-center gap-1 text-xs font-semibold text-brand-dark hover:underline"
               onClick={() => { setSelMode(true); setSelPanels(new Set()); }}>
               <span className="text-sm leading-none">⊞</span> New group
             </button>
-          )}
-        </div>
+          </div>
+        )}
         {(() => {
           let idx = -1; // running index into s.panels (display order) for setRowRef / numbering
           const row = (p: LvPanel) => {
@@ -6012,28 +6034,8 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
         )}
       </div>
 
-      {/* Docked multi-select bar (grouping) — portalled to body so `position:fixed` isn't
-          trapped by the card's transform (same rule as the BOM selection bar). */}
-      {selMode && selPanels.size > 0 && createPortal(
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
-          <div className="flex items-center gap-2 rounded-2xl border border-line bg-white py-2 pl-3 pr-2 shadow-lift animate-pop">
-            <span className="whitespace-nowrap text-sm font-semibold text-ink">{selPanels.size} selected</span>
-            <button onClick={() => openNaming([...selPanels])}
-              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-dark">
-              <span className="text-base leading-none">⊞</span> Group
-            </button>
-            {groups.length > 0 && (
-              <select value="" onChange={(e) => { const v = e.target.value; if (v) doMoveTo([...selPanels], v === "__ungroup" ? null : v); }}
-                title="Move the selected panels into an existing group"
-                className="h-8 cursor-pointer rounded-full border border-line bg-white px-2 text-sm text-ink focus:border-brand focus:outline-none">
-                <option value="">Move to…</option>
-                {groups.slice().sort((a, b) => a.order - b.order).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                <option value="__ungroup">— Ungrouped —</option>
-              </select>
-            )}
-            <button onClick={exitSel} title="Cancel" className="rounded-full px-2 py-1.5 text-sm font-semibold text-muted transition hover:bg-surface hover:text-ink">✕</button>
-          </div>
-        </div>, document.body)}
+      {/* (The grouping actions used to float in a bar at the bottom of the page; they now
+          live inline in the panel-list header above — see the select-mode header.) */}
       {/* New-group name prompt — focused, pre-filled with the common prefix of the picked names. */}
       {naming && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onMouseDown={() => setNaming(null)}>

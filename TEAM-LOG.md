@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Panels: the Group / Move-to buttons now sit in the panel list, not in a floating bar.**
+
+When you tick panels to group them, the **Group** button (and the **Move to…** dropdown, if the
+quotation already has groups) now appears right at the top of the panel list, under the "…selected"
+count — instead of floating in a little bar at the bottom-centre of the page. Same actions, same
+"name your group" popup; only the place they show up moved, so they're next to the panels you ticked.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Material List Excel export now includes the Market Price (%) column.**
 
 The "Export to Excel" file now carries a **Market Price (%)** column right after **Discount (%)**, matching
