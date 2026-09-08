@@ -196,6 +196,9 @@ export interface LvGroup {
   order: number;
 }
 
+/** A Technical-Offer scratch pad's shared content (the geometry stays per-user in localStorage). */
+export interface ScratchPad { headers: string[]; rows: string[][] }
+
 export interface LvState {
   project: LvProject;
   factors: Factors;
@@ -212,6 +215,9 @@ export interface LvState {
   // Per-item ABB discount % override (edited on the Material List), keyed by
   // reference||name. Absent → the item uses the global factors.abbDiscount.
   abbItemDiscounts: Record<string, number>;
+  // Per-panel Technical-Offer scratch pad (a side-calculation table beside each panel), keyed by
+  // panel id → its content. Saved with the quotation so teammates see it; screen-only, never printed.
+  offerScratch?: Record<string, ScratchPad>;
   // Divider/separator pages for the Technical Offer, each rendered before its panel.
   offerSeparators?: OfferSeparator[];
   // Manual page breaks in the Technical Offer: component ids before which the offer

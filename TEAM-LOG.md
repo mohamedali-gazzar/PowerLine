@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-07 · Mohamed's side · Claude
 
+**The scratch pad is now saved WITH the quotation, so teammates see it.**
+
+The scratch-pad tables in the Technical Offer used to be saved only in your own browser. Now the
+**content** you type is saved with the quotation itself, so anyone who opens that quotation — a teammate,
+or you from another computer — sees the same calculations. Each person's own **size/position** for the
+pad stays local (a per-viewer preference). For someone who can only view the quotation (or it's
+submitted/approved/locked, or they are a co-owner not the editor), the pad is **read-only** — they see
+it but can't change it. No database change (it rides along in the quotation's saved data). Verified that
+typed content saves to the quotation and reloads from it with the browser cache cleared; build green.
+
+## 2026-09-07 · Mohamed's side · Claude
+
 **New: a calculation "scratch pad" beside every panel in the Technical Offer.**
 
 Each panel in the Technical Offer (the "A4 pages" view) now has a small editable table to its left, next

@@ -29,7 +29,7 @@ import {
   panelLayout, panelNumbers, commonNamePrefix, resortByGroup, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, reorderPanelGroup,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
-  type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow, type CustomOfferItem,
+  type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow, type CustomOfferItem, type ScratchPad,
 } from "../lv/store";
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
@@ -1053,6 +1053,13 @@ export default function LvConfiguratorPage() {
     if (coWork && !isPrimary && !isNavOnly(patch, "selectedId")) return;
     apply((old) => ({ ...old, ...patch }));
   };
+  // Save one panel's scratch-pad content into the quotation. Merges into the LATEST state (functional
+  // apply) so two pads saving close together can't clobber each other. Blocked when the QTN is
+  // read-only / shared-read-only (teammates see it but only the editor writes it).
+  const upScratch = (pid: string, d: ScratchPad) => {
+    if (sharedReadOnly) return;
+    apply((old) => ({ ...old, offerScratch: { ...(old.offerScratch ?? {}), [pid]: d } }));
+  };
   const upPanel = (id: string, patch: Partial<LvPanel>) => {
     if (readOnly && !isNavOnly(patch, "activeSection")) return;
     // Co-Work: you may edit only the panels you own (opening a panel's section is
@@ -1825,7 +1832,7 @@ export default function LvConfiguratorPage() {
             onAdd={() => addSpareCell("spare")} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
             addLabel="+ Add cell" emptyLabel="No spare cells yet." emptyAddLabel="+ Add your first cell" />
         )}
-        {activeTab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} />)}
+        {activeTab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} onScratch={upScratch} readOnly={sharedReadOnly} />)}
         {activeTab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} readOnly={readOnly} />)}
         {activeTab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
         {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} />}
@@ -2799,47 +2806,56 @@ function SeparatorPage({ text, onChange, onRemove }: { text: string; onChange: (
 // part of the offer or the PDF — it lives outside the printed source. It's kept per-quotation in the
 // browser (localStorage), so it survives tab switches and reloads but is private to this machine and
 // never sent to the server. Numeric columns auto-sum in the footer.
-function OfferScratchPad({ storageKey, title, defaultHeight }: { storageKey: string; title?: string; defaultHeight: number }) {
+function OfferScratchPad({ value, onChange, geomKey, panelId, disabled, title, defaultHeight }: {
+  value: ScratchPad | undefined; onChange: (d: ScratchPad) => void; geomKey: string;
+  panelId: string; disabled?: boolean; title?: string; defaultHeight: number;
+}) {
   const COLS = 4;
   const DEFAULT_HEADERS = ["Item", "Qty", "Value", "Total"];
   const DEFAULT_W = 300, MIN_W = 200, MIN_H = 140;
   const blankRow = () => Array<string>(COLS).fill("");
-  type Data = { headers: string[]; rows: string[][]; w?: number; h?: number; dx?: number; dy?: number };
+  type Data = { headers: string[]; rows: string[][] };
   const fresh = (): Data => ({ headers: [...DEFAULT_HEADERS], rows: [] });
-  // Pad (or trim) a saved table to the current column count so an older pad gains the new column.
-  const asNum = (v: unknown) => (typeof v === "number" ? v : undefined);
-  const normalize = (d: Data): Data => ({
-    headers: Array.from({ length: COLS }, (_, i) => d.headers[i] ?? DEFAULT_HEADERS[i] ?? ""),
-    rows: (d.rows || []).map((row) => Array.from({ length: COLS }, (_, i) => row[i] ?? "")),
-    w: asNum(d.w), h: asNum(d.h), dx: asNum(d.dx), dy: asNum(d.dy),
-  });
-  const load = (): Data => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) { const d = JSON.parse(raw); if (d && Array.isArray(d.headers) && Array.isArray(d.rows)) return normalize(d as Data); }
-    } catch { /* private window / cleared storage — start fresh */ }
-    return fresh();
+  // Content comes from the quotation (shared with teammates). Coerce it to the current column count.
+  const seed = (v: ScratchPad | undefined): Data =>
+    v && Array.isArray(v.headers) && Array.isArray(v.rows)
+      ? { headers: Array.from({ length: COLS }, (_, i) => v.headers[i] ?? DEFAULT_HEADERS[i] ?? ""), rows: v.rows.map((r) => Array.from({ length: COLS }, (_, i) => r[i] ?? "")) }
+      : fresh();
+  const [data, setData] = useState<Data>(() => seed(value));
+  // Geometry (size + position) is a per-user view preference → kept in the browser, not the quotation.
+  const loadBox = () => {
+    try { const b = JSON.parse(localStorage.getItem(geomKey) || "null"); if (b) return { w: b.w ?? DEFAULT_W, h: b.h ?? defaultHeight, dx: b.dx ?? 0, dy: b.dy ?? 0 }; } catch { /* ignore */ }
+    return { w: DEFAULT_W, h: defaultHeight, dx: 0, dy: 0 };
   };
-  const [data, setData] = useState<Data>(load);
-  const boxFrom = (d: Data) => ({ w: d.w ?? DEFAULT_W, h: d.h ?? defaultHeight, dx: d.dx ?? 0, dy: d.dy ?? 0 });
-  const [box, setBox] = useState(() => boxFrom(data));
+  const [box, setBox] = useState(loadBox);
   const boxRef = useRef(box); boxRef.current = box; // latest geometry, read on drag-release
-  // Reload content + geometry when the panel (key) changes; persist on every edit.
-  useEffect(() => { const d = load(); setData(d); setBox(boxFrom(d)); }, [storageKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { try { localStorage.setItem(storageKey, JSON.stringify(data)); } catch { /* ignore */ } }, [data, storageKey]);
+  // Re-seed content + geometry when the panel changes (NOT on mount — useState already seeded it, and
+  // re-seeding on mount would spuriously push an empty pad to the quotation). Skip the resulting save.
+  const skipSave = useRef(true);
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }
+    skipSave.current = true; setData(seed(value)); setBox(loadBox());
+  }, [panelId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Save the content back to the quotation on edit (debounced; not on mount / panel re-seed).
+  useEffect(() => {
+    if (skipSave.current) { skipSave.current = false; return; }
+    const t = setTimeout(() => onChange({ headers: data.headers, rows: data.rows }), 300);
+    return () => clearTimeout(t);
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Typing in a not-yet-existing row grows the stored data to reach it (the grid shows more rows than
   // are stored, so the empty area is fillable without an "add row" button).
-  const setCell = (r: number, c: number, v: string) => setData((d) => {
+  const setCell = (r: number, c: number, v: string) => { if (disabled) return; setData((d) => {
     const rows = d.rows.length > r ? d.rows.slice() : [...d.rows, ...Array.from({ length: r - d.rows.length + 1 }, blankRow)];
     return { ...d, rows: rows.map((row, ri) => (ri === r ? row.map((cell, ci) => (ci === c ? v : cell)) : row)) };
-  });
-  const setHeader = (c: number, v: string) => setData((d) => ({ ...d, headers: d.headers.map((h, i) => (i === c ? v : h)) }));
-  const clearAll = () => setData((d) => ({ ...fresh(), w: d.w, h: d.h, dx: d.dx, dy: d.dy })); // keep geometry, clear content
+  }); };
+  const setHeader = (c: number, v: string) => { if (disabled) return; setData((d) => ({ ...d, headers: d.headers.map((h, i) => (i === c ? v : h)) })); };
+  const clearAll = () => { if (disabled) return; setData(fresh()); };
 
   // Move (drag the title bar) and resize (drag the bottom-right grip) — "press and pull". Geometry is
-  // stored per-panel, so each pad remembers where you put it and how big you made it.
-  const persist = (b: typeof box) => setData((d) => ({ ...d, w: b.w, h: b.h, dx: b.dx, dy: b.dy }));
+  // per-user, saved in the browser (so each viewer positions their own copy).
+  const persist = (b: typeof box) => { try { localStorage.setItem(geomKey, JSON.stringify(b)); } catch { /* ignore */ } };
   const drag = (onDelta: (mx: number, my: number) => void) => (e: React.MouseEvent) => {
     e.preventDefault();
     const sx = e.clientX, sy = e.clientY;
@@ -2936,7 +2952,7 @@ function OfferScratchPad({ storageKey, title, defaultHeight }: { storageKey: str
   });
   const startFill = (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
-    if (!sel) return;
+    if (!sel || disabled) return;
     const { r: from, c } = sel;
     const src = cellAt(from, c); // copy the raw equation (refs shifted per row in fillDown)
     const rowUnder = (ev: MouseEvent) => {
@@ -2996,7 +3012,7 @@ function OfferScratchPad({ storageKey, title, defaultHeight }: { storageKey: str
   const focusCell = (r: number, c: number) => tbodyRef.current?.querySelector<HTMLInputElement>(`tr[data-r="${r}"] td:nth-child(${c + 2}) input`)?.focus();
   const eachInRange = (fn: (ri: number, ci: number) => void) => { if (!range) return; const n = norm(range); for (let r = n.r1; r <= n.r2; r++) for (let c = n.c1; c <= n.c2; c++) fn(r, c); };
   let sumSel = 0; eachInRange((r, c) => { const v = parseFloat(evaluate(cellAt(r, c))); if (isFinite(v)) sumSel += v; });
-  const deleteSel = () => setData((d) => { if (!range) return d; const n = norm(range); return { ...d, rows: d.rows.map((row, ri) => (ri >= n.r1 && ri <= n.r2 ? row.map((cell, ci) => (ci >= n.c1 && ci <= n.c2 ? "" : cell)) : row)) }; });
+  const deleteSel = () => { if (disabled) return; setData((d) => { if (!range) return d; const n = norm(range); return { ...d, rows: d.rows.map((row, ri) => (ri >= n.r1 && ri <= n.r2 ? row.map((cell, ci) => (ci >= n.c1 && ci <= n.c2 ? "" : cell)) : row)) }; }); };
   const copySel = () => { if (!range) return; const n = norm(range); const lines: string[] = []; for (let r = n.r1; r <= n.r2; r++) { const cols: string[] = []; for (let c = n.c1; c <= n.c2; c++) cols.push(evaluate(cellAt(r, c))); lines.push(cols.join("\t")); } try { void navigator.clipboard?.writeText(lines.join("\n")); } catch { /* clipboard blocked */ } };
   const actBtn = "rounded-md border border-line bg-white px-1.5 py-0.5 text-[11px] font-semibold text-muted transition";
 
@@ -3010,11 +3026,11 @@ function OfferScratchPad({ storageKey, title, defaultHeight }: { storageKey: str
           {multi && (
             <>
               <span title="Sum of the selected cells" className="rounded bg-brand-tint px-1.5 py-0.5 text-[11px] font-bold text-brand-dark">Σ {sumSel.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-              <button type="button" onClick={deleteSel} title="Clear the selected cells" className={`${actBtn} hover:text-red-600`}>Delete</button>
+              {!disabled && <button type="button" onClick={deleteSel} title="Clear the selected cells" className={`${actBtn} hover:text-red-600`}>Delete</button>}
               <button type="button" onClick={copySel} title="Copy the selected cells" className={`${actBtn} hover:text-brand`}>Copy</button>
             </>
           )}
-          <button type="button" onClick={clearAll} title="Clear the whole table" className={`${actBtn} hover:text-red-600`}>Clear</button>
+          {!disabled && <button type="button" onClick={clearAll} title="Clear the whole table" className={`${actBtn} hover:text-red-600`}>Clear</button>}
         </div>
       </div>
       {/* Formula bar — the address of the selected cell + its raw content (edit equations here). */}
@@ -3022,10 +3038,11 @@ function OfferScratchPad({ storageKey, title, defaultHeight }: { storageKey: str
         <span className="w-7 shrink-0 text-center text-[11px] font-bold text-muted">{sel ? `${COL_LETTERS[sel.c]}${sel.r + 1}` : "—"}</span>
         <span className="shrink-0 italic text-muted">ƒ</span>
         <input value={sel ? cellAt(sel.r, sel.c) : ""}
-          onFocus={() => sel && setEditing(sel)}
+          readOnly={disabled}
+          onFocus={() => sel && !disabled && setEditing(sel)}
           onBlur={() => setEditing(null)}
           onChange={(e) => sel && setCell(sel.r, sel.c, e.target.value)}
-          placeholder={sel ? "value or =formula (e.g. =A1+B2)" : "select a cell"}
+          placeholder={sel ? (disabled ? "" : "value or =formula (e.g. =A1+B2)") : "select a cell"}
           className="min-w-0 flex-1 bg-transparent px-1 py-0.5 text-xs outline-none placeholder:text-muted/50" />
       </div>
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-hidden p-2">
@@ -3047,7 +3064,7 @@ function OfferScratchPad({ storageKey, title, defaultHeight }: { storageKey: str
               <th className="border border-line bg-surface" />
               {data.headers.map((h, c) => (
                 <th key={c} className="border border-line p-0">
-                  <input value={h} onChange={(e) => setHeader(c, e.target.value)} aria-label={`Column ${COL_LETTERS[c]} title`}
+                  <input value={h} readOnly={disabled} onChange={(e) => setHeader(c, e.target.value)} aria-label={`Column ${COL_LETTERS[c]} title`}
                     className="w-full bg-surface px-1.5 py-1 text-center text-xs font-bold text-brand-dark outline-none" />
                 </th>
               ))}
@@ -3066,10 +3083,10 @@ function OfferScratchPad({ storageKey, title, defaultHeight }: { storageKey: str
                     <td key={ci} onMouseEnter={() => overCell(ri, ci)}
                       className={`relative border border-line p-0 ${inFill || (seld && multi) ? "bg-brand-tint/50" : ""} ${active ? "ring-2 ring-inset ring-brand" : ""} ${isPoint ? "outline-dashed outline-2 -outline-offset-2 outline-brand" : ""}`}>
                       <input value={shown(ri, ci)}
-                        readOnly={!isEditing(ri, ci)}
+                        readOnly={disabled || !isEditing(ri, ci)}
                         onMouseDown={startSelect(ri, ci)}
                         onFocus={() => setSel({ r: ri, c: ci })}
-                        onDoubleClick={() => setEditing({ r: ri, c: ci })}
+                        onDoubleClick={() => { if (!disabled) setEditing({ r: ri, c: ci }); }}
                         onKeyDown={(e) => {
                           const ed = isEditing(ri, ci);
                           const raw = cellAt(ri, ci);
@@ -3093,10 +3110,10 @@ function OfferScratchPad({ storageKey, title, defaultHeight }: { storageKey: str
                           else if (nav && e.key === "ArrowUp") { e.preventDefault(); setEditing(null); focusCell(Math.max(0, ri - 1), ci); }
                           else if (nav && e.key === "ArrowLeft") { e.preventDefault(); setEditing(null); focusCell(ri, Math.max(0, ci - 1)); }
                           else if (nav && e.key === "ArrowRight") { e.preventDefault(); setEditing(null); focusCell(ri, Math.min(COLS - 1, ci + 1)); }
-                          else if (!ed && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); setEditing({ r: ri, c: ci }); setCell(ri, ci, e.key); }
+                          else if (!ed && !disabled && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); setEditing({ r: ri, c: ci }); setCell(ri, ci, e.key); }
                         }}
                         onChange={(e) => setCell(ri, ci, e.target.value)} className={cellCls} />
-                      {active && (
+                      {active && !disabled && (
                         <span onMouseDown={startFill} title="Drag down to fill the cells below with this value"
                           className="fill-handle absolute bottom-0 right-0 z-10 h-2 w-2 cursor-crosshair rounded-[1px] border border-white bg-brand" />
                       )}
@@ -3119,7 +3136,7 @@ function OfferScratchPad({ storageKey, title, defaultHeight }: { storageKey: str
 }
 
 type NotesKey = "notesGeneral" | "notesAdditional";
-function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void; onBackToPanel: (id: string) => void }) {
+function TechnicalTab({ s, qtnNo, up, onBackToPanel, onScratch, readOnly }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void; onBackToPanel: (id: string) => void; onScratch: (pid: string, d: ScratchPad) => void; readOnly: boolean }) {
   // Editable notes page (after the cover): edit / add / remove lines.
   const notesOf = (k: NotesKey) => s[k] ?? [];
   const setNotes = (k: NotesKey, a: string[]) => up(k === "notesGeneral" ? { notesGeneral: a } : { notesAdditional: a });
@@ -3159,6 +3176,10 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
   // The source stays in the DOM (display:none) so the PDF export still reads it, and so the
   // paginator can clone its cover / notes / panels; the clones lay out for real inside the
   // visible host, giving true A4 pagination on screen.
+  // Rebuild only when something the PAGES show changes — deliberately NOT on offerScratch, so typing in
+  // a scratch pad doesn't re-paginate (which would remount the pad and steal focus). The scratch pads
+  // are React portals rendered from the live `s`, so they always get the latest content anyway.
+  const offerBuildSig = JSON.stringify([s.panels, s.groups, s.notesGeneral, s.notesAdditional, s.offerSeparators, s.offerPageBreaks, s.project, hideBrand]);
   useEffect(() => {
     if (techView !== "a4") return;
     const src = printRef.current;
@@ -3270,7 +3291,7 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
       setScratchSlots([]);
       a4HostRef.current?.replaceChildren();
     };
-  }, [techView, hideBrand, s]);
+  }, [techView, offerBuildSig]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!s.panels.length) {
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Technical Offer is generated from them.</div>;
   }
@@ -3355,7 +3376,10 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel }: { s: LvState; qtnNo: stri
       {/* One editable scratch-pad calculation table portalled into each panel's slot (built in the
           effect above). Screen-only and per-panel — kept in the browser, never in the offer or PDF. */}
       {showScratch && techView === "a4" && scratchSlots.map((sl) => createPortal(
-        <OfferScratchPad key={sl.pid} storageKey={`pl-offer-scratch-${qtnNo}-${sl.pid}`} title={sl.name} defaultHeight={sl.defaultH} />,
+        <OfferScratchPad key={sl.pid} panelId={sl.pid} title={sl.name} defaultHeight={sl.defaultH}
+          value={s.offerScratch?.[sl.pid]} disabled={readOnly}
+          geomKey={`pl-offer-scratch-geom-${qtnNo}-${sl.pid}`}
+          onChange={(d) => onScratch(sl.pid, d)} />,
         sl.el,
       ))}
       <div ref={printRef} data-pdf-root className={`print-area space-y-6${techView === "a4" ? " a4-src-hidden" : ""}`}>

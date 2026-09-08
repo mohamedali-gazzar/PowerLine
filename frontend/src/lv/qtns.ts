@@ -141,6 +141,22 @@ function normalize(state: LvState): LvState {
         unitPrice: Number(r.unitPrice) || 0,
       }));
   }
+  // Per-panel scratch pads: default to none, coerce to the declared shape, and drop any whose panel
+  // is gone (the server stores whatever it was handed).
+  {
+    const raw = (state.offerScratch && typeof state.offerScratch === "object" ? state.offerScratch : {}) as Record<string, unknown>;
+    const panelIds = new Set(Array.isArray(state.panels) ? state.panels.map((p) => p.id) : []);
+    const clean: Record<string, { headers: string[]; rows: string[][] }> = {};
+    for (const [pid, v] of Object.entries(raw)) {
+      if (!panelIds.has(pid) || !v || typeof v !== "object") continue;
+      const o = v as { headers?: unknown; rows?: unknown };
+      clean[pid] = {
+        headers: Array.isArray(o.headers) ? o.headers.map((h) => String(h ?? "")) : [],
+        rows: Array.isArray(o.rows) ? o.rows.map((r) => (Array.isArray(r) ? r.map((c) => String(c ?? "")) : [])) : [],
+      };
+    }
+    state.offerScratch = clean;
+  }
   // Technical-Offer divider pages: default to none, and drop any whose panel is gone.
   state.offerSeparators = (Array.isArray(state.offerSeparators) ? state.offerSeparators : [])
     .filter((sep) => Array.isArray(state.panels) && state.panels.some((p) => p.id === sep.beforePanelId));
