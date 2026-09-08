@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Selectivity: the "Fed From" filter is now remembered when you leave the tab and come back.**
+
+Picking a source in the Selectivity tab's "Fed From" filter used to reset to "All" whenever you
+switched to another tab and returned. It now stays on your last choice (saved per quotation, and it
+even survives a page reload). Panel names and Fed From edits were always saved — only the filter reset
+before. If the source you filtered by later disappears, the filter quietly goes back to "All".
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Panel editor: the component row under the mouse now goes bold.**
 
 Moving the mouse over any component in a panel's component list highlights that row — it turns bold

@@ -1835,7 +1835,7 @@ export default function LvConfiguratorPage() {
         {activeTab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} onScratch={upScratch} readOnly={sharedReadOnly} />)}
         {activeTab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} readOnly={readOnly} />)}
         {activeTab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
-        {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} />}
+        {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} qtnNo={qtnNum} />}
         {activeTab === "sizing" && <SizingReviewTab key={rec?.id ?? "none"} s={s} qtnId={rec?.id ?? ""} />}
         {activeTab === "summary" && <SummaryTab s={s} up={up} />}
       </div>
@@ -5641,11 +5641,23 @@ function selMainIncomer(p: LvPanel): PanelComponent | undefined {
   const isBreaker = (c: PanelComponent) => /\b(ACB|MCCB|MCB)\b/i.test(c.type || "");
   return p.components.find((c) => !isSpacer(c) && isBreaker(c) && /incom/i.test(c.section || ""));
 }
-function SelectivityTab({ s, upPanel }: { s: LvState; upPanel: (id: string, patch: Partial<LvPanel>) => void }) {
-  const [fedFilter, setFedFilter] = useState(""); // "Fed From" column filter — "" = all
+function SelectivityTab({ s, upPanel, qtnNo }: { s: LvState; upPanel: (id: string, patch: Partial<LvPanel>) => void; qtnNo: string }) {
+  // "Fed From" column filter — "" = all. Kept per-QTN in localStorage so switching to another tab
+  // and back (or reloading) keeps the last chosen source, not resetting to "All".
+  const FKEY = `pl.selectivity.fedFilter.${qtnNo}`;
+  const [fedFilter, setFedFilter] = useState<string>(() => { try { return localStorage.getItem(FKEY) || ""; } catch { return ""; } });
+  useEffect(() => {
+    try { if (fedFilter) localStorage.setItem(FKEY, fedFilter); else localStorage.removeItem(FKEY); } catch { /* storage blocked — non-fatal */ }
+  }, [fedFilter, FKEY]);
   const panels = s.panels.filter((p) => !p.spare);
   // Distinct "Fed From" values seen across the panels → the header filter's options.
   const fedOptions = Array.from(new Set(panels.map((p) => p.fedFrom.trim()).filter(Boolean)));
+  // If the remembered source no longer feeds any panel (renamed/removed), drop the filter so the
+  // dropdown never shows a stale or blank selection.
+  useEffect(() => {
+    if (fedFilter && !fedOptions.includes(fedFilter)) setFedFilter("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fedFilter, fedOptions.join("")]);
   // Panel-by-name → look up the "Fed From" (feeding) panel to read its incomer for the
   // "Incoming of Feeder" column.
   const byName = new Map(panels.map((x) => [x.name.trim(), x]));
