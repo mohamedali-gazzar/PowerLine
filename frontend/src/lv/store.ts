@@ -241,6 +241,10 @@ export interface LvState {
   /** Commercial Offer lines typed by hand. Only a "custom" quotation uses these — it
    *  has no panels, so the offer table is written rather than generated from them. */
   customItems?: CustomOfferItem[];
+  /** Custom offer: a second, optional "Alternative offer" — hidden until turned on, then
+   *  printed as its own page after the main one. Same hand-typed line format. */
+  altOfferOn?: boolean;
+  altItems?: CustomOfferItem[];
   // Free-form sticky notes on the "Summary" tab (draggable/editable annotations).
   summaryNotes?: SummaryNote[];
   // Free-text "Record Results" box on the Pricing Settings tab.

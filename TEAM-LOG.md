@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Custom Commercial Offer: an optional "Alternative offer" second page.**
+
+The Custom Commercial Offer tab has a new "Alternative offer" toggle next to "Offer lines". Off by
+default (offer unchanged). Turn it on and a second offer-lines table appears — it prints as its own page
+titled "Alternative offer" after the main one, and the first page is then titled "Main offer". Same line
+format (description · qty · unit price · total, drag to reorder). The PDF export prints the extra page too.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Replace component: "Select all" / "Unselect all" links for the panel picker.**
 
 In the "⇄ Replace component" window, when you choose "Selected panels" there are now **Select all** and

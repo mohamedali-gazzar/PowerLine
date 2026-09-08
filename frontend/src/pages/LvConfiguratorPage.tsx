@@ -3767,28 +3767,25 @@ function TermsEditor({ value, onSave, rtl }: { value: TermsSection[]; onSave: (v
  * VAT and the exchange rate are edited here because a custom quotation has no Pricing
  * Settings tab — without them the total on this one screen could not be made correct.
  */
-function CustomItemsEditor({
-  s, up, cur, rate, readOnly,
-}: {
-  s: LvState;
-  up: (patch: Partial<LvState>) => void;
+/** One editable offer-lines table (Order · Description · Qty · Unit · Total) with drag/arrow
+ *  reordering — used for the Main offer and, when shown, the Alternative offer. */
+function OfferLinesTable({ items, onChange, cur, rate }: {
+  items: CustomOfferItem[];
+  onChange: (next: CustomOfferItem[]) => void;
   cur: "USD" | "EGP";
   rate: number;
-  readOnly?: boolean;
 }) {
-  const items = s.customItems ?? [];
-  const write = (next: CustomOfferItem[]) => up({ customItems: next });
   const patch = (id: string, p: Partial<CustomOfferItem>) =>
-    write(items.map((r) => (r.id === id ? { ...r, ...p } : r)));
+    onChange(items.map((r) => (r.id === id ? { ...r, ...p } : r)));
   const add = () =>
-    write([...items, { id: `ci-${Date.now()}-${items.length}`, description: "", qty: 1, unitPrice: 0 }]);
-  const remove = (id: string) => write(items.filter((r) => r.id !== id));
+    onChange([...items, { id: `ci-${Date.now()}-${items.length}`, description: "", qty: 1, unitPrice: 0 }]);
+  const remove = (id: string) => onChange(items.filter((r) => r.id !== id));
   const move = (i: number, by: number) => {
     const j = i + by;
     if (j < 0 || j >= items.length) return;
     const next = [...items];
     [next[i], next[j]] = [next[j], next[i]];
-    write(next);
+    onChange(next);
   };
   // Drag-to-reorder, using the same grip handle and drop cue as the component rows on
   // the Panels tab, so reordering an offer works the way reordering already does here.
@@ -3805,49 +3802,14 @@ function CustomItemsEditor({
     if (from < 0 || to < 0) return;
     const [moved] = arr.splice(from, 1);
     arr.splice(to, 0, moved);
-    write(arr);
+    onChange(arr);
   };
-
-  if (readOnly) {
-    return (
-      <div className="card mb-3 p-3 text-xs text-muted no-print">
-        This quotation is locked, so the offer lines can no longer be edited.
-      </div>
-    );
-  }
-
   return (
-    <div className="card mb-4 p-4 no-print">
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="sec-head mb-0 pb-0">Offer lines</h2>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5 text-xs font-semibold text-muted">
-            VAT %
-            <input
-              className="input w-20 py-1 text-sm"
-              type="number" min={0} step={1}
-              value={Math.round((s.factors.vat ?? 0) * 100)}
-              onChange={(e) =>
-                up({ factors: { ...s.factors, vat: (Number(e.target.value) || 0) / 100 } })}
-            />
-          </label>
-          <label className="flex items-center gap-1.5 text-xs font-semibold text-muted">
-            EGP per USD
-            <input
-              className="input w-24 py-1 text-sm"
-              type="number" min={0} step="0.01"
-              value={s.factors.usd ?? 0}
-              onChange={(e) => up({ factors: { ...s.factors, usd: Number(e.target.value) || 0 } })}
-            />
-          </label>
-        </div>
-      </div>
-
+    <>
       <p className="mb-3 text-xs text-muted">
         Drag a line by its handle to move it, or use the arrows. The order here is the order
         the customer sees.
       </p>
-
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -3948,8 +3910,72 @@ function CustomItemsEditor({
           </tbody>
         </table>
       </div>
-
       <button type="button" className="btn btn-ghost mt-3 text-sm" onClick={add}>+ Add line</button>
+    </>
+  );
+}
+
+function CustomItemsEditor({
+  s, up, cur, rate, readOnly,
+}: {
+  s: LvState;
+  up: (patch: Partial<LvState>) => void;
+  cur: "USD" | "EGP";
+  rate: number;
+  readOnly?: boolean;
+}) {
+  if (readOnly) {
+    return (
+      <div className="card mb-3 p-3 text-xs text-muted no-print">
+        This quotation is locked, so the offer lines can no longer be edited.
+      </div>
+    );
+  }
+  const altOn = !!s.altOfferOn; // the Alternative offer is hidden until this is turned on
+  return (
+    <div className="card mb-4 p-4 no-print">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <h2 className="sec-head mb-0 pb-0">Offer lines</h2>
+          {/* Toggle the second, optional "Alternative offer" page on/off. */}
+          <label className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold transition-colors ${altOn ? "border-brand bg-brand-light text-brand-dark" : "border-line text-muted hover:border-brand/40"}`}
+            title="Show a second, optional Alternative offer — printed as its own page">
+            <input type="checkbox" className="accent-brand" checked={altOn} onChange={(e) => up({ altOfferOn: e.target.checked })} />
+            Alternative offer
+          </label>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-muted">
+            VAT %
+            <input
+              className="input w-20 py-1 text-sm"
+              type="number" min={0} step={1}
+              value={Math.round((s.factors.vat ?? 0) * 100)}
+              onChange={(e) =>
+                up({ factors: { ...s.factors, vat: (Number(e.target.value) || 0) / 100 } })}
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-muted">
+            EGP per USD
+            <input
+              className="input w-24 py-1 text-sm"
+              type="number" min={0} step="0.01"
+              value={s.factors.usd ?? 0}
+              onChange={(e) => up({ factors: { ...s.factors, usd: Number(e.target.value) || 0 } })}
+            />
+          </label>
+        </div>
+      </div>
+
+      {altOn && <div className="mb-1 mt-2 text-[11px] font-bold uppercase tracking-wide text-brand-dark">Main offer</div>}
+      <OfferLinesTable items={s.customItems ?? []} onChange={(next) => up({ customItems: next })} cur={cur} rate={rate} />
+
+      {altOn && (
+        <div className="mt-6 rounded-lg border border-brand/30 bg-brand-tint/30 p-3">
+          <h3 className="sec-head mb-1 pb-1 text-brand-dark">Alternative offer</h3>
+          <OfferLinesTable items={s.altItems ?? []} onChange={(next) => up({ altItems: next })} cur={cur} rate={rate} />
+        </div>
+      )}
     </div>
   );
 }
@@ -3968,6 +3994,11 @@ function CommercialTab({ s, qtnNo, up, readOnly }: { s: LvState; qtnNo: string; 
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Commercial Offer is generated from them.</div>;
   }
   const items = s.customItems ?? [];
+  // Optional second "Alternative offer" page (custom offers only) — hidden unless turned on.
+  const altOn = custom && !!s.altOfferOn;
+  const altItems = s.altItems ?? [];
+  const altSubtotal = altItems.reduce((t, r) => t + r.qty * r.unitPrice, 0);
+  const altVat = altSubtotal * s.factors.vat;
   const calcs: [LvPanel, PanelCalc][] = s.panels.map((p) => [p, calcPanel(p, s.factors, s.abbItemDiscounts)]);
   const subtotal = custom
     ? customItemsTotal(s)
@@ -4006,6 +4037,7 @@ function CommercialTab({ s, qtnNo, up, readOnly }: { s: LvState; qtnNo: string; 
         <OfferCover s={s} qtnNo={qtnNo} kind="Commercial" />
         <section className="a4-sheet flex flex-col px-10 pb-10 pt-12">
         <PageHeader s={s} qtnRef={qtnRef} flush />
+        {altOn && <h2 className="mb-3 font-display text-xl font-bold" style={{ color: TRED }}>Main offer</h2>}
         <table data-pdf-cotable className="w-full text-sm">
           <thead>
             <tr className="border-b-2 border-brand text-left text-[12px] uppercase tracking-wide text-muted">
@@ -4056,6 +4088,40 @@ function CommercialTab({ s, qtnNo, up, readOnly }: { s: LvState; qtnNo: string; 
           <div className="flex justify-between border-t-2 border-brand pt-1 text-base"><span className="font-bold">Total ({cur})</span><b className="text-brand-dark">{m(subtotal + vat)}</b></div>
         </div>
         </section>
+        {/* Alternative offer — its own A4 page, printed only when the toggle is on. */}
+        {altOn && (
+        <section className="a4-sheet flex flex-col px-10 pb-10 pt-12">
+        <PageHeader s={s} qtnRef={qtnRef} flush />
+        <h2 className="mb-3 font-display text-xl font-bold" style={{ color: TRED }}>Alternative offer</h2>
+        <table data-pdf-cotable-alt className="w-full text-sm">
+          <thead>
+            <tr className="border-b-2 border-brand text-left text-[12px] uppercase tracking-wide text-muted">
+              <th className="py-1.5 pr-2 w-10">Item</th>
+              <th className="py-1.5 pr-2">Description</th>
+              <th className="py-1.5 pr-2 text-center w-14">Qty</th>
+              <th className="py-1.5 pr-2 text-right w-32">Unit price ({cur})</th>
+              <th className="py-1.5 text-right w-32">Total ({cur})</th>
+            </tr>
+          </thead>
+          <tbody>
+            {altItems.map((r, i) => (
+              <tr key={r.id} className="border-b border-line/60 align-top">
+                <td className="py-1.5 pr-2 font-bold text-muted">{i + 1}</td>
+                <td className="py-1.5 pr-2 whitespace-pre-line"><b>{r.description}</b></td>
+                <td className="py-1.5 pr-2 text-center font-semibold">{r.qty}</td>
+                <td className="py-1.5 pr-2 text-right">{m(r.unitPrice)}</td>
+                <td className="py-1.5 text-right font-semibold">{m(r.qty * r.unitPrice)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div data-pdf-totals-alt className="ml-auto mt-6 w-72 space-y-1 text-sm">
+          <div className="flex justify-between"><span className="text-muted">Subtotal (excl. VAT)</span><b>{m(altSubtotal)}</b></div>
+          <div className="flex justify-between"><span className="text-muted">VAT {Math.round(s.factors.vat * 100)}%</span><b>{m(altVat)}</b></div>
+          <div className="flex justify-between border-t-2 border-brand pt-1 text-base"><span className="font-bold">Total ({cur})</span><b className="text-brand-dark">{m(altSubtotal + altVat)}</b></div>
+        </div>
+        </section>
+        )}
         {/* General Terms & Conditions (English) — its own A4 page; <thead> logo repeats per printed page. */}
         <section className="a4-sheet px-10 pb-10 pt-12" style={{ breakAfter: "page" }}>
           <table className="w-full">

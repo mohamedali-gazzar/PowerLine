@@ -289,6 +289,7 @@ function paginateCommercialMain(
   headerEl: HTMLElement | null,
   table: HTMLElement,
   totalsEl: HTMLElement | null,
+  title?: string,
 ): HTMLElement[] {
   const colgroup = table.querySelector("colgroup");
   const thead = table.querySelector("thead");
@@ -299,6 +300,13 @@ function paginateCommercialMain(
   do {
     const { page, content } = contentPage(headerEl);
     host.appendChild(page);
+    if (title && pages.length === 0) {
+      // Page heading ("Main offer" / "Alternative offer") on the first page of this table.
+      const h = document.createElement("div");
+      h.textContent = title;
+      h.style.cssText = "font-weight:700;font-size:20px;line-height:1.2;margin:0 0 12px;color:#F16722";
+      content.appendChild(h);
+    }
     const t = document.createElement("table");
     t.className = table.className;
     t.style.width = "100%";
@@ -442,8 +450,12 @@ export async function exportCommercialPdf(opts: ExportOpts): Promise<Blob | void
   const mainTable = printArea.querySelector<HTMLElement>("[data-pdf-cotable]");
   const totals = printArea.querySelector<HTMLElement>("[data-pdf-totals]");
   const mainSheet = mainTable ? (mainTable.closest(".a4-sheet") as HTMLElement | null) : null;
+  // Optional second "Alternative offer" page (custom offers only) — paginated like the main.
+  const altTable = printArea.querySelector<HTMLElement>("[data-pdf-cotable-alt]");
+  const altTotals = printArea.querySelector<HTMLElement>("[data-pdf-totals-alt]");
+  const altSheet = altTable ? (altTable.closest(".a4-sheet") as HTMLElement | null) : null;
   const termSheets = Array.from(printArea.querySelectorAll<HTMLElement>(":scope > .a4-sheet"))
-    .filter((s) => s !== cover && s !== mainSheet);
+    .filter((s) => s !== cover && s !== mainSheet && s !== altSheet);
 
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;left:-10000px;top:0;z-index:-1;background:#fff;";
@@ -453,7 +465,8 @@ export async function exportCommercialPdf(opts: ExportOpts): Promise<Blob | void
     // Cover + paginated Main Offer, as A4 page-blocks.
     const blockPages: HTMLElement[] = [];
     if (cover) blockPages.push(makeCoverPage(cover));
-    if (mainTable) blockPages.push(...paginateCommercialMain(host, header, mainTable, totals));
+    if (mainTable) blockPages.push(...paginateCommercialMain(host, header, mainTable, totals, altTable ? "Main offer" : undefined));
+    if (altTable) blockPages.push(...paginateCommercialMain(host, header, altTable, altTotals, "Alternative offer"));
     host.append(...blockPages);
     // Drop the reserved "Page X of Y" footer — the commercial offer has no page footer.
     for (const p of blockPages) {
