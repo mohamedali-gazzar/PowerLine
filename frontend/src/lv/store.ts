@@ -694,6 +694,22 @@ export function lcpEnclosureDbPrice(box: LcpBox | null | undefined, f: Factors, 
 export function lcpBox2Of(p: LvPanel): LcpBox | null {
   return p.panelsSizing?.layout === "Double" ? (p.lcpBox2 ?? null) : null;
 }
+/** The catalogue enclosure backing an LCP/KWHM panel — the reference-picked box if any, else the
+ *  auto-sized box matched by dimensions within its family (falling back to any box of that family,
+ *  since IP / mounting / RAL are uniform per family). Gives the Technical Offer header its
+ *  Panel Type / IP / Mounting for these auxiliary panels. */
+export function lcpEnclosureRecord(p: LvPanel): DbEnclosure | undefined {
+  if (p.lcpEnclRef) return lcpEnclByRef(p.lcpEnclRef);
+  const fam = p.panelsSizing?.family ?? "SR-Basic";
+  const box = lcpBoxOf(p);
+  let any: DbEnclosure | undefined;
+  for (const e of ENCLOSURES) {
+    if (e.fam !== fam) continue;
+    if (!any) any = e; // family fallback — IP/mounting/RAL don't vary within a family
+    if (box) { const d = parseEnclDims((e.name || "").trim()); if (d && d.H === box.H && d.W === box.W && d.D === box.D) return e; }
+  }
+  return any;
+}
 /** Every box in a family that is named rather than dimensioned — Primo "3PH-E-KWHM",
  *  Minicenter, Pro-E, IS2. These can only be addressed by catalogue reference, which is
  *  why lcpSizes() (which parses H×W×D out of the name) returns nothing for them. */

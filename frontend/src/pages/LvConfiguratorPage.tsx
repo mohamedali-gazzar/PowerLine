@@ -22,7 +22,7 @@ import {
 } from "../lv/catalog";
 import {
   newPanel, newSparePanel, duplicatePanel, nextDuplicateName, uniquePanelName, panelNameOwner, panelNameClashMessage, blankSpareNames, blankSpareMessage, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
-  lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpSizes, lcpRealBox,
+  lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpEnclosureRecord, lcpSizes, lcpRealBox,
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog,
@@ -3296,6 +3296,17 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel, onScratch, readOnly }: { s:
     return <div className="card p-10 text-center text-sm text-muted animate-fade-up">Add panels first — the Technical Offer is generated from them.</div>;
   }
   const specOf = (p: LvPanel) => {
+    // KWHM / LCP auxiliary panels resolve their type/IP/mounting from the enclosure family they
+    // were auto-sized into (they have no panelItems/cellConfig), so the header can show them.
+    if (p.spare && (p.spareKind === "lcp" || p.spareKind === "kwhm")) {
+      const enc = lcpEnclosureRecord(p);
+      return {
+        panelType: p.panelsSizing?.family ?? "—",
+        ip: enc?.ip || "—",
+        mount: enc?.mount || "—",
+        ral: enc?.ral || "—",
+      };
+    }
     if (p.sizingMode === "cells") {
       const cc = p.cellConfig;
       return {
@@ -3477,36 +3488,47 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel, onScratch, readOnly }: { s:
                   </tr>
                 </tbody>
               </table>
-              {/* spec grid — 2 label/value pairs per row, like the reference.
-                  A spare-parts cell has no specs, so only its item bar shows. */}
-              {!p.spare && (
-              <table className="w-full table-fixed border-collapse">
-                <colgroup>
-                  <col className="w-[18%]" />
-                  <col className="w-[51%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[13%]" />
-                </colgroup>
-                <tbody>
-                  {([
-                    ["Panel Type", sp.panelType, "IP", sp.ip],
-                    ["Mounting", sp.mount, "Rating", p.ratingA ? `${p.ratingA} A` : ""],
-                    ["RAL", sp.ral, "Amb. Temp.", p.ambTemp],
-                    ["Copper", p.copperType, "Neutral", p.neutral],
-                    ["Incoming Cables", p.incomingCables, "Earth", p.earth],
-                    ["Outgoing Cables", p.outgoingCables, "Form", p.form],
-                    ["Short Circuit", p.shortCircuit, "Fed From", p.fedFrom],
-                  ] as [string, React.ReactNode, string, React.ReactNode][]).map(([l1, v1, l2, v2]) => (
-                    <tr key={l1}>
-                      <Lbl>{l1}</Lbl>
-                      <Val>{v1}</Val>
-                      <Lbl>{l2}</Lbl>
-                      <Val>{v2}</Val>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              )}
+              {/* spec grid — 2 label/value pairs per row, like the reference. A plain spare-parts
+                  cell has no specs (only its item bar shows); KWHM / LCP panels show a compact
+                  4-field header (Panel Type · IP · Mounting · Rating). */}
+              {(() => {
+                const isKwhmLcp = p.spare && (p.spareKind === "lcp" || p.spareKind === "kwhm");
+                if (p.spare && !isKwhmLcp) return null;
+                const rows: [string, React.ReactNode, string, React.ReactNode][] = isKwhmLcp
+                  ? [
+                      ["Panel Type", sp.panelType, "IP", sp.ip],
+                      ["Mounting", sp.mount, "Rating", p.ratingA ? `${p.ratingA} A` : ""],
+                    ]
+                  : [
+                      ["Panel Type", sp.panelType, "IP", sp.ip],
+                      ["Mounting", sp.mount, "Rating", p.ratingA ? `${p.ratingA} A` : ""],
+                      ["RAL", sp.ral, "Amb. Temp.", p.ambTemp],
+                      ["Copper", p.copperType, "Neutral", p.neutral],
+                      ["Incoming Cables", p.incomingCables, "Earth", p.earth],
+                      ["Outgoing Cables", p.outgoingCables, "Form", p.form],
+                      ["Short Circuit", p.shortCircuit, "Fed From", p.fedFrom],
+                    ];
+                return (
+                  <table className="w-full table-fixed border-collapse">
+                    <colgroup>
+                      <col className="w-[18%]" />
+                      <col className="w-[51%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[13%]" />
+                    </colgroup>
+                    <tbody>
+                      {rows.map(([l1, v1, l2, v2]) => (
+                        <tr key={l1}>
+                          <Lbl>{l1}</Lbl>
+                          <Val>{v1}</Val>
+                          <Lbl>{l2}</Lbl>
+                          <Val>{v2}</Val>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
               </div>{/* /panel-data frame */}
               <div className="h-3" aria-hidden />{/* white space between the two tables */}
               {/* components table — rounded bordered frame. overflow-hidden clips the corners; note
@@ -5828,6 +5850,8 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
     moved.groupId = neighbour?.groupId;
     up({ panels: resortByGroup(arr, s.groups ?? []) });
   });
+  // Themed confirm (PowerLine dialog) instead of the browser's window.confirm.
+  const { confirm, dialogs } = useDialogs();
   // ── Panel grouping (organisational only — no pricing effect) ────────────────
   const groups = s.groups ?? [];
   const numbers = panelNumbers(s);
@@ -5890,10 +5914,16 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
   const openNaming = (ids: string[]) => setNaming({ ids, name: commonNamePrefix(ids.map(nameOf)) });
   const doCreateGroup = (ids: string[], name: string) => { if (name.trim()) { up(createPanelGroup(s, name, ids)); exitSel(); } };
   const doMoveTo = (ids: string[], gid: string | null) => { up(movePanelsToGroup(s, ids, gid)); exitSel(); };
-  const doDeleteGroup = (gid: string) => {
+  const doDeleteGroup = async (gid: string) => {
     const g = groups.find((x) => x.id === gid);
     const n = s.panels.filter((p) => p.groupId === gid).length;
-    if (window.confirm(`Delete the group "${g?.name}" and its ${n} panel${n === 1 ? "" : "s"}? This can't be undone.`)) up(deletePanelGroup(s, gid));
+    const ok = await confirm({
+      title: "Delete group",
+      message: `Delete the group “${g?.name}” and its ${n} panel${n === 1 ? "" : "s"}?\nThis can't be undone.`,
+      confirmLabel: "Delete group",
+      tone: "danger",
+    });
+    if (ok) up(deletePanelGroup(s, gid));
   };
   // Drag a whole group by the dotted handle on its header to reorder it among the groups —
   // mirrors the panels' handle. Groups have variable heights (header + N rows), so instead of a
@@ -6171,6 +6201,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
             </div>
           </div>
         </div>, document.body)}
+      {dialogs}{/* themed confirm (group delete) */}
 
       {/* editor — its own scroll area so the panel list and editor scroll independently.
           LCP / KWHM cells use the LcpEditor; any other spare cell the stripped SpareEditor;

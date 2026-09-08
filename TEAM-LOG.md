@@ -23,6 +23,25 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Deleting a panel group now uses the PowerLine dialog, not the browser's grey box.**
+
+The "Delete the group … and its N panels?" confirmation was the browser's own popup (the ugly
+"localhost says" / "powerline-chi.vercel.app says" box). It's now the app's themed dialog — follows the
+light/dark theme, has a red bar for the can't-be-undone action, and buttons named **Cancel** / **Delete
+group** instead of OK/Cancel. Same as the other confirmations in the app.
+
+## 2026-09-08 · Mohamed's side · Claude
+
+**KWHM / LCP panels now show a 4-field header in the Technical Offer.**
+
+KWHM and LCP auxiliary panels used to print only their item bar (name + qty) with no spec header. They
+now show a compact 4-field header: **Panel Type · IP · Mounting · Rating**. Panel Type / IP / Mounting
+come from the enclosure family the panel is auto-sized into; Rating follows the panel's rating (blank for
+these aux panels, which carry no busbar rating). Normal panels are unchanged (full header). RAL and Amb.
+Temp. are not shown for KWHM/LCP.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Selectivity: a jump arrow beside each panel name opens that panel in the Panels tab.**
 
 Each row in the Selectivity table now has a small ↗ arrow next to the Panel Name. Clicking it jumps
