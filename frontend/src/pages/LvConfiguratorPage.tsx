@@ -4374,6 +4374,15 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
   );
 }
 
+// Factor colour bands (cost ÷ selling): ≤0.9 healthy margin (green), ≤0.95 thin (yellow),
+// ≤1 very thin — price ≈ cost (red), >1 selling below cost / a loss (dark red + ✕).
+function factorTone(f: number): { cls: string; x: boolean } {
+  if (f <= 0.9) return { cls: "text-green-600", x: false };
+  if (f <= 0.95) return { cls: "text-yellow-600", x: false };
+  if (f <= 1) return { cls: "text-red-600", x: false };
+  return { cls: "text-red-800", x: true };
+}
+
 // A commercial-style table of every panel — name, qty, unit cost, factor, unit selling,
 // an editable TARGET selling, and total selling. Typing a target unit price previews the
 // selling factor that reaches it (price ∝ 1/factor); "↺ Default" previews the global
@@ -4387,6 +4396,13 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
   // until "Apply to Panels & Commercial Offer".
   const [staged, setStaged] = useState<Record<string, number>>({});
   const [copied, setCopied] = useState(false);
+  // "Do you have a target price?" — a pop-up that works out the factor (cost ÷ target price)
+  // and, on request, records it into the Record-Results list shown under the table.
+  const [targetOpen, setTargetOpen] = useState(false);
+  const [targetInput, setTargetInput] = useState("");
+  const [targetVatIncl, setTargetVatIncl] = useState(false); // is the typed target price incl. VAT?
+  const [recorded, setRecorded] = useState(false);
+  const [resultsCopied, setResultsCopied] = useState(false);
   // Collapsible like the "Panel details" / "Panel cost (live)" cards (state remembered).
   const [open, setOpen] = useState(() => { try { return localStorage.getItem("lv-panelpricing-open") !== "0"; } catch { return true; } });
   const toggleOpen = () => setOpen((o) => { try { localStorage.setItem("lv-panelpricing-open", o ? "0" : "1"); } catch { /* ignore */ } return !o; });
@@ -4411,6 +4427,41 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
   });
   const totalSell = rows.reduce((t, r) => t + r.previewTotalEgp, 0);
   const totalCost = rows.reduce((t, r) => t + r.calc.unitCostOps * safetyMul * r.p.qty, 0);
+  const totalQty = rows.reduce((t, r) => t + r.p.qty, 0);
+  const vatMul = 1 + (s.factors.vat ?? 0);      // total selling incl. VAT = excl. VAT × (1 + VAT)
+  const totalSellIncl = totalSell * vatMul;
+  // The overall (weighted) factor for the whole quotation: total cost ÷ total selling (excl. VAT).
+  const finalFactor = totalSell > 0 ? +(totalCost / totalSell).toFixed(4) : 0;
+  // "Do you have a target price?" — factor needed to hit a typed target total selling price. The
+  // factor is cost ÷ selling (excl. VAT), so an incl.-VAT target is divided by (1 + VAT) first.
+  const targetNum = parseFloat(targetInput.replace(/,/g, "")) || 0; // as typed, display currency
+  const targetExcl = targetVatIncl ? targetNum / vatMul : targetNum; // selling excl. VAT
+  const targetEgp = targetExcl * rate;                               // → EGP (the ratio is currency-free)
+  const newFactorTarget = targetEgp > 0 ? +(totalCost / targetEgp).toFixed(4) : 0;
+  const recordedLines = (s.recordResults ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const recordTarget = () => {
+    if (!(targetNum > 0)) return;
+    const line = `Target ${fmtEgp(targetNum)} ${cur} ${targetVatIncl ? "incl." : "excl."} VAT → factor ${newFactorTarget}  (total cost ${m(totalCost)} ${cur})`;
+    up({ recordResults: [...recordedLines, line].join("\n") });
+    setRecorded(true);
+  };
+  // Copy the whole recorded-results list to the clipboard (one line each).
+  const copyResults = async () => {
+    const text = recordedLines.join("\n");
+    if (!text) return;
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch { /* fall through */ }
+    if (!ok) {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch { /* ignore */ }
+    }
+    if (ok) { setResultsCopied(true); setTimeout(() => setResultsCopied(false), 1500); }
+  };
   const dirtyRows = rows.filter((r) => r.dirty);
   // Copy the Total cost column as plain integers, one per line (paste straight into Excel).
   const copyTotalCost = async () => {
@@ -4473,12 +4524,6 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
             </div>
           )}
         </div>
-        {open && (
-          <p className="mt-1 text-xs text-muted">
-            Set a <b>target selling</b> (unit) price for any panel — it previews the factor. Nothing
-            changes until you <b>Apply to Panels &amp; Commercial Offer</b>. A factor above 0.95 asks first.
-          </p>
-        )}
       </div>
       {open && (<>
       <div className="overflow-x-auto">
@@ -4508,26 +4553,63 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
               <th className="py-1.5 pr-2 text-center">Target selling ({cur})</th>
               <th className="w-24 py-1.5 px-3 text-center">New factor</th>
               <th className="w-40 py-1.5 px-3 text-right">Total cost ({cur})</th>
-              <th className="py-1.5 text-right">Total selling ({cur})</th>
+              <th className="py-1.5 px-3 text-right">Total selling ({cur}) excl. VAT</th>
+              <th className="py-1.5 text-right">Total selling ({cur}) incl. VAT</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <PanelTargetRow key={r.p.id} name={r.p.name} qty={r.p.qty}
                 unitCost={r.calc.unitCostOps * safetyMul} factor={r.currentFactor} custom={r.custom} dirty={r.dirty}
-                sellUnit={r.calc.sellUnit} newFactor={r.newFactor} totalSell={r.previewTotalEgp} m={m}
+                sellUnit={r.calc.sellUnit} newFactor={r.newFactor} totalSell={r.previewTotalEgp} totalSellIncl={r.previewTotalEgp * vatMul} m={m}
                 onTarget={(t) => stageTarget(r.p.id, r.currentFactor, r.calc.sellUnit, t)}
                 onDefault={() => resetToDefault(r.p.id)} />
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-brand text-sm font-bold">
-              <td className="py-2 pr-2" colSpan={7}>Total selling (excl. VAT)</td>
+              <td className="py-2 pr-2">Total</td>
+              <td className="py-2 pr-2 text-center">{totalQty}</td>
+              <td className="py-2 px-3" colSpan={4} />
+              <td className="py-2 px-3 text-center" title="Final factor = total cost ÷ total selling (excl. VAT)">
+                {finalFactor
+                  ? (() => { const t = factorTone(finalFactor); return <span className={t.cls}>{finalFactor}{t.x ? " ✕" : ""}</span>; })()
+                  : <span className="text-muted">—</span>}
+              </td>
               <td className="py-2 px-3 text-right text-muted">{m(totalCost)}</td>
-              <td className="py-2 text-right text-brand-dark">{m(totalSell)}</td>
+              <td className="py-2 px-3 text-right text-brand-dark">{m(totalSell)}</td>
+              <td className="py-2 text-right text-brand-dark">{m(totalSellIncl)}</td>
             </tr>
           </tfoot>
         </table>
+      </div>
+      {/* Target-price helper — a pop-up that works out the factor for a wanted total price. */}
+      <div className="mt-4 text-sm">
+        <span className="text-muted">Do you have a target price? </span>
+        <button type="button" onClick={() => { setTargetOpen(true); setRecorded(false); }}
+          className="font-bold text-brand hover:underline">Click here</button>
+        {recordedLines.length > 0 && (
+          <div className="mt-2 rounded-lg border border-line bg-surface p-3">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-muted">Recorded results</span>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={copyResults}
+                  className={`text-[11px] font-semibold transition-colors hover:underline ${resultsCopied ? "text-green-600" : "text-brand"}`}>{resultsCopied ? "✓ Copied" : "Copy"}</button>
+                <button type="button" onClick={() => up({ recordResults: "" })}
+                  className="text-[11px] text-muted transition-colors hover:text-red-600 hover:underline">Clear</button>
+              </div>
+            </div>
+            <ul className="space-y-0.5 text-xs text-ink">
+              {recordedLines.map((line, i) => {
+                const fm = line.match(/factor\s+([\d.]+)/);
+                if (!fm) return <li key={i}>• {line}</li>;
+                const t = factorTone(parseFloat(fm[1]));
+                const [before, after] = line.split(fm[0]);
+                return <li key={i}>• {before}factor <b className={t.cls}>{fm[1]}{t.x ? " ✕" : ""}</b>{after}</li>;
+              })}
+            </ul>
+          </div>
+        )}
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
         {dirtyRows.length > 0 && (
@@ -4544,6 +4626,67 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
         </button>
       </div>
       </>)}
+      {targetOpen && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onMouseDown={() => setTargetOpen(false)}>
+          <div className="fixed inset-0 bg-ink/40 animate-fade-in" />
+          <div role="dialog" aria-modal="true" aria-label="Target price"
+            className="relative w-full max-w-sm overflow-hidden rounded-xl2 border border-line bg-white shadow-lift animate-pop dark:bg-surface"
+            onMouseDown={(e) => e.stopPropagation()}>
+            <div className="h-1.5 bg-brand" />
+            <div className="p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-base font-extrabold text-ink">Target price → factor</h2>
+                <button type="button" onClick={() => setTargetOpen(false)} aria-label="Close"
+                  className="rounded-lg p-1 text-lg leading-none text-muted transition-colors hover:bg-surface hover:text-ink">✕</button>
+              </div>
+              <p className="mb-3 text-xs text-muted">
+                Enter the total selling price you want for the whole quotation, and whether it includes VAT —
+                the factor is worked out as <b>total cost ÷ price (excl. VAT)</b>.
+              </p>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <label className="text-[11px] font-bold uppercase tracking-wide text-muted">Target price ({cur})</label>
+                <div className="inline-flex rounded-lg border border-line bg-white p-0.5 text-[11px]">
+                  {([["excl", "Excl. VAT"], ["incl", "Incl. VAT"]] as const).map(([k, label]) => (
+                    <button key={k} type="button" onClick={() => { setTargetVatIncl(k === "incl"); setRecorded(false); }}
+                      className={`rounded-md px-2 py-0.5 font-bold transition-colors ${(targetVatIncl ? "incl" : "excl") === k ? "bg-brand text-white" : "text-muted hover:text-brand"}`}>{label}</button>
+                  ))}
+                </div>
+              </div>
+              <input inputMode="decimal" autoFocus value={targetInput}
+                onChange={(e) => { setTargetInput(e.target.value); setRecorded(false); }}
+                onKeyDown={(e) => { if (e.key === "Enter") recordTarget(); if (e.key === "Escape") setTargetOpen(false); }}
+                placeholder="e.g. 8000" className="input mt-1 w-full text-right font-bold" />
+              <div className="mt-3 space-y-1 rounded-lg bg-surface p-3 text-sm">
+                <div className="flex justify-between"><span className="text-muted">Total cost ({cur})</span><b>{m(totalCost)}</b></div>
+                <div className="flex justify-between"><span className="text-muted">Target price ({cur}) · {targetVatIncl ? "incl." : "excl."} VAT</span><b>{targetNum > 0 ? fmtEgp(targetNum) : "—"}</b></div>
+                {targetVatIncl && targetNum > 0 && (
+                  <div className="flex justify-between text-xs"><span className="text-muted">Selling excl. VAT</span><b>{fmtEgp(+targetExcl.toFixed(2))}</b></div>
+                )}
+                <div className="mt-1 flex justify-between border-t-2 border-brand pt-1 text-base">
+                  <span className="font-bold">New factor</span>
+                  <b className={targetNum > 0 ? factorTone(newFactorTarget).cls : "text-muted"}>
+                    {targetNum > 0 ? <>{newFactorTarget}{factorTone(newFactorTarget).x ? " ✕" : ""}</> : "—"}
+                  </b>
+                </div>
+              </div>
+              {targetNum > 0 && newFactorTarget > 0.9 && (
+                <p className={`mt-1 text-[11px] font-semibold ${factorTone(newFactorTarget).cls}`}>
+                  {newFactorTarget > 1
+                    ? "Above 1 — selling below cost (a loss)."
+                    : newFactorTarget > 0.95
+                    ? "0.95–1 — very thin margin (price ≈ cost)."
+                    : "0.9–0.95 — thin margin."}
+                </p>
+              )}
+              {recorded && <p className="mt-2 text-xs font-semibold text-green-700">✓ Recorded — see “Recorded results” under the table.</p>}
+              <div className="mt-4 flex justify-end gap-2">
+                <button type="button" className="btn-ghost" onClick={() => setTargetOpen(false)}>Close</button>
+                <button type="button" className="btn-primary disabled:opacity-40" disabled={!(targetNum > 0)} onClick={recordTarget}>Record the result</button>
+              </div>
+            </div>
+          </div>
+        </div>, document.body
+      )}
       {dialogs}
     </div>
   );
@@ -4551,9 +4694,9 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
 
 // One row of the panel-pricing table. Values are the PREVIEW (staged) numbers; a local
 // draft holds the target input until the user commits it (blur / Enter) to the parent.
-function PanelTargetRow({ name, qty, unitCost, factor, custom, dirty, sellUnit, newFactor, totalSell, m, onTarget, onDefault }: {
+function PanelTargetRow({ name, qty, unitCost, factor, custom, dirty, sellUnit, newFactor, totalSell, totalSellIncl, m, onTarget, onDefault }: {
   name: string; qty: number; unitCost: number; factor: number; custom: boolean; dirty: boolean;
-  sellUnit: number; newFactor: number | null; totalSell: number; m: (egp: number) => string;
+  sellUnit: number; newFactor: number | null; totalSell: number; totalSellIncl: number; m: (egp: number) => string;
   onTarget: (targetDisplay: number) => void; onDefault: () => void;
 }) {
   const [draft, setDraft] = useState("");
@@ -4562,7 +4705,6 @@ function PanelTargetRow({ name, qty, unitCost, factor, custom, dirty, sellUnit, 
     if (v > 0) onTarget(v); // keep the typed value visible — do NOT clear the draft
   };
   const curRisky = factor > 0.95;
-  const newRisky = newFactor != null && newFactor > 0.95;
   return (
     <tr className={`border-b border-line/60 align-middle ${dirty ? "bg-brand-tint/40" : ""}`}>
       <td className="py-1.5 pr-2"><b>{name || <span className="font-normal text-muted">(unnamed)</span>}</b></td>
@@ -4590,11 +4732,14 @@ function PanelTargetRow({ name, qty, unitCost, factor, custom, dirty, sellUnit, 
       <td className="py-1.5 px-3 text-center">
         {newFactor == null
           ? <span className="text-muted">—</span>
-          : <span className={newRisky ? "font-bold text-red-600" : "font-bold text-brand-dark"}
-              title={newRisky ? "Above 0.95 — thin margin (price ≈ cost)" : "Factor needed to reach your target"}>{newFactor}</span>}
+          : (() => { const t = factorTone(newFactor); return (
+              <span className={`font-bold ${t.cls}`}
+                title={newFactor > 1 ? "Above 1 — selling below cost (a loss)" : newFactor > 0.95 ? "0.95–1 — very thin margin (price ≈ cost)" : newFactor > 0.9 ? "0.9–0.95 — thin margin" : "Factor needed to reach your target"}>{newFactor}{t.x ? " ✕" : ""}</span>
+            ); })()}
       </td>
       <td className="py-1.5 px-3 text-right font-semibold text-muted">{m(unitCost * qty)}</td>
-      <td className="py-1.5 text-right font-semibold">{m(totalSell)}</td>
+      <td className="py-1.5 px-3 text-right font-semibold">{m(totalSell)}</td>
+      <td className="py-1.5 text-right font-semibold">{m(totalSellIncl)}</td>
     </tr>
   );
 }

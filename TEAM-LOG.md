@@ -23,6 +23,22 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Panel pricing table: reworked totals + a target-price helper.**
+
+Several changes on the Pricing Settings "Panel pricing" table:
+- Removed the grey help sentence at the top.
+- The totals row now shows the **total qty** (in the Qty column) and the **final factor** (total cost ÷
+  total selling) in the New Factor column.
+- "Total selling" is split into two columns: **excl. VAT** and a new **incl. VAT** (= excl × (1 + VAT)).
+- **Factor colours** everywhere a factor is shown: ≤0.9 green, 0.9–0.95 yellow, 0.95–1 red, above 1 dark
+  red with a ✕ (selling below cost).
+- New **"Do you have a target price? Click here"** below the table → a pop-up where you type the total
+  price you want and it works out the factor (**cost ÷ price**). You choose **Excl. / Incl. VAT** (incl.
+  is divided by 1+VAT first), can **Record the result** into a list under the table, and **Copy** that
+  list to the clipboard.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Approval conversation is now a button that opens the chat in a pop-up.**
 
 The "Approval conversation · N messages" block no longer sits open on the page taking up space. It's a
