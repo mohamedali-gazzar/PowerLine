@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**"+ Add panel" now adds into the active group, or ungrouped when nothing is selected.**
+
+If you're working inside a group (a panel in it is open), pressing "+ Add panel" adds the new panel
+**into that group**. If you click an empty spot in the panel list to deselect everything (the editor then
+shows "Nothing selected"), "+ Add panel" adds the panel **ungrouped, after the last group/panel**.
+Selecting an ungrouped panel and adding also adds ungrouped. No prices change.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Component QTY cells now accept equations (like Excel).**
 
 In a panel's component table you can type an equation in the QTY column — e.g. **=5+3** — and when you
