@@ -209,6 +209,9 @@ export interface LvState {
   selectedId: string | null;
   /** Optional panel groups (organisational only). Absent on legacy quotations = none. */
   groups?: LvGroup[];
+  /** The group "selected" in the panel list with no panel open — used only to decide where a
+   *  new "+ Add panel" lands (into this group) when nothing is selected. UI hint, not offer data. */
+  activeGroupId?: string | null;
   notesGeneral: string[];          // editable "General Notes" page (after the cover)
   notesAdditional: string[];       // editable "Additional Notes" page
   commercialTerms: TermsSection[];   // editable "General Terms & Conditions" — English

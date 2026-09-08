@@ -1105,13 +1105,19 @@ export default function LvConfiguratorPage() {
     // project-wide fields don't have to be re-picked for every panel.
     const p = withProjectSpecs(newPanel(s.panels.length + 1), s.projectSpecs);
     if (coWork && user?.id) p.ownerId = user.id; // co-work: a new panel belongs to its creator
-    // Contextual placement: if the open (active) panel sits in a group, the new panel joins that
-    // group; if nothing is selected (deselected) or the active panel is ungrouped, it's appended
-    // ungrouped after the last group/panel. resortByGroup keeps the physical order correct.
-    const active = s.panels.find((x) => x.id === s.selectedId);
-    const gid = active?.groupId && (s.groups ?? []).some((g) => g.id === active.groupId) ? active.groupId : undefined;
+    // Contextual placement: join the open panel's group; or, with no panel open, the group made
+    // active by clicking its header. Nothing active → appended ungrouped after the last group/panel.
+    // resortByGroup keeps the physical order correct.
+    const has = (id?: string | null) => !!id && (s.groups ?? []).some((g) => g.id === id);
+    let gid: string | undefined;
+    if (s.selectedId != null) {
+      const active = s.panels.find((x) => x.id === s.selectedId);
+      if (has(active?.groupId)) gid = active!.groupId ?? undefined;
+    } else if (has(s.activeGroupId)) {
+      gid = s.activeGroupId ?? undefined;
+    }
     if (gid) p.groupId = gid;
-    apply((old) => ({ ...old, panels: resortByGroup([...old.panels, p], old.groups ?? []), selectedId: p.id }));
+    apply((old) => ({ ...old, panels: resortByGroup([...old.panels, p], old.groups ?? []), selectedId: p.id, activeGroupId: null }));
     setTab("panels");
   };
 
@@ -6013,7 +6019,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
         // list, the editor, or any popup (portalled outside this grid) keep the selection.
         const t = e.target as HTMLElement;
         if (panelListRef.current?.contains(t) || editorRef.current?.contains(t)) return;
-        if (s.selectedId != null) up({ selectedId: null });
+        if (s.selectedId != null || s.activeGroupId != null) up({ selectedId: null, activeGroupId: null });
         if (selMode) exitSel();
       }}>
       {/* panel list — sticks below the tab header, with its own scroll (independent of the editor) */}
@@ -6023,7 +6029,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
           // deselect — the next "+ Add panel" then adds ungrouped, after the last group/panel.
           const t = e.target as HTMLElement;
           if (t.closest("[data-panelrow], [data-grouphead], button, a, input, select, textarea, label")) return;
-          if (s.selectedId != null) up({ selectedId: null });
+          if (s.selectedId != null || s.activeGroupId != null) up({ selectedId: null, activeGroupId: null });
           if (selMode) exitSel();
         }}>
         {/* New-group / select-mode header — the Group / Move-to actions live right here in
@@ -6102,7 +6108,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
                         {b.text}
                       </span>
                     ); })()}
-                    <button onClick={() => selMode ? toggleSel(p.id) : up({ selectedId: p.id })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
+                    <button onClick={() => selMode ? toggleSel(p.id) : up({ selectedId: p.id, activeGroupId: null })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
                       <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{p.name.trim() || "(unnamed panel)"}</div>
                     </button>
                   </div>
@@ -6148,13 +6154,15 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
               const g = sec.group;
               const isCol = collapsed.has(g.id);
               const gi = sorted.findIndex((x) => x.id === g.id);
+              // The group is "active" (no panel open) — a new panel will be added into it.
+              const groupActive = s.activeGroupId === g.id && s.selectedId == null;
               return (
                 <div key={g.id} className="mb-1.5">
                   {/* Drop indicator — where the dragged group will land (above this group). */}
                   {gDragId && gDropIdx === gi && <div className="mx-0.5 mb-1 h-[3px] rounded-full bg-brand" />}
                   {/* 42px orange header strip — same look as the BOM combination row */}
                   <div ref={setGroupHeaderRef(g.id)} data-grouphead
-                    className={`flex h-[42px] items-center gap-1.5 rounded-lg border border-[#F16722]/35 bg-[#FFF3EC] pr-1 transition-shadow ${gDragId === g.id ? "opacity-90 shadow-lift" : ""}`}
+                    className={`flex h-[42px] items-center gap-1.5 rounded-lg border bg-[#FFF3EC] pr-1 transition-shadow ${groupActive ? "border-brand ring-2 ring-brand ring-offset-1" : "border-[#F16722]/35"} ${gDragId === g.id ? "opacity-90 shadow-lift" : ""}`}
                     style={{ borderLeft: "4px solid #F16722" }}>
                     <span onPointerDown={startGroupDrag(g.id, gi)} title="Drag to reorder this group"
                       className="shrink-0 cursor-grab select-none pl-1.5 text-brand-dark/40 transition-colors hover:text-brand-dark active:cursor-grabbing"
@@ -6177,7 +6185,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
                         onKeyDown={(e) => { if (e.key === "Enter") { up(renamePanelGroup(s, g.id, editGroupVal)); setEditGroupId(null); } else if (e.key === "Escape") setEditGroupId(null); }}
                         className="h-6 min-w-0 flex-1 rounded border border-brand px-1.5 text-[13px] font-bold uppercase tracking-wide text-[#F16722] focus:outline-none" />
                     ) : (
-                      <button onClick={() => toggleCollapse(g.id)} title={g.name} className="min-w-0 flex-1 truncate text-left text-[13px] font-bold uppercase tracking-wide text-[#F16722]">{g.name}</button>
+                      <button onClick={() => up({ selectedId: null, activeGroupId: g.id })} title={`Select “${g.name}” — a new + Add panel goes into this group`} className="min-w-0 flex-1 truncate text-left text-[13px] font-bold uppercase tracking-wide text-[#F16722]">{g.name}</button>
                     )}
                     <span className="shrink-0 rounded-full bg-[#F16722]/15 px-1.5 text-[11px] font-bold text-brand-dark">{sec.panels.length}</span>
                     <div className="ml-auto flex shrink-0 items-center">
@@ -6250,12 +6258,17 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
           : sel.spare
           ? <SpareEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />
           : <PanelEditor key={sel.id} s={s} p={sel} up={up} upPanel={upPanel} />)
-        : (
-          <div className="card p-10 text-center text-sm text-muted animate-fade-up">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface text-xl">☰</div>
-            Nothing selected. Click a panel to edit it — or press <b className="text-brand-dark">+ Add panel</b>{groups.length ? ", and it'll be added without a group (after the last one)." : "."}
-          </div>
-        )}
+        : (() => {
+          const ag = s.activeGroupId ? groups.find((g) => g.id === s.activeGroupId) : null;
+          return (
+            <div className="card p-10 text-center text-sm text-muted animate-fade-up">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface text-xl">{ag ? "🗂️" : "☰"}</div>
+              {ag
+                ? <>Group <b className="text-brand-dark">{ag.name}</b> is selected — <b className="text-brand-dark">+ Add panel</b> adds a new panel into it. Click a panel to edit it.</>
+                : <>Nothing selected. Click a panel to edit it — or press <b className="text-brand-dark">+ Add panel</b>{groups.length ? ", and it'll be added without a group (after the last one)." : "."}</>}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

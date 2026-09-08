@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Click a group to select it — the next "+ Add panel" then adds into that group.**
+
+Clicking a group's name now selects the group on its own: any open panel is deselected, the group's
+header gets a highlight, and the editor shows "Group … is selected". Pressing "+ Add panel" while a
+group is selected adds the new panel into it. (The little arrow still expands/collapses the group;
+clicking a panel selects the panel as before; clicking outside the list deselects everything.)
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Clicking outside the panel list now deselects — so the next "+ Add panel" adds outside any group.**
 
 Following on from the contextual "+ Add panel": you no longer have to find an empty spot inside the list
