@@ -5920,6 +5920,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
   // Click anywhere outside the panel list (while selecting) to drop the selection and leave
   // select mode. Skipped while the group-name popup is open — that portal handles its own close.
   const panelListRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null); // the editor column — clicks here keep the selection
   useEffect(() => {
     if (!selMode) return;
     const onDocDown = (e: MouseEvent) => {
@@ -6005,7 +6006,16 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
     );
   }
   return (
-    <div className="grid items-start gap-5 lg:grid-cols-[260px_1fr] animate-fade-up">
+    <div className="grid items-start gap-5 lg:grid-cols-[260px_1fr] animate-fade-up"
+      onMouseDown={(e) => {
+        // Click outside the panel list AND outside the editor (the empty area around/below the list)
+        // to deselect the active panel — the next "+ Add panel" then adds ungrouped. Clicks on the
+        // list, the editor, or any popup (portalled outside this grid) keep the selection.
+        const t = e.target as HTMLElement;
+        if (panelListRef.current?.contains(t) || editorRef.current?.contains(t)) return;
+        if (s.selectedId != null) up({ selectedId: null });
+        if (selMode) exitSel();
+      }}>
       {/* panel list — sticks below the tab header, with its own scroll (independent of the editor) */}
       <div ref={panelListRef} className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar"
         onMouseDown={(e) => {
@@ -6234,7 +6244,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
       {/* editor — its own scroll area so the panel list and editor scroll independently.
           LCP / KWHM cells use the LcpEditor; any other spare cell the stripped SpareEditor;
           every other cell the full PanelEditor. */}
-      <div className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
+      <div ref={editorRef} className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
         {sel ? (sel.spareKind === "lcp" || sel.spareKind === "kwhm"
           ? <LcpEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />
           : sel.spare

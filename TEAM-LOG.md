@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Clicking outside the panel list now deselects — so the next "+ Add panel" adds outside any group.**
+
+Following on from the contextual "+ Add panel": you no longer have to find an empty spot inside the list
+to deselect. Clicking the empty area around/below the panel list now clears the active panel (the editor
+shows "Nothing selected"), and the next "+ Add panel" adds ungrouped. Clicking the editor keeps the panel
+open (so editing isn't interrupted), and clicking a panel selects it as before.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **"+ Add panel" now adds into the active group, or ungrouped when nothing is selected.**
 
 If you're working inside a group (a panel in it is open), pressing "+ Add panel" adds the new panel
