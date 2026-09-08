@@ -45,6 +45,7 @@ export interface PanelComponent {
   cuC: number;
   stock: string;
   qty: number;
+  qtyEq?: string;   // the equation typed into the QTY cell (e.g. "=5+3"); qty holds its result
   baseQty?: number; // per-combination base qty — combo qty = qty / baseQty (combination scaling)
   comboScalable?: boolean; // group shows a "Combination qty" (×N) control (MCC + custom combinations)
   comboId?: string; // instance id shared by every row of one committed combination (ATS/Sync/…) → whole-combo select

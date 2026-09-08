@@ -6607,12 +6607,59 @@ function PanelEditor({ s, p, up, upPanel }: {
 }
 
 // Enter in a Qty cell jumps to the next row's Qty (down the column), not across to Adj.
-function qtyEnterNav(e: { key: string; preventDefault: () => void; currentTarget: HTMLInputElement }) {
-  if (e.key !== "Enter") return;
-  e.preventDefault();
-  const inputs = Array.from(document.querySelectorAll<HTMLInputElement>("input[data-qtyinput]"));
-  const next = inputs[inputs.indexOf(e.currentTarget) + 1];
-  if (next) { next.focus(); next.select(); }
+/** Evaluate a QTY cell entry: a plain number, or an "=" equation using + - * / ( ) — like Excel.
+ *  Returns NaN when the text is empty or not a valid expression (so the old value is kept). */
+function evalQtyExpr(raw: string): number {
+  const t = raw.trim();
+  if (!t) return NaN;
+  if (t.startsWith("=")) {
+    const expr = t.slice(1);
+    if (!/^[0-9+\-*/(). %]+$/.test(expr)) return NaN;   // digits + - * / ( ) . % only
+    try {
+      const v = Function(`"use strict";return (${expr})`)() as unknown;
+      return typeof v === "number" && isFinite(v) ? v : NaN;
+    } catch { return NaN; }
+  }
+  const v = parseFloat(t);
+  return isFinite(v) ? v : NaN;
+}
+
+/** A QTY cell that accepts Excel-style equations: type "=5+3", it commits 8; click back in and it
+ *  shows "=5+3" again. Plain numbers work as before. The result is clamped ≥ 0. */
+function QtyCell({ value, eq, title, onCommit }: {
+  value: number;
+  eq?: string;
+  title?: string;
+  onCommit: (value: number, eq: string | undefined) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState("");
+  const commit = (raw: string) => {
+    setEditing(false);
+    const v = evalQtyExpr(raw);
+    if (isNaN(v)) { onCommit(value, eq); return; }         // invalid / empty → keep the old value
+    const t = raw.trim();
+    onCommit(Math.max(0, v), t.startsWith("=") ? t : undefined); // remember the equation only for "="
+  };
+  return (
+    <input className="input h-7 px-1.5 text-center text-xs" type="text" inputMode="text"
+      data-qtyinput title={title}
+      value={editing ? text : (value || "")}
+      onFocus={(e) => { setEditing(true); setText(eq && eq.trim() ? eq : (value ? String(value) : "")); requestAnimationFrame(() => e.target.select()); }}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const inputs = Array.from(document.querySelectorAll<HTMLInputElement>("input[data-qtyinput]"));
+          const next = inputs[inputs.indexOf(e.currentTarget) + 1];
+          e.currentTarget.blur();                            // commits this cell
+          if (next) requestAnimationFrame(() => { next.focus(); next.select(); });
+        } else if (e.key === "Escape") {
+          setEditing(false); e.currentTarget.blur();
+        }
+      }} />
+  );
 }
 
 // Enter in a Copper Tool cell moves down the same column (Phase / Neutral / Earth),
@@ -8108,18 +8155,16 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                         {c.baseQty != null ? (
                           // Combo item: the Qty column is the PER-UNIT qty (1 per unit); the group's
                           // combination qty (×N) multiplies the total, not this number.
-                          <input className="input h-7 px-1.5 text-center text-xs" type="number" min={0} value={c.baseQty || ""}
-                            data-qtyinput onKeyDown={qtyEnterNav}
-                            title="Per-unit qty — the combination qty (×N) multiplies the total"
-                            onChange={(e) => {
-                              const per = Math.max(0, parseFloat(e.target.value) || 0);
+                          <QtyCell value={c.baseQty} eq={c.qtyEq}
+                            title="Per-unit qty — the combination qty (×N) multiplies the total. Accepts equations, e.g. =5+3"
+                            onCommit={(v, eq) => {
                               const n = comboQtyOf(secComps, effGroup.get(c.id) || "");
-                              setComp(c.id, { baseQty: per, qty: per * n });
+                              setComp(c.id, { baseQty: v, qty: v * n, qtyEq: eq });
                             }} />
                         ) : (
-                          <input className="input h-7 px-1.5 text-center text-xs" type="number" min={0} value={c.qty || ""}
-                            data-qtyinput onKeyDown={qtyEnterNav}
-                            onChange={(e) => setComp(c.id, { qty: Math.max(0, parseFloat(e.target.value) || 0) })} />
+                          <QtyCell value={c.qty} eq={c.qtyEq}
+                            title="Quantity — accepts equations, e.g. =5+3"
+                            onCommit={(v, eq) => setComp(c.id, { qty: v, qtyEq: eq })} />
                         )}
                       </td>
                       <td className="max-w-[330px] py-1 pr-2">

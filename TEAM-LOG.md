@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Component QTY cells now accept equations (like Excel).**
+
+In a panel's component table you can type an equation in the QTY column — e.g. **=5+3** — and when you
+confirm it (Enter or click away) the cell shows the result **8**. Click back into the cell and it shows
+the equation again so you can change it. Supports + − × (*) ÷ (/), brackets and %. Plain numbers work as
+before; the result is what drives the quantity/cost, and the equation is saved with the quotation (so
+teammates see it too). Works on the normal QTY and the combination per-unit QTY cells.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Selectivity: the help sentence is replaced with a search bar.**
 
 The line of grey text under the Selectivity heading ("One row per panel — … Use the Fed From filter…")
