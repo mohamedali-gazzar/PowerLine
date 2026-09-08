@@ -5854,6 +5854,19 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
     const [lo, hi] = a < b ? [a, b] : [b, a];
     setSelPanels(new Set(ids.slice(lo, hi + 1)));    // selection = the contiguous start→cursor range
   };
+  // Click anywhere outside the panel list (while selecting) to drop the selection and leave
+  // select mode. Skipped while the group-name popup is open — that portal handles its own close.
+  const panelListRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!selMode) return;
+    const onDocDown = (e: MouseEvent) => {
+      if (naming) return;                                    // naming popup dismisses itself
+      const card = panelListRef.current;
+      if (card && !card.contains(e.target as Node)) exitSel();
+    };
+    document.addEventListener("mousedown", onDocDown);
+    return () => document.removeEventListener("mousedown", onDocDown);
+  }, [selMode, naming]); // eslint-disable-line react-hooks/exhaustive-deps
   const nameOf = (id: string) => s.panels.find((p) => p.id === id)?.name || "";
   const openNaming = (ids: string[]) => setNaming({ ids, name: commonNamePrefix(ids.map(nameOf)) });
   const doCreateGroup = (ids: string[], name: string) => { if (name.trim()) { up(createPanelGroup(s, name, ids)); exitSel(); } };
@@ -5925,7 +5938,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[260px_1fr] animate-fade-up">
       {/* panel list — sticks below the tab header, with its own scroll (independent of the editor) */}
-      <div className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
+      <div ref={panelListRef} className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
         {/* New-group / select-mode header — the Group / Move-to actions live right here in
             the panel list (they appear once panels are ticked), not in a floating bar. */}
         {selMode ? (

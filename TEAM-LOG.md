@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Panels: click outside the panel list to drop the selection and leave select mode.**
+
+While ticking panels to group them, clicking anywhere outside the panel list (the panel form, empty
+space, another tab) now clears the ticks and leaves select mode — no need to hit Cancel. The group-name
+popup is unaffected: clicking inside it doesn't cancel your selection.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Panels: press a panel's tick box and drag over the rows to select a whole range.**
 
 In the panel list's group-select mode you can now press one panel's checkbox, hold, and drag up or
