@@ -9578,8 +9578,10 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
       up({ abbItemDiscounts: next });
     },
   };
-  // Excel export shows the discount only (0 for market-price rows) — negatives are the on-screen markup.
+  // Excel export splits the one stored value into two columns: Discount (%) for a
+  // positive value, Market Price (%) for a negative one — each 0 on the other's rows.
   const discPctFor = (r: MatRow) => { const v = s.abbItemDiscounts[abbKey(r)] ?? defFor(r); return v > 0 ? v : 0; };
+  const mktPctFor = (r: MatRow) => { const v = s.abbItemDiscounts[abbKey(r)] ?? 0; return v < 0 ? -v : 0; };
   const overrideCount = Object.keys(s.abbItemDiscounts).length;
   // "Default Discount" — drop every per-item override so all items follow the
   // Pricing-Settings ABB discount again.
@@ -9627,7 +9629,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
     if (name === null) return; // cancelled
     const exportBlocks = visible.map((b) =>
       b.kind === "table"
-        ? { ...b, abbDiscPct: b.rows.map((r) => discPctFor(r)) }
+        ? { ...b, abbDiscPct: b.rows.map((r) => discPctFor(r)), abbMktPct: b.rows.map((r) => mktPctFor(r)) }
         : b);
     const ws = XLSX.utils.aoa_to_sheet(materialAoa(exportBlocks as MatBlock[]));
     const wb = XLSX.utils.book_new();

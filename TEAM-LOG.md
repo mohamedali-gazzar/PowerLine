@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Material List Excel export now includes the Market Price (%) column.**
+
+The "Export to Excel" file now carries a **Market Price (%)** column right after **Discount (%)**, matching
+the on-screen table. For each item the sheet shows its discount as a number (0 if it has none) and its
+market-price markup as a number (0 if it has none) — never both, since a component can only carry one.
+Verified the two columns land side by side with the right values; build green, all 81 tests pass.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Material List: new "Market Price (%)" column that raises a component's cost.**
 
 Next to the per-item **Discount (%)** column (which lowers a component's cost) there is now a **Market
