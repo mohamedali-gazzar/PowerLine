@@ -26,7 +26,7 @@ import {
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog,
-  panelLayout, panelNumbers, commonNamePrefix, resortByGroup, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, reorderPanelGroup,
+  panelLayout, panelNumbers, commonNamePrefix, resortByGroup, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
   type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow, type CustomOfferItem, type ScratchPad,
@@ -5839,6 +5839,44 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
     const n = s.panels.filter((p) => p.groupId === gid).length;
     if (window.confirm(`Delete the group "${g?.name}" and its ${n} panel${n === 1 ? "" : "s"}? This can't be undone.`)) up(deletePanelGroup(s, gid));
   };
+  // Drag a whole group by the dotted handle on its header to reorder it among the groups —
+  // mirrors the panels' handle. Groups have variable heights (header + N rows), so instead of a
+  // fixed row-pitch we hit-test each header's vertical midpoint to find the drop slot.
+  const groupHeaderRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const setGroupHeaderRef = (id: string) => (el: HTMLElement | null) => { if (el) groupHeaderRefs.current.set(id, el); else groupHeaderRefs.current.delete(id); };
+  const [gDragId, setGDragId] = useState<string | null>(null);   // the group being dragged
+  const [gDropIdx, setGDropIdx] = useState<number | null>(null); // live insertion slot (drop line)
+  const gDropRef = useRef(0);                                     // latest slot, read on release
+  const startGroupDrag = (gid: string, index: number) => (e: React.PointerEvent) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return; // left button only
+    const order = groups.slice().sort((a, b) => a.order - b.order);
+    if (order.length < 2) return; // only one group — nothing to reorder
+    e.preventDefault();
+    e.stopPropagation();
+    setGDragId(gid); setGDropIdx(index); gDropRef.current = index;
+    const move = (ev: PointerEvent) => {
+      let idx = 0; // how many group headers sit (by their midpoint) above the pointer
+      for (const gg of order) {
+        const he = groupHeaderRefs.current.get(gg.id);
+        if (!he) continue;
+        const r = he.getBoundingClientRect();
+        if (ev.clientY > r.top + r.height / 2) idx++;
+      }
+      idx = Math.max(0, Math.min(order.length, idx));
+      gDropRef.current = idx; setGDropIdx(idx);
+    };
+    const finish = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      const to = gDropRef.current;
+      setGDragId(null); setGDropIdx(null);
+      up(moveGroupToIndex(s, gid, to));
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  };
   if (!s.panels.length) {
     return (
       <div className="card p-12 text-center animate-fade-up">
@@ -5977,9 +6015,22 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
               const gi = sorted.findIndex((x) => x.id === g.id);
               return (
                 <div key={g.id} className="mb-1.5">
+                  {/* Drop indicator — where the dragged group will land (above this group). */}
+                  {gDragId && gDropIdx === gi && <div className="mx-0.5 mb-1 h-[3px] rounded-full bg-brand" />}
                   {/* 42px orange header strip — same look as the BOM combination row */}
-                  <div className="flex h-[42px] items-center gap-1.5 rounded-lg border border-[#F16722]/35 bg-[#FFF3EC] pr-1" style={{ borderLeft: "4px solid #F16722" }}>
-                    <button onClick={() => toggleCollapse(g.id)} title={isCol ? "Expand" : "Collapse"} className="shrink-0 pl-1.5 text-brand-dark/70 hover:text-brand-dark">
+                  <div ref={setGroupHeaderRef(g.id)}
+                    className={`flex h-[42px] items-center gap-1.5 rounded-lg border border-[#F16722]/35 bg-[#FFF3EC] pr-1 transition-shadow ${gDragId === g.id ? "opacity-90 shadow-lift" : ""}`}
+                    style={{ borderLeft: "4px solid #F16722" }}>
+                    <span onPointerDown={startGroupDrag(g.id, gi)} title="Drag to reorder this group"
+                      className="shrink-0 cursor-grab select-none pl-1.5 text-brand-dark/40 transition-colors hover:text-brand-dark active:cursor-grabbing"
+                      style={{ touchAction: "none" }}>
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
+                        <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
+                        <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
+                      </svg>
+                    </span>
+                    <button onClick={() => toggleCollapse(g.id)} title={isCol ? "Expand" : "Collapse"} className="shrink-0 text-brand-dark/70 hover:text-brand-dark">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
                         style={{ transform: isCol ? "rotate(-90deg)" : "none", transition: "transform .15s" }} aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
                     </button>
@@ -5995,8 +6046,6 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
                     )}
                     <span className="shrink-0 rounded-full bg-[#F16722]/15 px-1.5 text-[11px] font-bold text-brand-dark">{sec.panels.length}</span>
                     <div className="ml-auto flex shrink-0 items-center">
-                      <button onClick={() => up(reorderPanelGroup(s, g.id, -1))} disabled={gi <= 0} title="Move group up" className="rounded px-0.5 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark disabled:opacity-25">↑</button>
-                      <button onClick={() => up(reorderPanelGroup(s, g.id, 1))} disabled={gi >= sorted.length - 1} title="Move group down" className="rounded px-0.5 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark disabled:opacity-25">↓</button>
                       <button onClick={() => { setEditGroupId(g.id); setEditGroupVal(g.name); }} title="Rename group" className="rounded px-0.5 text-xs text-brand-dark/60 hover:bg-white hover:text-brand-dark">✎</button>
                       <button onClick={() => up(duplicatePanelGroup(s, g.id))} title="Duplicate group (deep-copy its panels)" className="rounded px-0.5 text-sm text-brand-dark/60 hover:bg-white hover:text-brand-dark">⧉</button>
                       <button onClick={() => up(ungroupPanelGroup(s, g.id))} title="Ungroup — keep the panels" className="rounded px-0.5 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">⊟</button>
@@ -6009,6 +6058,8 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
                       {sec.panels.length === 0 && <p className="py-1 pl-1 text-[11px] italic text-muted">No panels yet — drag one in, or use “Move to…”.</p>}
                     </div>
                   )}
+                  {/* Trailing drop indicator — dragged group lands after the last group. */}
+                  {gDragId && gDropIdx === sorted.length && gi === sorted.length - 1 && <div className="mx-0.5 mt-1 h-[3px] rounded-full bg-brand" />}
                 </div>
               );
             }

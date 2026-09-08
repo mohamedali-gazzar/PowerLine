@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Panels: reorder groups by dragging the dotted handle, instead of the ↑/↓ arrows.**
+
+The little up/down arrows on each group's orange header are gone. Instead every group header now
+has the same dotted grip on its left that the panels have — grab it and drag the whole group up or
+down to reorder it, and a coloured line shows where it will land. Renaming, duplicating, ungrouping
+and deleting a group are unchanged. Only the display order changes; no prices or panels are touched.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Panels: the Group / Move-to buttons now sit in the panel list, not in a floating bar.**
 
 When you tick panels to group them, the **Group** button (and the **Move to…** dropdown, if the

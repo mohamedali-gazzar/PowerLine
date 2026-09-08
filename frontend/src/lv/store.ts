@@ -1195,6 +1195,21 @@ export function reorderPanelGroup(s: LvState, groupId: string, dir: -1 | 1): Par
   return { groups: renumbered, panels: resortByGroup(s.panels, renumbered) };
 }
 
+/** Drag-to-reorder a group to an arbitrary slot. `insertAt` is an insertion index in the
+ *  current (sorted) group order, 0..count (i.e. "how many groups sit above the drop point");
+ *  the index shift from removing the dragged group first is handled here. */
+export function moveGroupToIndex(s: LvState, groupId: string, insertAt: number): Partial<LvState> {
+  const groups = [...(s.groups ?? [])].sort((a, b) => a.order - b.order);
+  const from = groups.findIndex((g) => g.id === groupId);
+  if (from < 0) return {};
+  const [moved] = groups.splice(from, 1);
+  const to = Math.max(0, Math.min(groups.length, insertAt > from ? insertAt - 1 : insertAt));
+  if (to === from) return {}; // dropped back in place — nothing to change
+  groups.splice(to, 0, moved);
+  const renumbered = groups.map((g, k) => ({ ...g, order: k }));
+  return { groups: renumbered, panels: resortByGroup(s.panels, renumbered) };
+}
+
 // ── Main-busbar copper (kg) — auto rule for sheet-metal panel systems ─────────
 // Ref "Main busbar Cu (kg).xlsx": bar cross-section sized by the incomer rating,
 // run the full panel height, one bar per pole. Copper density ≈ 9e-6 kg/mm³.
