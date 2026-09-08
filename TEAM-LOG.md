@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-08 · Mohamed's side · Claude
 
+**Material List: new "Market Price (%)" column that raises a component's cost.**
+
+Next to the per-item **Discount (%)** column (which lowers a component's cost) there is now a **Market
+Price (%)** column that **raises** it — e.g. a component that costs 100 with a 20% market price now costs
+120. A cell with a **discount** shows **red**, a cell with a **market price** shows **green**, and you can
+only use ONE of the two on any component (entering one disables the other). Existing discounts and every
+saved quotation are unaffected — a market price is handled as the mirror image of a discount, so the cost
+formula itself did not change. (The Excel export still shows the discount column only for now.) Verified
+the numbers (100 → 120 with 20% market price) and the on-screen behaviour; build green.
+
+## 2026-09-08 · Mohamed's side · Claude
+
 **Amending a quotation now dates the new revision today, not the old date.**
 
 When you cancel-and-amend a quotation, the new revision is a fresh document, so its offer **date** now

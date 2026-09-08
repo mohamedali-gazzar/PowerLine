@@ -9460,14 +9460,18 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
 }
 
 // ── Material List tab (RPT-04) ───────────────────────────────────────────────
-interface AbbDiscCtl {
+// Per-item price adjustment on the Material List. ONE value per item (stored in abbItemDiscounts):
+//   ≥ 0  → a DISCOUNT that lowers the cost   (cost = base × (1 − pct/100))
+//   < 0  → a MARKET PRICE that raises it      (cost = base × (1 + pct/100), stored as −pct)
+// Because it is a single value, an item can never carry a discount AND a market price at once.
+interface PriceCtl {
   globalPct: number;
-  defaultFor: (r: MatRow) => number;
-  valueFor: (r: MatRow) => number;
-  isOverride: (r: MatRow) => boolean;
-  onChange: (r: MatRow, pct: number) => void;
+  defaultFor: (r: MatRow) => number;               // ABB items → the Pricing-Settings global %, else 0
+  storedFor: (r: MatRow) => number | undefined;    // the signed override, or undefined = follow the default
+  onDisc: (r: MatRow, pct: number) => void;        // set a discount % (clears any market price)
+  onMkt: (r: MatRow, pct: number) => void;         // set a market-price % (clears any discount)
 }
-function MatTable({ title, rows, withSupplier, note, abbDisc }: { title: string; rows: MatRow[]; withSupplier?: boolean; note?: string; abbDisc?: AbbDiscCtl }) {
+function MatTable({ title, rows, withSupplier, note, priceCtl }: { title: string; rows: MatRow[]; withSupplier?: boolean; note?: string; priceCtl?: PriceCtl }) {
   if (!rows.length) return null;
   return (
     <div className="card overflow-hidden">
@@ -9481,7 +9485,8 @@ function MatTable({ title, rows, withSupplier, note, abbDisc }: { title: string;
         <colgroup>
           <col />
           <col style={{ width: 210 }} />
-          {abbDisc && <col style={{ width: 110 }} />}
+          {priceCtl && <col style={{ width: 100 }} />}
+          {priceCtl && <col style={{ width: 118 }} />}
           {withSupplier && <col style={{ width: 150 }} />}
           <col style={{ width: 96 }} />
           <col style={{ width: 72 }} />
@@ -9490,33 +9495,53 @@ function MatTable({ title, rows, withSupplier, note, abbDisc }: { title: string;
           <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
             <th className="px-4 py-1.5">Description</th>
             <th className="px-2 py-1.5">Reference</th>
-            {abbDisc && <th className="px-2 py-1.5 text-right">Discount (%)</th>}
+            {priceCtl && <th className="px-2 py-1.5 text-right">Discount (%)</th>}
+            {priceCtl && <th className="px-2 py-1.5 text-right">Market Price (%)</th>}
             {withSupplier && <th className="px-2 py-1.5">Supplier</th>}
             <th className="px-2 py-1.5">Stock</th>
             <th className="px-4 py-1.5 text-right">Qty</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className="border-t border-line/70">
-              <td className="px-4 py-1">{r.description}</td>
-              <td className="px-2 py-1 text-[11px] text-muted">{r.reference || "—"}</td>
-              {abbDisc && (
-                <td className="px-2 py-1 text-right">
-                  <input type="number" min={0} max={100} step={0.5}
-                    className={`w-16 rounded border px-1.5 py-0.5 text-right text-[12px] focus:outline-none ${
-                      abbDisc.isOverride(r) ? "border-brand bg-brand-light font-bold text-brand-dark" : "border-line bg-white text-ink"
-                    }`}
-                    value={abbDisc.valueFor(r) || ""}
-                    title={abbDisc.isOverride(r) ? "Custom — click and clear to follow the default" : `Default ${abbDisc.defaultFor(r)}%${abbDisc.defaultFor(r) === abbDisc.globalPct ? " (Pricing Settings)" : ""}`}
-                    onChange={(e) => abbDisc.onChange(r, Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))} />
-                </td>
-              )}
-              {withSupplier && <td className="px-2 py-1 text-muted">{r.supplier}</td>}
-              <td className="px-2 py-1 text-[11px] text-muted">{r.stock || "—"}</td>
-              <td className="px-4 py-1 text-right font-bold">{r.qty}</td>
-            </tr>
-          ))}
+          {rows.map((r, i) => {
+            const stored = priceCtl?.storedFor(r);
+            const def = priceCtl ? priceCtl.defaultFor(r) : 0;
+            const isMkt = stored != null && stored < 0;                    // a market price is set
+            const isDisc = stored != null && stored >= 0 && stored !== def; // a per-item discount override is set
+            const discVal = isMkt ? "" : (stored != null ? stored : def);
+            const mktVal = isMkt ? -stored : "";
+            return (
+              <tr key={i} className="border-t border-line/70">
+                <td className="px-4 py-1">{r.description}</td>
+                <td className="px-2 py-1 text-[11px] text-muted">{r.reference || "—"}</td>
+                {priceCtl && (
+                  <td className="px-2 py-1 text-right">
+                    <input type="number" min={0} max={100} step={0.5} disabled={isMkt}
+                      className={`w-16 rounded border px-1.5 py-0.5 text-right text-[12px] focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 ${
+                        isDisc ? "border-red-500 bg-red-50 font-bold text-red-700" : "border-line bg-white text-ink"
+                      }`}
+                      value={discVal || ""}
+                      title={isMkt ? "A market price is set — clear it to use a discount" : (isDisc ? "Custom discount — clear it to follow the default" : `Default ${def}%${def === priceCtl.globalPct ? " (Pricing Settings)" : ""}`)}
+                      onChange={(e) => priceCtl.onDisc(r, Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))} />
+                  </td>
+                )}
+                {priceCtl && (
+                  <td className="px-2 py-1 text-right">
+                    <input type="number" min={0} max={1000} step={0.5} disabled={isDisc}
+                      className={`w-16 rounded border px-1.5 py-0.5 text-right text-[12px] focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 ${
+                        isMkt ? "border-green-600 bg-green-50 font-bold text-green-700" : "border-line bg-white text-ink"
+                      }`}
+                      value={mktVal || ""}
+                      title={isDisc ? "A discount is set — clear it to use a market price" : "Market price markup (%) — raises the cost (e.g. 20 → cost × 1.20)"}
+                      onChange={(e) => priceCtl.onMkt(r, Math.max(0, parseFloat(e.target.value) || 0))} />
+                  </td>
+                )}
+                {withSupplier && <td className="px-2 py-1 text-muted">{r.supplier}</td>}
+                <td className="px-2 py-1 text-[11px] text-muted">{r.stock || "—"}</td>
+                <td className="px-4 py-1 text-right font-bold">{r.qty}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -9536,19 +9561,25 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   // other supplier (incl. cells) defaults to 0. A per-item value still applies to any of them.
   const defFor = (r: MatRow) =>
     r.supplier === "ABB" && (r.eur ?? 0) > 0 ? globalPct : 0;
-  const abbDisc: AbbDiscCtl = {
+  const priceCtl: PriceCtl = {
     globalPct,
     defaultFor: defFor,
-    valueFor: (r) => s.abbItemDiscounts[abbKey(r)] ?? defFor(r),
-    // Highlight only when the value differs from the row's default.
-    isOverride: (r) => (s.abbItemDiscounts[abbKey(r)] ?? defFor(r)) !== defFor(r),
-    onChange: (r, pct) => {
+    storedFor: (r) => s.abbItemDiscounts[abbKey(r)],
+    onDisc: (r, pct) => {
       const next = { ...s.abbItemDiscounts };
       if (pct === defFor(r)) delete next[abbKey(r)]; // back to default → follow it (no highlight)
-      else next[abbKey(r)] = pct;
+      else next[abbKey(r)] = pct;                    // a positive value; overwrites any market price
+      up({ abbItemDiscounts: next });
+    },
+    onMkt: (r, pct) => {
+      const next = { ...s.abbItemDiscounts };
+      if (pct <= 0) delete next[abbKey(r)];           // cleared → follow the default discount again
+      else next[abbKey(r)] = -pct;                    // stored negative; overwrites any discount
       up({ abbItemDiscounts: next });
     },
   };
+  // Excel export shows the discount only (0 for market-price rows) — negatives are the on-screen markup.
+  const discPctFor = (r: MatRow) => { const v = s.abbItemDiscounts[abbKey(r)] ?? defFor(r); return v > 0 ? v : 0; };
   const overrideCount = Object.keys(s.abbItemDiscounts).length;
   // "Default Discount" — drop every per-item override so all items follow the
   // Pricing-Settings ABB discount again.
@@ -9569,8 +9600,8 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   type Block =
     | { kind: "table"; title: string; rows: MatRow[]; withSupplier?: boolean; note?: string }
     | { kind: "copper"; title: string; kg: number };
-  const abbNote = "ABB discount (%) is editable per item · defaults from Pricing Settings";
-  const encNote = "Quoted at list price — the ABB discount does not apply · a per-item discount (%) can still be entered";
+  const abbNote = "Per item: Discount (%) lowers the cost, Market Price (%) raises it — one or the other, not both";
+  const encNote = "Quoted at list price · per item: a Discount (%) lowers the cost or a Market Price (%) raises it";
   const candidates: (Block | false)[] = [
     { kind: "table", title: "ABB Products", rows: ml.abb, note: abbNote },
     !abbOnly && { kind: "table", title: "Other Suppliers", rows: ml.other },
@@ -9596,7 +9627,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
     if (name === null) return; // cancelled
     const exportBlocks = visible.map((b) =>
       b.kind === "table"
-        ? { ...b, abbDiscPct: b.rows.map((r) => abbDisc.valueFor(r)) }
+        ? { ...b, abbDiscPct: b.rows.map((r) => discPctFor(r)) }
         : b);
     const ws = XLSX.utils.aoa_to_sheet(materialAoa(exportBlocks as MatBlock[]));
     const wb = XLSX.utils.book_new();
@@ -9636,7 +9667,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
         <>
           {visible.map((b, i) => b.kind === "table" ? (
             <MatTable key={b.title} title={`${i + 1} · ${b.title}`} rows={b.rows} withSupplier={b.withSupplier} note={b.note}
-              abbDisc={abbDisc} />
+              priceCtl={priceCtl} />
           ) : (
             <div key={b.title} className="card flex items-center justify-between p-4">
               <h3 className="text-sm font-bold text-brand-dark">{i + 1} · {b.title}</h3>
