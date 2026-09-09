@@ -86,7 +86,10 @@ export default function SendForApprovalMenu({
       {open && pos && createPortal(
         <div
           ref={menuRef}
-          style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 60 }}
+          // Sits ABOVE the Approval-conversation modal (z-100): when this menu is opened from the
+          // "Reply & send for approval" button inside that modal, a lower z-index put the list behind
+          // the modal's backdrop — greyed out, and every click hit the backdrop instead of a name.
+          style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 120 }}
           className="w-64 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl2 border border-line bg-white shadow-lift animate-pop"
         >
           <div className="border-b border-line px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-muted">

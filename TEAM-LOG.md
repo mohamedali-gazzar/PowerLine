@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Fixed: the "Send to…" list opened behind the approval pop-up (looked greyed/locked).**
+
+When you clicked "Reply & send for approval" inside the approval conversation pop-up, the list of people to send
+to was opening BEHIND the pop-up's dim background — so it looked greyed out and clicking a name did nothing (the
+click hit the dim background instead). The list now opens on top of the pop-up, so you can pick a person and it
+sends. Pure display-layering fix.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **A returned quotation can now be re-sent for approval by a co-worker or an admin, not only its creator.**
 
 When a quotation was "Returned for revision", only the exact person who first created it could send it back for
