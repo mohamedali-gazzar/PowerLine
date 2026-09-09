@@ -429,15 +429,18 @@ async function offerTransitionDenial(
 ): Promise<string | null> {
   const acc = await accessOf(req.userId);
   const isOwner = offer.ownerId === req.userId;
+  // The owner or an admin may (re)send it for approval — not just the original creator, so a
+  // returned offer an admin is handling doesn't get stuck with the reviewer's comments.
+  const canSendForApproval = isOwner || acc.tier === "ADMIN";
   const need = (p: Perm, msg: string) => (acc.perms.has(p) ? null : msg);
 
   if (to === "WAITING_APPROVAL") {
     // From APPROVED = the approver retracting their approval (un-approve); needs approve
-    // rights, not ownership. From DRAFT/RETURNED = the owner sending it.
+    // rights, not ownership. From DRAFT/RETURNED = a (re)send for approval.
     if (from === "APPROVED") {
       return need("qtn.approve", "You do not have permission to withdraw an approval.");
     }
-    return isOwner ? null : "Only the person who created this offer can send it for approval.";
+    return canSendForApproval ? null : "Only the owner or an admin can send this offer for approval.";
   }
   if (to === "APPROVED") {
     const denied = need("qtn.approve", "You do not have permission to approve offers.");

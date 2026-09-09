@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**A returned quotation can now be re-sent for approval by a co-worker or an admin, not only its creator.**
+
+When a quotation was "Returned for revision", only the exact person who first created it could send it back for
+approval — so a co-worker (Co-Work) or an admin handling it was stuck: they could read the reviewer's comments but
+"Reply & send for approval" was refused. Now the owner, a co-worker, OR an admin can send (or re-send) a quotation
+for approval. Same fix applied to RMU offers (owner or admin). No screen change — the button was already there; the
+server was rejecting it.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Admins can now approve their own QTNs (and RMU offers).**
 
 Before, an admin held every permission EXCEPT "approve your own QTN" — and there was no way to switch that on

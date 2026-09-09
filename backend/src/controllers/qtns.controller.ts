@@ -804,22 +804,30 @@ export async function amend(req: Request, res: Response) {
 /** Who may perform a given move, and why not. `null` = allowed. */
 async function transitionDenial(
   req: Request,
-  q: { ownerId: string },
+  q: QtnListRow,
   from: QtnStatus,
   to: QtnStatus,
   note: string
 ): Promise<string | null> {
   const acc = await accessOf(req.userId);
   const isOwner = q.ownerId === req.userId;
+  // Anyone who BUILDS the quotation may (re)send it for approval — the owner, a co-worker
+  // (Co-Work), or an admin — not just the original creator. A quotation returned for revision
+  // was often being handled by a co-worker or picked up by an admin, and the old owner-only
+  // rule left them stuck with the reviewer's comments and no way to send it back.
+  const canSendForApproval =
+    isOwner || acc.tier === "ADMIN" || coOwnersOf(q).some((c) => c.id === req.userId);
   const need = (p: Perm, msg: string) => (acc.perms.has(p) ? null : msg);
 
   if (to === "WAITING_APPROVAL") {
     // From APPROVED this is the approver retracting their approval (un-approve); it needs
-    // approve rights, not ownership. From DRAFT/RETURNED it's the owner sending it.
+    // approve rights, not ownership. From DRAFT/RETURNED it's a (re)send for approval.
     if (from === "APPROVED") {
       return need("qtn.approve", "You do not have permission to withdraw an approval.");
     }
-    return isOwner ? null : "Only the person who created this quotation can send it for approval.";
+    return canSendForApproval
+      ? null
+      : "Only the owner, a co-worker, or an admin can send this quotation for approval.";
   }
   if (to === "APPROVED") {
     const denied = need("qtn.approve", "You do not have permission to approve quotations.");
