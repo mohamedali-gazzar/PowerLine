@@ -6114,15 +6114,76 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
   // rows to select a contiguous range (anchor → cursor), exactly like the components list. A
   // quick click on a checkbox (no drag) just toggles that one panel.
   const panelDrag = useRef<{ anchorId: string; moved: boolean; onCheckbox: boolean } | null>(null);
-  const onPanelRowDown = (id: string, onCheckbox: boolean) => {
+  const lastRange = useRef<string>(""); // last selected range key, to skip redundant setState during a drag
+  // Extend the drag-selection to whatever panel row sits at the given viewport point. Used both by
+  // onMouseEnter (in-view dragging) and by the auto-scroll tick (so rows revealed by scrolling get
+  // selected even when the pointer never moves — the browser fires no enter events on scroll).
+  const extendSelToPoint = (x: number, y: number) => {
+    const d = panelDrag.current;
+    if (!d) return;
+    const rowEl = (document.elementFromPoint(x, y) as HTMLElement | null)?.closest("[data-panelid]") as HTMLElement | null;
+    const overId = rowEl?.getAttribute("data-panelid");
+    if (!overId) return;
+    d.moved = true;
+    const ids = s.panels.map((p) => p.id);          // top-to-bottom display order
+    const a = ids.indexOf(d.anchorId), b = ids.indexOf(overId);
+    if (a < 0 || b < 0) return;
+    const [lo, hi] = a < b ? [a, b] : [b, a];
+    const key = `${lo}-${hi}`;
+    if (key === lastRange.current) return;           // no change → skip the setState (60fps guard)
+    lastRange.current = key;
+    setSelPanels(new Set(ids.slice(lo, hi + 1)));    // selection = the contiguous start→cursor range
+  };
+  const onPanelRowDown = (id: string, onCheckbox: boolean, startX: number, startY: number) => {
     if (!selMode) return;
     panelDrag.current = { anchorId: id, moved: false, onCheckbox };
+    lastRange.current = "";
+    // Auto-scroll while the pointer is held near the top/bottom edge, so a long list can be
+    // range-selected end to end. Each frame we also re-select the row under the pointer, so the
+    // rows scrolling into view under a stationary cursor get added too. Scrolls whichever container
+    // actually scrolls: the panel-list card if it has its own scrollbar (wide screens), else the page.
+    let lastX = startX, lastY = startY;
+    let raf = 0;
+    const EDGE = 56, MAX = 16; // px from the edge where scrolling starts · max px/frame
+    const findScroller = (): HTMLElement | null => {
+      for (let el = panelListRef.current as HTMLElement | null; el; el = el.parentElement) {
+        const oy = getComputedStyle(el).overflowY;
+        if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight) return el;
+      }
+      return null; // → scroll the window instead
+    };
+    const tick = () => {
+      const sc = findScroller();
+      let top: number, bottom: number, canUp: boolean, canDown: boolean;
+      if (sc) {
+        const r = sc.getBoundingClientRect();
+        top = r.top; bottom = r.bottom;
+        canUp = sc.scrollTop > 0;
+        canDown = sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1;
+      } else {
+        top = 0; bottom = window.innerHeight;
+        const doc = document.scrollingElement || document.documentElement;
+        canUp = doc.scrollTop > 0;
+        canDown = doc.scrollTop + doc.clientHeight < doc.scrollHeight - 1;
+      }
+      let dy = 0;
+      if (lastY < top + EDGE && canUp) dy = -Math.ceil(((top + EDGE - lastY) / EDGE) * MAX);
+      else if (lastY > bottom - EDGE && canDown) dy = Math.ceil(((lastY - (bottom - EDGE)) / EDGE) * MAX);
+      if (dy) { if (sc) sc.scrollTop += dy; else window.scrollBy(0, dy); }
+      extendSelToPoint(lastX, lastY);                // keep selecting the row under the cursor
+      raf = requestAnimationFrame(tick);
+    };
+    const onMove = (e: MouseEvent) => { lastX = e.clientX; lastY = e.clientY; };
     const onUp = () => {
       const d = panelDrag.current; panelDrag.current = null;
       window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("mousemove", onMove);
+      cancelAnimationFrame(raf);
       if (d && !d.moved && d.onCheckbox) toggleSel(d.anchorId); // plain click on the box → toggle
     };
+    window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
+    raf = requestAnimationFrame(tick);
   };
   const onPanelRowEnter = (id: string) => {
     const d = panelDrag.current;
@@ -6132,6 +6193,7 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
     const a = ids.indexOf(d.anchorId), b = ids.indexOf(id);
     if (a < 0 || b < 0) return;
     const [lo, hi] = a < b ? [a, b] : [b, a];
+    lastRange.current = `${lo}-${hi}`;
     setSelPanels(new Set(ids.slice(lo, hi + 1)));    // selection = the contiguous start→cursor range
   };
   // Click anywhere outside the panel list (while selecting) to drop the selection and leave
@@ -6288,8 +6350,8 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
             const num = numbers.get(p.id) ?? i + 1;
             const checked = selPanels.has(p.id);
             return (
-              <div key={p.id} ref={setRowRef(i)} data-panelrow
-                onMouseDown={selMode ? (e) => { const t = e.target as HTMLElement; if (t.closest("[data-panelgrip]")) return; onPanelRowDown(p.id, !!t.closest("[data-rowcheck]")); } : undefined}
+              <div key={p.id} ref={setRowRef(i)} data-panelrow data-panelid={p.id}
+                onMouseDown={selMode ? (e) => { const t = e.target as HTMLElement; if (t.closest("[data-panelgrip]")) return; onPanelRowDown(p.id, !!t.closest("[data-rowcheck]"), e.clientX, e.clientY); } : undefined}
                 onMouseEnter={selMode ? () => onPanelRowEnter(p.id) : undefined}
                 className={`mb-1.5 rounded-lg border px-2 py-1.5 transition-colors duration-150 ${selMode ? "select-none" : ""} ${
                   p.highlight

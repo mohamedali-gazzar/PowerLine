@@ -23,6 +23,19 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Panel list: hold-and-drag now scrolls AND selects a long list.**
+
+When you make a group and there are more panels than fit on screen, you press the first panel's checkbox,
+hold, and drag down (or up) to sweep-select a range. Before, if you dragged toward the top or bottom edge
+the list would just stop there — it wouldn't scroll to reveal the panels off-screen, so you couldn't reach
+them. Now, while you're holding and dragging, if the cursor gets near the top or bottom edge the list (or
+the page, whichever one scrolls on your screen) auto-scrolls in that direction — faster the closer you push
+to the edge — and every row that scrolls into view under your cursor gets added to the selection, even when
+you hold the mouse still. It stops the moment you let go. This is the same scroll behaviour already used when
+you drag to reorder panels, so it feels the same. Nothing else changed.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Panels "No. of poles": an MCCB summary in the Outgoings block.**
 
 When a panel has outgoing MCCBs, the Outgoings side of the "No. of poles" card now lists them counted by
