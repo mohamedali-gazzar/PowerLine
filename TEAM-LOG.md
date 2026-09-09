@@ -21,6 +21,15 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-09 · Mohamed's side · Claude
+
+**Panels "No. of poles": an MCCB summary in the Outgoings block.**
+
+When a panel has outgoing MCCBs, the Outgoings side of the "No. of poles" card now lists them counted by
+frame (XT1…XT7, and T-series) with a "Total: N MCCB" line — e.g. 3 XT1 / 2 XT4 / 1 XT7 / Total: 6 MCCB.
+Quantities are summed, and it only shows when there are MCCBs. MCCBs aren't DIN-rail items, so the pole
+counts are unchanged.
+
 ## 2026-09-08 · Mohamed's side · Claude
 
 **Panel pricing table: reworked totals + a target-price helper.**

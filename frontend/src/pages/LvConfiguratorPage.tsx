@@ -9716,6 +9716,22 @@ function SizingCard({ p, u, factors }: {
   );
 }
 
+// Count the MCCBs among a set of components, grouped by frame (Tmax XT1…XT7 / T1…T7), using
+// each row's qty — for the Outgoings "MCCB summary". Frames sort XT1→XT7 then T-series, "Other" last.
+function mccbSummary(comps: PanelComponent[]): { frame: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const c of comps) {
+    const hay = `${c.type || ""} ${c.name || ""}`;
+    if (!/MCCB/i.test(hay)) continue;
+    const fm = hay.match(/\b(XT[1-7]|T[1-7])/i);
+    const frame = fm ? fm[1].toUpperCase() : "Other";
+    counts.set(frame, (counts.get(frame) || 0) + (c.qty || 0));
+  }
+  return [...counts.entries()]
+    .map(([frame, count]) => ({ frame, count }))
+    .sort((a, b) => (a.frame === "Other" ? 1 : b.frame === "Other" ? -1 : a.frame.localeCompare(b.frame, undefined, { numeric: true })));
+}
+
 // Panel "No. of poles" summary — categorises the panel's DIN-rail components (MCB / RCBO /
 // RCCB, contactors + aux + terminal, control gear) and totals their rail width in poles,
 // so the enclosure can be sized. Widths come from the Control Design Guide (see lv/poles.ts).
@@ -9723,6 +9739,7 @@ function PolesSummary({ p }: { p: LvPanel }) {
   // Split the DIN-rail poles by feed: Main Incoming vs everything else (Outgoings).
   const pIn = panelPoles(p.components.filter((c) => c.section === "Main Incoming"));
   const pOut = panelPoles(p.components.filter((c) => c.section !== "Main Incoming"));
+  const outMccb = mccbSummary(p.components.filter((c) => c.section !== "Main Incoming")); // outgoing MCCBs by frame
   const pl = (n: number) => `${n} pole${n === 1 ? "" : "s"}`;
   const groupKinds: Record<PoleGroup, PoleKind[]> = {
     protection: ["mcb", "rcbo", "rccb"],
@@ -9737,13 +9754,23 @@ function PolesSummary({ p }: { p: LvPanel }) {
   const sumOf = (d: Poles, ex: Set<PoleKind>, kinds: PoleKind[]) =>
     kinds.reduce((s, k) => s + (!ex.has(k) ? (d.rows[k]?.poles || 0) : 0), 0);
   // One Incoming / Outgoings block: section header + total, then the group tables.
-  const block = (title: string, d: Poles, ex: Set<PoleKind>, setEx: React.Dispatch<React.SetStateAction<Set<PoleKind>>>) => {
+  const block = (title: string, d: Poles, ex: Set<PoleKind>, setEx: React.Dispatch<React.SetStateAction<Set<PoleKind>>>, mccb?: { frame: string; count: number }[]) => {
     const toggle = (k: PoleKind) => setEx((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+    const mccbTotal = (mccb ?? []).reduce((s, r) => s + r.count, 0);
     return (
       <div className="overflow-hidden rounded-lg border border-line">
         <div className="flex items-center justify-between bg-brand-tint/50 px-3 py-1.5 text-[12px] font-extrabold uppercase tracking-wide text-brand-dark">
           <span>{title}</span><span>{pl(sumOf(d, ex, POLE_KINDS))}</span>
         </div>
+        {mccb && mccb.length > 0 && (
+          <div className="border-t border-line px-3 py-2">
+            <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-muted">MCCB summary</div>
+            <ul className="space-y-0.5 text-[13px] text-ink">
+              {mccb.map((r) => <li key={r.frame}><b>{r.count}</b> {r.frame}</li>)}
+            </ul>
+            <div className="mt-1.5 border-t border-line pt-1 text-[13px] font-extrabold text-brand-dark">Total: {mccbTotal} MCCB</div>
+          </div>
+        )}
         {d.total === 0 ? (
           <p className="px-3 py-2 text-[11px] text-muted">No {title.toLowerCase()} DIN-rail items yet.</p>
         ) : (
@@ -9780,7 +9807,7 @@ function PolesSummary({ p }: { p: LvPanel }) {
   return (
     <div>
       <h2 className="sec-head">No. of poles <span className="text-[11px] font-normal text-muted">— DIN-rail width · 1 pole = {POLE_CM} cm</span></h2>
-      {pIn.total === 0 && pOut.total === 0 ? (
+      {pIn.total === 0 && pOut.total === 0 && outMccb.length === 0 ? (
         <p className="rounded-lg border border-dashed border-line p-4 text-center text-xs text-muted">
           Add MCB / RCBO / RCCB, contactors or control gear — their pole widths appear here to help size the panel.
         </p>
@@ -9788,7 +9815,7 @@ function PolesSummary({ p }: { p: LvPanel }) {
         <div className="space-y-2.5">
           <div className="grid items-start gap-2.5 sm:grid-cols-2">
             {block("Incoming", pIn, exIn, setExIn)}
-            {block("Outgoings", pOut, exOut, setExOut)}
+            {block("Outgoings", pOut, exOut, setExOut, outMccb)}
           </div>
           <div className="flex items-center justify-between rounded-lg bg-brand-tint/60 px-3 py-2 text-sm font-extrabold text-brand-dark">
             <span>Total no. poles</span>
