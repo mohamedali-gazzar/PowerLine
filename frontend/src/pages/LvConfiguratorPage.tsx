@@ -6176,8 +6176,11 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
       let dy = 0;
       if (lastY < top + EDGE && canUp) dy = -Math.ceil(((top + EDGE - lastY) / EDGE) * MAX);
       else if (lastY > bottom - EDGE && canDown) dy = Math.ceil(((lastY - (bottom - EDGE)) / EDGE) * MAX);
-      if (dy) { if (sc) sc.scrollTop += dy; else window.scrollBy(0, dy); }
-      extendSelToPoint(lastX, lastY);                // keep selecting the row under the cursor
+      // Only extend the range from the tick while actually auto-scrolling — that's the case a
+      // stationary cursor needs help with (rows moving under it). An in-view drag is handled by
+      // onPanelRowEnter (mouseenter), and a plain click must NOT be treated as a drag, or it would
+      // replace the selection with just the clicked row instead of toggling it into the set.
+      if (dy) { if (sc) sc.scrollTop += dy; else window.scrollBy(0, dy); extendSelToPoint(lastX, lastY); }
       raf = requestAnimationFrame(tick);
     };
     const onMove = (e: MouseEvent) => { lastX = e.clientX; lastY = e.clientY; };
@@ -6980,7 +6983,8 @@ function QtyCell({ value, eq, title, onCommit }: {
         if (e.key === "Enter") {
           e.preventDefault();
           const inputs = Array.from(document.querySelectorAll<HTMLInputElement>("input[data-qtyinput]"));
-          const next = inputs[inputs.indexOf(e.currentTarget) + 1];
+          const idx = inputs.indexOf(e.currentTarget);
+          const next = idx >= 0 ? inputs[idx + 1] : undefined; // guard: never wrap to the first cell
           e.currentTarget.blur();                            // commits this cell
           if (next) requestAnimationFrame(() => { next.focus(); next.select(); });
         } else if (e.key === "Escape") {
@@ -7838,7 +7842,12 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     u({ components: arr });
   };
 
-  const refocusSearch = () => requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true }));
+  // Return focus to the search box after an add. Double rAF on purpose: a QtyCell's own
+  // Enter-navigation (and the browser settling focus after the qty pop-up unmounts) can grab
+  // focus one frame later once rows exist, which is why the SECOND add used to land in the
+  // QTY column. Running a frame after that competitor makes the search box win every time.
+  const refocusSearch = () =>
+    requestAnimationFrame(() => requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true })));
   // After an add, keep the view on the row that was just inserted (instead of the list
   // jumping back to the top) — wait a couple frames for the new <tr> to render, then reveal it.
   const revealRow = (id: string) =>
@@ -8162,7 +8171,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
               <label className="text-xs font-semibold text-muted">Qty</label>
               <input ref={qtyRef} inputMode="numeric" className="input h-9 w-24" placeholder="1" value={pendQty}
                 onChange={(e) => setPendQty(e.target.value.replace(/[^\d]/g, ""))}
-                onKeyDown={(e) => { if (e.key === "Enter") { add(pending, parseInt(pendQty, 10) || 1); setPending(null); } if (e.key === "Escape") setPending(null); }} />
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(pending, parseInt(pendQty, 10) || 1); setPending(null); } if (e.key === "Escape") setPending(null); }} />
               <button type="button" className="btn-primary h-9 px-4 text-sm" onClick={() => { add(pending, parseInt(pendQty, 10) || 1); setPending(null); }}>Add</button>
               <button type="button" className="btn-ghost h-9 px-3 text-sm" onClick={() => setPending(null)}>Cancel</button>
             </div>

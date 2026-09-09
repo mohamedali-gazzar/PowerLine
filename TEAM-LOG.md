@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Adding components: the cursor now returns to the search box every time.**
+
+When adding components one after another, the cursor was supposed to jump back to the search box so you can type
+the next one — but from the second component on it sometimes landed in the QTY column instead. The search box now
+reliably takes the cursor back after every add (it waits for the screen to settle so it wins), and a guard stops
+the QTY Enter-key navigation from ever jumping to the first row's quantity. NOTE: this is a timing-sensitive focus
+fix that couldn't be replayed in the offline test window — worth a quick check on the live site.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Offer cover product links now point to askpowerline.com.**
 
 The five product boxes on the offer cover (Technical & Commercial, and the RMU cover) now link to the new site:
