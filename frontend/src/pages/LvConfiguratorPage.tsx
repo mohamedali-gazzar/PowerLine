@@ -7253,14 +7253,14 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     comboClipboard = { label: group, section: sec, comps: members.map((c) => ({ ...c })) };
     bumpClip((v) => v + 1);
   };
-  // Where a paste of the copied combination would land in THIS panel: the section it was
-  // copied from when this panel has one by that name (so a "Main Incoming" combo returns to
-  // Main Incoming, here or in another panel), else the section being worked in, else the
-  // first section. Never an unrelated section just because it was left active.
+  // Where a paste of the copied combination lands: the section you're WORKING IN (active), so a
+  // combo drops where you are — switch to Outgoings, paste, and it goes to Outgoings even if it was
+  // copied from Main Incoming. Only if this panel has no such section (e.g. pasting into a different
+  // panel that lacks the active one) does it fall back to the copied-from section, then the first.
   const pasteTargetSec = (): string =>
     comboClipboard
-      ? (p.sections.includes(comboClipboard.section) ? comboClipboard.section
-        : p.sections.includes(p.activeSection) ? p.activeSection
+      ? (p.sections.includes(p.activeSection) ? p.activeSection
+        : p.sections.includes(comboClipboard.section) ? comboClipboard.section
         : p.sections[0] ?? "")
       : "";
   const pasteCombo = () => {

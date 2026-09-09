@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Paste combination now drops into the section you're viewing, not the one it was copied from.**
+
+Copy a combination, switch to another section (e.g. Outgoings), and "Paste combination" now pastes it into that
+section — before, it went back to the section the combination was copied from (e.g. Main Incoming). It still falls
+back to the copied-from section only when you paste into a different panel that doesn't have the active section.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Copper Tool formula bar: it now keeps the formula, so you can select it and Ctrl+C (the copy button stays too).**
 
 The formula bar now keeps showing a cell's formula after you click out of the cell, and one click on the formula
