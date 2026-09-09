@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Component list: dragging to reorder now feels like the panel list (smooth), and the dragged row is solid.**
+
+The component drag was the browser's native drag-and-drop (a faint ghost image). It's now the same smooth pointer
+drag the panels use: the row lifts and follows your cursor with a solid white background, the drop spot highlights,
+and it auto-scrolls when you drag near the top/bottom edge. Reordering within a section, moving a component to
+another section (drop it on that section's header/tab), and combinations all work exactly as before — only the feel
+changed. (One difference from panels: the drop spot highlights instead of neighbours sliding aside, which is more
+reliable with the component list's combinations and stacked sections.)
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Paste combination now drops into the section you're viewing, not the one it was copied from.**
 
 Copy a combination, switch to another section (e.g. Outgoings), and "Paste combination" now pastes it into that
