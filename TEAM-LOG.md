@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Admins can now approve their own QTNs (and RMU offers).**
+
+Before, an admin held every permission EXCEPT "approve your own QTN" — and there was no way to switch that on
+for an admin, so an admin could never approve a quotation they created (the server always said "another approver
+must review it"). Now admins (both owner accounts) can approve their own QTNs and RMU offers. Engineers are
+unchanged: for them, "Approve their own QTNs" is still a separate tick you grant per person in the Access Center.
+⚠️ HEADS-UP: this relaxes the previous separation-of-duties rule for admins — an admin no longer needs a second
+person to approve their own work.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Panels editor: brought back the "Nothing selected" placeholder card.**
 
 Reverted the earlier removal — when no panel is selected, the editor area shows the "Nothing selected. Click a

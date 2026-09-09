@@ -50,9 +50,10 @@ export const PERM_LABEL: Record<Perm, string> = {
   "announcements.manage": "Manage announcements",
 };
 
-/** Admins hold everything except the deliberate self-approval exception, which stays
- *  an explicit grant so it is always a conscious decision. */
-const ADMIN_PERMS: Perm[] = PERMS.filter((p) => p !== "qtn.approveOwn");
+/** Admins hold every permission — including self-approval (qtn.approveOwn), so an admin
+ *  may approve their own quotations and offers. (It stays a distinct, separately-grantable
+ *  permission for ENGINEER-tier users, who only get it when it is ticked for them.) */
+const ADMIN_PERMS: Perm[] = [...PERMS];
 
 /** What a not-yet-migrated user gets, derived from their legacy role. Chosen so the
  *  deploy that adds `tier`/`perms` changes nobody's access. */
@@ -116,7 +117,7 @@ export async function accessOf(userId: string | undefined): Promise<Access> {
   if (!u) return none;
   // The system owner holds every admin permission no matter what the row says, so a bad
   // edit — or a database restored from an older backup — can never lock them out. Any
-  // separately-granted permission (qtn.approveOwn) is still merged in.
+  // separately-granted permission is still merged in.
   if (isProtectedOwner(u.email)) {
     return {
       tier: "ADMIN",
@@ -132,10 +133,9 @@ export async function accessOf(userId: string | undefined): Promise<Access> {
   const tier = u.tier as Tier;
   const granted = safeParsePerms(u.perms);
   if (tier === "ADMIN") {
-    // Admin implies everything EXCEPT the self-approval exception, which stays a
-    // deliberate, separately-ticked grant. The explicit grants must be merged in
-    // rather than replaced: returning ADMIN_PERMS alone silently discarded
-    // qtn.approveOwn, so ticking it for an admin could never take effect.
+    // Admin implies every permission (ADMIN_PERMS now includes qtn.approveOwn). Any
+    // separately-ticked grants are merged in too, which is harmless for admins and keeps
+    // the shape identical to the engineer branch.
     return { tier, perms: new Set([...ADMIN_PERMS, ...granted]), role };
   }
   return { tier, perms: new Set(granted), role };

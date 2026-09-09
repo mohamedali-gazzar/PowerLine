@@ -5,12 +5,11 @@ import { useAuth } from "../auth/AuthContext";
 // Access Center — who is an admin, and what each engineer is allowed to do.
 //
 // Tier is the coarse switch, the ticks are the fine one, and the ticks only
-// mean anything for engineers: an admin already holds everything, so an
-// editable tick there would promise a trim that the server will not honour.
-// The single exception is approving your own quotations — deliberately NOT
-// implied by admin, so it stays a real tick at every tier.
+// mean anything for engineers: an admin already holds EVERYTHING (including
+// approving their own quotations), so an editable tick there would promise a
+// trim that the server will not honour. For engineers, "Approve their own QTNs"
+// is a real, separately-grantable tick.
 
-const ADMIN_EXCEPTION = "qtn.approveOwn";
 const CUSTOM_ROLE = "Custom";
 
 // Fallback role presets used until the server catalogue loads. The backend
@@ -302,7 +301,7 @@ function UserCard({
 
   // How each permission tick appears for the current role.
   const tick = (key: string): { checked: boolean; disabled: boolean } => {
-    if (isAdminRole) return { checked: key !== ADMIN_EXCEPTION, disabled: true }; // admin holds all
+    if (isAdminRole) return { checked: true, disabled: true }; // admin holds every permission
     if (preset) return { checked: preset.perms.includes(key), disabled: true };   // fixed engineer role
     return { checked: draft.perms.includes(key), disabled: busy };                // Custom → editable
   };
