@@ -9993,7 +9993,7 @@ function CopperCell({ value, eq, colKey, label, onActive, onCommit }: {
         // Plain numbers update the weight live; leave formulas to evaluate on Enter/blur.
         if (/^\d*\.?\d*$/.test(raw.trim())) onCommit(parseFloat(raw) || 0, undefined);
       }}
-      onBlur={(e) => { commit(e.target.value); onActive(null); }}
+      onBlur={(e) => commit(e.target.value)}
     />
   );
 }
@@ -10003,7 +10003,9 @@ function CopperCell({ value, eq, colKey, label, onActive, onCommit }: {
 function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void }) {
   const type = p.cellConfig.type;
   const tool = p.copperTool ?? {};
-  // The cell you're editing, mirrored into the formula bar (a long formula is clipped in the cell).
+  // The last cell you touched, mirrored into the formula bar (a long formula is clipped in the cell).
+  // It STAYS after you leave the cell so you can select the formula there and copy it with Ctrl+C
+  // — or use the copy button.
   const [active, setActive] = useState<{ label: string; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const copyBar = async (text: string) => {
@@ -10043,8 +10045,9 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
           <>
             <span className="shrink-0 text-[11px] font-bold text-brand-dark">{active.label}</span>
             <span className="shrink-0 text-line">|</span>
-            <span className="min-w-0 flex-1 select-all truncate text-sm text-ink" title={active.text}>{active.text || "—"}</span>
-            {/* onMouseDown preventDefault keeps focus in the cell, so the bar isn't cleared before the copy runs. */}
+            {/* select-all: one click highlights the whole formula, then Ctrl+C copies it. */}
+            <span className="min-w-0 flex-1 cursor-text select-all truncate text-sm text-ink" title="Select and press Ctrl+C to copy">{active.text || "—"}</span>
+            {/* …or the copy button. onMouseDown preventDefault keeps the cell focused so the copy runs. */}
             <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => copyBar(active.text)}
               title="Copy the formula" aria-label="Copy the formula"
               className="shrink-0 rounded p-1 text-muted transition-colors hover:bg-surface hover:text-brand-dark">

@@ -23,6 +23,13 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Copper Tool formula bar: it now keeps the formula, so you can select it and Ctrl+C (the copy button stays too).**
+
+The formula bar now keeps showing a cell's formula after you click out of the cell, and one click on the formula
+selects the whole thing — so you can copy it with Ctrl+C. The copy button is still there too, so either way works.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Copper Tool: a formula bar above the table, with a copy button.**
 
 Above the Copper Tool table there's now a formula bar (like a spreadsheet). Click into any length cell and the bar
