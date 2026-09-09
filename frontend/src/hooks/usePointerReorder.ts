@@ -10,9 +10,11 @@ import { useRef, useState } from "react";
  * settles into its slot, then `onReorder(from, to)` fires so the caller splices the array and
  * re-renders (numbers renumber, totals recompute). It only moves display order — no other math.
  *
- * The step (row pitch) is measured from the first two rows, and the target index is
- * `from + round(dragDeltaY / step)` clamped to range. Works with mouse and touch (pointer
- * events + `touch-action: none` on the handle).
+ * The drop target is resolved by POSITION: each row's midpoint is captured on grab, and the
+ * target index is the count of other rows whose midpoint sits above the pointer. That stays
+ * correct when the list has group-header strips or variable-height rows between items — a
+ * uniform row pitch does not, and used to make a grabbed panel snap back instead of moving.
+ * Works with mouse and touch (pointer events + `touch-action: none` on the handle).
  *
  * When the list is taller than its viewport, holding the row near the top/bottom edge
  * auto-scrolls so a long list can be reordered end-to-end. It scrolls the nearest scrollable
@@ -64,12 +66,25 @@ export function usePointerReorder(count: number, onReorder: (from: number, to: n
 
       const r0 = list[0]?.getBoundingClientRect();
       const r1 = list[1]?.getBoundingClientRect();
+      // A representative row pitch for the GLIDE gap only. Targeting no longer uses it (see below).
       const step = r0 && r1 ? Math.abs(r1.top - r0.top) : (list[i]?.getBoundingClientRect().height ?? 44) + 6;
       const from = i;
       let startY = e.clientY; // drag origin — shifted by auto-scroll so the maths stays true
       let lastY = e.clientY; // latest pointer position (viewport coords)
       let to = from;
       setDragging(true);
+
+      // Original midpoints of every row (captured before any glide) → the drop target is resolved by
+      // POSITION (which row the pointer is over), not by a uniform pitch. A uniform pitch is wrong when
+      // the list has group-header strips or variable-height rows between items — that made grabbing a
+      // panel underestimate the move and snap back instead of reordering.
+      const mids = rows.current.map((el) => { const r = el?.getBoundingClientRect(); return r ? r.top + r.height / 2 : Number.POSITIVE_INFINITY; });
+      let scrolled = 0; // cumulative auto-scroll, so the (viewport) midpoints stay comparable to lastY
+      const resolveTo = (): number => {
+        let idx = 0;
+        for (let j = 0; j < count; j++) if (j !== from && mids[j] < lastY + scrolled) idx++;
+        return Math.max(0, Math.min(count - 1, idx));
+      };
 
       const grabbed = list[from];
       if (grabbed) {
@@ -81,13 +96,11 @@ export function usePointerReorder(count: number, onReorder: (from: number, to: n
         grabbed.style.willChange = "transform";
       }
 
-      const clampTo = (dy: number) => Math.max(0, Math.min(count - 1, from + Math.round(dy / step)));
-
       // Position the grabbed row under the pointer and glide the neighbours it passes aside.
       const apply = () => {
         const dy = lastY - startY;
         if (grabbed) grabbed.style.transform = `translateY(${dy}px)`;
-        to = clampTo(dy);
+        to = resolveTo();
         for (let j = 0; j < count; j++) {
           if (j === from) continue;
           const el = rows.current[j];
@@ -125,7 +138,9 @@ export function usePointerReorder(count: number, onReorder: (from: number, to: n
           const before = target.scrollTop;
           target.scrollTop += d;
           const moved = target.scrollTop - before;
-          if (moved) { startY -= moved; apply(); } // keep the row glued under the pointer
+          // keep the row glued under the pointer AND keep the captured (viewport) midpoints
+          // comparable to the pointer as the container scrolls under it.
+          if (moved) { startY -= moved; scrolled += moved; apply(); }
         }
         raf = requestAnimationFrame(tick);
       };
@@ -138,7 +153,7 @@ export function usePointerReorder(count: number, onReorder: (from: number, to: n
         window.removeEventListener("pointercancel", up);
         cancelAnimationFrame(raf);
         lastY = ev.clientY;
-        const finalTo = clampTo(lastY - startY);
+        const finalTo = resolveTo();
         // Let the grabbed row glide to its slot, then commit the reorder and clear styles.
         if (grabbed && finalTo !== from) {
           grabbed.style.transition = EASE;

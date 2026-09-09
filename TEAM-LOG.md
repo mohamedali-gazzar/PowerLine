@@ -23,6 +23,19 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Panel drag-reorder now works once panels are in groups (it used to snap back).**
+
+The earlier report blamed shared/co-work quotations, but the real cause was groups. As soon as panels were placed in
+groups, the orange group-header strips (and the small "Ungrouped" label) sat between the panel cards, so the rows were
+no longer evenly spaced. The drag was working out where you dropped a panel by assuming even spacing — with those strips
+in the way it under-measured the move, decided you hadn't moved far enough, and snapped the panel back. A plain flat
+list (no groups) stayed evenly spaced, so it worked there — which is why it looked like "some can, some can't". The drag
+now follows your actual pointer position over the rows instead of assuming a fixed row height, so it drops exactly where
+you release, no matter how many group headers or differently-sized rows are in between. Verified on a grouped list:
+dragged a panel across the gap, it landed where dropped and stayed there after a reload.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Shared (Co-Work) quotations: co-workers can now drag-reorder the panels too.**
 
 Before, only the primary owner could reorder panels — for a co-worker the drag lifted the row but snapped back
