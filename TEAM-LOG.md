@@ -23,6 +23,25 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Offer cover product links now point to askpowerline.com.**
+
+The five product boxes on the offer cover (Technical & Commercial, and the RMU cover) now link to the new site:
+LV Enclosures → askpowerline.com/low-voltage · Transformers → /products/dry-type-transformers · Secondary
+Switchgear → /secondary-switchgear · Primary Switchgear → /primary-switchgear · Kiosk → /compact-substation.
+Clicking the icon or the title opens the page (on screen and in the downloaded PDF). The small "Website" globe icon
+at the bottom still points to powerlinei.com — left as-is for now.
+
+## 2026-09-09 · Mohamed's side · Claude
+
+**Fixed: clicking a field in the P.F.C pop-up closed it and showed "Nothing selected".**
+
+Opening any field inside the P.F.C pop-up (and other pop-ups) was being mistaken for a click on the empty space
+next to the panel list, which deselects the active panel — that tore down the editor and closed the pop-up. Pop-ups
+open in a top layer (portal); their clicks are no longer treated as "empty space" clicks, so the pop-up stays open
+and the panel stays selected. The "Nothing selected" card is unchanged; it just no longer appears wrongly here.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Fixed: the "Send to…" list opened behind the approval pop-up (looked greyed/locked).**
 
 When you clicked "Reply & send for approval" inside the approval conversation pop-up, the list of people to send

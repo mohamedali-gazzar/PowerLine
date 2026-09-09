@@ -36,7 +36,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: ReactNode; href?: str
   {
     title: "LV Enclosures",
     items: ["PLP MAX", "PLP CORE", "PLP MINI"],
-    href: "https://www.powerlinei.com/low-voltage",
+    href: "https://www.askpowerline.com/low-voltage",
     icon: (
       <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.25"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -62,7 +62,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: ReactNode; href?: str
   {
     title: "Transformers",
     items: ["PDTR"],
-    href: "https://www.powerlinei.com/products/dry-type-transformers",
+    href: "https://www.askpowerline.com/products/dry-type-transformers",
     icon: (
       <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.06"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -93,7 +93,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: ReactNode; href?: str
   {
     title: "Secondary Switchgear",
     items: ["PRAL", "PSEC", "AEGIS PLUS"],
-    href: "https://www.powerlinei.com/secondary-switchgear",
+    href: "https://www.askpowerline.com/secondary-switchgear",
     icon: (
       <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.157"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -124,7 +124,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: ReactNode; href?: str
   {
     title: "Primary Switchgear",
     items: ["PLGEAR"],
-    href: "https://www.powerlinei.com/primary-switchgear",
+    href: "https://www.askpowerline.com/primary-switchgear",
     icon: (
       <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.25"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -144,7 +144,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: ReactNode; href?: str
   {
     title: "Kiosk",
     items: ["PCSS"],
-    href: "https://www.powerlinei.com/products/pcss",
+    href: "https://www.askpowerline.com/compact-substation",
     icon: (
       <svg viewBox="0 0 32 32" className="h-[35px] w-[35px]" fill="none" stroke="#585859" strokeWidth="1.088"
         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -245,7 +245,7 @@ export default function OfferCover({
                   );
                   return col.href ? (
                     <a href={col.href} target="_blank" rel="noopener noreferrer" data-pdf-link={col.href}
-                      className="block text-inherit no-underline" title={`Open ${col.title} on powerlinei.com`}>
+                      className="block text-inherit no-underline" title={`Open ${col.title} on askpowerline.com`}>
                       {head}
                     </a>
                   ) : head;

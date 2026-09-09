@@ -1044,13 +1044,20 @@ export default function LvConfiguratorPage() {
   // Once submitted the QTN is read-only. Content edits are frozen, but pure navigation
   // is still allowed so a submitted offer can be reviewed: selecting a panel (selectedId)
   // and switching a panel's section (activeSection) pass through.
-  const isNavOnly = (patch: object, key: string) => Object.keys(patch).length === 1 && key in patch;
+  // A patch is navigation-only when EVERY key it sets is one of the allowed "which panel /
+  // group is focused" keys — no data fields. Selecting a panel sets selectedId AND clears
+  // activeGroupId, so both count as navigation; without this a read-only (submitted /
+  // cancelled) or co-worker view could not open other panels just to look at them.
+  const isNavOnly = (patch: object, ...allowed: string[]) => {
+    const keys = Object.keys(patch);
+    return keys.length > 0 && keys.every((k) => allowed.includes(k));
+  };
   // immutable update helpers
   const up = (patch: Partial<LvState>) => {
-    if (readOnly && !isNavOnly(patch, "selectedId")) return;
+    if (readOnly && !isNavOnly(patch, "selectedId", "activeGroupId")) return;
     // Co-Work: the shared tabs (Project / Pricing / Terms) and panel reorder belong
     // to the primary owner; a co-owner may still navigate between panels.
-    if (coWork && !isPrimary && !isNavOnly(patch, "selectedId")) return;
+    if (coWork && !isPrimary && !isNavOnly(patch, "selectedId", "activeGroupId")) return;
     apply((old) => ({ ...old, ...patch }));
   };
   // Save one panel's scratch-pad content into the quotation. Merges into the LATEST state (functional
@@ -2447,7 +2454,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode; href
   {
     title: "LV Enclosures",
     items: ["PLP MAX", "PLP CORE", "PLP MINI"],
-    href: "https://www.powerlinei.com/low-voltage",
+    href: "https://www.askpowerline.com/low-voltage",
     // LV control panel drawn from the supplied photograph: metering row, pilot
     // lights, rotary selector, nameplate — the door's actual reading order.
     //
@@ -2484,7 +2491,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode; href
   {
     title: "Transformers",
     items: ["PDTR"],
-    href: "https://www.powerlinei.com/products/dry-type-transformers",
+    href: "https://www.askpowerline.com/products/dry-type-transformers",
     // Cast-resin DRY-TYPE transformer, drawn from the supplied photograph — the three
     // exposed coil limbs between a clamping beam and the base frame. That silhouette
     // is what says "dry type" rather than the oil tank it replaces, so the coils take
@@ -2528,7 +2535,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode; href
   {
     title: "Secondary Switchgear",
     items: ["PRAL", "PSEC", "AEGIS PLUS"],
-    href: "https://www.powerlinei.com/secondary-switchgear",
+    href: "https://www.askpowerline.com/secondary-switchgear",
     // RMU line-up drawn from the supplied photograph. The orange mimic band running
     // across the middle is what identifies this product on sight, so it carries the
     // accent — three cubicles, instruments above, cable compartments below.
@@ -2568,7 +2575,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode; href
   {
     title: "Primary Switchgear",
     items: ["PLGEAR"],
-    href: "https://www.powerlinei.com/primary-switchgear",
+    href: "https://www.askpowerline.com/primary-switchgear",
     // MV cubicle drawn from the supplied photograph, distilled to what identifies it
     // at 28px: the protection-relay row, the dark control plate carrying the breaker
     // mimic, and the cable compartment below.
@@ -2594,7 +2601,7 @@ const COVER_RANGE: { title: string; items: string[]; icon: React.ReactNode; href
   {
     title: "Kiosk",
     items: ["PCSS"],
-    href: "https://www.powerlinei.com/products/pcss",
+    href: "https://www.askpowerline.com/compact-substation",
     // PCSS drawn from the supplied photograph: the gabled roof cap with its
     // nameplate, the double doors on their centre seam, and the dark plinth. The
     // nameplate takes the orange — on the real kiosk that plate IS the brand mark.
@@ -2702,7 +2709,7 @@ function OfferCover({ s, qtnNo, kind }: { s: LvState; qtnNo: string; kind: "Tech
                 );
                 return col.href ? (
                   <a href={col.href} target="_blank" rel="noopener noreferrer" data-pdf-link={col.href}
-                    className="block text-inherit no-underline" title={`Open ${col.title} on powerlinei.com`}>
+                    className="block text-inherit no-underline" title={`Open ${col.title} on askpowerline.com`}>
                     {head}
                   </a>
                 ) : head;
@@ -6289,7 +6296,12 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
       onMouseDown={(e) => {
         // Click outside the panel list AND outside the editor (the empty area around/below the list)
         // to deselect the active panel — the next "+ Add panel" then adds ungrouped. Clicks on the
-        // list, the editor, or any popup (portalled outside this grid) keep the selection.
+        // list, the editor, or any popup keep the selection.
+        // A popup (P.F.C, component search, …) is portalled into <body>, so its React events bubble
+        // here even though its DOM sits OUTSIDE this grid. Guard on the grid's OWN DOM first: if the
+        // click didn't physically land inside this grid, it came from a portalled popup — never
+        // deselect (that would unmount the editor and close the popup mid-interaction).
+        if (!e.currentTarget.contains(e.target as Node)) return;
         const t = e.target as HTMLElement;
         if (panelListRef.current?.contains(t) || editorRef.current?.contains(t)) return;
         if (s.selectedId != null || s.activeGroupId != null) up({ selectedId: null, activeGroupId: null });
