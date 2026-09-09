@@ -1106,6 +1106,19 @@ export default function LvConfiguratorPage() {
     setEdmsWarn(null);
   };
 
+  // Panel drag-reorder commit. Uses apply() (not up()) so a Co-Work co-worker can reorder too —
+  // up() blocks non-primary co-workers from shared changes, but the server's co-work merge keeps
+  // whatever panel order the saver sends and protects everyone else's panel content, so reordering
+  // is safe for any collaborator. Still frozen for a read-only (submitted / cancelled) quotation.
+  const reorderPanels = (from: number, to: number) => {
+    if (readOnly) return;
+    const arr = [...s.panels];
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    const neighbour = to > 0 ? arr[to - 1] : arr[to + 1];
+    moved.groupId = neighbour?.groupId;
+    apply((old) => ({ ...old, panels: resortByGroup(arr, s.groups ?? []) }));
+  };
   const addPanel = () => {
     if (readOnly) return;
     // A new panel starts from whatever was chosen on the Specs tab, so the
@@ -1841,13 +1854,13 @@ export default function LvConfiguratorPage() {
         {activeTab === "pricing" && <PricingTab s={s} up={up} />}
         {activeTab === "specs" && <SpecsTab s={s} up={up} qtnId={rec?.id ?? ""} readOnly={sharedReadOnly} />}
         {activeTab === "panels" && (
-          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} panelBadge={panelBadge} freshIds={freshPanels}
+          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} reorderPanels={reorderPanels} panelBadge={panelBadge} freshIds={freshPanels}
             onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
             onAddSpare={isEdmsQtn ? undefined : addSpareCell}
             onImport={readOnly ? undefined : importPanels} knownComponentRefs={knownComponentRefs} />
         )}
         {activeTab === "spare" && (
-          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} panelBadge={panelBadge} freshIds={freshPanels}
+          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} reorderPanels={reorderPanels} panelBadge={panelBadge} freshIds={freshPanels}
             onAdd={() => addSpareCell("spare")} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
             addLabel="+ Add cell" emptyLabel="No spare cells yet." emptyAddLabel="+ Add your first cell" />
         )}
@@ -6064,10 +6077,12 @@ function AddSpareMenu({ onAddSpare, trigger, wrap = "" }: { onAddSpare: (kind: s
   );
 }
 
-function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, onImport, knownComponentRefs, panelBadge, freshIds, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
+function PanelsTab({ s, sel, up, upPanel, reorderPanels, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, onImport, knownComponentRefs, panelBadge, freshIds, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
   s: LvState; sel: LvPanel | null;
   up: (p: Partial<LvState>) => void;
   upPanel: (id: string, p: Partial<LvPanel>) => void;
+  /** Commit a panel drag-reorder (from → to). Lives in the parent so it can allow Co-Work co-workers. */
+  reorderPanels: (from: number, to: number) => void;
   onAdd: () => void; onDel: (id: string) => void; onClone: (id: string) => void;
   onOpenInOffer: (id: string) => void;
   onAddSpare?: (kind: string) => void;
@@ -6083,17 +6098,9 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
   // Smooth pointer drag-to-reorder (handle-driven, touch-friendly). Reordering only changes
   // display order — the saved order autosaves to the QTN; no pricing math is touched. Hooks
   // must precede the early return.
-  const { setRowRef, handleProps } = usePointerReorder(s.panels.length, (from, to) => {
-    const arr = [...s.panels];
-    const [moved] = arr.splice(from, 1);
-    arr.splice(to, 0, moved);
-    // Adopt the group of wherever it was dropped — drag a panel into a group's rows to join
-    // it, or into the ungrouped area to leave. Then re-sort so groups stay contiguous and the
-    // continuous 1..n numbering follows the new order.
-    const neighbour = to > 0 ? arr[to - 1] : arr[to + 1];
-    moved.groupId = neighbour?.groupId;
-    up({ panels: resortByGroup(arr, s.groups ?? []) });
-  });
+  // The reorder commit lives in the parent (reorderPanels) so it can bypass the co-work write-guard
+  // that up() applies — a Co-Work co-worker may reorder panels, the server merge keeps that order.
+  const { setRowRef, handleProps } = usePointerReorder(s.panels.length, reorderPanels);
   // Themed confirm (PowerLine dialog) instead of the browser's window.confirm.
   const { confirm, dialogs } = useDialogs();
   // ── Panel grouping (organisational only — no pricing effect) ────────────────

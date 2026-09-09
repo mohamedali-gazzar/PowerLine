@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Shared (Co-Work) quotations: co-workers can now drag-reorder the panels too.**
+
+Before, only the primary owner could reorder panels — for a co-worker the drag lifted the row but snapped back
+(reordering was treated as a shared change reserved for the owner). Now any collaborator can reorder. It's safe: the
+server keeps whatever order the saver sends and still protects everyone else's panel content. Reordering stays frozen
+for everyone on a submitted/cancelled quotation, and normal (non-shared) quotations are unchanged.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Component list: dragging to reorder now feels like the panel list (smooth), and the dragged row is solid.**
 
 The component drag was the browser's native drag-and-drop (a faint ghost image). It's now the same smooth pointer
