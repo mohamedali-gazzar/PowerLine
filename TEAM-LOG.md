@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Panels editor: dropped the "Nothing selected" placeholder card.**
+
+When no panel is selected, the big editor area used to show a placeholder card ("Nothing selected. Click a
+panel to edit it — or press + Add panel"). The owner asked to remove it, so that space is now simply empty
+until a panel is clicked. The separate hint shown while a group is active (explaining that + Add panel adds
+into the group) is kept, since it's a different state.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Offer cover links now open from phones and WhatsApp too.**
 
 The links on the offer cover (products, ISO certificates, address, email, phone, website, Facebook, LinkedIn)

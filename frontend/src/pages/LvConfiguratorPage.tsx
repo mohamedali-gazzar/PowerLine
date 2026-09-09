@@ -6533,12 +6533,13 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
           : <PanelEditor key={sel.id} s={s} p={sel} up={up} upPanel={upPanel} />)
         : (() => {
           const ag = s.activeGroupId ? groups.find((g) => g.id === s.activeGroupId) : null;
+          // Nothing selected → show no placeholder card (the owner asked to drop it). Only the
+          // "a group is active" hint stays, since it explains where + Add panel will land.
+          if (!ag) return null;
           return (
             <div className="card p-10 text-center text-sm text-muted animate-fade-up">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface text-xl">{ag ? "🗂️" : "☰"}</div>
-              {ag
-                ? <>Group <b className="text-brand-dark">{ag.name}</b> is selected — <b className="text-brand-dark">+ Add panel</b> adds a new panel into it. Click a panel to edit it.</>
-                : <>Nothing selected. Click a panel to edit it — or press <b className="text-brand-dark">+ Add panel</b>{groups.length ? ", and it'll be added without a group (after the last one)." : "."}</>}
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface text-xl">🗂️</div>
+              Group <b className="text-brand-dark">{ag.name}</b> is selected — <b className="text-brand-dark">+ Add panel</b> adds a new panel into it. Click a panel to edit it.
             </div>
           );
         })()}
