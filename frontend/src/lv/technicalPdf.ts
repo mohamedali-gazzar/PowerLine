@@ -371,7 +371,16 @@ function addPageLinks(pdf: jsPDF, page: HTMLElement): void {
     if (!url || url.startsWith("#")) continue; // in-page anchors mean nothing in the PDF
     const r = a.getBoundingClientRect();
     if (!r.width || !r.height) continue;
-    pdf.link((r.left - box.left) * sx, (r.top - box.top) * sy, r.width * sx, r.height * sy, { url });
+    const x = (r.left - box.left) * sx;
+    const w = r.width * sx;
+    const yTop = (r.top - box.top) * sy;
+    const h = r.height * sy;
+    // jsPDF writes the annotation /Rect as [x, top, x+w, bottom] — an INVERTED rectangle
+    // (y1 > y2). The PDF spec wants [x1 y1 x2 y2] with y1 ≤ y2; Acrobat/Chrome normalise it,
+    // but strict and mobile PDF viewers (phones, WhatsApp — how customers open these) drop an
+    // inverted-rect link, so the cover links looked dead in the downloaded file. Passing the
+    // bottom edge as the origin with a negative height makes jsPDF emit a normalised rect.
+    pdf.link(x, yTop + h, w, -h, { url });
   }
 }
 

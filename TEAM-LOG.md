@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Offer cover links now open from phones and WhatsApp too.**
+
+The links on the offer cover (products, ISO certificates, address, email, phone, website, Facebook, LinkedIn)
+were already being placed into the downloaded PDF — but their clickable boxes were being written upside-down.
+Adobe Reader and Chrome quietly correct that, so the links worked there; phone PDF viewers and WhatsApp's
+built-in viewer do not, and they dropped the "backwards" links — which is exactly how customers open the file,
+so the cover links looked dead. Fixed how the clickable areas are written (same spot, same size, just the right
+way up), so every viewer now treats them as real links. Applies to both the Technical and Commercial offer covers.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Panel list: hold-and-drag now scrolls AND selects a long list.**
 
 When you make a group and there are more panels than fit on screen, you press the first panel's checkbox,
