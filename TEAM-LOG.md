@@ -23,6 +23,22 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Copper Tool: a formula bar above the table, with a copy button.**
+
+Above the Copper Tool table there's now a formula bar (like a spreadsheet). Click into any length cell and the bar
+shows which cell it is (e.g. "630 A · Phase L") and its full formula/value — handy when a long formula like
+=1000+1000+500 doesn't fit in the narrow cell. A copy button on the bar copies that formula/value to the clipboard
+(with a ✓ confirmation) without disturbing the cell you're editing.
+
+## 2026-09-09 · Mohamed's side · Claude
+
+**Panel list: click anywhere in a panel's card to open it.**
+
+You no longer have to click exactly on the panel name — clicking anywhere in a panel's card now opens (selects) that
+panel. The drag handle and the row's icons (jump / edit / duplicate / remove) still do their own thing.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Inside a QTN: the "Offers" sidebar icon no longer looks selected, and "← All QTNs" is now "← My QTNs".**
 
 Two small navigation tweaks when a quotation is open: (1) the left sidebar's "Offers" icon no longer shows as

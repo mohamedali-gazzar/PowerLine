@@ -6368,7 +6368,11 @@ function PanelsTab({ s, sel, up, upPanel, onAdd, onDel, onClone, onOpenInOffer, 
               <div key={p.id} ref={setRowRef(i)} data-panelrow data-panelid={p.id}
                 onMouseDown={selMode ? (e) => { const t = e.target as HTMLElement; if (t.closest("[data-panelgrip]")) return; onPanelRowDown(p.id, !!t.closest("[data-rowcheck]"), e.clientX, e.clientY); } : undefined}
                 onMouseEnter={selMode ? () => onPanelRowEnter(p.id) : undefined}
-                className={`mb-1.5 rounded-lg border px-2 py-1.5 transition-colors duration-150 ${selMode ? "select-none" : ""} ${
+                // Click anywhere in the card (not just the name) to open the panel — but let the
+                // card's own controls (grip, jump / edit / duplicate / remove buttons) act on their
+                // own clicks. Only in normal mode; select-mode uses onMouseDown for range-select.
+                onClick={!selMode ? (e) => { const t = e.target as HTMLElement; if (t.closest("button, a, input, [data-panelgrip]")) return; up({ selectedId: p.id, activeGroupId: null }); } : undefined}
+                className={`mb-1.5 rounded-lg border px-2 py-1.5 transition-colors duration-150 ${selMode ? "select-none" : "cursor-pointer"} ${
                   p.highlight
                     ? `bg-yellow-200 hover:bg-yellow-300 ${active ? "border-brand" : "border-yellow-400"}`
                     : active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
@@ -9959,8 +9963,10 @@ function evalNum(raw: string): number {
 // REMEMBERS it: clicking back into the cell shows the formula (selected, so copying yields the
 // formula rather than the computed value); plain numbers still update the weight live. Enter
 // moves down the column (copperEnterNav).
-function CopperCell({ value, eq, colKey, onCommit }: {
-  value: number; eq?: string; colKey: "p" | "n" | "e"; onCommit: (n: number, eq: string | undefined) => void;
+function CopperCell({ value, eq, colKey, label, onActive, onCommit }: {
+  value: number; eq?: string; colKey: "p" | "n" | "e"; label: string;
+  onActive: (info: { label: string; text: string } | null) => void; // report focus/content to the formula bar
+  onCommit: (n: number, eq: string | undefined) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
@@ -9978,15 +9984,16 @@ function CopperCell({ value, eq, colKey, onCommit }: {
       placeholder="0"
       data-coppercol={colKey}
       title="Type a number, or a formula like =1000+1000+500 — the formula is kept"
-      onFocus={(e) => { setEditing(true); setText(eq && eq.trim() ? eq : (value ? String(value) : "")); requestAnimationFrame(() => e.target.select()); }}
+      onFocus={(e) => { setEditing(true); const t = eq && eq.trim() ? eq : (value ? String(value) : ""); setText(t); onActive({ label, text: t }); requestAnimationFrame(() => e.target.select()); }}
       onKeyDown={copperEnterNav}
       onChange={(e) => {
         const raw = e.target.value;
         setText(raw);
+        onActive({ label, text: raw });                       // keep the formula bar in sync as you type
         // Plain numbers update the weight live; leave formulas to evaluate on Enter/blur.
         if (/^\d*\.?\d*$/.test(raw.trim())) onCommit(parseFloat(raw) || 0, undefined);
       }}
-      onBlur={(e) => commit(e.target.value)}
+      onBlur={(e) => { commit(e.target.value); onActive(null); }}
     />
   );
 }
@@ -9996,6 +10003,16 @@ function CopperCell({ value, eq, colKey, onCommit }: {
 function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void }) {
   const type = p.cellConfig.type;
   const tool = p.copperTool ?? {};
+  // The cell you're editing, mirrored into the formula bar (a long formula is clipped in the cell).
+  const [active, setActive] = useState<{ label: string; text: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const copyBar = async (text: string) => {
+    if (!text) return;
+    try { await navigator.clipboard.writeText(text); }
+    catch { const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); } catch { /* ignore */ } ta.remove(); }
+    setCopied(true); window.setTimeout(() => setCopied(false), 1200);
+  };
+  const KEY_LABEL: Record<"p" | "n" | "e", string> = { p: "Phase L", n: "Neutral L", e: "Earth L" };
   const setLen = (rating: number, key: "p" | "n" | "e", val: number, eq: string | undefined) => {
     const cur = tool[String(rating)] ?? { p: 0, n: 0, e: 0 };
     // Store the length AND its formula (…Eq); an undefined eq clears any old formula on that cell.
@@ -10011,13 +10028,38 @@ function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => 
         value={row?.[key] ?? 0}
         eq={row?.[`${key}Eq` as "pEq" | "nEq" | "eEq"]}
         colKey={key}
+        label={`${rating} A · ${KEY_LABEL[key]}`}
+        onActive={setActive}
         onCommit={(n, eq) => setLen(rating, key, n, eq)}
       />
     );
   };
   return (
     <div className="flex h-full flex-col rounded-lg border border-line p-3">
-      <div className="-mx-3 -mt-3 mb-3 flex items-center justify-between rounded-t-lg border-b border-brand/20 bg-brand-light px-3 py-2">
+      {/* Formula bar — shows the formula / value of the cell being edited, in full width. */}
+      <div className="-mx-3 -mt-3 flex items-center gap-2 rounded-t-lg border-b border-line bg-white px-3 py-1.5">
+        <span className="shrink-0 select-none font-serif text-sm font-bold italic text-muted" aria-hidden="true">fx</span>
+        {active ? (
+          <>
+            <span className="shrink-0 text-[11px] font-bold text-brand-dark">{active.label}</span>
+            <span className="shrink-0 text-line">|</span>
+            <span className="min-w-0 flex-1 select-all truncate text-sm text-ink" title={active.text}>{active.text || "—"}</span>
+            {/* onMouseDown preventDefault keeps focus in the cell, so the bar isn't cleared before the copy runs. */}
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => copyBar(active.text)}
+              title="Copy the formula" aria-label="Copy the formula"
+              className="shrink-0 rounded p-1 text-muted transition-colors hover:bg-surface hover:text-brand-dark">
+              {copied ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-green-600" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+              )}
+            </button>
+          </>
+        ) : (
+          <span className="truncate text-xs text-muted">Click a length cell to see its formula here.</span>
+        )}
+      </div>
+      <div className="-mx-3 mb-3 flex items-center justify-between border-b border-brand/20 bg-brand-light px-3 py-2">
         <h3 className="text-base font-bold text-brand-dark">Copper Tool</h3>
         <span className="text-sm font-bold text-brand-dark">Busbar copper: {total.toFixed(1)} KG</span>
       </div>
