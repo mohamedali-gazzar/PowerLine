@@ -23,6 +23,23 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Inside a QTN: the "Offers" sidebar icon no longer looks selected, and "← All QTNs" is now "← My QTNs".**
+
+Two small navigation tweaks when a quotation is open: (1) the left sidebar's "Offers" icon no longer shows as
+highlighted while you're inside a quotation — it only highlights on the offer-history list itself; (2) the "← All
+QTNs" back-link at the top-left is now "← My QTNs" and takes you to your home page instead of the all-QTNs list.
+
+## 2026-09-09 · Mohamed's side · Claude
+
+**Copper Tool: the length cells now remember the formula you type (and copy the formula, not the value).**
+
+Like the QTY column, the Copper Tool's Phase L / Neutral L / Earth L cells now accept a formula (e.g. =350+350 →
+shows 700 and the weight uses 700). Click back into a cell and it shows the formula again — and because the formula
+is selected, copying the cell copies the formula, not the computed value. Plain numbers behave exactly as before;
+the weight math is unchanged, and existing copper values are untouched.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Adding components: the cursor now returns to the search box every time.**
 
 When adding components one after another, the cursor was supposed to jump back to the search box so you can type

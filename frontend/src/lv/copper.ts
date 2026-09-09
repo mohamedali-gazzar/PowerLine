@@ -31,7 +31,10 @@ export function ratingForCsa(type: CellType, targetCsa: number): number {
   return COPPER_RATINGS[COPPER_RATINGS.length - 1];
 }
 
-export interface CopperLen { p: number; n: number; e: number } // lengths in mm
+// Lengths in mm. The optional *Eq fields remember the formula a length was typed as
+// (e.g. "=1000+1000+500"), so the cell shows it again on edit and copies the formula, not
+// the computed value. Weight calculations read only p/n/e and ignore these.
+export interface CopperLen { p: number; n: number; e: number; pEq?: string; nEq?: string; eEq?: string }
 export type CopperTool = Record<string, CopperLen>;            // keyed by rating
 
 const K = 0.000009; // copper density (kg/mm³)

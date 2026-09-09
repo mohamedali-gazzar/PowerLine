@@ -186,7 +186,7 @@ export default function App() {
             <NotificationBell pinMode={pinMode} />
 
             {/* One history for everything — LV quotations and RMU offers together. */}
-            <NavLink to="/lv" title="Offer History" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>
+            <NavLink to="/lv" end title="Offer History" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>
               <span className="shrink-0">{barsIcon}</span>
               <span className={lbl}>Offers</span>
             </NavLink>

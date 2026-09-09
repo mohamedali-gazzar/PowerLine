@@ -1472,7 +1472,7 @@ export default function LvConfiguratorPage() {
       }`}>
         <div>
           <div className="flex items-center gap-3">
-            <Link to="/lv" className="text-xs font-semibold text-brand hover:underline">← All QTNs</Link>
+            <Link to="/" className="text-xs font-semibold text-brand hover:underline">← My QTNs</Link>
             <button
               type="button"
               onClick={() => setHeaderPinned((v) => !v)}
@@ -7002,7 +7002,8 @@ function copperEnterNav(e: { key: string; preventDefault: () => void; currentTar
   const col = e.currentTarget.getAttribute("data-coppercol");
   if (!col) return;
   const inputs = Array.from(document.querySelectorAll<HTMLInputElement>(`input[data-coppercol="${col}"]`));
-  const next = inputs[inputs.indexOf(e.currentTarget) + 1];
+  const idx = inputs.indexOf(e.currentTarget);
+  const next = idx >= 0 ? inputs[idx + 1] : undefined; // guard: never wrap to the first cell
   if (next) { next.focus(); next.select(); }
 }
 
@@ -9954,14 +9955,21 @@ function evalNum(raw: string): number {
   return isNaN(n) || !isFinite(n) ? 0 : Math.round(n * 1000) / 1000;
 }
 
-// A Copper-Tool length cell that also accepts a formula, e.g. "=1000+1000+500" (→ 2500).
-// It keeps a text draft while editing; plain numbers commit live, a formula evaluates on
-// Enter or blur. Enter still moves down the column (copperEnterNav).
-function CopperCell({ value, colKey, onCommit }: {
-  value: number; colKey: "p" | "n" | "e"; onCommit: (n: number) => void;
+// A Copper-Tool length cell that accepts a formula, e.g. "=1000+1000+500" (→ 2500), and
+// REMEMBERS it: clicking back into the cell shows the formula (selected, so copying yields the
+// formula rather than the computed value); plain numbers still update the weight live. Enter
+// moves down the column (copperEnterNav).
+function CopperCell({ value, eq, colKey, onCommit }: {
+  value: number; eq?: string; colKey: "p" | "n" | "e"; onCommit: (n: number, eq: string | undefined) => void;
 }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const shown = draft !== null ? draft : value ? String(value) : "";
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState("");
+  const shown = editing ? text : value ? String(value) : "";
+  const commit = (raw: string) => {
+    setEditing(false);
+    const t = raw.trim();
+    onCommit(evalNum(raw), t.startsWith("=") ? t : undefined); // remember the formula only for "="
+  };
   return (
     <input
       className="input h-8 w-16 px-1 text-center text-sm"
@@ -9969,15 +9977,16 @@ function CopperCell({ value, colKey, onCommit }: {
       value={shown}
       placeholder="0"
       data-coppercol={colKey}
-      title="Type a number, or a formula like =1000+1000+500"
+      title="Type a number, or a formula like =1000+1000+500 — the formula is kept"
+      onFocus={(e) => { setEditing(true); setText(eq && eq.trim() ? eq : (value ? String(value) : "")); requestAnimationFrame(() => e.target.select()); }}
       onKeyDown={copperEnterNav}
       onChange={(e) => {
         const raw = e.target.value;
-        setDraft(raw);
+        setText(raw);
         // Plain numbers update the weight live; leave formulas to evaluate on Enter/blur.
-        if (/^\d*\.?\d*$/.test(raw.trim())) onCommit(parseFloat(raw) || 0);
+        if (/^\d*\.?\d*$/.test(raw.trim())) onCommit(parseFloat(raw) || 0, undefined);
       }}
-      onBlur={(e) => { onCommit(evalNum(e.target.value)); setDraft(null); }}
+      onBlur={(e) => commit(e.target.value)}
     />
   );
 }
@@ -9987,20 +9996,25 @@ function CopperCell({ value, colKey, onCommit }: {
 function CopperToolCard({ p, u }: { p: LvPanel; u: (patch: Partial<LvPanel>) => void }) {
   const type = p.cellConfig.type;
   const tool = p.copperTool ?? {};
-  const setLen = (rating: number, key: "p" | "n" | "e", val: number) => {
+  const setLen = (rating: number, key: "p" | "n" | "e", val: number, eq: string | undefined) => {
     const cur = tool[String(rating)] ?? { p: 0, n: 0, e: 0 };
-    const next = { ...tool, [String(rating)]: { ...cur, [key]: val } };
+    // Store the length AND its formula (…Eq); an undefined eq clears any old formula on that cell.
+    const next = { ...tool, [String(rating)]: { ...cur, [key]: val, [`${key}Eq`]: eq } };
     // Total busbar copper weight flows into the panel cost.
     u({ copperTool: next, mainBusbarKg: Math.round(copperTotal(type, next) * 10) / 10 });
   };
   const total = copperTotal(type, tool);
-  const cell = (rating: number, key: "p" | "n" | "e") => (
-    <CopperCell
-      value={tool[String(rating)]?.[key] ?? 0}
-      colKey={key}
-      onCommit={(n) => setLen(rating, key, n)}
-    />
-  );
+  const cell = (rating: number, key: "p" | "n" | "e") => {
+    const row = tool[String(rating)];
+    return (
+      <CopperCell
+        value={row?.[key] ?? 0}
+        eq={row?.[`${key}Eq` as "pEq" | "nEq" | "eEq"]}
+        colKey={key}
+        onCommit={(n, eq) => setLen(rating, key, n, eq)}
+      />
+    );
+  };
   return (
     <div className="flex h-full flex-col rounded-lg border border-line p-3">
       <div className="-mx-3 -mt-3 mb-3 flex items-center justify-between rounded-t-lg border-b border-brand/20 bg-brand-light px-3 py-2">
