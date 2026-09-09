@@ -1131,8 +1131,13 @@ export default function LvConfiguratorPage() {
     // Co-Work co-worker (sharedReadOnly) — their order isn't saved (the owner owns the arrangement),
     // so letting them drag would only snap back. Kept out of up()'s path so history/guards stay simple.
     if (sharedReadOnly) return;
-    const arr = [...s.panels];
+    // `from`/`to` index the RENDERED rows, which follow the grouped LAYOUT order. Splice on that
+    // exact flattened order — never s.panels, whose physical order can differ (a quotation that
+    // was once co-worked can have its stored panels out of group order). Splicing s.panels by a
+    // layout index would then move the WRONG panel, which is why a drag could seem to do nothing.
+    const arr = panelLayout(s).flatMap((sec) => sec.panels);
     const [moved] = arr.splice(from, 1);
+    if (!moved) return;
     arr.splice(to, 0, moved);
     const neighbour = to > 0 ? arr[to - 1] : arr[to + 1];
     moved.groupId = neighbour?.groupId;

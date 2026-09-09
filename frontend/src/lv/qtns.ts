@@ -9,6 +9,7 @@ import {
   newSparePanel,
   grandTotals,
   meteringBeforeOutgoings,
+  resortByGroup,
   DEFAULT_GENERAL_NOTES,
   DEFAULT_COMMERCIAL_TERMS,
   DEFAULT_COMMERCIAL_TERMS_AR,
@@ -105,6 +106,14 @@ function normalize(state: LvState): LvState {
     const gids = new Set(state.groups.map((g) => g.id));
     for (const p of state.panels) if (p?.groupId && !gids.has(p.groupId)) p.groupId = undefined;
   }
+  // Keep the physical panel array in the SAME order the sidebar renders it (grouped by
+  // group.order, ungrouped last). That order is the app's invariant everywhere — the 1..n
+  // numbering and, crucially, drag-reorder, which maps a dragged ROW back to this array by
+  // position. A quotation whose stored panels drifted out of group order (e.g. one that was
+  // once co-worked, when the old merge rebuilt the list from a saver's order) would otherwise
+  // render grouped but splice the wrong panel on a drag — the reorder "did nothing"/snapped
+  // back. resortByGroup is stable and idempotent, so an already-sorted quotation is unchanged.
+  state.panels = resortByGroup(state.panels, state.groups);
 
   // Merge in any factor key added since this QTN was saved. Without this a new
   // key is `undefined` on every server-loaded quotation and turns the whole

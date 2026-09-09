@@ -23,6 +23,23 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**The REAL reason Mayar couldn't reorder panels in QTN-26-01827 — the saved order had drifted from what's on screen.**
+
+QTN-26-01827 has no co-worker now, but it was co-worked in the past. Back then a shared quotation could end up with its
+panels STORED in a different order than they're shown on screen (on screen they're grouped; the saved list underneath had
+drifted out of that order), and nothing re-aligned the two when the quotation opened. So when Mayar dragged a panel, the
+app moved the panel sitting at that spot in the *saved* list — not the one she grabbed on screen — so the wrong panel
+moved and it looked like her drag did nothing / snapped back. Ordinary quotations (never drifted) worked, which is why it
+looked specific to her.
+
+Fix, two layers: (1) opening a quotation now lines up the saved panel order with what's shown — an invisible correction
+that permanently heals an affected quotation the first time it's opened (the on-screen order doesn't change); (2) a drag
+now always acts on the panels as shown, never the raw saved list, so the panel you grab is the one that moves. Verified by
+recreating the exact "saved order ≠ screen" case: the drag moved the right panel and stuck after a reload. 4 new tests.
+**For Mayar: reopen QTN-26-01827 once it's live and reordering will work — it self-corrects on open.**
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Shared quotations: the OWNER's panel order now sticks (co-workers' auto-saves were quietly undoing it).**
 
 Reported as "Mayar can't reorder panels in QTN-26-01827, but anyone else can." Mayar owns that (draft) quotation, so
