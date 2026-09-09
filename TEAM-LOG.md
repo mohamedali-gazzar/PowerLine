@@ -23,6 +23,13 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Panels editor: brought back the "Nothing selected" placeholder card.**
+
+Reverted the earlier removal — when no panel is selected, the editor area shows the "Nothing selected. Click a
+panel to edit it — or press + Add panel" card again, as before. (The owner asked to undo the previous change.)
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Panels editor: dropped the "Nothing selected" placeholder card.**
 
 When no panel is selected, the big editor area used to show a placeholder card ("Nothing selected. Click a
