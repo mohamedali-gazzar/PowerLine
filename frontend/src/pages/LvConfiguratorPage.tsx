@@ -891,7 +891,8 @@ export default function LvConfiguratorPage() {
   const panelOwnerOf = (p?: LvPanel | null) => p?.ownerId || rec?.ownerId || "";
   const canEditPanel = (p?: LvPanel | null) => !coWork || panelOwnerOf(p) === user?.id;
   // The shared tabs are read-only for a co-worker (the owner owns them). Panel
-  // edits are gated per-panel in `upPanel`; reorder is gated in `up`.
+  // edits are gated per-panel in `upPanel`; the panel ARRANGEMENT (order) belongs to
+  // the primary owner alone, so reorder is gated on `sharedReadOnly` too.
   const sharedReadOnly = readOnly || (coWork && !isPrimary);
   // Resolve a panel-owner id to a display name / initials for the co-work badges.
   const ownerNameById = (id?: string | null) => {
@@ -920,11 +921,13 @@ export default function LvConfiguratorPage() {
   // return you didn't make is reflected without a reload — and, when co-working,
   // the OTHER owner's panels.
   //
-  // The merge is deliberately one-sided: your own panels are never read from the
-  // server, so nothing you are typing can be overwritten. Only panels that belong
-  // to the other person are replaced, added or dropped. A co-owner additionally
-  // takes the shared tabs from the server, since the primary owner owns those and
-  // the co-owner cannot edit them anyway.
+  // The merge protects your own panels' CONTENT: your own panels are never read from
+  // the server, so nothing you are typing can be overwritten. Only panels that belong
+  // to the other person are replaced, added or dropped. The panel ORDER, though, belongs
+  // to the primary owner: the owner keeps their local arrangement, while a co-worker adopts
+  // the owner's order from the server (and also takes the shared tabs from it, since the
+  // owner owns those and the co-worker cannot edit them anyway). Without that, the owner's
+  // reorder never reached co-workers and each side's next save fought over the order.
   const [freshPanels, setFreshPanels] = useState<Set<string>>(new Set());
   const theirsRef = useRef<string | null>(null); // their panels as last seen on the server
   const syncFromServer = async () => {
@@ -969,12 +972,25 @@ export default function LvConfiguratorPage() {
     const iAmPrimary = mine === r.ownerId;
     setHist((h) => {
       const cur = h.present;
-      // Keep all of mine untouched; keep theirs only while it still exists remotely.
-      const merged = cur.panels
-        .filter((p) => ownerOnServer(p) === mine || theirIds.has(p.id))
-        .map((p) => (ownerOnServer(p) === mine ? p : theirs.find((x) => x.id === p.id) ?? p));
-      const have = new Set(merged.map((p) => p.id));
-      theirs.forEach((p) => { if (!have.has(p.id)) merged.push(p); }); // panels they added
+      let merged: LvPanel[];
+      if (iAmPrimary) {
+        // The owner owns the ARRANGEMENT: keep my order and my panels untouched, and refresh only
+        // the co-workers' panels from the server — each kept in the slot where I placed it.
+        merged = cur.panels
+          .filter((p) => ownerOnServer(p) === mine || theirIds.has(p.id))
+          .map((p) => (ownerOnServer(p) === mine ? p : theirs.find((x) => x.id === p.id) ?? p));
+        const have = new Set(merged.map((p) => p.id));
+        theirs.forEach((p) => { if (!have.has(p.id)) merged.push(p); }); // panels a co-worker added
+      } else {
+        // A co-worker follows the owner's ORDER: adopt the server's arrangement, but keep my own
+        // panels' LOCAL content (it may hold edits I haven't saved yet) and any panel I just added
+        // that hasn't reached the server. This is what lets the owner's reorder actually appear for
+        // co-workers instead of each side clinging to its own order.
+        const mineLocal = new Map(cur.panels.filter((p) => ownerOnServer(p) === mine).map((p) => [p.id, p]));
+        merged = r.state.panels.map((p) => (ownerOnServer(p) === mine ? mineLocal.get(p.id) ?? p : p));
+        const onServer = new Set(r.state.panels.map((p) => p.id));
+        cur.panels.forEach((p) => { if (ownerOnServer(p) === mine && !onServer.has(p.id)) merged.push(p); });
+      }
       const base = iAmPrimary ? cur : { ...r.state, selectedId: cur.selectedId };
       const next = { ...base, panels: merged };
       if (JSON.stringify(next) === JSON.stringify(cur)) return h;
@@ -1111,7 +1127,10 @@ export default function LvConfiguratorPage() {
   // whatever panel order the saver sends and protects everyone else's panel content, so reordering
   // is safe for any collaborator. Still frozen for a read-only (submitted / cancelled) quotation.
   const reorderPanels = (from: number, to: number) => {
-    if (readOnly) return;
+    // The primary owner arranges the panel order. It is blocked while frozen by status, and for a
+    // Co-Work co-worker (sharedReadOnly) — their order isn't saved (the owner owns the arrangement),
+    // so letting them drag would only snap back. Kept out of up()'s path so history/guards stay simple.
+    if (sharedReadOnly) return;
     const arr = [...s.panels];
     const [moved] = arr.splice(from, 1);
     arr.splice(to, 0, moved);
@@ -1854,13 +1873,13 @@ export default function LvConfiguratorPage() {
         {activeTab === "pricing" && <PricingTab s={s} up={up} />}
         {activeTab === "specs" && <SpecsTab s={s} up={up} qtnId={rec?.id ?? ""} readOnly={sharedReadOnly} />}
         {activeTab === "panels" && (
-          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} reorderPanels={reorderPanels} panelBadge={panelBadge} freshIds={freshPanels}
+          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} reorderPanels={reorderPanels} canReorder={!sharedReadOnly} panelBadge={panelBadge} freshIds={freshPanels}
             onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
             onAddSpare={isEdmsQtn ? undefined : addSpareCell}
             onImport={readOnly ? undefined : importPanels} knownComponentRefs={knownComponentRefs} />
         )}
         {activeTab === "spare" && (
-          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} reorderPanels={reorderPanels} panelBadge={panelBadge} freshIds={freshPanels}
+          <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} reorderPanels={reorderPanels} canReorder={!sharedReadOnly} panelBadge={panelBadge} freshIds={freshPanels}
             onAdd={() => addSpareCell("spare")} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
             addLabel="+ Add cell" emptyLabel="No spare cells yet." emptyAddLabel="+ Add your first cell" />
         )}
@@ -6077,12 +6096,15 @@ function AddSpareMenu({ onAddSpare, trigger, wrap = "" }: { onAddSpare: (kind: s
   );
 }
 
-function PanelsTab({ s, sel, up, upPanel, reorderPanels, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, onImport, knownComponentRefs, panelBadge, freshIds, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
+function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, onImport, knownComponentRefs, panelBadge, freshIds, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
   s: LvState; sel: LvPanel | null;
   up: (p: Partial<LvState>) => void;
   upPanel: (id: string, p: Partial<LvPanel>) => void;
-  /** Commit a panel drag-reorder (from → to). Lives in the parent so it can allow Co-Work co-workers. */
+  /** Commit a panel drag-reorder (from → to). Lives in the parent. */
   reorderPanels: (from: number, to: number) => void;
+  /** Whether this user may reorder. The PRIMARY owner arranges the panel order; a Co-Work
+   *  co-worker cannot (their order isn't saved), so the drag handle is hidden for them. */
+  canReorder?: boolean;
   onAdd: () => void; onDel: (id: string) => void; onClone: (id: string) => void;
   onOpenInOffer: (id: string) => void;
   onAddSpare?: (kind: string) => void;
@@ -6098,8 +6120,10 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, onAdd, onDel, onClone, 
   // Smooth pointer drag-to-reorder (handle-driven, touch-friendly). Reordering only changes
   // display order — the saved order autosaves to the QTN; no pricing math is touched. Hooks
   // must precede the early return.
-  // The reorder commit lives in the parent (reorderPanels) so it can bypass the co-work write-guard
-  // that up() applies — a Co-Work co-worker may reorder panels, the server merge keeps that order.
+  // The reorder commit lives in the parent (reorderPanels). The drag handle only shows for the
+  // person who may reorder (canReorder) — the primary owner. A Co-Work co-worker owns their
+  // panels' content, not the arrangement, so hiding the handle keeps the order from a drag that
+  // the server would not keep anyway.
   const { setRowRef, handleProps } = usePointerReorder(s.panels.length, reorderPanels);
   // Themed confirm (PowerLine dialog) instead of the browser's window.confirm.
   const { confirm, dialogs } = useDialogs();
@@ -6390,16 +6414,18 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, onAdd, onDel, onClone, 
                       <input type="checkbox" data-rowcheck checked={checked} readOnly
                         className="mr-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-brand" title="Select for grouping — or press and drag over the rows to select a range" />
                     )}
-                    <span
-                      {...handleProps(i)} data-panelgrip
-                      title="Drag to reorder — or into a group's rows to add it"
-                      className="shrink-0 select-none px-0.5 text-muted/50 transition-colors hover:text-brand">
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                        <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
-                        <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
-                        <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
-                      </svg>
-                    </span>
+                    {canReorder && (
+                      <span
+                        {...handleProps(i)} data-panelgrip
+                        title="Drag to reorder — or into a group's rows to add it"
+                        className="shrink-0 select-none px-0.5 text-muted/50 transition-colors hover:text-brand">
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                          <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
+                          <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
+                          <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
+                        </svg>
+                      </span>
+                    )}
                     <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{num}</span>
                     {panelBadge && (() => { const b = panelBadge(p); return (
                       <span title={`Owner: ${b.title}${b.mine ? " (you)" : ""}`}

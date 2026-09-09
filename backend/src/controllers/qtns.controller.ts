@@ -442,30 +442,66 @@ export async function create(req: Request, res: Response) {
 // Panel ownership is read from the STORED state — a saver cannot reassign or edit
 // someone else's panel — unassigned panels belong to the owner, and a brand-new panel
 // is stamped to whoever saved it.
-type PanelLike = { id?: string; ownerId?: string; [k: string]: unknown };
+export type PanelLike = { id?: string; ownerId?: string; [k: string]: unknown };
 type StateLike = { panels?: PanelLike[]; [k: string]: unknown };
-function mergeCoWork(stored: StateLike, incoming: StateLike, primaryId: string, saverId: string): StateLike {
+/**
+ * Merge a co-worked quotation on save. Ownership splits BY PANEL, but along two different axes:
+ *
+ *   • CONTENT is owned by each panel's owner — a co-worker's panel is never overwritten by anyone
+ *     else's save, and the co-worker's own panels never come back from someone else's client.
+ *   • The ARRANGEMENT (the order of the list) belongs to the PRIMARY OWNER alone. This is the fix
+ *     for the reorder that would not stick: every routine autosave ships the saver's whole panel
+ *     array, so if a co-worker's stale save were allowed to set the order, it would silently revert
+ *     an order the owner had just dragged into place. Now only the owner's save can reorder.
+ *
+ * So: the OWNER's save takes the incoming order (they may move anyone's panel) but keeps each
+ * co-worker's panel content authoritative; a CO-WORKER's save walks the owner's STORED order,
+ * swapping in edits to their own panels, dropping the ones they deleted, and appending the ones
+ * they added — the incoming order is ignored.
+ */
+export function mergeCoWork(stored: StateLike, incoming: StateLike, primaryId: string, saverId: string): StateLike {
   const storedPanels = Array.isArray(stored?.panels) ? stored.panels : [];
   const incomingPanels = Array.isArray(incoming?.panels) ? incoming.panels : [];
   const storedById = new Map(storedPanels.filter((p) => p?.id).map((p) => [p.id as string, p]));
+  const incomingById = new Map(incomingPanels.filter((p) => p?.id).map((p) => [p.id as string, p]));
   const ownerOf = (p: PanelLike) => p?.ownerId || primaryId;
+  const saverIsPrimary = saverId === primaryId;
 
   const merged: PanelLike[] = [];
-  const seen = new Set<string>();
-  for (const p of incomingPanels) {
-    if (!p?.id) { merged.push(p); continue; }
-    seen.add(p.id);
-    const sp = storedById.get(p.id);
-    if (!sp) { merged.push({ ...p, ownerId: saverId }); continue; } // new panel → saver owns it
-    if (ownerOf(sp) !== saverId) merged.push(sp);                   // someone else's — authoritative
-    else merged.push({ ...p, ownerId: saverId });                   // the saver's own edit
-  }
-  // Never drop anyone else's panels, even if the saver's client didn't send them back.
-  for (const sp of storedPanels) {
-    if (sp?.id && !seen.has(sp.id) && ownerOf(sp) !== saverId) merged.push(sp);
+  if (saverIsPrimary) {
+    // Owner arranges: take the incoming ORDER, but keep each co-worker's panel CONTENT as stored.
+    const seen = new Set<string>();
+    for (const p of incomingPanels) {
+      if (!p?.id) { merged.push(p); continue; }
+      seen.add(p.id);
+      const sp = storedById.get(p.id);
+      if (sp && ownerOf(sp) !== saverId) merged.push(sp); // a co-worker's panel — their content, the owner's position
+      else merged.push(p);                                // the owner's own panel, or a brand-new one
+    }
+    // Never drop a co-worker's panel the owner's client didn't send back.
+    for (const sp of storedPanels) {
+      if (sp?.id && !seen.has(sp.id) && ownerOf(sp) !== saverId) merged.push(sp);
+    }
+  } else {
+    // Co-worker: the owner's stored ORDER is law. Walk it, keeping everyone else's panels as stored
+    // and swapping in the saver's edits to their OWN panels (dropping ones they removed).
+    for (const sp of storedPanels) {
+      if (!sp?.id) { merged.push(sp); continue; }
+      if (ownerOf(sp) === saverId) {
+        const ip = incomingById.get(sp.id);
+        if (ip) merged.push({ ...ip, ownerId: saverId }); // their edit
+        // else: they deleted their own panel → leave it out
+      } else {
+        merged.push(sp); // someone else's — authoritative, in its stored slot
+      }
+    }
+    // The saver's brand-new panels (not yet stored) → append after the owner's arrangement.
+    for (const p of incomingPanels) {
+      if (p?.id && !storedById.has(p.id)) merged.push({ ...p, ownerId: saverId });
+    }
   }
 
-  const base = saverId === primaryId ? incoming : stored; // co-workers keep stored shared fields
+  const base = saverIsPrimary ? incoming : stored; // co-workers keep the owner's shared fields
   return { ...base, panels: merged };
 }
 

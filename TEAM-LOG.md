@@ -23,6 +23,25 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-09 · Mohamed's side · Claude
 
+**Shared quotations: the OWNER's panel order now sticks (co-workers' auto-saves were quietly undoing it).**
+
+Reported as "Mayar can't reorder panels in QTN-26-01827, but anyone else can." Mayar owns that (draft) quotation, so
+nothing was blocking her — her arrangement was being *undone*. In a shared quotation every teammate's app auto-saves
+constantly (whenever they price one of their own panels), and each of those saves was re-sending that person's view of
+the whole panel order. So Mayar would drag the panels into place, it saved, and a few seconds later a co-worker's routine
+auto-save arrived carrying the *old* order and overwrote hers — it snapped back. Co-workers' own reorders only seemed to
+"work" because they happened to save last.
+
+Fix: panel **order now belongs to the quotation's owner**, the same way the owner already owns the Project/Pricing/Terms
+tabs. A co-worker's save can no longer move panels — it only updates the contents of that co-worker's own panels (adds,
+edits, deletes still work). Co-workers see the owner's order (it syncs to them within ~15s). **Heads-up / behavior change:**
+co-workers no longer have the drag handle on the panel list — their reordering was never being saved anyway and was the
+very thing causing the conflict. If we decide co-workers *should* be able to arrange the shared list, that needs a
+different approach — say so and I'll do it. Guarded by 9 new backend tests proving a co-worker's stale save can't revert
+the owner's order.
+
+## 2026-09-09 · Mohamed's side · Claude
+
 **Panel drag-reorder now works once panels are in groups (it used to snap back).**
 
 The earlier report blamed shared/co-work quotations, but the real cause was groups. As soon as panels were placed in
