@@ -4622,7 +4622,8 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
                 unitCost={r.calc.unitCostOps * safetyMul} factor={r.currentFactor} custom={r.custom} dirty={r.dirty}
                 sellUnit={r.calc.sellUnit} newFactor={r.newFactor} totalSell={r.previewTotalEgp} totalSellIncl={r.previewTotalEgp * vatMul} m={m}
                 onTarget={(t) => stageTarget(r.p.id, r.currentFactor, r.calc.sellUnit, t)}
-                onDefault={() => resetToDefault(r.p.id)} />
+                onDefault={() => resetToDefault(r.p.id)}
+                onName={(nm) => up({ panels: s.panels.map((pp) => (pp.id === r.p.id ? { ...pp, name: nm } : pp)) })} />
             ))}
           </tbody>
           <tfoot>
@@ -4643,7 +4644,7 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
         </table>
       </div>
       {/* Target-price helper — a pop-up that works out the factor for a wanted total price. */}
-      <div className="mt-4 text-sm">
+      <div className="mt-4 text-base font-bold">
         <span className="text-muted">Do you have a target price? </span>
         <button type="button" onClick={() => { setTargetOpen(true); setRecorded(false); }}
           className="font-bold text-brand hover:underline">Click here</button>
@@ -4753,10 +4754,10 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
 
 // One row of the panel-pricing table. Values are the PREVIEW (staged) numbers; a local
 // draft holds the target input until the user commits it (blur / Enter) to the parent.
-function PanelTargetRow({ name, qty, unitCost, factor, custom, dirty, sellUnit, newFactor, totalSell, totalSellIncl, m, onTarget, onDefault }: {
+function PanelTargetRow({ name, qty, unitCost, factor, custom, dirty, sellUnit, newFactor, totalSell, totalSellIncl, m, onTarget, onDefault, onName }: {
   name: string; qty: number; unitCost: number; factor: number; custom: boolean; dirty: boolean;
   sellUnit: number; newFactor: number | null; totalSell: number; totalSellIncl: number; m: (egp: number) => string;
-  onTarget: (targetDisplay: number) => void; onDefault: () => void;
+  onTarget: (targetDisplay: number) => void; onDefault: () => void; onName: (name: string) => void;
 }) {
   const [draft, setDraft] = useState("");
   const commit = () => {
@@ -4766,7 +4767,12 @@ function PanelTargetRow({ name, qty, unitCost, factor, custom, dirty, sellUnit, 
   const curRisky = factor > 0.95;
   return (
     <tr className={`border-b border-line/60 align-middle ${dirty ? "bg-brand-tint/40" : ""}`}>
-      <td className="py-1.5 pr-2"><b>{name || <span className="font-normal text-muted">(unnamed)</span>}</b></td>
+      <td className="py-1.5 pr-2">
+        {/* Panel name is editable right here — same field as the Panels tab, so a rename sticks. */}
+        <input value={name} placeholder="(unnamed)" title="Edit the panel name"
+          onChange={(e) => onName(e.target.value)}
+          className="w-full min-w-[7rem] rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-bold text-ink placeholder:font-normal placeholder:text-muted hover:border-line focus:border-brand focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand/30" />
+      </td>
       <td className="py-1.5 pr-2 text-center font-semibold">{qty}</td>
       <td className="py-1.5 px-3 text-center">{m(unitCost)}</td>
       <td className="py-1.5 px-3 text-center">

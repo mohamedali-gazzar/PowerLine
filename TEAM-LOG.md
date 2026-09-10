@@ -23,6 +23,13 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**Pricing Settings → Panel pricing: the panel name is now editable, and the target-price line is bigger + bold.**
+
+In the "Panel pricing" table you can now edit a panel's name straight in the PANEL column — it's the same name used
+everywhere, saved automatically. The "Do you have a target price? Click here" line is also 2px larger and bold.
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **Auxiliary panels (LCP / KWHM) now appear in the Selectivity table.**
 
 The Selectivity coordination table used to skip every auxiliary cell; now the real aux panels — LCP and KWHM — are
