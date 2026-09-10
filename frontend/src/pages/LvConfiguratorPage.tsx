@@ -15,7 +15,7 @@ import { useStaff, SALES_MANAGER } from "../staff";
 import PanelsBulkImport, { type ImportedPanel } from "../components/PanelsBulkImport";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
-  SHEET_METAL_FAMILIES, RESTRICTED_FORMS,
+  formFamilyConflict,
   PANEL_SYSTEMS, SELECTABLE_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
   COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp,
   findByName, externalNeutralCT, copperTypeFactor,
@@ -26,7 +26,7 @@ import {
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpEnclosureRecord, lcpSizes, lcpRealBox,
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, formFamilyIssue, repriceToCatalog,
+  initialState, calcPanel, grandTotals, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog,
   panelLayout, panelNumbers, commonNamePrefix, resortByGroup, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
@@ -296,20 +296,16 @@ export default function LvConfiguratorPage() {
   const routeQtnId = id.includes("-") ? hashId || id : id;
   const navigate = useNavigate();
   /**
-   * Pin the quotation header (number, price, status, actions) to the top so it
-   * stays visible while scrolling a long panel list. Remembered per browser, the
-   * same way the sidebar pin is. Off by default — pinned, it costs ~90px of
-   * height on every screen, which not everyone wants.
-   *
-   * The tab strip below is sticky already; while the header is pinned it gives up
-   * its own stickiness so the two cannot stack on top of each other.
+   * Minimize the quotation header to a slim bar — the price, status, timer and the whole
+   * action-button cluster collapse away, leaving just the QTN number and name — to give the
+   * panel list below more room. Remembered per browser; expanded by default.
    */
-  const [headerPinned, setHeaderPinned] = useState(() => {
-    try { return localStorage.getItem("pl.qtnHeaderPin") === "1"; } catch { return false; }
+  const [headerMin, setHeaderMin] = useState(() => {
+    try { return localStorage.getItem("pl.qtnHeaderMin") === "1"; } catch { return false; }
   });
   useEffect(() => {
-    try { localStorage.setItem("pl.qtnHeaderPin", headerPinned ? "1" : "0"); } catch { /* ignore */ }
-  }, [headerPinned]);
+    try { localStorage.setItem("pl.qtnHeaderMin", headerMin ? "1" : "0"); } catch { /* ignore */ }
+  }, [headerMin]);
 
   // Themed stand-ins for window.confirm / alert / prompt. `confirmModal` is
   // rendered once, near the bottom of this component; it portals to document.body.
@@ -1505,36 +1501,35 @@ export default function LvConfiguratorPage() {
 
   return (
     <div>
-      <div className={`mb-5 flex flex-wrap items-end justify-between gap-3 animate-fade-up no-print ${
-        headerPinned ? "sticky top-0 z-40 -mx-4 border-b border-line/60 bg-surface px-4 py-3 sm:-mx-6 sm:px-6" : ""
-      }`}>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3 animate-fade-up no-print">
         <div>
           <div className="flex items-center gap-3">
             <Link to="/" className="text-xs font-semibold text-brand hover:underline">← My QTNs</Link>
             <button
               type="button"
-              onClick={() => setHeaderPinned((v) => !v)}
-              aria-pressed={headerPinned}
-              title={headerPinned
-                ? "Unpin — let this bar scroll away with the page"
-                : "Pin — keep the number, price and buttons visible while you scroll"}
-              className={`text-xs font-semibold hover:underline ${headerPinned ? "text-brand" : "text-muted"}`}
+              onClick={() => setHeaderMin((v) => !v)}
+              aria-pressed={headerMin}
+              aria-label={headerMin ? "Expand this bar" : "Minimize this bar"}
+              title={headerMin
+                ? "Expand — show the price, status and action buttons again"
+                : "Minimize — collapse this bar to just the number and name"}
+              className="text-xs font-semibold text-muted hover:text-brand hover:underline"
             >
-              {headerPinned ? "📌 Pinned" : "📌 Pin"}
+              {headerMin ? "▸ Expand" : "▾ Minimize"}
             </button>
           </div>
           <h1 className="flex items-center gap-3 text-2xl font-extrabold tracking-tight">
             <span className="code-chip">{offerLabel}</span>
             {s.project.name || (isCustomQtn ? "Custom Commercial Offer" : "LV Quotation")}
           </h1>
-          <p className="text-sm text-muted">
+          <p className={`text-sm text-muted ${headerMin ? "hidden" : ""}`}>
             {fmtEgp(totals.sell)} EGP excl. VAT
             {totals.sell > 0 && <> · <strong className="text-ink">{fmtEgp(totals.incl)}</strong> incl. {Math.round(s.factors.vat * 100)}% VAT</>}
           </p>
           {/* Workflow stage, under the price — it belongs with the quotation's own
               details rather than among the buttons that act on it. */}
           {/* text-sm (14px) rather than text-xs (12px) — the 2px the owner asked for. */}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className={`mt-2 ${headerMin ? "hidden" : "flex flex-wrap items-center gap-2"}`}>
             <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-sm font-bold ${QTN_STATUS_STYLE[status]}`}
               title={`Workflow stage: ${QTN_STATUS_LABEL[status]}`}>
               {QTN_STATUS_LABEL[status]}
@@ -1543,7 +1538,7 @@ export default function LvConfiguratorPage() {
             <ActiveTimeBadge qtnId={rec?.id} initialSeconds={rec?.activeSeconds ?? 0} enabled={!sharedReadOnly && !reviewSandbox} />
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
+        <div className={headerMin ? "hidden" : "flex flex-col items-end gap-2"}>
           {/* The action buttons and the Share dropdown form their own group, sized by
               `w-max` to the buttons' natural width — so the dropdown below spans exactly
               their combined width. It has to be a separate group: the ERP / Check-for-
@@ -1840,11 +1835,8 @@ export default function LvConfiguratorPage() {
       {/* Tabs — sticky header so sections are reachable without scrolling up.
           Negative margins let the bg band span the full content width; py keeps a
           solid band so content scrolls cleanly underneath. */}
-      {/* Sticky on its own, but not while the header above is pinned — two sticky
-          bars at top-0 would sit on top of each other. */}
-      <div className={`-mx-4 mb-4 flex flex-wrap gap-1.5 border-b border-line/60 bg-surface px-4 py-2.5 no-print sm:-mx-6 sm:px-6 ${
-        headerPinned ? "" : "sticky top-0 z-30"
-      }`}>
+      {/* The tab strip stays stuck to the top of the viewport as you scroll. */}
+      <div className="-mx-4 mb-4 flex flex-wrap gap-1.5 border-b border-line/60 bg-surface px-4 py-2.5 no-print sm:-mx-6 sm:px-6 sticky top-0 z-30">
         {tabs.map(([t, label]) => (
           <button key={t} onClick={() => goToTab(t)}
             className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
@@ -1907,13 +1899,24 @@ function fmtDate(iso: string): string {
   return y && m && d ? `${d}/${m}/${y}` : iso;
 }
 
+// Shown when a sheet-metal family (SR-Basic / Unikit / Local) is paired with Form 3a / 3b / 4a / 4b,
+// in whichever order the two were picked. It only WARNS — the user may proceed anyway.
+const FORM_FAMILY_WARNING = {
+  title: "Warning",
+  message:
+    "Form 3A, 3B, 4A, and 4B are not available for the selected panel types:\n" +
+    "• SR-Basic\n• Unikit\n• Local\n" +
+    "Do you want to proceed anyway?",
+  confirmLabel: "Proceed Anyway",
+  cancelLabel: "Cancel",
+  tone: "danger" as const,
+};
+
 // RPT-1: a panel needs a name and an incoming C.B rating before any output.
 function panelInvalid(p: LvPanel): string[] {
   const out: string[] = [];
   if (!p.name.trim()) out.push("Panel name is required");
   if (!p.ratingA || p.ratingA <= 0) out.push("Busbar Rating is required");
-  const formIssue = formFamilyIssue(p);
-  if (formIssue) out.push(formIssue);
   return out;
 }
 // A name a PERSON typed is never rewritten or refused mid-word — being overruled while
@@ -6889,26 +6892,19 @@ function PanelEditor({ s, p, up, upPanel }: {
           <div><L>Short circuit</L><input className="input" value={p.shortCircuit}
             placeholder="e.g. 50 kA" onChange={(e) => u({ shortCircuit: e.target.value })} /></div>
           {commonField("Amb. temp", "ambTemp", AMB_TEMPS)}
-          {/* Form of separation. SR-Basic / Unikit / Local (Sheet Metal) cannot build Form 3a and
-              up, so those options are disabled for such a panel, and a panel already set that way
-              (e.g. its family was changed afterwards) is flagged and blocks every offer. */}
-          {(() => {
-            const famRestricts = p.sizingMode === "panels" && SHEET_METAL_FAMILIES.has(p.panelsSizing?.family ?? "");
-            const issue = formFamilyIssue(p);
-            return (
-              <div>
-                <L>Form</L>
-                <select className={`input cursor-pointer ${issue ? "border-red-400 bg-red-50/40" : ""}`}
-                  value={p.form} onChange={(e) => u({ form: e.target.value })}>
-                  {FORMS.map((f) => {
-                    const blocked = famRestricts && RESTRICTED_FORMS.has(f);
-                    return <option key={f} value={f} disabled={blocked}>{blocked ? `${f} — n/a` : f}</option>;
-                  })}
-                </select>
-                {issue && <p className="mt-1 text-[11px] font-semibold text-red-600">⚠ {issue}</p>}
-              </div>
-            );
-          })()}
+          {/* Form of separation — freely selectable. If the panel is on a sheet-metal family
+              (SR-Basic / Unikit / Local) and Form 3a+ is picked, warn but allow proceeding. */}
+          <div>
+            <L>Form</L>
+            <Sel value={p.form as any} options={FORMS as any}
+              onChange={(v) => {
+                if (p.sizingMode === "panels" && formFamilyConflict(v, p.panelsSizing?.family ?? "")) {
+                  void confirm(FORM_FAMILY_WARNING).then((ok) => { if (ok) u({ form: v }); });
+                } else {
+                  u({ form: v });
+                }
+              }} />
+          </div>
           {commonField("Neutral", "neutral", NEUTRAL_EARTH)}
           {commonField("Earth", "earth", NEUTRAL_EARTH)}
           {commonField("Copper", "copperType", COPPER_TYPES)}
@@ -9655,6 +9651,7 @@ function SizingCard({ p, u, factors }: {
   p: LvPanel; u: (patch: Partial<LvPanel>) => void;
   factors: LvState["factors"];
 }) {
+  const { confirm, dialogs } = useDialogs();
   const panelsLocked = p.ratingA > PANELS_MAX_INCOMER_A;
   useEffect(() => {
     if (panelsLocked && p.sizingMode === "panels") u({ sizingMode: "cells", panelItems: [] });
@@ -9701,6 +9698,15 @@ function SizingCard({ p, u, factors }: {
   // other family is 3P. Picking a family resets the busbar poles to its standard.
   const setFamily = (family: string) =>
     u({ panelsSizing: { ...ps, family }, panelItems: [], busbarPoles: family === "Pillars" ? 4.25 : 3 });
+  // Warn (but allow) when a sheet-metal family is picked while the form is 3a+. On cancel we don't
+  // apply — the dialog closing re-renders this card, so the controlled select snaps back.
+  const onPickFamily = (family: string) => {
+    if (formFamilyConflict(p.form, family)) {
+      void confirm(FORM_FAMILY_WARNING).then((ok) => { if (ok) setFamily(family); });
+    } else {
+      setFamily(family);
+    }
+  };
   const keyOf = (it: PanelTypeItem | null) => (it ? `${it.name}|${it.ref}` : "");
 
   // Panels/Cells chooser — rendered at the top in panels/none mode, or inside the
@@ -9748,6 +9754,7 @@ function SizingCard({ p, u, factors }: {
 
   return (
     <div className="card p-5">
+      {dialogs}
       <div>
       {/* Panel type body — full width; the No. of poles summary is its own section below. */}
       <div className="min-w-0">
@@ -9783,9 +9790,10 @@ function SizingCard({ p, u, factors }: {
             <div>
               <L>Enclosure family</L>
               {/* Starts unchosen — the disabled placeholder makes the engineer pick a family before
-                  a size can be searched (the pool below is empty until then). */}
+                  a size can be searched (the pool below is empty until then). Picking a sheet-metal
+                  family while the form is 3a+ warns first (onPickFamily), but is allowed. */}
               <select className={`input cursor-pointer ${!ps.family ? "text-muted" : ""}`}
-                value={ps.family} onChange={(e) => setFamily(e.target.value)}>
+                value={ps.family} onChange={(e) => onPickFamily(e.target.value)}>
                 <option value="" disabled>Choose Enclosure Type..</option>
                 {famOptions.map((f) => <option key={f} value={f}>{f}</option>)}
               </select>

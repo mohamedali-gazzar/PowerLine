@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**Form 3a/3b/4a/4b on SR-Basic / Unikit / Local is now a soft WARNING, not a block (supersedes the earlier version).**
+
+Earlier today this was a hard rule (the forms were greyed out / the families were hidden). By request it's now a
+gentle warning instead: forms and enclosure families are all freely selectable again, and if you end up pairing a
+sheet-metal family (SR-Basic / Unikit / Local) with Form 3a/3b/4a/4b — in EITHER order (pick the form then the family, or
+the family then the form) — a pop-up asks "Form 3A, 3B, 4A, and 4B are not available for the selected panel types:
+SR-Basic / Unikit / Local — Do you want to proceed anyway?" with **Proceed Anyway** and **Cancel**. Proceed Anyway keeps
+the choice (it's allowed now — no offer is blocked); Cancel undoes just the change that triggered the warning. The old
+hard offer/export block for this rule was removed.
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **A new panel no longer pre-picks SR-Basic — the enclosure family now starts on "Choose Enclosure Type..".**
 
 When you switch a panel to Panels mode, the Enclosure family box now shows a greyed "Choose Enclosure Type.." and you

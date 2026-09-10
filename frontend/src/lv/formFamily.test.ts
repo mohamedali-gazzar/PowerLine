@@ -1,53 +1,41 @@
 // The sheet-metal / basic enclosure families (SR-Basic, Unikit, Local) cannot achieve the higher
-// forms of separation (3a and up). formFamilyIssue() is the single rule that blocks such a panel
-// from every offer; these tests pin exactly when it fires.
+// forms of separation (3a and up). That is only a WARNING now — the user may proceed — so the rule
+// lives in one predicate, formFamilyConflict(form, family), which decides whether to raise the
+// prompt in whichever order the two were chosen. These tests pin exactly when it fires.
 import { describe, it, expect } from "vitest";
-import { newPanel, formFamilyIssue, type LvPanel } from "./store";
+import { formFamilyConflict } from "./catalog";
 
-// A "panels"-mode panel in the given family and form — the only shape the rule looks at.
-const panel = (family: string, form: string, over: Partial<LvPanel> = {}): LvPanel => ({
-  ...newPanel(),
-  sizingMode: "panels",
-  panelsSizing: { layout: "Single", family, sizing1: "", sizing2: "" },
-  form,
-  ...over,
-});
+const SHEET_METAL = ["SR-Basic", "Unikit", "Local (Sheet Metal)"];
+const RESTRICTED = ["3a", "3b", "4a", "4b"];
+const OK_FORMS = ["1", "2a", "2b"];
+const OTHER_FAMILIES = ["Minicenter", "Primo", "Pillars", "Coffree"];
 
-describe("formFamilyIssue — forbidden form / enclosure combinations", () => {
-  it("blocks Forms 3a / 3b / 4a / 4b on SR-Basic, Unikit and Local (Sheet Metal)", () => {
-    for (const fam of ["SR-Basic", "Unikit", "Local (Sheet Metal)"]) {
-      for (const form of ["3a", "3b", "4a", "4b"]) {
-        const msg = formFamilyIssue(panel(fam, form));
-        expect(msg, `${fam} + Form ${form}`).not.toBe("");
-        expect(msg).toContain(form);
-        expect(msg).toContain(fam);
+describe("formFamilyConflict — when to warn about form / enclosure", () => {
+  it("warns for every restricted form on every sheet-metal family", () => {
+    for (const fam of SHEET_METAL) {
+      for (const form of RESTRICTED) {
+        expect(formFamilyConflict(form, fam), `${form} + ${fam}`).toBe(true);
       }
     }
   });
 
-  it("allows Forms 1 / 2a / 2b on those same families", () => {
-    for (const fam of ["SR-Basic", "Unikit", "Local (Sheet Metal)"]) {
-      for (const form of ["1", "2a", "2b"]) {
-        expect(formFamilyIssue(panel(fam, form)), `${fam} + Form ${form}`).toBe("");
+  it("does not warn for the lower forms on sheet-metal families", () => {
+    for (const fam of SHEET_METAL) {
+      for (const form of OK_FORMS) {
+        expect(formFamilyConflict(form, fam), `${form} + ${fam}`).toBe(false);
       }
     }
   });
 
-  it("allows every form on the compartmentalised families (Minicenter, Primo, Pillars, Coffree)", () => {
-    for (const fam of ["Minicenter", "Primo", "Pillars", "Coffree"]) {
-      expect(formFamilyIssue(panel(fam, "4b")), fam).toBe("");
+  it("does not warn on the compartmentalised families, even for restricted forms", () => {
+    for (const fam of OTHER_FAMILIES) {
+      for (const form of RESTRICTED) {
+        expect(formFamilyConflict(form, fam), `${form} + ${fam}`).toBe(false);
+      }
     }
   });
 
-  it("does not apply in cells mode — panelsSizing.family is not the real system there", () => {
-    expect(formFamilyIssue(panel("SR-Basic", "4a", { sizingMode: "cells" }))).toBe("");
-  });
-
-  it("does not apply before an enclosure is chosen (sizingMode none)", () => {
-    expect(formFamilyIssue(panel("SR-Basic", "3a", { sizingMode: "none" }))).toBe("");
-  });
-
-  it("does not apply to spare / LCP / KWHM cells (no form to check)", () => {
-    expect(formFamilyIssue(panel("SR-Basic", "3a", { spare: true }))).toBe("");
+  it("does not warn when no family is chosen yet", () => {
+    expect(formFamilyConflict("3a", "")).toBe(false);
   });
 });
