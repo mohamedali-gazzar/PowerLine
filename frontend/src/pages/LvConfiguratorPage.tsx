@@ -26,7 +26,7 @@ import {
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpEnclosureRecord, lcpSizes, lcpRealBox,
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog,
+  initialState, calcPanel, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog,
   panelLayout, panelNumbers, commonNamePrefix, resortByGroup, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
@@ -588,7 +588,8 @@ export default function LvConfiguratorPage() {
   const salesMailBody = () => [
     `Dear ${s.project.salesPerson.trim() || "Sales"},`,
     "Please find attached the Technical and Commercial offers",
-    `on factor "${s.factors.factor}"`,
+    // The PROJECT factor — the achieved total cost ÷ total selling — not the panels-factor default.
+    `on factor "${projectFactor(s) || s.factors.factor}"`,
     "",
     "Best regards,",
     s.project.supportEngineer.trim() || user?.name || "",
@@ -4385,6 +4386,10 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
 // ── Pricing tab (RPT-01: Pricing Settings replaces "Panels Section") ─────────
 function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }) {
   const f = s.factors;
+  // The Project factor reads the APPLIED state (total cost ÷ total selling). A staged target in the
+  // Panel pricing table is a preview until "Apply to Panels & Commercial Offer" writes it to the
+  // panels; on apply, s changes and this recomputes to match the Total row.
+  const projFactor = projectFactor(s);
   const upF = (k: string, v: number) => up({ factors: { ...f, [k]: v } });
   const fx = useLiveRates();
   // Your USD/EUR rate must stay at or above the live rate — enforced as a field minimum.
@@ -4415,7 +4420,14 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
           Exchange rates, material costs, operations and margins — drives the EGP selling price live.
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
-          {num("factor", "Selling factor", { hint: "cost ÷ factor = selling price" })}
+          {num("factor", "Panels factor", { hint: "cost ÷ factor = panel selling price" })}
+          <div key="projectFactor">
+            <L>Project factor</L>
+            <input className="input cursor-default bg-surface font-bold text-brand-dark" readOnly tabIndex={-1}
+              title="View only — total cost ÷ total selling (excl. VAT); mirrors the Panel pricing Total row"
+              value={projFactor > 0 ? projFactor : "—"} />
+            <p className="mt-1 text-[11px] text-muted">View only · total cost ÷ total selling</p>
+          </div>
           {num("copper", "Copper (EGP/KG)", { step: 1 })}
           {num("sheetMetal", "Sheet metal (EGP/KG)", { step: 1 })}
           {num("euro", "EUR → EGP", { min: liveEur, hint: liveEur ? `must be ≥ live ${liveEur}` : undefined })}

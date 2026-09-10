@@ -23,6 +23,26 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**Return for revision: edit an added comment, and apply one comment to several panels at once.**
+
+Two changes to the reviewer's "Return for revision" box. (1) Every added comment now has a pencil (✎) — click it and the
+comment comes back into the editor (its panel and its text) so you can change anything before sending; the button reads
+"Update comment" while you edit. (2) The panel dropdown now has a checkbox beside every panel (and "General") — tick as
+many as you like and your comment is added to each one, so the same note can go on several panels in one go. The box
+shows "N panels selected" while picking.
+
+## 2026-09-10 · Mohamed's side · Claude
+
+**Pricing Settings: the "Selling factor" is split into "Panels factor" (editable) and "Project factor" (view only).**
+
+"Panels factor" is the old Selling factor and still drives panel pricing (cost ÷ factor = selling). The new "Project
+factor" is read-only and shows the whole project's achieved factor — total cost ÷ total selling, the same number as the
+Panel pricing "Total" row. It reflects the APPLIED state: a target price you type in the Panel pricing table is a preview
+until you press "Apply to Panels & Commercial Offer", and only then does the Project factor update to match. The email
+sent to the sales person (Outlook / WhatsApp) now quotes the project factor.
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **"Check for updates" is now a proper "What changed in this update" screen with four tabs.**
 
 The Check-for-updates button now opens a redesigned screen split into four tabs — Prices, General settings, Components,

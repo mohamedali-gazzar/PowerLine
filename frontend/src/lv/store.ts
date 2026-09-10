@@ -1463,6 +1463,21 @@ export function customItemsTotal(s: LvState): number {
   return t;
 }
 
+/** The project's achieved selling factor — total cost ÷ total selling (excl. VAT) across every
+ *  panel, the same figure the Panel pricing "Total" row shows. Read-only: it reflects the factors
+ *  actually applied to the panels, not the project-wide "Panels factor" default. 0 = no panels. */
+export function projectFactor(s: LvState): number {
+  const safetyMul = 1 + (s.factors.safetyFactor || 0);
+  let cost = 0, sell = 0;
+  s.panels.forEach((p) => {
+    const c = calcPanel(p, s.factors, s.abbItemDiscounts);
+    cost += c.unitCostOps * safetyMul * (p.qty || 0);
+    sell += c.totalSell;
+  });
+  sell += customItemsTotal(s);
+  return sell > 0 ? +(cost / sell).toFixed(4) : 0;
+}
+
 export function grandTotals(s: LvState) {
   let sell = 0;
   s.panels.forEach((p) => (sell += calcPanel(p, s.factors, s.abbItemDiscounts).totalSell));

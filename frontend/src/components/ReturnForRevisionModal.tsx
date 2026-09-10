@@ -32,7 +32,8 @@ export default function ReturnForRevisionModal({
   onCancel?: () => void;
   onReturn?: (comments: ReturnComment[]) => void;
 }) {
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const [comments, setComments] = useState<ReturnComment[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -51,16 +52,22 @@ export default function ReturnForRevisionModal({
       label: `${i + 1}-${typeof p === "string" ? p : p?.name || `Panel ${i + 1}`}`,
     })),
   ];
-  const selected = options.find((o) => o.key === selectedKey) || null;
+  // Multi-select: one comment can be applied to several panels at once (checkboxes in the menu).
+  const selectedOptions = options.filter((o) => selectedKeys.includes(o.key));
+  const selectSummary = selectedOptions.length === 0 ? null
+    : selectedOptions.length === 1 ? selectedOptions[0].label
+    : `${selectedOptions.length} panels selected`;
 
-  const canAdd = !!selected && draft.trim().length > 0;
-  const pendingCount = comments.length + (canAdd ? 1 : 0);
+  const canAdd = selectedKeys.length > 0 && draft.trim().length > 0;
+  // Each selected panel becomes its own comment row, so a multi-select adds several at once.
+  const pendingCount = comments.length + (canAdd ? selectedKeys.length : 0);
   const canReturn = pendingCount > 0;
 
   // Fresh state every time the modal opens.
   useEffect(() => {
     if (open) {
-      setSelectedKey(null);
+      setSelectedKeys([]);
+      setEditingIdx(null);
       setDraft("");
       setComments([]);
       setMenuOpen(false);
@@ -108,18 +115,35 @@ export default function ReturnForRevisionModal({
   if (!open) return null;
 
   const addComment = () => {
-    if (!canAdd || !selected) return;
-    setComments((c) => [...c, { key: selected.key, label: selected.label, comment: draft.trim() }]);
+    if (!canAdd) return;
+    const text = draft.trim();
+    const rows = selectedOptions.map((o) => ({ key: o.key, label: o.label, comment: text }));
+    setComments((c) => [...c, ...rows]);
     setDraft("");
-    setSelectedKey(null);
+    setSelectedKeys([]);
+    setEditingIdx(null);
   };
 
-  const removeComment = (idx: number) => setComments((c) => c.filter((_, i) => i !== idx));
+  const removeComment = (idx: number) => {
+    setComments((c) => c.filter((_, i) => i !== idx));
+    setEditingIdx(null);
+  };
+
+  // Edit: pull a saved comment back into the editor (its panel + text) and drop it from the list, so
+  // changing anything and pressing "Update comment" re-saves it (to the same or different panels).
+  const editComment = (idx: number) => {
+    const c = comments[idx];
+    setDraft(c.comment);
+    setSelectedKeys([c.key]);
+    setComments((cs) => cs.filter((_, i) => i !== idx));
+    setEditingIdx(idx);
+    setMenuOpen(false);
+  };
 
   const handleReturn = () => {
     // A valid comment typed but not "+ Add"-ed is included automatically.
-    const all = canAdd && selected
-      ? [...comments, { key: selected.key, label: selected.label, comment: draft.trim() }]
+    const all = canAdd
+      ? [...comments, ...selectedOptions.map((o) => ({ key: o.key, label: o.label, comment: draft.trim() }))]
       : comments;
     if (!all.length) return;
     onReturn?.(all);
@@ -172,27 +196,33 @@ export default function ReturnForRevisionModal({
             onClick={() => setMenuOpen((v) => !v)}
             autoFocus
           >
-            <span className={selected ? "" : "rfr-placeholder"}>
-              {selected ? selected.label : "Select a panel…"}
+            <span className={selectedKeys.length ? "" : "rfr-placeholder"}>
+              {selectSummary || "Select panel(s)…"}
             </span>
             <svg width="12" height="8" viewBox="0 0 12 8" className={`rfr-chev ${menuOpen ? "up" : ""}`} aria-hidden="true">
               <path d="M1 1.5 L6 6.5 L11 1.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
           {menuOpen && (
-            <div className="rfr-menu" role="listbox">
-              {options.map((o) => (
-                <button
-                  key={o.key}
-                  type="button"
-                  role="option"
-                  aria-selected={o.key === selectedKey}
-                  className={`rfr-option ${o.key === selectedKey ? "is-selected" : ""} ${o.key === GENERAL_KEY ? "is-general" : ""}`}
-                  onClick={() => { setSelectedKey(o.key); setMenuOpen(false); }}
-                >
-                  {o.label}
-                </button>
-              ))}
+            <div className="rfr-menu" role="listbox" aria-multiselectable="true">
+              {/* Tick as many panels as need the same comment — the menu stays open so you can pick
+                  several, then "Add comment" applies your note to each. */}
+              {options.map((o) => {
+                const checked = selectedKeys.includes(o.key);
+                return (
+                  <button
+                    key={o.key}
+                    type="button"
+                    role="option"
+                    aria-selected={checked}
+                    className={`rfr-option ${checked ? "is-selected" : ""} ${o.key === GENERAL_KEY ? "is-general" : ""}`}
+                    onClick={() => setSelectedKeys((k) => (checked ? k.filter((x) => x !== o.key) : [...k, o.key]))}
+                  >
+                    <span className={`rfr-check ${checked ? "is-on" : ""}`} aria-hidden="true">{checked ? "✓" : ""}</span>
+                    <span className="rfr-optlabel">{o.label}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -203,15 +233,17 @@ export default function ReturnForRevisionModal({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={
-            selected && selected.key === GENERAL_KEY
+            selectedKeys.length === 1 && selectedKeys[0] === GENERAL_KEY
               ? "Write a note about the whole quotation…"
+              : selectedKeys.length > 1
+              ? "What needs to change in these panels?"
               : "What needs to change in this panel?"
           }
           rows={3}
         />
 
         <button type="button" className="rfr-add" onClick={addComment} disabled={!canAdd}>
-          +&nbsp;&nbsp;Add comment
+          {editingIdx !== null ? "✎  Update comment" : "+  Add comment"}
         </button>
 
         <div className="rfr-divider" />
@@ -227,14 +259,26 @@ export default function ReturnForRevisionModal({
                   <div className="rfr-rowtitle">{c.label}</div>
                   <div className="rfr-rowtext">{c.comment}</div>
                 </div>
-                <button
-                  type="button"
-                  className="rfr-x rfr-rowx"
-                  onClick={() => removeComment(i)}
-                  aria-label={`Remove comment for ${c.label}`}
-                >
-                  ×
-                </button>
+                <div className="rfr-rowbtns">
+                  <button
+                    type="button"
+                    className="rfr-x rfr-rowx rfr-rowedit"
+                    onClick={() => editComment(i)}
+                    aria-label={`Edit comment for ${c.label}`}
+                    title="Edit this comment"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    className="rfr-x rfr-rowx"
+                    onClick={() => removeComment(i)}
+                    aria-label={`Remove comment for ${c.label}`}
+                    title="Remove this comment"
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -285,9 +329,12 @@ const styles = `
 .rfr-chev{color:rgb(var(--c-muted));transition:transform .15s;flex:none;}
 .rfr-chev.up{transform:rotate(180deg);}
 .rfr-menu{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--c-card);border:1px solid rgb(var(--c-line));border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,.3);padding:4px;max-height:280px;overflow:auto;z-index:10;}
-.rfr-option{display:block;width:100%;text-align:left;padding:11px 12px;font-size:14.5px;font-family:inherit;color:rgb(var(--c-ink));background:none;border:0;border-radius:7px;cursor:pointer;}
+.rfr-option{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;font-size:14.5px;font-family:inherit;color:rgb(var(--c-ink));background:none;border:0;border-radius:7px;cursor:pointer;}
 .rfr-option:hover{background:rgba(241,103,34,.08);}
 .rfr-option.is-selected{background:rgba(241,103,34,.12);color:#F16722;font-weight:600;}
+.rfr-check{flex:none;width:18px;height:18px;border:1.5px solid rgb(var(--c-line));border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;background:var(--c-card);}
+.rfr-check.is-on{background:#F16722;border-color:#F16722;}
+.rfr-optlabel{flex:1;min-width:0;}
 .rfr-option.is-general{font-weight:500;border-bottom:1px solid rgb(var(--c-line));border-bottom-left-radius:0;border-bottom-right-radius:0;margin-bottom:2px;}
 .rfr-textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:96px;padding:12px 14px;font-size:15px;font-family:inherit;color:rgb(var(--c-ink));background:var(--c-card);border:1px solid rgb(var(--c-line));border-radius:8px;}
 .rfr-textarea:focus-visible{border-color:#F16722;box-shadow:0 0 0 1px rgba(241,103,34,.35);outline:none;}
@@ -303,6 +350,9 @@ const styles = `
 .rfr-rowtitle{font-size:14px;font-weight:600;}
 .rfr-rowtext{font-size:13.5px;color:rgb(var(--c-muted));margin-top:3px;white-space:pre-wrap;word-break:break-word;}
 .rfr-rowx{font-size:17px;flex:none;}
+.rfr-rowbtns{display:flex;align-items:center;gap:1px;flex:none;}
+.rfr-rowedit{font-size:14px;color:#F16722;}
+.rfr-rowedit:hover{color:#F16722;background:rgba(241,103,34,.12);}
 .rfr-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;}
 .rfr-hint{font-size:12.5px;color:rgb(var(--c-muted));}
 .rfr-actions{display:flex;align-items:center;gap:14px;}
