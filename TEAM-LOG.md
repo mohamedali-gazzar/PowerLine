@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**Auxiliary panels (LCP / KWHM) now appear in the Selectivity table.**
+
+The Selectivity coordination table used to skip every auxiliary cell; now the real aux panels — LCP and KWHM — are
+listed alongside the ordinary panels. Only the pure "Spare parts" parts-list cell is still left out, since it has no
+breakers to coordinate. Say the word if you want that one in too.
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **Changing a "Default rate" (USD/EUR/Safety/Copper) now shows up in "Check for updates".**
 
 When you change any of the default rates on the price list and press Save & publish, the change is now recorded in the

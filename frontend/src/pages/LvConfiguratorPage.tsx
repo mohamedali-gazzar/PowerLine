@@ -5953,7 +5953,9 @@ function SelectivityTab({ s, upPanel, qtnNo, onOpenPanel }: { s: LvState; upPane
   useEffect(() => {
     try { if (fedFilter) localStorage.setItem(FKEY, fedFilter); else localStorage.removeItem(FKEY); } catch { /* storage blocked — non-fatal */ }
   }, [fedFilter, FKEY]);
-  const panels = s.panels.filter((p) => !p.spare);
+  // Auxiliary panels (LCP / KWHM) are real panels and belong in the coordination table; only the
+  // pure "Spare parts" parts-list cell is left out, since it has no breakers to coordinate.
+  const panels = s.panels.filter((p) => p.spareKind !== "spare");
   // Distinct "Fed From" values seen across the panels → the header filter's options.
   const fedOptions = Array.from(new Set(panels.map((p) => p.fedFrom.trim()).filter(Boolean)));
   // If the remembered source no longer feeds any panel (renamed/removed), drop the filter so the
