@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**Changing a "Default rate" (USD/EUR/Safety/Copper) now shows up in "Check for updates".**
+
+When you change any of the default rates on the price list and press Save & publish, the change is now recorded in the
+"Check for updates" changelog — e.g. "Default rate — Copper (EGP/kg) 800 → 815", or "Default rate — Safety factor 2% →
+3%". Only rates that actually moved are listed (unchanged ones re-saved alongside are ignored), so there's no noise. No
+database change — it reuses the same audit/publish machinery as an ordinary price edit.
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **Draft quotations now pick up the latest copper price.**
 
 When you open a Draft, its copper price is refreshed to the current "Default rates" copper value — so an in-progress

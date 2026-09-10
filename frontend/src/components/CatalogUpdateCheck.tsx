@@ -257,6 +257,18 @@ function ChangeRow({ it, read, onRead }: { it: CatalogChangeItem; read: boolean;
         )}
       </>
     );
+  } else if (it.entity === "PriceSetting") {
+    // A "Default rates for new quotations" change (USD/EUR/Safety/Copper…) — its label already
+    // names the rate, so just show the old → new values.
+    body = (
+      <>
+        {Head}
+        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12px]">
+          <span className="text-muted line-through">{it.oldValue ?? "—"}</span>
+          <span className="font-bold text-ink">→ {it.newValue ?? "—"}</span>
+        </div>
+      </>
+    );
   } else if (it.field === "price") {
     // Price → one currency, rounded, with the percentage move.
     const a = parseMoney(it.oldValue);

@@ -136,6 +136,23 @@ export async function postLvSeedChunk(req: Request, res: Response) {
   }
 }
 
+// Human labels + display formatting for the "Default rates" settings, so a change to one reads
+// well in the "Check for updates" changelog (rather than a raw key and a bare fraction).
+const RATE_LABEL: Record<string, string> = {
+  usd: "Default rate — USD → EGP",
+  euro: "Default rate — EUR → EGP",
+  safetyFactor: "Default rate — Safety factor",
+  copper: "Default rate — Copper (EGP/kg)",
+  sheetMetal: "Default rate — Sheet metal (EGP/kg)",
+  operations: "Default rate — Operations",
+  abbDiscount: "Default rate — ABB discount",
+  vat: "Default rate — VAT",
+  factor: "Default rate — Selling factor",
+};
+const RATE_IS_PCT = new Set(["safetyFactor", "operations", "abbDiscount", "vat"]);
+const fmtRate = (key: string, v: number): string =>
+  RATE_IS_PCT.has(key) ? `${Number((v * 100).toFixed(2))}%` : String(Number(v.toFixed(4)));
+
 /** POST /api/pricing/lv/settings — the LV factors (EUR rate, copper, VAT…). */
 export async function postLvSettings(req: Request, res: Response) {
   try {
@@ -147,12 +164,25 @@ export async function postLvSettings(req: Request, res: Response) {
     let saved = 0;
     for (const [key, value] of Object.entries(factors as Record<string, unknown>)) {
       if (typeof value === "number" && Number.isFinite(value)) {
+        const prev = await prisma.priceSetting.findUnique({ where: { scope_key: { scope: "LV", key } } });
         await prisma.priceSetting.upsert({
           where: { scope_key: { scope: "LV", key } },
           update: { num: value, updatedBy: by },
           create: { scope: "LV", key, num: value, updatedBy: by },
         });
         saved++;
+        // Record a changelog row when the value actually moved, so the change shows up in
+        // "Check for updates" (version stamped by the next publish, like any price edit).
+        if (!prev || prev.num !== value) {
+          await prisma.priceChange.create({
+            data: {
+              domain: "LV", entity: "PriceSetting", entityId: key,
+              label: RATE_LABEL[key] ?? `Default rate — ${key}`, field: key,
+              oldValue: prev && prev.num != null ? fmtRate(key, prev.num) : null, newValue: fmtRate(key, value),
+              actorId: req.userId ?? null, actorEmail: by,
+            },
+          });
+        }
       } else if (value && typeof value === "object") {
         // nested "forms" map
         for (const [k2, v2] of Object.entries(value as Record<string, unknown>)) {
