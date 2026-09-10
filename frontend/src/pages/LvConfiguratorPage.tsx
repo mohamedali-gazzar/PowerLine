@@ -75,7 +75,7 @@ import { stdPanel, applyStdPanel, STD_EDMS_KVA } from "../lv/standardEdms";
 import { stdAts, applyStdAts, stdAtsRatings, atsBreakersFor, type StdAtsVariant } from "../lv/standardAtsEdms";
 
 type Tab = "project" | "pricing" | "specs" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "sizing" | "summary";
-const TABS: Tab[] = ["project", "pricing", "specs", "panels", "technical", "commercial", "material", "spare", "selectivity", "sizing"];
+const TABS: Tab[] = ["project", "pricing", "specs", "panels", "technical", "commercial", "material", "spare", "selectivity"];
 
 // How many edits Undo/Redo can step through. Text fields record one step PER KEYSTROKE, so the
 // old 60 was used up after a few words and undo felt short-lived; 1000 reaches far further back.
@@ -1012,7 +1012,6 @@ export default function LvConfiguratorPage() {
     ? [["project", "Project"], ["pricing", "Pricing Settings"], ["spare", "Spare Parts"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"], ["summary", "Summary"]]
     : [["project", "Project"], ["pricing", "Pricing Settings"], ["specs", "Specs"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"],
        ...(isEdmsQtn ? [] : [["selectivity", "Selectivity"] as [Tab, string]]),
-       ["sizing", "Sizing Review"],
        ["summary", "Summary"]];
   // The remembered tab can be one this QTN doesn't have (a QTN opened on
   // Selectivity and later turned into an EDMS one, or a kind whose tab set
@@ -6804,8 +6803,7 @@ function PanelEditor({ s, p, up, upPanel }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [predictedRating]);
   // Collapsible cost summary — the open/closed state is remembered across panels.
-  const [costOpen, setCostOpen] = useState(() => { try { return localStorage.getItem("lv-costcard-open") !== "0"; } catch { return true; } });
-  const toggleCost = () => setCostOpen((o) => { try { localStorage.setItem("lv-costcard-open", o ? "0" : "1"); } catch { /* ignore */ } return !o; });
+  // Panel details and Panel cost collapse together — one toggle (on Panel details) drives both.
   const [detailsOpen, setDetailsOpen] = useState(() => { try { return localStorage.getItem("lv-detailscard-open") !== "0"; } catch { return true; } });
   const toggleDetails = () => setDetailsOpen((o) => { try { localStorage.setItem("lv-detailscard-open", o ? "0" : "1"); } catch { /* ignore */ } return !o; });
   // The open combination builder is owned here and shared between the cards — most
@@ -6822,14 +6820,12 @@ function PanelEditor({ s, p, up, upPanel }: {
       <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)]">
       {/* Cost summary (live) */}
       <div className="card px-4 py-3 order-2 flex flex-col">
-        <button type="button" onClick={toggleCost} className="flex w-full items-center justify-between gap-3 text-left">
-          <h2 className="sec-head mb-0 flex items-center gap-1.5">
-            <span className={`text-[11px] text-muted transition-transform ${costOpen ? "rotate-90" : ""}`}>▶</span>
-            Panel cost (live)
-          </h2>
+        {/* No own toggle — it collapses/expands together with Panel details (detailsOpen). */}
+        <div className="flex w-full items-center justify-between gap-3">
+          <h2 className="sec-head mb-0">Panel cost (live)</h2>
           <span className="whitespace-nowrap text-sm font-bold text-brand-dark">{fmtEgp(calc.sellUnit)} EGP</span>
-        </button>
-        {costOpen && (
+        </div>
+        {detailsOpen && (
         <div className="mt-3 grid flex-1 auto-rows-fr grid-cols-2 gap-2 text-sm [&_b]:text-base sm:grid-cols-3">
           <div className="rounded-lg bg-surface p-2.5">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Enclosure<br /><b>{fmtEgp(calc.enclCost)} EGP</b></div>

@@ -23,6 +23,22 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**Removed the "Sizing Review" tab.**
+
+The Sizing Review tab is gone from every quotation's tab strip (it now goes straight from Selectivity to Summary). A
+quotation that happened to be left open on that tab now opens on Project instead. The change is surgical — nothing else
+in the configurator is affected, and any sizing-review notes already saved on existing quotations are left untouched,
+just no longer shown.
+
+## 2026-09-10 · Mohamed's side · Claude
+
+**In a panel, "Panel cost (live)" now collapses together with "Panel details" (one toggle for both).**
+
+The Panel cost card lost its own collapse arrow. It now follows the Panel details toggle — collapse or expand Panel
+details and Panel cost does the same, so the two always show together or hide together.
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **The quotation top bar now minimizes fully with an arrow beside the QTN number.**
 
 The "Minimize" text link is replaced by a small arrow right next to the QTN number. Clicking it now collapses the WHOLE
