@@ -23,6 +23,19 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**"Check for updates" is now a proper "What changed in this update" screen with four tabs.**
+
+The Check-for-updates button now opens a redesigned screen split into four tabs — Prices, General settings, Components,
+and User experience — each with an unread count that clears as you read, and a green tick when a tab is done. Prices
+lists every changed price (increases first) with the up/down percentage; General settings shows the rate changes;
+Components shows what was Added / Removed / Edited (with the before/after wording for description edits); User experience
+is a short list of recent app improvements. Every line marks itself read when you click it, there's "mark this tab as
+read" and "mark all as read", and the footer shows the version, who published it and when. "Apply changes" still brings
+the open quotation's prices and settings up to date; nothing auto-applies. It reads the same published data we already
+had — no database change.
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **Price-list import: "Insert anyway" for new items that have no price.**
 
 When you upload an Excel price list and it finds a new item with no price, it used to just skip it (a no-price item would

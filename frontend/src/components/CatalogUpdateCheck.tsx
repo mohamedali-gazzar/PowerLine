@@ -1,58 +1,33 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useDialogs } from "./ConfirmModal";
 import { getToken, api, type CatalogChanges, type CatalogChangeItem } from "../api";
 import { checkCatalogUpdates, catalogVersion } from "../lv/catalogSource";
 
-// Brand orange — the "Added / Removed / Restored" label in the changelog.
-const TRED = "#F16722";
-
 /**
- * "Check for updates" — the price list is edited centrally and published, so an
- * offer can be started on a catalogue that has since moved. This re-reads the
- * published catalogue and says what changed: prices, brands, descriptions, new
- * items. Available to every role — it only swaps what this browser quotes from
- * and never writes to the price list, unlike the price-admin catalogue tools.
+ * "What changed in this update" — the price list / settings / catalogue are edited centrally and
+ * published, so a quotation can be started on a catalogue that has since moved. This re-reads the
+ * published catalogue and shows what changed across four tabs, with per-row read/unread so the
+ * modal is a "seen it once" list. It only swaps what THIS browser quotes from and never writes to
+ * the price list; "Apply changes" re-prices the open quotation to the current list.
  */
-/** Audit field name → how it reads in the changelog. */
-const CHANGE_FIELD_LABEL: Record<string, string> = {
-  price: "price", brand: "brand", description: "description", type: "type",
-  family: "family", rating: "rating", poles: "poles", stock: "stock",
-  "weight/panel/pole": "copper weight", "weight/cell/pole": "copper weight",
-  __created: "added", __retired: "removed", __restored: "restored",
-};
 
-// ── Changelog formatting ─────────────────────────────────────────────────────
-// Audit values are stored as text ("0 EUR / 3248 EGP"). Read the money back out
-// so a price can be shown in the ONE currency it is actually priced in, rounded,
-// and with the percentage move — "3,248 EGP → 978 EGP (−70%)".
+// ── Money formatting ─────────────────────────────────────────────────────────
+// Audit prices are stored as text ("0 EUR / 3248 EGP"); read the money back out so a price shows
+// in the one currency it is actually priced in, rounded, with the percentage move.
 const parseMoney = (v: string | null): { eur: number; egp: number } | null => {
   const m = String(v ?? "").match(/(-?[\d.]+)\s*EUR\s*\/\s*(-?[\d.]+)\s*EGP/i);
   if (!m) return null;
   return { eur: parseFloat(m[1]) || 0, egp: parseFloat(m[2]) || 0 };
 };
-/** EGP whole, EUR to 2dp — rounding a €2.29 list price to €2 would be worse than
- *  the float tail it is meant to hide. */
 const money1 = (m: { eur: number; egp: number } | null): string => {
   if (!m) return "—";
   if (m.eur > 0) return `${Number(m.eur.toFixed(2)).toLocaleString("en-US")} EUR`;
   return `${Math.round(m.egp).toLocaleString("en-US")} EGP`;
 };
 const moneyValue = (m: { eur: number; egp: number } | null): number => (m ? (m.eur > 0 ? m.eur : m.egp) : 0);
-const pctMove = (from: number, to: number): string =>
-  from > 0 ? `${to >= from ? "+" : "−"}${Math.abs(((to - from) / from) * 100).toFixed(0)}%` : "";
-/** The ABB discount reaches an item only when it is ABB-branded AND priced in EUR. */
-const discountable = (brand: string | undefined, eur: number | undefined) =>
-  (brand ?? "").trim() === "ABB" && (eur ?? 0) > 0;
-const numOrText = (v: string | null) => {
-  const n = Number(v);
-  if (v != null && v !== "" && Number.isFinite(n)) return Number(n.toFixed(3)).toLocaleString("en-US");
-  return v && v.trim() ? v : "—";
-};
 
-// "Read" changes are remembered per browser so the red count only shows what hasn't been
-// acknowledged. Keyed by catalogue version + the change's identity, so a fresh upload (new
-// version) shows up again while already-read items stay dismissed.
+// ── Read/unread store (per browser) ──────────────────────────────────────────
+// Keyed so a fresh publish (new version) shows again while already-read rows stay dismissed.
 const READ_STORE = "lvCatalogReadChanges";
 const loadReadChanges = (): Set<string> => {
   try { return new Set(JSON.parse(localStorage.getItem(READ_STORE) || "[]") as string[]); } catch { return new Set(); }
@@ -62,6 +37,20 @@ const saveReadChanges = (s: Set<string>) => {
 };
 const changeKey = (version: number, it: CatalogChangeItem): string =>
   `${version}|${it.field}|${it.label || it.detail?.ref || it.detail?.d || ""}|${it.oldValue ?? ""}|${it.newValue ?? ""}`;
+
+// ── "User experience" tab — a short, hand-maintained list of app improvements. Each id is stable,
+// so a NEW entry is unread for everyone until they open this modal, then stays read. ───────────────
+const UX_ITEMS: { id: string; title: string; body: string }[] = [
+  { id: "ux-mcc-combo", title: "New circuit combination: MCC starter",
+    body: "Build a DOL or Star-Delta motor starter in one click from the combinations row on the Panels tab — contactors, overload and CB are added as one named group." },
+  { id: "ux-form-warning", title: "Warning when a form isn’t buildable",
+    body: "Choosing Form 3a / 3b / 4a / 4b on an SR-Basic, Unikit or Local panel now asks “proceed anyway?” before it’s set — in either order you pick the form and the family." },
+  { id: "ux-aux-selectivity", title: "Auxiliary panels in Selectivity",
+    body: "LCP and KWHM panels now appear in the Selectivity coordination table alongside the ordinary panels." },
+  { id: "ux-insert-anyway", title: "Insert a no-price item anyway",
+    body: "When you import a price list, a new item that has no price can now be inserted at 0 (and priced later) instead of being skipped — from the Review screen’s “Insert anyway” tab." },
+];
+const uxKey = (id: string) => `ux|${id}`;
 
 export default function CatalogUpdateCheck({ onApply }: { onApply?: () => { changed: number; removed: number } }) {
   const [busy, setBusy] = useState(false);
@@ -76,7 +65,6 @@ export default function CatalogUpdateCheck({ onApply }: { onApply?: () => { chan
     return () => { alive = false; };
   }, []);
 
-  // Pull the latest catalogue for this browser and open the changelog.
   const run = async () => {
     setBusy(true);
     const before = catalogVersion();
@@ -90,15 +78,19 @@ export default function CatalogUpdateCheck({ onApply }: { onApply?: () => { chan
   };
 
   const version = changes?.version ?? 0;
-  const items = changes?.items ?? [];
-  const unreadCount = items.filter((it) => !read.has(changeKey(version, it))).length;
-  const markRead = (it: CatalogChangeItem) => {
-    const next = new Set(read).add(changeKey(version, it));
-    setRead(next); saveReadChanges(next);
-  };
-  const markAllRead = () => {
+  const items = useMemo(() => changes?.items ?? [], [changes]);
+
+  // Every readable thing has a key: a catalogue change (changeKey) or a UX entry (uxKey).
+  const allKeys = useMemo(
+    () => [...items.map((it) => changeKey(version, it)), ...UX_ITEMS.map((u) => uxKey(u.id))],
+    [items, version],
+  );
+  const unreadCount = allKeys.filter((k) => !read.has(k)).length;
+
+  const isRead = (key: string) => read.has(key);
+  const markKeys = (keys: string[]) => {
     const next = new Set(read);
-    for (const it of items) next.add(changeKey(version, it));
+    keys.forEach((k) => next.add(k));
     setRead(next); saveReadChanges(next);
   };
 
@@ -106,244 +98,330 @@ export default function CatalogUpdateCheck({ onApply }: { onApply?: () => { chan
     <div className="flex flex-col items-end no-print">
       <div className="relative">
         <button onClick={run} disabled={busy}
-          title="Re-read the published price list and show what changed"
+          title="See what changed in the latest published update"
           className="btn-ghost disabled:opacity-60">
           {busy ? "Checking…" : "⟳ Check for updates"}
         </button>
         {unreadCount > 0 && (
-          <span aria-label={`${unreadCount} unread price changes`}
+          <span aria-label={`${unreadCount} unread updates`}
             className="pointer-events-none absolute -right-2 -top-2 grid h-5 min-w-[1.25rem] place-items-center rounded-full bg-red-600 px-1 text-[11px] font-extrabold leading-none text-white ring-2 ring-white">
             {unreadCount}
           </span>
         )}
       </div>
       {open && changes && (
-        <ChangeLogDialog changes={changes} onApply={onApply}
-          isRead={(it) => read.has(changeKey(version, it))} onMarkRead={markRead} onMarkAllRead={markAllRead}
-          onClose={() => setOpen(false)} />
+        <WhatChangedModal changes={changes} version={version} onApply={onApply}
+          isRead={isRead} markKeys={markKeys} onClose={() => setOpen(false)} />
       )}
     </div>
   );
 }
 
-/** The changelog, as its own dismissible panel rather than a dropdown under the button. */
-function ChangeLogDialog({ changes, onApply, isRead, onMarkRead, onMarkAllRead, onClose }: { changes: CatalogChanges; onApply?: () => { changed: number; removed: number }; isRead: (it: CatalogChangeItem) => boolean; onMarkRead: (it: CatalogChangeItem) => void; onMarkAllRead: () => void; onClose: () => void }) {
-  const anyUnread = changes.items.some((it) => !isRead(it));
-  const { confirm, dialogs } = useDialogs();
+// ── Row chips ────────────────────────────────────────────────────────────────
+const Chip = ({ read }: { read: boolean }) =>
+  read
+    ? <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-bold text-green-600 dark:bg-green-500/15 dark:text-green-300">✓ Read</span>
+    : <span className="shrink-0 rounded-full bg-brand-tint px-2 py-0.5 text-[11px] font-bold text-brand">● New</span>;
+
+/** A flat white row: orange rail + "● New" when unread, greyed + "✓ Read" when read. Clicking it
+ *  marks read. `right` is the row's own content (prices / values); `main` is the left side. */
+function Row({ read, onRead, main, right }: { read: boolean; onRead: () => void; main: ReactNode; right?: ReactNode }) {
+  return (
+    <div onClick={read ? undefined : onRead}
+      className={`relative flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0 ${read ? "" : "cursor-pointer"}`}>
+      {!read && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-brand" />}
+      <div className="min-w-0 flex-1">{main}</div>
+      {right}
+      <Chip read={read} />
+    </div>
+  );
+}
+
+interface ModalProps {
+  changes: CatalogChanges; version: number;
+  onApply?: () => { changed: number; removed: number };
+  isRead: (key: string) => boolean; markKeys: (keys: string[]) => void; onClose: () => void;
+}
+
+function WhatChangedModal({ changes, version, onApply, isRead, markKeys, onClose }: ModalProps) {
+  const items = changes.items;
+  const ck = (it: CatalogChangeItem) => changeKey(version, it);
+
+  // ── Categorise the published changes into the four tabs ──
+  const prices = useMemo(() => {
+    const move = (it: CatalogChangeItem) => {
+      const a = moneyValue(parseMoney(it.oldValue)), b = moneyValue(parseMoney(it.newValue));
+      return a > 0 ? ((b - a) / a) * 100 : 0;
+    };
+    return items.filter((it) => it.field === "price").sort((x, y) => move(y) - move(x)); // increases first
+  }, [items]);
+  const settings = useMemo(() => items.filter((it) => it.entity === "PriceSetting"), [items]);
+  const added = useMemo(() => items.filter((it) => it.field === "__created"), [items]);
+  const removed = useMemo(() => items.filter((it) => it.field === "__retired"), [items]);
+  const edited = useMemo(() => items.filter((it) => it.field === "description"), [items]);
+
+  const componentRows = [...added, ...removed, ...edited];
+  const tabs = [
+    { id: "prices", label: "Prices", keys: prices.map(ck) },
+    { id: "settings", label: "General settings", keys: settings.map(ck) },
+    { id: "components", label: "Components", keys: componentRows.map(ck) },
+    { id: "ux", label: "User experience", keys: UX_ITEMS.map((u) => uxKey(u.id)) },
+  ].filter((t) => t.keys.length > 0);
+
+  const unread = (t: { keys: string[] }) => t.keys.filter((k) => !isRead(k)).length;
+
+  const [active, setActive] = useState(() => (tabs.find((t) => unread(t) > 0) ?? tabs[0])?.id ?? "prices");
+  const [showAllPrices, setShowAllPrices] = useState(false);
+  const [showAllEdited, setShowAllEdited] = useState(false);
   const [applied, setApplied] = useState<{ changed: number; removed: number } | null>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const doApply = async () => {
+  const activeTab = tabs.find((t) => t.id === active) ?? tabs[0];
+  const activeUnread = activeTab ? unread(activeTab) : 0;
+
+  const doApply = () => {
     if (!onApply) return;
-    if (
-      !(await confirm({
-        title: "Update to the current price list",
-        message:
-          "Component and cell prices are brought up to today's list, and any item discontinued from the list is removed.\n" +
-          "Your quantities, per-line adjustments and notes are kept, and you can Undo this afterwards.",
-        confirmLabel: "Update prices",
-      }))
-    )
-      return;
     setApplied(onApply());
+    // Apply acts on Prices and General settings — mark those read (Components & UX are already live).
+    markKeys([...prices.map(ck), ...settings.map(ck)]);
   };
+
+  const dateStr = changes.publishedAt ? new Date(changes.publishedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print">
       <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
-      {dialogs}
       <div role="dialog" aria-modal="true"
-        className="relative flex max-h-[86vh] w-full max-w-3xl flex-col rounded-xl2 border border-line bg-white p-5 shadow-lift animate-pop">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="sec-head">What changed in the price list</h2>
-            <p className="-mt-1 text-xs text-muted">
-              Version {changes.version}
-              {changes.from < changes.version - 1 ? ` (since version ${changes.from})` : ""}
-              {changes.publishedBy ? ` · ${changes.publishedBy}` : ""}
-              {changes.note ? ` · ${changes.note}` : ""}
-            </p>
-          </div>
+        className="relative flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl2 border border-line bg-white shadow-lift animate-pop dark:bg-surface">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 px-5 pt-5">
+          <h2 className="sec-head mb-0">What changed in this update</h2>
           <div className="flex shrink-0 items-center gap-2">
             {onApply && applied === null && (
               <button onClick={doApply} className="btn-primary"
-                title="Update this quotation's component & cell prices to the current list">
-                Apply changes
-              </button>
+                title="Bring this quotation’s prices and settings up to the current list">Apply changes</button>
             )}
             {applied !== null && (
               <span className="rounded-full bg-green-100 px-3 py-1.5 text-xs font-semibold text-green-700 dark:bg-green-500/15 dark:text-green-300">
                 ✓ {applied.changed === 0 && applied.removed === 0
                   ? "Already up to date"
-                  : [
-                      applied.changed > 0 ? `${applied.changed} price${applied.changed === 1 ? "" : "s"} updated` : "",
-                      applied.removed > 0 ? `${applied.removed} discontinued removed` : "",
-                    ].filter(Boolean).join(" · ")}
+                  : [applied.changed > 0 ? `${applied.changed} price${applied.changed === 1 ? "" : "s"} updated` : "",
+                     applied.removed > 0 ? `${applied.removed} discontinued removed` : ""].filter(Boolean).join(" · ")}
               </span>
-            )}
-            {anyUnread && (
-              <button onClick={onMarkAllRead} className="btn-ghost"
-                title="Mark every change here as read — clears the notification count">
-                ✓ Mark all read
-              </button>
             )}
             <button onClick={onClose} className="btn-ghost" title="Close (Esc)">✕ Close</button>
           </div>
         </div>
 
-        <div className="mt-3 flex-1 overflow-auto rounded-lg border border-line">
-          <ul className="divide-y divide-line">
-            {changes.items.map((it, i) => <ChangeRow key={i} it={it} read={isRead(it)} onRead={() => onMarkRead(it)} />)}
-          </ul>
+        {/* Tabs */}
+        <div className="flex gap-2 overflow-x-auto px-5 pb-3 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {tabs.map((t) => {
+            const u = unread(t);
+            const on = t.id === active;
+            return (
+              <button key={t.id} onClick={() => setActive(t.id)}
+                className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
+                  on ? "border-brand bg-brand text-white" : "border-line bg-white text-muted hover:border-brand/40 dark:bg-surface"}`}>
+                <span>{t.label}</span>
+                {u > 0 ? (
+                  <>
+                    <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[11px] font-extrabold tabular-nums ${on ? "bg-white text-brand" : "bg-surface text-muted"}`}>{u}</span>
+                    <span className={`h-[7px] w-[7px] rounded-full ${on ? "bg-white" : "bg-brand"}`} />
+                  </>
+                ) : (
+                  <span className={`text-xs font-extrabold ${on ? "text-white" : "text-green-600"}`}>✓</span>
+                )}
+              </button>
+            );
+          })}
         </div>
-        {changes.total > changes.items.length && (
-          <p className="mt-1 text-[11px] text-muted/80">
-            Showing the {changes.items.length} most recent of {changes.total} changes.
-          </p>
+
+        {/* Status bar */}
+        {activeTab && (
+          <div className="flex items-center justify-between gap-3 border-y border-line bg-surface px-5 py-2.5">
+            <span className={`text-xs font-bold tracking-wide ${activeUnread === 0 ? "text-green-600" : "text-muted"}`}>
+              {activeUnread === 0 ? `All ${activeTab.keys.length} read` : `${activeUnread} unread of ${activeTab.keys.length}`}
+            </span>
+            <button disabled={activeUnread === 0} onClick={() => markKeys(activeTab.keys)}
+              className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-bold text-brand transition-colors hover:border-brand hover:bg-brand-tint disabled:cursor-default disabled:border-line disabled:bg-transparent disabled:text-muted/50">
+              Mark this tab as read
+            </button>
+          </div>
         )}
+
+        {/* Body */}
+        <div className="min-h-[8rem] flex-1 overflow-y-auto">
+          {active === "prices" && (
+            <PricesTab items={prices} isRead={isRead} mark={(it) => markKeys([ck(it)])} ck={ck} showAll={showAllPrices} onShowAll={() => setShowAllPrices(true)} />
+          )}
+          {active === "settings" && settings.map((it, i) => (
+            <Row key={i} read={isRead(ck(it))} onRead={() => markKeys([ck(it)])}
+              main={<div className={`text-sm font-bold ${isRead(ck(it)) ? "text-muted" : "text-ink"}`}>{it.label || it.field}</div>}
+              right={<span className="whitespace-nowrap text-[13px]"><span className="text-muted/70 line-through">{it.oldValue ?? "—"}</span> <span className="font-extrabold text-ink">→ {it.newValue ?? "—"}</span></span>} />
+          ))}
+          {active === "components" && (
+            <ComponentsTab added={added} removed={removed} edited={edited} isRead={isRead} mark={(it) => markKeys([ck(it)])} ck={ck} showAllEdited={showAllEdited} onShowAllEdited={() => setShowAllEdited(true)} />
+          )}
+          {active === "ux" && UX_ITEMS.map((u) => {
+            const rd = isRead(uxKey(u.id));
+            return (
+              <Row key={u.id} read={rd} onRead={() => markKeys([uxKey(u.id)])}
+                main={<div>
+                  <div className={`text-sm font-bold ${rd ? "text-muted" : "text-ink"}`}>{u.title}</div>
+                  <div className="mt-0.5 max-w-[46ch] text-xs leading-relaxed text-muted">{u.body}</div>
+                </div>} />
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-4 border-t border-line bg-surface px-5 py-3">
+          <div className="min-w-0">
+            <div className="text-xs text-ink">Applying updates your prices and settings. Saved quotations are not changed.</div>
+            <div className="mt-0.5 truncate text-[11px] text-muted/70">
+              Version {changes.version}{changes.publishedBy ? ` · published by ${changes.publishedBy}` : ""}{dateStr ? ` · ${dateStr}` : ""}
+            </div>
+          </div>
+          <button onClick={() => markKeys([...items.map(ck), ...UX_ITEMS.map((u) => uxKey(u.id))])}
+            className="shrink-0 rounded-lg border border-line px-3 py-2 text-xs font-bold text-brand transition-colors hover:border-brand hover:bg-brand-tint">
+            Mark all as read
+          </button>
+        </div>
       </div>
     </div>,
     document.body,
   );
 }
 
-/** One changelog entry, described according to what actually changed, with a "read" toggle that
- *  dismisses it from the notification count. */
-function ChangeRow({ it, read, onRead }: { it: CatalogChangeItem; read: boolean; onRead: () => void }) {
-  const d = it.detail ?? undefined;
-  const name = it.label || d?.d || d?.name || d?.ref || "item";
-  const Head = (
-    <div className="flex flex-wrap items-baseline gap-x-2">
-      <span className="text-[13px] font-semibold text-ink">{name}</span>
-      {d?.ref && <span className="font-mono text-[10px] text-muted">{d.ref}</span>}
+// ── Tab 1: Prices ─────────────────────────────────────────────────────────────
+function PricesTab({ items, isRead, mark, ck, showAll, onShowAll }: {
+  items: CatalogChangeItem[]; isRead: (k: string) => boolean; mark: (it: CatalogChangeItem) => void;
+  ck: (it: CatalogChangeItem) => string; showAll: boolean; onShowAll: () => void;
+}) {
+  const shown = showAll ? items : items.slice(0, 8);
+  return (
+    <>
+      {shown.map((it, i) => {
+        const a = parseMoney(it.oldValue), b = parseMoney(it.newValue);
+        const av = moneyValue(a), bv = moneyValue(b);
+        const pct = av > 0 ? ((bv - av) / av) * 100 : 0;
+        const up = bv >= av;
+        const rd = isRead(ck(it));
+        return (
+          <Row key={i} read={rd} onRead={() => mark(it)}
+            main={<div className={`truncate text-sm font-bold ${rd ? "text-muted" : "text-ink"}`}>{it.label || it.detail?.d || it.detail?.ref || "item"}</div>}
+            right={<span className="flex items-center gap-2 whitespace-nowrap text-[13px]">
+              <span className="text-muted/70 line-through">{money1(a)}</span>
+              <span className="font-extrabold text-ink">→ {money1(b)}</span>
+              {av > 0 && (
+                <span className={`rounded px-1.5 py-0.5 text-[11px] font-extrabold tabular-nums ${up ? "bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-300" : "bg-green-50 text-green-600 dark:bg-green-500/15 dark:text-green-300"}`}>
+                  {up ? "▲" : "▼"} {Math.abs(pct).toFixed(0)}%
+                </span>
+              )}
+            </span>} />
+        );
+      })}
+      {!showAll && items.length > 8 && (
+        <button onClick={onShowAll} className="w-full border-t border-line py-3 text-center text-[13px] font-bold text-brand hover:bg-brand-tint">
+          Show all {items.length} changed prices
+        </button>
+      )}
+    </>
+  );
+}
+
+// ── Tab 3: Components ─────────────────────────────────────────────────────────
+function specStrip(it: CatalogChangeItem): string {
+  const d = it.detail ?? {};
+  if (it.entity === "LvEnclosure") return ["Enclosure", d.ip, d.mount, d.ral].filter(Boolean).join(" · ");
+  return [d.t, d.brand, d.r, d.poles ? `${d.poles}P` : "", "pc"].filter(Boolean).join(" · ");
+}
+const compRef = (it: CatalogChangeItem) => it.detail?.ref || it.detail?.fam || "—";
+const compName = (it: CatalogChangeItem) => it.entity === "LvEnclosure"
+  ? `${it.detail?.fam ?? ""} · ${it.detail?.name ?? ""}`.replace(/^ · | · $/g, "")
+  : (it.detail?.d || it.label || "");
+
+function CompLine({ it, kind, read, onRead }: { it: CatalogChangeItem; kind: "add" | "rem"; read: boolean; onRead: () => void }) {
+  const price = money1({ eur: it.detail?.eur ?? 0, egp: it.detail?.egp ?? 0 });
+  return (
+    <div onClick={read ? undefined : onRead}
+      className={`relative flex items-center gap-2.5 border-b border-line/70 px-4 py-2.5 last:border-b-0 ${read ? "opacity-60" : "cursor-pointer"} ${kind === "rem" ? "opacity-60" : ""}`}>
+      {!read && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-brand" />}
+      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${kind === "add" ? "bg-green-500" : "bg-red-500"}`} />
+      <span className="shrink-0 whitespace-nowrap text-[13px] font-extrabold text-ink">{compRef(it)} <span className="font-semibold text-muted">— {compName(it)}</span></span>
+      <span className="min-w-0 flex-1 truncate text-xs text-muted">{kind === "rem" ? "discontinued" : specStrip(it)}</span>
+      {kind === "add" && <span className="shrink-0 whitespace-nowrap text-[13px] font-extrabold tabular-nums text-ink">{price}</span>}
+      <Chip read={read} />
     </div>
   );
+}
 
-  let body: ReactNode;
-  // Added / removed / restored → describe the whole item, not one field.
-  if (it.field === "__created" || it.field === "__retired" || it.field === "__restored") {
-    const verb = it.field === "__created" ? "Added" : it.field === "__retired" ? "Removed" : "Restored";
-    const spec: [string, string][] = d
-      ? ([
-          ["Reference", d.ref || "—"],
-          ["Description", d.d || d.name || "—"],
-          ["Type", d.t || "—"], ["Family", d.f || d.fam || "—"], ["Rating", d.r || "—"],
-          ["Brand", d.brand || "—"], ["Poles", d.poles != null ? String(d.poles) : "—"],
-          ["Price", money1({ eur: d.eur ?? 0, egp: d.egp ?? 0 })],
-          ["ABB discount", discountable(d.brand, d.eur) ? "Yes" : "No"],
-          ["Weight/Panel/Pole", d.cuP ? String(d.cuP) : "—"],
-          ["Weight/Cell/Pole", d.cuC ? String(d.cuC) : "—"],
-          ["Stock", d.stock || "—"],
-          ["IP", d.ip || "—"], ["Mounting", d.mount || "—"], ["RAL", d.ral || "—"],
-        ].filter(([, v]) => v !== "—" || true) as [string, string][])
-      : [];
-    body = (
-      <>
-        {Head}
-        <div className="mt-0.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: TRED }}>{verb}</div>
-        {!!spec.length && (
-          <div className="mt-1 grid grid-cols-2 gap-x-6 gap-y-0.5 sm:grid-cols-3">
-            {spec.map(([k, v]) => (
-              <div key={k} className="flex items-baseline justify-between gap-2 text-[11px]">
-                <span className="text-muted">{k}</span>
-                <span className="text-right font-medium text-ink">{v}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </>
-    );
-  } else if (it.entity === "PriceSetting") {
-    // A "Default rates for new quotations" change (USD/EUR/Safety/Copper…) — its label already
-    // names the rate, so just show the old → new values.
-    body = (
-      <>
-        {Head}
-        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12px]">
-          <span className="text-muted line-through">{it.oldValue ?? "—"}</span>
-          <span className="font-bold text-ink">→ {it.newValue ?? "—"}</span>
+function ComponentsTab({ added, removed, edited, isRead, mark, ck, showAllEdited, onShowAllEdited }: {
+  added: CatalogChangeItem[]; removed: CatalogChangeItem[]; edited: CatalogChangeItem[];
+  isRead: (k: string) => boolean; mark: (it: CatalogChangeItem) => void; ck: (it: CatalogChangeItem) => string;
+  showAllEdited: boolean; onShowAllEdited: () => void;
+}) {
+  const editedShown = showAllEdited ? edited : edited.slice(0, 3);
+  const Block = ({ title, count, expl, children }: { title: string; count: number; expl: string; children: ReactNode }) => (
+    <div className="border-b border-line last:border-b-0">
+      <div className="px-4 pt-4">
+        <div className="flex items-center gap-2">
+          <h3 className="text-[17px] font-extrabold text-ink">{title}</h3>
+          <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-extrabold text-muted tabular-nums">{count}</span>
         </div>
-      </>
-    );
-  } else if (it.field === "price") {
-    // Price → one currency, rounded, with the percentage move.
-    const a = parseMoney(it.oldValue);
-    const b = parseMoney(it.newValue);
-    const pct = pctMove(moneyValue(a), moneyValue(b));
-    const up = moneyValue(b) >= moneyValue(a);
-    body = (
-      <>
-        {Head}
-        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12px]">
-          <span className="text-muted">Price</span>
-          <span className="text-muted line-through">{money1(a)}</span>
-          <span className="font-bold text-ink">→ {money1(b)}</span>
-          {pct && (
-            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${up ? "bg-amber-100 text-amber-800" : "bg-surface text-muted"}`}>
-              {pct}
-            </span>
-          )}
-        </div>
-      </>
-    );
-  } else if (it.field === "brand") {
-    // Brand → also say whether it turned the ABB discount on or off.
-    const was = discountable(it.oldValue ?? "", d?.eur);
-    const now = discountable(it.newValue ?? "", d?.eur);
-    body = (
-      <>
-        {Head}
-        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12px]">
-          <span className="text-muted">Brand</span>
-          <span className="text-muted line-through">{it.oldValue || "—"}</span>
-          <span className="font-bold text-ink">→ {it.newValue || "—"}</span>
-        </div>
-        {was !== now && (
-          <div className="mt-0.5 text-[11px]">
-            <span className="text-muted">ABB discount</span>{" "}
-            <span className="text-muted line-through">{was ? "Yes" : "No"}</span>{" "}
-            <span className="font-bold text-ink">→ {now ? "Yes" : "No"}</span>
-          </div>
-        )}
-      </>
-    );
-  } else if (it.field === "description") {
-    // Description → the full text, before and after.
-    body = (
-      <>
-        {Head}
-        <div className="mt-0.5 text-[12px]">
-          <div className="text-muted line-through">{it.oldValue || "—"}</div>
-          <div className="font-bold text-ink">→ {it.newValue || "—"}</div>
-        </div>
-      </>
-    );
-  } else {
-    // Anything else → the field, before and after.
-    body = (
-      <>
-        {Head}
-        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[12px]">
-          <span className="text-muted">{CHANGE_FIELD_LABEL[it.field] ?? it.field}</span>
-          <span className="text-muted line-through">{numOrText(it.oldValue)}</span>
-          <span className="font-bold text-ink">→ {numOrText(it.newValue)}</span>
-        </div>
-      </>
-    );
-  }
-
+        <p className="mt-0.5 mb-1 text-xs text-muted">{expl}</p>
+      </div>
+      {children}
+    </div>
+  );
   return (
-    <li className={`flex items-start justify-between gap-3 px-3 py-2 ${read ? "opacity-45" : ""}`}>
-      <div className="min-w-0">{body}</div>
-      <button type="button" onClick={onRead} disabled={read}
-        title={read ? "Already read" : "Mark this change as read — removes it from the notification count"}
-        className={`mt-0.5 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${read ? "bg-green-100 text-green-700" : "border border-line text-muted hover:border-brand/50 hover:text-brand-dark"}`}>
-        {read ? "✓ Read" : "Read"}
-      </button>
-    </li>
+    <>
+      {added.length > 0 && (
+        <Block title="Added" count={added.length} expl="New components now available to add to panels.">
+          {added.map((it, i) => <CompLine key={i} it={it} kind="add" read={isRead(ck(it))} onRead={() => mark(it)} />)}
+        </Block>
+      )}
+      {removed.length > 0 && (
+        <Block title="Removed" count={removed.length} expl="Discontinued — kept on saved quotations, no longer offered for new ones.">
+          {removed.map((it, i) => <CompLine key={i} it={it} kind="rem" read={isRead(ck(it))} onRead={() => mark(it)} />)}
+        </Block>
+      )}
+      {edited.length > 0 && (
+        <Block title="Edited" count={edited.length} expl="The description text changed — the price and part are the same.">
+          {editedShown.map((it, i) => {
+            const rd = isRead(ck(it));
+            return (
+              <div key={i} onClick={rd ? undefined : () => mark(it)}
+                className={`relative border-b border-line/70 px-4 py-3 last:border-b-0 ${rd ? "" : "cursor-pointer"}`}>
+                {!rd && <span className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r bg-brand" />}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-extrabold text-ink">{compRef(it)}</span>
+                    <span className="rounded bg-surface px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">Description</span>
+                  </div>
+                  <Chip read={rd} />
+                </div>
+                <div className="mt-1.5 grid grid-cols-[3.2rem_1fr] gap-x-2.5 gap-y-1 text-[13px] leading-snug">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-muted/70">Before</span>
+                  <span className="text-muted line-through">{it.oldValue || "—"}</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-muted/70">After</span>
+                  <span className={`font-semibold ${rd ? "text-muted" : "text-ink"}`}>{it.newValue || "—"}</span>
+                </div>
+              </div>
+            );
+          })}
+          {!showAllEdited && edited.length > 3 && (
+            <button onClick={onShowAllEdited} className="w-full border-t border-line/70 py-2.5 text-center text-[13px] font-bold text-brand hover:bg-brand-tint">
+              Show {edited.length - 3} more edited description{edited.length - 3 > 1 ? "s" : ""}
+            </button>
+          )}
+        </Block>
+      )}
+    </>
   );
 }
