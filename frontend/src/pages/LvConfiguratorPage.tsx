@@ -15,6 +15,7 @@ import { useStaff, SALES_MANAGER } from "../staff";
 import PanelsBulkImport, { type ImportedPanel } from "../components/PanelsBulkImport";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
+  SHEET_METAL_FAMILIES, RESTRICTED_FORMS,
   PANEL_SYSTEMS, SELECTABLE_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
   COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp,
   findByName, externalNeutralCT, copperTypeFactor,
@@ -25,7 +26,7 @@ import {
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpEnclosureRecord, lcpSizes, lcpRealBox,
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog,
+  initialState, calcPanel, grandTotals, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, formFamilyIssue, repriceToCatalog,
   panelLayout, panelNumbers, commonNamePrefix, resortByGroup, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
@@ -1911,6 +1912,8 @@ function panelInvalid(p: LvPanel): string[] {
   const out: string[] = [];
   if (!p.name.trim()) out.push("Panel name is required");
   if (!p.ratingA || p.ratingA <= 0) out.push("Busbar Rating is required");
+  const formIssue = formFamilyIssue(p);
+  if (formIssue) out.push(formIssue);
   return out;
 }
 // A name a PERSON typed is never rewritten or refused mid-word — being overruled while
@@ -6886,11 +6889,52 @@ function PanelEditor({ s, p, up, upPanel }: {
           <div><L>Short circuit</L><input className="input" value={p.shortCircuit}
             placeholder="e.g. 50 kA" onChange={(e) => u({ shortCircuit: e.target.value })} /></div>
           {commonField("Amb. temp", "ambTemp", AMB_TEMPS)}
-          {commonField("Form", "form", FORMS)}
+          {/* Form of separation. SR-Basic / Unikit / Local (Sheet Metal) cannot build Form 3a and
+              up, so those options are disabled for such a panel, and a panel already set that way
+              (e.g. its family was changed afterwards) is flagged and blocks every offer. */}
+          {(() => {
+            const famRestricts = p.sizingMode === "panels" && SHEET_METAL_FAMILIES.has(p.panelsSizing?.family ?? "");
+            const issue = formFamilyIssue(p);
+            return (
+              <div>
+                <L>Form</L>
+                <select className={`input cursor-pointer ${issue ? "border-red-400 bg-red-50/40" : ""}`}
+                  value={p.form} onChange={(e) => u({ form: e.target.value })}>
+                  {FORMS.map((f) => {
+                    const blocked = famRestricts && RESTRICTED_FORMS.has(f);
+                    return <option key={f} value={f} disabled={blocked}>{blocked ? `${f} — n/a` : f}</option>;
+                  })}
+                </select>
+                {issue && <p className="mt-1 text-[11px] font-semibold text-red-600">⚠ {issue}</p>}
+              </div>
+            );
+          })()}
           {commonField("Neutral", "neutral", NEUTRAL_EARTH)}
           {commonField("Earth", "earth", NEUTRAL_EARTH)}
           {commonField("Copper", "copperType", COPPER_TYPES)}
-          {commonField("Incoming cables", "incomingCables", INCOMING_CABLES)}
+          {/* Incoming cables. Picking "Top Busway" offers to feed the incoming C.B from the
+              busway; if applied, "Busway" is written on the incomer's Notes only — which also
+              adds the busway copper on that row (buswayCopperMult keys off the note). */}
+          <div>
+            <L>Incoming cables</L>
+            <Sel value={p.incomingCables as any} options={INCOMING_CABLES as any}
+              onChange={(v) => {
+                u({ incomingCables: v });
+                if (v !== "Top Busway") return;
+                const incomer = selMainIncomer(p);
+                if (!incomer || /busway/i.test(incomer.note || "")) return;
+                void confirm({
+                  title: "Fed from the Busway?",
+                  message: "Do you need the incoming C.B to be fed from the Busway?",
+                  confirmLabel: "Apply it",
+                  cancelLabel: "Cancel",
+                }).then((ok) => {
+                  if (!ok) return;
+                  const note = incomer.note?.trim() ? `${incomer.note.trim()} Busway` : "Busway";
+                  u({ components: p.components.map((c) => (c === incomer ? { ...c, note } : c)) });
+                });
+              }} />
+          </div>
           {commonField("Outgoing cables", "outgoingCables", OUTGOING_CABLES)}
           {(() => {
             const autoRaw = mainBusbarAutoRaw(p);   // family auto value, ignoring any override

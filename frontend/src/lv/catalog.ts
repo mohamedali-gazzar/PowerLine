@@ -130,6 +130,14 @@ export const INCOMING_CABLES = ["Bottom", "Top", "Top Busway"] as const;
 export const OUTGOING_CABLES = ["Bottom", "Top", "Top Busway", "Bottom & Top", "Bottom & Top Busway"] as const;
 export const FORMS = ["1", "2a", "2b", "3a", "3b", "4a", "4b"] as const;
 
+// Form-of-separation limit: the sheet-metal / basic enclosure families cannot achieve the
+// higher forms of separation (Form 3a and up need a compartmentalised system), so those forms
+// are forbidden on them — a panel that uses one is blocked from every offer until it is changed.
+// These three are exactly the sheet-metal families (the same set that allows the Double layout),
+// kept as their own constant so the two rules can move independently.
+export const SHEET_METAL_FAMILIES = new Set<string>(["SR-Basic", "Unikit", "Local (Sheet Metal)"]);
+export const RESTRICTED_FORMS = new Set<string>(["3a", "3b", "4a", "4b"]);
+
 // Sizing & Copper systems (RPT-01): Panels allowed only when incomer ≤ 800 A.
 export const PANEL_SYSTEMS = ["SR-Basic", "Unikit", "Local (Sheet Metal)", "Minicenter", "Primo", "Pillars", "Coffree"] as const;
 // Temporarily LOCKED enclosure families — hidden from the family pickers so no new panel can be

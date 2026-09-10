@@ -17,6 +17,8 @@ import {
   copperTypeFactor,
   findByName,
   findCellEnclosure,
+  SHEET_METAL_FAMILIES,
+  RESTRICTED_FORMS,
   type DbComponent,
   type DbEnclosure,
   type Factors,
@@ -1572,6 +1574,25 @@ export interface ExportCheck { title: string; items: string[] }
  *   3. Missing copper — recommended Phase/Neutral/Earth (per the incomer) not entered
  *                       in the Copper Tool, or the panel's busbar weight is 0.
  *   4. Same name    — two panels a reader of the offer cannot tell apart. */
+/**
+ * SR-Basic / Unikit / Local (Sheet Metal) are sheet-metal enclosures that cannot achieve the
+ * higher forms of separation — Form 3a and up need a compartmentalised system. So one of those
+ * forms on a panel built in one of those families is not a real product and must never reach an
+ * offer. Returns the blocker message for that case, or "" when the panel is fine.
+ *
+ * Only "panels"-mode panels have an enclosure family here (a cells-mode / Pro-E-IS2-PLP panel
+ * keeps a leftover panelsSizing.family that is NOT its real system, and those systems CAN do the
+ * higher forms), and spare / LCP / KWHM cells have no form to check — both are excluded.
+ */
+export function formFamilyIssue(p: LvPanel): string {
+  if (p.spare || p.sizingMode !== "panels") return "";
+  const fam = p.panelsSizing?.family ?? "";
+  if (SHEET_METAL_FAMILIES.has(fam) && RESTRICTED_FORMS.has(p.form)) {
+    return `Form ${p.form} is not available on ${fam} — use Form 1, 2a or 2b, or choose a different enclosure system`;
+  }
+  return "";
+}
+
 export function exportBlockers(s: LvState): ExportCheck[] {
   const zeroPrice: string[] = [];
   const noCells: string[] = [];
@@ -1580,6 +1601,7 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   const highlighted: string[] = []; // panels flagged with the sidebar highlighter
   const emptyPanels: string[] = []; // costed, but nothing to show the customer
   const dupNames: string[] = []; // two panels a reader cannot tell apart
+  const formIssues: string[] = []; // a form of separation the chosen enclosure family cannot build
   s.panels.forEach((p, i) => {
     const label = `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}`;
     if (p.highlight) highlighted.push(label);
@@ -1616,6 +1638,9 @@ export function exportBlockers(s: LvState): ExportCheck[] {
     }
     // Spare-parts cell: no sizing / cells / busbar rules to check.
     if (p.spare) return;
+    // Form of separation the chosen sheet-metal family cannot build (SR-Basic / Unikit / Local).
+    const formIssue = formFamilyIssue(p);
+    if (formIssue) formIssues.push(`${tag}: ${formIssue}`);
     // 2) No cells (Cells mode, ignoring the fixed Sides row)
     if (p.sizingMode === "cells" && !p.cellConfig.rows.some((r) => r.qty > 0 && !r.locked)) {
       noCells.push(`${tag}: no cell quantity selected`);
@@ -1647,6 +1672,7 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   const out: ExportCheck[] = [];
   if (highlighted.length) out.push({ title: "🖍️ Highlighted panels", items: highlighted });
   if (dupNames.length) out.push({ title: "Two panels with the same name", items: dupNames });
+  if (formIssues.length) out.push({ title: "Form of separation not available on this enclosure", items: formIssues });
   if (emptyPanels.length) out.push({ title: "Empty panels — nothing would print", items: emptyPanels });
   if (zeroPrice.length) out.push({ title: "Zero price", items: zeroPrice });
   if (noCells.length) out.push({ title: "No cells selected", items: noCells });

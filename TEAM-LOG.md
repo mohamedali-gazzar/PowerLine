@@ -23,6 +23,27 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**"Top Busway" incoming cables now offers to feed the incoming C.B from the busway.**
+
+When you set a panel's INCOMING CABLES to "Top Busway", a pop-up now asks "Do you need the incoming C.B to be fed from
+the Busway?" with two buttons, Apply It and Cancel. Apply It writes "Busway" in the Notes column of the incoming C.B
+only (the Main-Incoming breaker) — nothing else is touched; Cancel leaves the notes alone (the field still shows Top
+Busway). Writing "Busway" there also adds the busway copper on that breaker's row automatically (the price already reads
+that note), and it won't ask again if the note already says Busway.
+
+## 2026-09-10 · Mohamed's side · Claude
+
+**Forms 3a / 3b / 4a / 4b are now forbidden on SR-Basic, Unikit and Local (Sheet Metal) panels.**
+
+Those three are sheet-metal enclosures that cannot physically achieve the higher forms of separation, so the app now
+prevents that combination. On a panel built in one of those families the Form dropdown greys out 3a / 3b / 4a / 4b (they
+show "n/a") so they can't be picked. If a panel is already set to one of them — e.g. an older quotation, or the
+enclosure system was changed afterwards — the Form field turns red with a clear message and the panel blocks every offer
+(Technical / Commercial / Material and the PDF export) until it's changed, so the invalid combination can't reach a
+customer. The rule ignores cell-based panels (Pro-E / IS2 / PLP), the modular systems, and spare / LCP / KWHM cells.
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **"Check for updates" no longer shows Access Center changes — only real price-list changes.**
 
 The "What changed in the price list" screen was listing permission and role changes (e.g. "so-and-so → qtn.viewAll",
