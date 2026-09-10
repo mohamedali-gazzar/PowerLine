@@ -4665,7 +4665,8 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
                 if (!fm) return <li key={i}>• {line}</li>;
                 const t = factorTone(parseFloat(fm[1]));
                 const [before, after] = line.split(fm[0]);
-                return <li key={i}>• {before}factor <b className={t.cls}>{fm[1]}{t.x ? " ✕" : ""}</b>{after}</li>;
+                // Factor > 1 means the target price is below cost — flag it in words, not just the ✕.
+                return <li key={i}>• {before}factor <b className={t.cls}>{fm[1]}{t.x ? " ✕" : ""}</b>{after}{t.x && <b className="text-red-800"> (Exceed Cost)</b>}</li>;
               })}
             </ul>
           </div>

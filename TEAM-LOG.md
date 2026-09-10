@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**Recorded results: a target whose factor is above 1 now says "(Exceed Cost)".**
+
+Under the Panel pricing table, any recorded target-price result whose factor comes out above 1 — i.e. the target price
+is below cost (the ✕ ones) — now shows a red "(Exceed Cost)" note at the end of the line, so it's clear in words, not
+just the ✕. Results at factor 1 or below are unchanged.
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **Pricing Settings → Panel pricing: the panel name is now editable, and the target-price line is bigger + bold.**
 
 In the "Panel pricing" table you can now edit a panel's name straight in the PANEL column — it's the same name used
