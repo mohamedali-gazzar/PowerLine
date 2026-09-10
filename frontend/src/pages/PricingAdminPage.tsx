@@ -976,7 +976,8 @@ function DefaultRates({ onSaved }: { onSaved: () => void }) {
       <h2 className="sec-head mb-0">Default rates for new quotations</h2>
       <p className="mb-3 mt-1 text-xs text-muted">
         What a brand-new quotation starts from. Quotations already saved keep the rates they
-        were built with, so nothing already sent to a customer changes.
+        were built with, so nothing already sent to a customer changes — except that a DRAFT
+        picks up the latest copper price each time it's reopened.
       </p>
       <div className="flex flex-wrap items-end gap-3">
         <div>

@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**Draft quotations now pick up the latest copper price.**
+
+When you open a Draft, its copper price is refreshed to the current "Default rates" copper value — so an in-progress
+quotation always quotes on today's copper, not whatever it was created with. Only Drafts do this (submitted / approved /
+cancelled stay frozen, so nothing already sent to a customer changes), only the copper rate follows (USD / EUR / safety
+still freeze per quotation), and only the quotation's owner writes it. The change saves automatically. If we want the
+other rates to follow drafts too, that's an easy extension — say the word.
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **Price list → "Default rates for new quotations" now has a Copper (EGP/KG) field.**
 
 On the /pricing screen, the "Default rates for new quotations" box now includes a Copper (EGP/KG) field, right after

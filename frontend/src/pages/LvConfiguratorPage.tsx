@@ -18,7 +18,7 @@ import {
   formFamilyConflict,
   PANEL_SYSTEMS, SELECTABLE_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
   COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp,
-  findByName, externalNeutralCT, copperTypeFactor,
+  findByName, externalNeutralCT, copperTypeFactor, DEFAULT_FACTORS,
   type DbComponent, type DbEnclosure,
 } from "../lv/catalog";
 import {
@@ -370,7 +370,19 @@ export default function LvConfiguratorPage() {
         if (!alive) return;
         if (!r) { navigate("/lv", { replace: true }); return; }
         setRec(r);
-        setHist({ past: [], present: r.state, future: [] });
+        // A DRAFT follows the LIVE copper price: it hasn't been sent, so it should quote on today's
+        // copper (the "Default rates for new quotations" value), not whatever it was created with.
+        // Only the primary owner writes it — factors are an owner-owned/shared field — and only
+        // while it's a Draft; submitted / approved / cancelled stay frozen. The change persists on
+        // the load-time autosave. (Other rates are left alone; copper is the volatile commodity.)
+        const st = r.state;
+        const coWork = (r.coOwners ?? []).length > 0;
+        const iAmPrimary = !coWork || user?.id === r.ownerId;
+        const liveCu = DEFAULT_FACTORS.copper ?? 0;
+        if (r.status === "DRAFT" && iAmPrimary && st.factors && liveCu > 0 && st.factors.copper !== liveCu) {
+          st.factors = { ...st.factors, copper: liveCu };
+        }
+        setHist({ past: [], present: st, future: [] });
         setQtnNum(r.number);
         setStatus(r.status);
         setWf({
