@@ -566,7 +566,13 @@ export async function getLvCatalogChanges(req: Request, res: Response) {
     // Behind → everything since. Current → just the newest version's changes.
     const from = since < latest ? since : latest - 1;
 
-    const where = { domain: "LV", version: { gt: from, lte: latest } } as const;
+    // The Access Center files its permission / role / tier history in THIS same audit
+    // table, under domain "LV" with entity "User" (so access history sits beside price
+    // history). The price-list changelog must show catalogue changes only — never who was
+    // granted which permission — so the "User" rows are excluded here. Everything else under
+    // domain "LV" (LvComponent, LvEnclosure, LvCombo, PriceSetting) is a genuine price-list
+    // change and stays. This filter also feeds the counts, total and unread badge below.
+    const where = { domain: "LV", entity: { not: "User" }, version: { gt: from, lte: latest } } as const;
     const [rows, total] = await Promise.all([
       prisma.priceChange.findMany({
         where,

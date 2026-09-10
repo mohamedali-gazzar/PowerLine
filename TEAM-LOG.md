@@ -21,6 +21,17 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-10 · Mohamed's side · Claude
+
+**"Check for updates" no longer shows Access Center changes — only real price-list changes.**
+
+The "What changed in the price list" screen was listing permission and role changes (e.g. "so-and-so → qtn.viewAll",
+"role Custom → Powerline") mixed in with the actual price changes. That's because the app keeps its permission/role
+history in the same audit log as the price list, and this screen was reading the whole log instead of just the
+price-list part. It now shows only genuine price-list changes (components, enclosures, combinations, price settings)
+and skips the access/permission entries. The little red "unread" number on the button is fixed the same way — it was
+counting those permission entries too. The access history isn't lost; it still lives in the Access Center's own history.
+
 ## 2026-09-09 · Mohamed's side · Claude
 
 **The REAL reason Mayar couldn't reorder panels in QTN-26-01827 — the saved order had drifted from what's on screen.**
