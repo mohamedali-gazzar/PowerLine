@@ -937,6 +937,7 @@ function DefaultRates({ onSaved }: { onSaved: () => void }) {
   const [usd, setUsd] = useState("");
   const [euro, setEuro] = useState("");
   const [safety, setSafety] = useState("");
+  const [copper, setCopper] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
@@ -946,18 +947,19 @@ function DefaultRates({ onSaved }: { onSaved: () => void }) {
     setUsd(String(DEFAULT_FACTORS.usd ?? ""));
     setEuro(String(DEFAULT_FACTORS.euro ?? ""));
     setSafety(String(((DEFAULT_FACTORS.safetyFactor ?? 0) * 100).toFixed(2).replace(/\.?0+$/, "")));
+    setCopper(String(DEFAULT_FACTORS.copper ?? ""));
   }, []);
 
   const save = async () => {
-    const u = Number(usd), e = Number(euro), s = Number(safety);
-    if (![u, e, s].every(Number.isFinite) || u <= 0 || e <= 0 || s < 0 || s > 10) {
-      setErr("Enter a USD and EUR rate above zero, and a safety factor between 0 and 10%.");
+    const u = Number(usd), e = Number(euro), s = Number(safety), c = Number(copper);
+    if (![u, e, s, c].every(Number.isFinite) || u <= 0 || e <= 0 || s < 0 || s > 10 || c <= 0) {
+      setErr("Enter a USD and EUR rate above zero, a safety factor between 0 and 10%, and a copper price above zero.");
       return;
     }
     setBusy(true); setErr(""); setMsg("");
     try {
-      // Stored as a fraction — the field is a percentage, so 2 means ×1.02.
-      await api.pricing.lvSettings({ usd: u, euro: e, safetyFactor: s / 100 });
+      // Stored as a fraction — the field is a percentage, so 2 means ×1.02. Copper is EGP/kg.
+      await api.pricing.lvSettings({ usd: u, euro: e, safetyFactor: s / 100, copper: c });
       const r = await api.pricing.publish();
       await refreshCatalog(getToken());
       setMsg(`Saved and published (version ${r.version}). New quotations start from these.`);
@@ -991,6 +993,11 @@ function DefaultRates({ onSaved }: { onSaved: () => void }) {
           <label className="label" htmlFor="dr-sf">Safety factor (%)</label>
           <input id="dr-sf" className="input w-32" type="number" step="0.1" min="0" max="10"
             value={safety} onChange={(e) => setSafety(e.target.value)} />
+        </div>
+        <div>
+          <label className="label" htmlFor="dr-cu">Copper (EGP/KG)</label>
+          <input id="dr-cu" className="input w-32" type="number" step="1" min="0"
+            value={copper} onChange={(e) => setCopper(e.target.value)} />
         </div>
         <button className="btn-primary mb-0.5" disabled={busy} onClick={save}>
           {busy ? "Saving…" : "Save & publish"}

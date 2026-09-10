@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**Price list → "Default rates for new quotations" now has a Copper (EGP/KG) field.**
+
+On the /pricing screen, the "Default rates for new quotations" box now includes a Copper (EGP/KG) field, right after
+Safety Factor. Set it and press Save & publish and new quotations start from that copper price (quotations already saved
+keep the copper price they were built with, like the other rates). Verified end to end: changed it, saved, reloaded, and
+the new value carried through to what new quotations use. No back-end change was needed — copper was already a standard
+rate; it was just missing from the form.
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **Removed the "Sizing Review" tab.**
 
 The Sizing Review tab is gone from every quotation's tab strip (it now goes straight from Selectivity to Summary). A
