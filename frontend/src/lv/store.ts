@@ -473,7 +473,10 @@ export function newPanel(_n?: number): LvPanel {
     activeSection: DEFAULT_SECTIONS[0],
     components: [],
     sizingMode: "none",
-    panelsSizing: { layout: "Single", family: "SR-Basic", sizing1: "", sizing2: "" },
+    // Enclosure family starts UNCHOSEN (""), so the picker shows "Choose Enclosure Type.." and the
+    // engineer selects it consciously rather than silently quoting on SR-Basic. Spare / LCP / KWHM
+    // cells keep a concrete family (set in newSparePanel) because they auto-size against it.
+    panelsSizing: { layout: "Single", family: "", sizing1: "", sizing2: "" },
     panelItems: [],
     cellConfig: defaultCellConfig(),
   };
@@ -487,8 +490,9 @@ export function newSparePanel(kind = "spare"): LvPanel {
   const label = SPARE_KIND_LABELS[kind] ?? "Spare parts";
   const base = newPanel();
   const panel: LvPanel = { ...base, name: label, spare: true, spareKind: kind, sections: [label], activeSection: label };
-  // KWHM defaults to the Local (Sheet Metal) enclosure family.
-  if (kind === "kwhm") panel.panelsSizing = { ...base.panelsSizing, family: "Local (Sheet Metal)" };
+  // Spare / LCP / KWHM auto-size against a concrete family, so they keep one (the regular panels
+  // picker is what starts unset). KWHM uses Local (Sheet Metal); Spare and LCP keep SR-Basic.
+  panel.panelsSizing = { ...base.panelsSizing, family: kind === "kwhm" ? "Local (Sheet Metal)" : "SR-Basic" };
   return panel;
 }
 
@@ -1602,6 +1606,7 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   const emptyPanels: string[] = []; // costed, but nothing to show the customer
   const dupNames: string[] = []; // two panels a reader cannot tell apart
   const formIssues: string[] = []; // a form of separation the chosen enclosure family cannot build
+  const noFamily: string[] = []; // panels-mode panel with no enclosure family chosen yet
   s.panels.forEach((p, i) => {
     const label = `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}`;
     if (p.highlight) highlighted.push(label);
@@ -1660,7 +1665,11 @@ export function exportBlockers(s: LvState): ExportCheck[] {
     // Minicenter and Primo have no main busbar, so 0 kg is the right answer for
     // them — flagging it sent engineers looking for a number that does not exist.
     const family = p.sizingMode === "panels" ? p.panelsSizing?.family ?? "" : "";
-    if (!NO_BUSBAR_FAMILIES.has(family) && (mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) <= 0) {
+    if (p.sizingMode === "panels" && !family.trim()) {
+      // No enclosure family picked yet — the panel isn't configured, so "busbar weight is 0"
+      // would be a misleading symptom. Say the real thing instead.
+      noFamily.push(`${tag}: no enclosure family chosen — pick one under Panel type`);
+    } else if (!NO_BUSBAR_FAMILIES.has(family) && (mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) <= 0) {
       reasons.push("busbar weight is 0");
     }
     if (reasons.length) missingCopper.push(`${tag}: ${reasons.join("; ")}`);
@@ -1672,6 +1681,7 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   const out: ExportCheck[] = [];
   if (highlighted.length) out.push({ title: "🖍️ Highlighted panels", items: highlighted });
   if (dupNames.length) out.push({ title: "Two panels with the same name", items: dupNames });
+  if (noFamily.length) out.push({ title: "No enclosure family chosen", items: noFamily });
   if (formIssues.length) out.push({ title: "Form of separation not available on this enclosure", items: formIssues });
   if (emptyPanels.length) out.push({ title: "Empty panels — nothing would print", items: emptyPanels });
   if (zeroPrice.length) out.push({ title: "Zero price", items: zeroPrice });

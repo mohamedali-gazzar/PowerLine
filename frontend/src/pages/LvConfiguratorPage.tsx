@@ -9782,7 +9782,13 @@ function SizingCard({ p, u, factors }: {
             </div>
             <div>
               <L>Enclosure family</L>
-              <Sel value={ps.family as any} onChange={(v) => setFamily(v)} options={famOptions as any} />
+              {/* Starts unchosen — the disabled placeholder makes the engineer pick a family before
+                  a size can be searched (the pool below is empty until then). */}
+              <select className={`input cursor-pointer ${!ps.family ? "text-muted" : ""}`}
+                value={ps.family} onChange={(e) => setFamily(e.target.value)}>
+                <option value="" disabled>Choose Enclosure Type..</option>
+                {famOptions.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
             </div>
             <div>
               <L>{ps.layout === "Double" ? "Sizing (1)" : "Sizing"}</L>

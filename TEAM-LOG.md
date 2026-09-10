@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**A new panel no longer pre-picks SR-Basic — the enclosure family now starts on "Choose Enclosure Type..".**
+
+When you switch a panel to Panels mode, the Enclosure family box now shows a greyed "Choose Enclosure Type.." and you
+pick the family yourself (SR-Basic / Unikit / Local / Minicenter / Primo…); the size search stays empty until you do, so
+a size can't be chosen before the family. Spare / LCP / KWHM cells still start on a concrete family (KWHM = Local, the
+rest = SR-Basic) because they auto-size against it, and existing quotations keep whatever family they were saved with —
+only newly added panels start on the placeholder. If a panel is left in Panels mode with no family, the export check now
+says "no enclosure family chosen" instead of the old misleading "busbar weight is 0".
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **"Top Busway" incoming cables now offers to feed the incoming C.B from the busway.**
 
 When you set a panel's INCOMING CABLES to "Top Busway", a pop-up now asks "Do you need the incoming C.B to be fed from
