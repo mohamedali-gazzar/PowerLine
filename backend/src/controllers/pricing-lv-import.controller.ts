@@ -123,6 +123,9 @@ export interface DiffEntry {
   /** True when the sheet row carried no item code and was matched on description
    *  (or is a brand-new code-less item). Applied only if the uploader opts in. */
   noCode?: boolean;
+  /** True for a new item with no price (it would quote as free). Held apart and inserted at 0
+   *  only if the uploader ticks "Insert anyway"; a price is set later on the price list. */
+  unpriced?: boolean;
   row?: RawRow;
 }
 
@@ -349,8 +352,14 @@ export async function postLvImportPreview(req: Request, res: Response) {
             continue;
           }
           if (useEurN === 0 && useEgpN === 0) {
+            // No price → quotes as free. Held apart; inserted at 0 only if "Insert anyway" is ticked.
             unpriced++;
-            warnings.push(`“${row.description.trim()}”: new enclosure with no price — not added (it would quote as free).`);
+            diff.push({
+              kind: "add", entity: "LvEnclosure", code: "",
+              label: `${row.type.trim()} · ${row.description.trim()}`,
+              eur: 0, egp: 0, row, unpriced: true,
+            });
+            warnings.push(`“${row.description.trim()}”: new enclosure with no price — skipped (quotes as free) unless you tick “Insert anyway”.`);
             continue;
           }
           diff.push({
@@ -374,8 +383,15 @@ export async function postLvImportPreview(req: Request, res: Response) {
         }
         // Brand new, and with no code the only handle on it is its description.
         if (useEurN === 0 && useEgpN === 0) {
+          // No code AND no price — insertable anyway (matched later by description). A name already
+          // taken still can't be added, so that stays a clash rather than an insert-anyway row.
+          const labelU = row.description.trim();
+          const takenU = names.owner(labelU);
+          if (takenU) { warnings.push(lvAddNameClashWarning(labelU, "", takenU)); nameClashes++; continue; }
           unpriced++;
-          warnings.push(`“${row.description.trim()}”: no item code and no price — it would quote as free, so it is not offered.`);
+          diff.push({ kind: "add", entity: "LvComponent", code: "", label: labelU, eur: 0, egp: 0, row, unpriced: true });
+          names.claim(labelU, pendingItem(labelU, ""));
+          warnings.push(`“${labelU}”: no item code and no price — skipped (quotes as free) unless you tick “Insert anyway”.`);
           continue;
         }
         const labelN = row.description.trim();
@@ -428,8 +444,23 @@ export async function postLvImportPreview(req: Request, res: Response) {
 
       // Not in the price list — a new item.
       if (useEur === 0 && useEgp === 0) {
-        unpriced++;
-        warnings.push(`${row.code}: new item with no price — not added (it would quote as free).`);
+        // No price → quotes as free. Insertable at 0 only if "Insert anyway" is ticked; needs a name.
+        if (!row.description.trim()) {
+          warnings.push(`${row.code}: new item with no price and no description — cannot be added.`);
+          continue;
+        }
+        if (isEnc) {
+          unpriced++;
+          diff.push({ kind: "add", entity: "LvEnclosure", code: row.code.trim(), label: `${row.type.trim()} · ${row.description.trim()}`, eur: 0, egp: 0, row, unpriced: true });
+        } else {
+          const labelU = row.description.trim();
+          const takenU = names.owner(labelU);
+          if (takenU) { warnings.push(lvAddNameClashWarning(labelU, row.code.trim(), takenU)); nameClashes++; continue; }
+          unpriced++;
+          diff.push({ kind: "add", entity: "LvComponent", code: row.code.trim(), label: labelU, eur: 0, egp: 0, row, unpriced: true });
+          names.claim(labelU, pendingItem(labelU, row.code.trim()));
+        }
+        warnings.push(`${row.code}: new item with no price — skipped (quotes as free) unless you tick “Insert anyway”.`);
         continue;
       }
       if (!row.description.trim()) {
@@ -506,8 +537,11 @@ export async function postLvImportPreview(req: Request, res: Response) {
 
     // Code-less rows are held apart: they are shown for review and applied only if
     // the uploader ticks them, so they never inflate the headline counts.
-    const coded = diff.filter((d) => !d.noCode && d.kind !== "remove");
-    const noCodeEntries = diff.filter((d) => d.noCode);
+    // No-price "insert anyway" rows are their own bucket — held out of the headline adds and the
+    // no-code list, applied only if the uploader ticks their opt-in.
+    const unpricedEntries = diff.filter((d) => d.unpriced);
+    const coded = diff.filter((d) => !d.noCode && !d.unpriced && d.kind !== "remove");
+    const noCodeEntries = diff.filter((d) => d.noCode && !d.unpriced);
     const updates = coded.filter((d) => d.kind === "update");
     const additions = coded.filter((d) => d.kind === "add");
     const allRemovals = diff.filter((d) => d.kind === "remove");
@@ -533,6 +567,8 @@ export async function postLvImportPreview(req: Request, res: Response) {
       blankKept,
       noCode,
       unpriced,
+      // New items with no price that CAN be inserted anyway (at 0) if the uploader opts in.
+      unpricedAdditions: unpricedEntries.length,
       duplicates,
       // Rows refused (an add) or partly refused (a rename) because the name is
       // already an item's. Each one is named in `warnings`.
@@ -568,6 +604,7 @@ export async function postLvImportPreview(req: Request, res: Response) {
       additions: additions.slice(0, DETAIL_CAP),
       removals: allRemovals.slice(0, DETAIL_CAP),
       noCodeItems: noCodeEntries.slice(0, DETAIL_CAP),
+      unpricedItems: unpricedEntries.slice(0, DETAIL_CAP),
       warnings: warnings.slice(0, 50),
       truncated: updates.length > DETAIL_CAP || additions.length > DETAIL_CAP || allRemovals.length > DETAIL_CAP,
       expiresAt: batch.expiresAt,
@@ -598,8 +635,11 @@ export async function postLvImportApply(req: Request, res: Response) {
     // their opt-in in the preview — both are held out of the default apply.
     const includeNoCode = req.body?.includeNoCode === true;
     const includeRemovals = req.body?.includeRemovals === true;
+    const includeUnpriced = req.body?.includeUnpriced === true;
     const diff = (JSON.parse(batch.diff) as DiffEntry[]).filter((d) =>
-      d.kind === "remove" ? includeRemovals : includeNoCode || !d.noCode,
+      d.unpriced ? includeUnpriced
+      : d.kind === "remove" ? includeRemovals
+      : includeNoCode || !d.noCode,
     );
     const by = req.userEmail ?? "";
     const actorId = req.userId ?? null;

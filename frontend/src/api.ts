@@ -374,8 +374,10 @@ export interface LvImportSummary {
   /** Priced items whose cell was left blank — the existing price was kept. */
   blankKept: number;
   noCode: number;
-  /** New items with no price: not added, because they would quote as free. */
+  /** New items with no price: skipped by default (they would quote as free). */
   unpriced: number;
+  /** …of those, how many can be inserted anyway (at 0) if the uploader opts in. */
+  unpricedAdditions: number;
   duplicates: number;
   /** Rows refused because their description is already another item's name —
    *  an add is dropped, a rename is dropped on its own and the price still
@@ -406,6 +408,8 @@ export interface LvImportPreview {
   removals: LvImportDiff[];
   /** Rows with no item code, for review before they are included. */
   noCodeItems: LvImportDiff[];
+  /** New items with no price, for review before inserting them anyway (at 0). */
+  unpricedItems: LvImportDiff[];
   warnings: string[];
   truncated: boolean;
   expiresAt: string;
@@ -818,10 +822,10 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ rows }),
       }),
-    lvImportApply: (batchId: string, includeNoCode = false, includeRemovals = false) =>
+    lvImportApply: (batchId: string, includeNoCode = false, includeRemovals = false, includeUnpriced = false) =>
       request<{ ok: true; updated: number; added: number; removed: number; skipped: number; nameClashes?: string[]; published: boolean; version: number | null; blockers?: string[] }>(
         `/pricing/lv/import/${batchId}/apply`,
-        { method: "POST", body: JSON.stringify({ includeNoCode, includeRemovals }) },
+        { method: "POST", body: JSON.stringify({ includeNoCode, includeRemovals, includeUnpriced }) },
       ),
     lvImportCancel: (batchId: string) =>
       request<{ ok: true }>(`/pricing/lv/import/${batchId}/cancel`, { method: "POST" }),

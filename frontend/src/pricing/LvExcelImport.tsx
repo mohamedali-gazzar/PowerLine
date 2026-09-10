@@ -141,7 +141,7 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
   const [dl, setDl] = useState(""); // "Download current" progress text
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<LvImportPreview | null>(null);
-  const [tab, setTab] = useState<"updates" | "additions" | "removals" | "noCode" | "warnings">("updates");
+  const [tab, setTab] = useState<"updates" | "additions" | "removals" | "noCode" | "unpriced" | "warnings">("updates");
   const [done, setDone] = useState("");
   // Rows the name rule refused at apply time — the catalogue can have moved on
   // since the preview, so these are not always the ones the preview flagged.
@@ -151,6 +151,8 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
   // Full-sync removals (items not in the file) are retired only if the uploader ticks
   // this — default off, so a partial file can never empty the catalogue by surprise.
   const [includeRemovals, setIncludeRemovals] = useState(false);
+  // New items with no price — inserted (at 0) only if the uploader ticks "Insert anyway".
+  const [includeUnpriced, setIncludeUnpriced] = useState(false);
 
   const pickFile = () => {
     setError("");
@@ -274,7 +276,7 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
     setBusy("Applying…");
     setError("");
     try {
-      const r = await api.pricing.lvImportApply(preview.batchId, includeNoCode, includeRemovals);
+      const r = await api.pricing.lvImportApply(preview.batchId, includeNoCode, includeRemovals, includeUnpriced);
       setPreview(null);
       setNotes(r.nameClashes ?? []);
       const head = `${r.updated.toLocaleString()} item(s) updated, ${r.added} item(s) added${r.removed ? `, ${r.removed.toLocaleString()} removed` : ""}`;
@@ -306,9 +308,10 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
   const s = preview?.summary;
   const noCodeTotal = (s?.noCodeUpdates ?? 0) + (s?.noCodeAdditions ?? 0);
   const removalsTotal = s?.removals ?? 0;
-  // Code-less rows and removals count towards Apply only once each is ticked.
+  const unpricedTotal = s?.unpricedAdditions ?? 0;
+  // Code-less rows, removals and no-price "insert anyway" rows count towards Apply once ticked.
   const applyCount =
-    (s ? s.updates + s.additions : 0) + (includeNoCode ? noCodeTotal : 0) + (includeRemovals ? removalsTotal : 0);
+    (s ? s.updates + s.additions : 0) + (includeNoCode ? noCodeTotal : 0) + (includeRemovals ? removalsTotal : 0) + (includeUnpriced ? unpricedTotal : 0);
 
   return (
     <>
@@ -461,35 +464,48 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
                 </label>
               )}
 
-              {(s.unpriced > 0 || s.duplicates > 0) && (
+              {/* New items with no price — skipped by default, but insertable at 0 if opted in. */}
+              {unpricedTotal > 0 && (
+                <label className="mt-2 flex cursor-pointer items-start gap-2.5 rounded-lg border border-amber-400/70 bg-amber-50 p-2.5 dark:border-amber-400/40 dark:bg-amber-400/10">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-amber-600"
+                    checked={includeUnpriced} onChange={(e) => setIncludeUnpriced(e.target.checked)} />
+                  <span className="text-xs text-ink">
+                    <b>{unpricedTotal} new item{unpricedTotal === 1 ? " has" : "s have"} no price</b>{" "}
+                    — skipped by default because {unpricedTotal === 1 ? "it" : "they"} would quote as free. Tick to{" "}
+                    <b>insert {unpricedTotal === 1 ? "it" : "them"} anyway</b> at 0 (set a real price later on the price list).
+                    Review {unpricedTotal === 1 ? "it" : "them"} in the{" "}
+                    <button type="button" onClick={() => setTab("unpriced")} className="font-bold underline underline-offset-2">
+                      Insert anyway
+                    </button>{" "}
+                    tab.
+                  </span>
+                </label>
+              )}
+
+              {s.duplicates > 0 && (
                 <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs font-semibold text-amber-800 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">
-                  ⚠ Skipped:{" "}
-                  {[
-                    s.unpriced > 0 && `${s.unpriced} new item(s) with no price`,
-                    s.duplicates > 0 && `${s.duplicates} repeated item code(s)`,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
+                  ⚠ Skipped: {s.duplicates} repeated item code(s)
                 </p>
               )}
 
               {/* Detail */}
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {(["updates", "additions", "removals", "noCode", "warnings"] as const).map((t) => {
+                {(["updates", "additions", "removals", "noCode", "unpriced", "warnings"] as const).map((t) => {
                   const n =
                     t === "updates" ? preview.updates.length
                     : t === "additions" ? preview.additions.length
                     : t === "removals" ? (preview.removals?.length ?? 0)
                     : t === "noCode" ? (preview.noCodeItems?.length ?? 0)
+                    : t === "unpriced" ? (preview.unpricedItems?.length ?? 0)
                     : preview.warnings.length;
-                  if (t === "noCode" && !n) return null;
-                  const label = t === "noCode" ? "No item code" : t === "removals" ? "To remove" : t;
+                  if ((t === "noCode" || t === "unpriced") && !n) return null;
+                  const label = t === "noCode" ? "No item code" : t === "removals" ? "To remove" : t === "unpriced" ? "Insert anyway" : t;
                   const isRemovals = t === "removals";
                   return (
                     <button
                       key={t}
                       onClick={() => setTab(t)}
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${t === "noCode" || isRemovals ? "" : "capitalize"} ${
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${t === "noCode" || t === "unpriced" || isRemovals ? "" : "capitalize"} ${
                         tab === t
                           ? isRemovals ? "border-red-500 bg-red-500 text-white" : "border-brand bg-brand text-white"
                           : "border-line bg-white text-muted hover:border-brand/40"
@@ -524,7 +540,7 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
                       </tr>
                     </thead>
                     <tbody>
-                      {(tab === "updates" ? preview.updates : tab === "removals" ? preview.removals ?? [] : tab === "noCode" ? preview.noCodeItems ?? [] : preview.additions).map((d, i) => {
+                      {(tab === "updates" ? preview.updates : tab === "removals" ? preview.removals ?? [] : tab === "noCode" ? preview.noCodeItems ?? [] : tab === "unpriced" ? preview.unpricedItems ?? [] : preview.additions).map((d, i) => {
                         // A data-only row keeps its price — show it as untouched, not as a move.
                         const priceHeld = tab !== "additions" && d.priceMoved === false;
                         return (
@@ -592,7 +608,7 @@ export default function LvExcelImport({ onApplied, extra }: { onApplied: () => v
                         </tr>
                         );
                       })}
-                      {(tab === "updates" ? preview.updates : tab === "removals" ? preview.removals ?? [] : tab === "noCode" ? preview.noCodeItems ?? [] : preview.additions).length === 0 && (
+                      {(tab === "updates" ? preview.updates : tab === "removals" ? preview.removals ?? [] : tab === "noCode" ? preview.noCodeItems ?? [] : tab === "unpriced" ? preview.unpricedItems ?? [] : preview.additions).length === 0 && (
                         <tr>
                           <td colSpan={5} className="p-4 text-center text-muted">
                             Nothing in this list.

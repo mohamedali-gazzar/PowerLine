@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**Price-list import: "Insert anyway" for new items that have no price.**
+
+When you upload an Excel price list and it finds a new item with no price, it used to just skip it (a no-price item would
+quote as free). The "Review before applying" screen now offers to insert those anyway: an amber tick — "N new items have
+no price — tick to insert them anyway at 0 (set a real price later)" — plus an "Insert anyway" tab that lists them. They
+are added ONLY if you tick it, at price 0, and everything else applies exactly as before. Nothing changes unless you
+choose to insert. So the "Space for VSD" type of row can now be added and priced later.
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **Recorded results: a target whose factor is above 1 now says "(Exceed Cost)".**
 
 Under the Panel pricing table, any recorded target-price result whose factor comes out above 1 — i.e. the target price
