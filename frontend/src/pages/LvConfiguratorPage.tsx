@@ -1505,22 +1505,20 @@ export default function LvConfiguratorPage() {
         <div>
           <div className="flex items-center gap-3">
             <Link to="/" className="text-xs font-semibold text-brand hover:underline">← My QTNs</Link>
-            <button
-              type="button"
-              onClick={() => setHeaderMin((v) => !v)}
-              aria-pressed={headerMin}
-              aria-label={headerMin ? "Expand this bar" : "Minimize this bar"}
-              title={headerMin
-                ? "Expand — show the price, status and action buttons again"
-                : "Minimize — collapse this bar to just the number and name"}
-              className="text-xs font-semibold text-muted hover:text-brand hover:underline"
-            >
-              {headerMin ? "▸ Expand" : "▾ Minimize"}
-            </button>
           </div>
-          <h1 className="flex items-center gap-3 text-2xl font-extrabold tracking-tight">
+          {/* The arrow beside the QTN number minimizes / maximizes the whole bar — minimized, only
+              this row (number + arrow) stays and everything else (name, price, status, buttons) is
+              hidden; the arrow points down when open, right when collapsed. */}
+          <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight">
             <span className="code-chip">{offerLabel}</span>
-            {s.project.name || (isCustomQtn ? "Custom Commercial Offer" : "LV Quotation")}
+            <button type="button" onClick={() => setHeaderMin((v) => !v)}
+              aria-expanded={!headerMin}
+              aria-label={headerMin ? "Maximize this bar" : "Minimize this bar"}
+              title={headerMin ? "Maximize — show the name, price, status and buttons" : "Minimize — collapse this bar"}
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-surface hover:text-brand">
+              <span className={`text-sm leading-none transition-transform ${headerMin ? "" : "rotate-90"}`}>▶</span>
+            </button>
+            {!headerMin && <span>{s.project.name || (isCustomQtn ? "Custom Commercial Offer" : "LV Quotation")}</span>}
           </h1>
           <p className={`text-sm text-muted ${headerMin ? "hidden" : ""}`}>
             {fmtEgp(totals.sell)} EGP excl. VAT

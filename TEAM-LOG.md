@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-10 · Mohamed's side · Claude
 
+**The quotation top bar now minimizes fully with an arrow beside the QTN number.**
+
+The "Minimize" text link is replaced by a small arrow right next to the QTN number. Clicking it now collapses the WHOLE
+top bar — the project name, the price line, the status/timer and every action button (Undo/Redo, Send for approval,
+Share, Copy link, ERP CSV, Check for updates) all hide, leaving just "← My QTNs" and the QTN number with the arrow.
+Click the arrow again to bring it all back. The arrow points down when open, right when collapsed, and the choice is
+remembered per browser.
+
+## 2026-09-10 · Mohamed's side · Claude
+
 **Form 3a/3b/4a/4b on SR-Basic / Unikit / Local is now a soft WARNING, not a block (supersedes the earlier version).**
 
 Earlier today this was a hard rule (the forms were greyed out / the families were hidden). By request it's now a
