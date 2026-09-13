@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**"Copy link" and "Go to ERP" are now one button, and the header shows just the quotation number.**
+
+- The button under the quotation number does both jobs in sequence: click it once and it copies the link and turns into
+  **"Go to ERP"**; click it again (a double-click) and the ERP opens for that quotation. If the quotation has no ERP
+  number yet, it just flashes "Copied" like before.
+- Removed the **project name** and the little **▼ arrow** from the header — it now shows only the quotation number. (The
+  arrow was the show/hide-the-whole-bar toggle; that feature is gone with it.)
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **Tidied the top of a quotation: the Assistant button no longer covers the row buttons, the price line is replaced by the Copy link / ERP CSV buttons, and Share sits next to Send for approval.**
 
 Three small layout fixes:

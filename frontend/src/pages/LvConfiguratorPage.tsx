@@ -296,17 +296,6 @@ export default function LvConfiguratorPage() {
   const hashId = decodeURIComponent((hash || "").replace(/^#/, ""));
   const routeQtnId = id.includes("-") ? hashId || id : id;
   const navigate = useNavigate();
-  /**
-   * Minimize the quotation header to a slim bar — the price, status, timer and the whole
-   * action-button cluster collapse away, leaving just the QTN number and name — to give the
-   * panel list below more room. Remembered per browser; expanded by default.
-   */
-  const [headerMin, setHeaderMin] = useState(() => {
-    try { return localStorage.getItem("pl.qtnHeaderMin") === "1"; } catch { return false; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem("pl.qtnHeaderMin", headerMin ? "1" : "0"); } catch { /* ignore */ }
-  }, [headerMin]);
 
   // Themed stand-ins for window.confirm / alert / prompt. `confirmModal` is
   // rendered once, near the bottom of this component; it portals to document.body.
@@ -327,8 +316,11 @@ export default function LvConfiguratorPage() {
     return saved && TABS.includes(saved) ? saved : "project";
   });
   const [matAbbOnly, setMatAbbOnly] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false); // "Copy offer link" feedback flash
-  const [showErp, setShowErp] = useState(false); // reveal "Go to ERP" once the link has been copied
+  const [linkCopied, setLinkCopied] = useState(false); // after copying, the same button flips to "Go to ERP"
+  // Decides the "Copy link" button's branch on click — copy first, then (next click) open the ERP.
+  // A ref (not state) so a real double-click's two rapid clicks don't race the re-render. Declared
+  // here with the other hooks so it's always called, never after an early return.
+  const erpReadyRef = useRef(false);
   // RPT-1: the QTN number is editable after creation (kept unique per user).
   const [qtnNum, setQtnNum] = useState("");
   // Where this quotation sits in the approval workflow. The server owns it; the
@@ -1585,9 +1577,20 @@ export default function LvConfiguratorPage() {
     } catch {
       try { await navigator.clipboard.writeText(plain); } catch { /* clipboard unavailable */ }
     }
-    setLinkCopied(true);
-    setShowErp(true); // now offer the jump straight to the ERP for pasting/checking
-    window.setTimeout(() => setLinkCopied(false), 1800);
+    setLinkCopied(true); // the button now reads "Go to ERP" until this clears
+    window.setTimeout(() => { setLinkCopied(false); erpReadyRef.current = false; }, 4000);
+  };
+  // The single "Copy link → Go to ERP" button's click: copy first, then (on the next click, while
+  // it still reads "Go to ERP") open the ERP. Double-clicking the same spot does both.
+  const copyOrGoErp = () => {
+    if (erpReadyRef.current && erpUrl) {
+      erpReadyRef.current = false;
+      setLinkCopied(false);
+      window.open(erpUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    erpReadyRef.current = true; // set synchronously so the double-click's second click opens the ERP
+    void copyOfferLink();
   };
 
   return (
@@ -1597,35 +1600,24 @@ export default function LvConfiguratorPage() {
           <div className="flex items-center gap-3">
             <Link to="/" className="text-xs font-semibold text-brand hover:underline">← My QTNs</Link>
           </div>
-          {/* The arrow beside the QTN number minimizes / maximizes the whole bar — minimized, only
-              this row (number + arrow) stays and everything else (name, price, status, buttons) is
-              hidden; the arrow points down when open, right when collapsed. */}
           <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight">
             <span className="code-chip">{offerLabel}</span>
-            <button type="button" onClick={() => setHeaderMin((v) => !v)}
-              aria-expanded={!headerMin}
-              aria-label={headerMin ? "Maximize this bar" : "Minimize this bar"}
-              title={headerMin ? "Maximize — show the name, price, status and buttons" : "Minimize — collapse this bar"}
-              className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-surface hover:text-brand">
-              <span className={`text-sm leading-none transition-transform ${headerMin ? "" : "rotate-90"}`}>▶</span>
-            </button>
-            {!headerMin && <span>{s.project.name || (isCustomQtn ? "Custom Commercial Offer" : "LV Quotation")}</span>}
           </h1>
           {/* The price used to sit here; the owner asked for the quick actions instead — Copy link
               and the ERP export — right under the quotation number. */}
-          <div className={`mt-1 ${headerMin ? "hidden" : "flex flex-wrap items-center gap-2"}`}>
-            <button type="button" onClick={copyOfferLink}
-              title="Copy a clickable link to this offer, named by its quotation number — paste it into the ERP"
-              className="rounded-full border border-line bg-white px-4 py-1.5 text-xs font-bold text-ink hover:border-brand/50 hover:text-brand-dark no-print">
-              {linkCopied ? "✓ Copied" : "🔗 Copy link"}
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            {/* One button in this spot: a click copies the link, then it flips to "Go to ERP" so a
+                second click (or a double-click) opens the ERP. Falls back to a "✓ Copied" flash when
+                the quotation has no ERP number yet. */}
+            <button type="button" onClick={copyOrGoErp}
+              title={linkCopied && erpUrl ? `Open this quotation in the ERP — ${erpUrl}` : "Copy a clickable link to this offer — click again to open the ERP"}
+              className={`rounded-full border px-4 py-1.5 text-xs font-bold transition-colors no-print ${
+                linkCopied && erpUrl
+                  ? "border-brand bg-brand-light text-brand-dark hover:bg-brand hover:text-white"
+                  : "border-line bg-white text-ink hover:border-brand/50 hover:text-brand-dark"
+              }`}>
+              {linkCopied ? (erpUrl ? "↗ Go to ERP" : "✓ Copied") : "🔗 Copy link"}
             </button>
-            {showErp && erpUrl && (
-              <a href={erpUrl} target="_blank" rel="noopener noreferrer"
-                title={`Open this quotation in the ERP — ${erpUrl}`}
-                className="inline-flex items-center gap-1 rounded-full border border-brand bg-brand-light px-4 py-1.5 text-xs font-bold text-brand-dark transition-colors hover:bg-brand hover:text-white no-print">
-                ↗ Go to ERP
-              </a>
-            )}
             {erpCount > 0 && (
               <button onClick={exportErpCsv}
                 title={`Download ${erpCount} panel${erpCount > 1 ? "s" : ""} as an ERPNext "Bulk Edit Items" CSV for your ERP`}
@@ -1637,7 +1629,7 @@ export default function LvConfiguratorPage() {
           {/* Workflow stage, under the price — it belongs with the quotation's own
               details rather than among the buttons that act on it. */}
           {/* text-sm (14px) rather than text-xs (12px) — the 2px the owner asked for. */}
-          <div className={`mt-2 ${headerMin ? "hidden" : "flex flex-wrap items-center gap-2"}`}>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-sm font-bold ${QTN_STATUS_STYLE[status]}`}
               title={`Workflow stage: ${QTN_STATUS_LABEL[status]}`}>
               {QTN_STATUS_LABEL[status]}
@@ -1646,7 +1638,7 @@ export default function LvConfiguratorPage() {
             <ActiveTimeBadge qtnId={rec?.id} initialSeconds={rec?.activeSeconds ?? 0} enabled={!sharedReadOnly && !reviewSandbox} />
           </div>
         </div>
-        <div className={headerMin ? "hidden" : "flex flex-col items-end gap-2"}>
+        <div className="flex flex-col items-end gap-2">
           {/* Primary workflow button and the Share dropdown sit side by side on one row. */}
           <div className="flex flex-wrap items-center justify-end gap-2">
             {/* One primary workflow button, chosen by the viewer's role and the stage — and after
