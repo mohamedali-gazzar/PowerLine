@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**The "new default rates" check now also runs at Send for approval — so a quotation left open can't be sent on stale rates.**
+
+Before, the "Updated default rates" popup only appeared when a quotation was opened or reloaded. So if someone left a
+quotation open while an admin published new rates, they could send it for approval on the old rates. Now, clicking
+**Send for approval** first fetches the very latest published rates (no reload needed) and, if the quotation is behind,
+shows the same popup as a gate: you Apply (updates it to the latest price and re-prices it) or Keep, and only then does
+the send continue. The rate change is saved before the quotation locks for approval, so nothing races the send.
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **Default rates (USD / EUR / Safety / Copper) are now admin-managed, versioned, and applied per quotation on request.**
 
 Only an admin can change and publish the four default rates on the Price list screen — everyone else now sees them

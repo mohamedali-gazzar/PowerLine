@@ -46,10 +46,10 @@ import {
 import { rankSearchOptions } from "../lv/search";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
-import { catalogVersion, latestRateVersion, onCatalogChange } from "../lv/catalogSource";
+import { catalogVersion, latestRateVersion, onCatalogChange, refreshCatalog } from "../lv/catalogSource";
 import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import {
-  api, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
+  api, getToken, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type QtnAttachmentDto, type QtnStatus,
   type QtnEventDto,
 } from "../api";
@@ -365,6 +365,9 @@ export default function LvConfiguratorPage() {
   const [rateModal, setRateModal] = useState<{ current: RateSet; latest: RateSet } | null>(null);
   const [rateErr, setRateErr] = useState("");
   const [rateBusy, setRateBusy] = useState(false);
+  // True while the rate warning is gating a "Send for approval": after the person decides,
+  // the send continues automatically so a quotation is never sent behind on rates unnoticed.
+  const [pendingSend, setPendingSend] = useState(false);
   // Bumped whenever the live catalogue swaps (a publish), so the rate-warning check re-runs
   // once the freshly-published rates have loaded.
   const [catalogTick, setCatalogTick] = useState(0);
@@ -560,8 +563,20 @@ export default function LvConfiguratorPage() {
   // Block sending until it's picked, surfacing why and jumping to the Project tab. Then
   // show every other missing thing (see approvalWarnings) before the quotation is locked,
   // so the approver sees it rather than discovering it at export time.
-  // Past the EDMS confirmation: the offer's own checks, then the transition.
-  const proceedSend = () => {
+  // Past the EDMS confirmation: first make sure this quotation isn't behind on the default
+  // rates, then the offer's own checks, then the transition.
+  //
+  // The rate gate re-fetches the published catalogue FIRST, so a quotation left open for a
+  // while (never reloaded) is still judged against what is live right now. If it is behind, the
+  // "Updated default rates" popup is shown as a gate — the person applies or keeps, and only
+  // then does the send continue (setPendingSend). This is what stops a quotation being sent for
+  // approval on stale rates just because it was never refreshed.
+  const proceedSend = async (skipRateGate = false) => {
+    if (!skipRateGate) {
+      try { await refreshCatalog(getToken()); } catch { /* offline → judge against what we have */ }
+      const data = rateUpdate(s, status, latestRateVersion(), pickRates(DEFAULT_FACTORS));
+      if (data) { setPendingSend(true); setRateModal(data); return; }
+    }
     const warns = approvalWarnings();
     if (warns.length) { setApprovalWarns(warns); return; } // the modal confirms the send
     runSendForApproval();
@@ -577,7 +592,7 @@ export default function LvConfiguratorPage() {
     // A STANDARD (EDMS) quotation whose panel was changed gets the recheck warning a
     // second time here, as an extra confirmation — but only when something was changed.
     if (isEdmsQtn && s.panels.some((p) => p.edmsEdited)) { setEdmsSendConfirm(true); return; }
-    proceedSend();
+    void proceedSend();
   };
   // "Send to <sales person>" — compose the offer e-mail in Outlook via a mailto link.
   // Recipient is the sales person's e-mail from the Project tab (empty To when none is
@@ -929,14 +944,21 @@ export default function LvConfiguratorPage() {
       action === "apply"
         ? { factors: { ...s.factors, ...pickRates(DEFAULT_FACTORS) }, rateVersion: latest }
         : { rateVersionDismissed: latest };
+    const nextState = { ...s, ...patch } as LvState;
     setRateBusy(true); setRateErr("");
     try {
+      // Persist the decision IMMEDIATELY (not via the debounced autosave). A quotation locked
+      // for approval goes through its own endpoint; an editable one is saved directly here — so
+      // if this decision is gating a send, the transition that follows can never race the save.
       if (readOnly) {
-        const summary = action === "apply" ? summaryOf({ ...s, ...patch } as LvState) : undefined;
-        await api.qtns.rateDecision(rec.id, action, summary);
+        await api.qtns.rateDecision(rec.id, action, action === "apply" ? summaryOf(nextState) : undefined);
+      } else {
+        await saveQtn(rec.id, nextState);
       }
       setHist((h) => ({ ...h, present: { ...h.present, ...patch } }));
       setRateModal(null);
+      // If the warning was gating a "Send for approval", continue it now (rates are settled).
+      if (pendingSend) { setPendingSend(false); void proceedSend(true); }
     } catch (e) {
       setRateErr((e as Error).message || "Could not update the rates. Please try again.");
     } finally {
@@ -1839,7 +1861,7 @@ export default function LvConfiguratorPage() {
         acknowledgeLabel="Send for approval"
         onClose={() => setEdmsSendConfirm(false)}
         onRevert={() => setEdmsSendConfirm(false)}
-        onAcknowledge={() => { setEdmsSendConfirm(false); proceedSend(); }}
+        onAcknowledge={() => { setEdmsSendConfirm(false); void proceedSend(); }}
       />
       <ReassignQtnModal
         open={reassignOpen}
