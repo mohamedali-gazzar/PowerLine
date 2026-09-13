@@ -21,6 +21,13 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-13 · Mohamed's side · Claude
+
+**Project factor now shows 3 decimals (e.g. 0.752).**
+
+The read-only Project factor in Pricing Settings — and the factor quoted in the sales email — now reads to three
+decimal places instead of four, so 0.7466 shows as 0.747 and a round 0.7 shows as 0.700.
+
 ## 2026-09-10 · Mohamed's side · Claude
 
 **Return for revision: edit an added comment, and apply one comment to several panels at once.**

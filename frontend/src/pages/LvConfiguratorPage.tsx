@@ -589,7 +589,7 @@ export default function LvConfiguratorPage() {
     `Dear ${s.project.salesPerson.trim() || "Sales"},`,
     "Please find attached the Technical and Commercial offers",
     // The PROJECT factor — the achieved total cost ÷ total selling — not the panels-factor default.
-    `on factor "${projectFactor(s) || s.factors.factor}"`,
+    `on factor "${(projectFactor(s) || s.factors.factor).toFixed(3)}"`,
     "",
     "Best regards,",
     s.project.supportEngineer.trim() || user?.name || "",
@@ -4425,7 +4425,7 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
             <L>Project factor</L>
             <input className="input cursor-default bg-surface font-bold text-brand-dark" readOnly tabIndex={-1}
               title="View only — total cost ÷ total selling (excl. VAT); mirrors the Panel pricing Total row"
-              value={projFactor > 0 ? projFactor : "—"} />
+              value={projFactor > 0 ? projFactor.toFixed(3) : "—"} />
             <p className="mt-1 text-[11px] text-muted">View only · total cost ÷ total selling</p>
           </div>
           {num("copper", "Copper (EGP/KG)", { step: 1 })}

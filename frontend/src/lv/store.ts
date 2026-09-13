@@ -1475,7 +1475,7 @@ export function projectFactor(s: LvState): number {
     sell += c.totalSell;
   });
   sell += customItemsTotal(s);
-  return sell > 0 ? +(cost / sell).toFixed(4) : 0;
+  return sell > 0 ? +(cost / sell).toFixed(3) : 0;
 }
 
 export function grandTotals(s: LvState) {
