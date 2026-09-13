@@ -9010,17 +9010,29 @@ function ReplaceComponentModal({ s, replaceComponent, factors, onClose }: {
 
   const [findKey, setFindKey] = useState("");
   const [repl, setRepl] = useState<DbComponent | null>(null);
-  const [allPanels, setAllPanels] = useState(true);
-  const [sel, setSel] = useState<Set<string>>(() => new Set(s.panels.map((pp) => pp.id)));
+  const [sel, setSel] = useState<Set<string>>(new Set());
   const find = used.find((u) => `${u.ref}|${u.name}` === findKey) ?? null;
-
-  const inSel = (pp: LvPanel) => allPanels || sel.has(pp.id);
-  const instInPanel = (pp: LvPanel) => (find ? pp.components.filter((c) => !isSpacer(c) && c.ref === find.ref && c.name === find.name).length : 0);
-  let instTotal = 0, panelsTotal = 0;
-  if (find) for (const pp of s.panels) if (inSel(pp)) { const n = instInPanel(pp); if (n) { instTotal += n; panelsTotal += 1; } }
-  const ready = !!find && !!repl && instTotal > 0;
   const panelName = (pp: LvPanel, i: number) => (pp.name?.trim() || `Panel ${i + 1}`);
-  const apply = () => { if (!ready) return; replaceComponent(find!.ref, find!.name, repl!, new Set(s.panels.filter(inSel).map((pp) => pp.id))); onClose(); };
+
+  // The panels that actually contain the found part — with each panel's instance count and its
+  // original index (for a stable name). This is the ONLY list shown: the replacement can only
+  // touch panels where the part exists.
+  const usedPanels = s.panels
+    .map((pp, i) => ({ pp, i, n: find ? pp.components.filter((c) => !isSpacer(c) && c.ref === find.ref && c.name === find.name).length : 0 }))
+    .filter((x) => x.n > 0);
+
+  // Whenever the found part changes, tick every panel that contains it (the spec's default) — the
+  // user then unticks any panel they want left unchanged.
+  useEffect(() => {
+    const f = used.find((u) => `${u.ref}|${u.name}` === findKey);
+    if (!f) { setSel(new Set()); return; }
+    setSel(new Set(s.panels.filter((pp) => pp.components.some((c) => !isSpacer(c) && c.ref === f.ref && c.name === f.name)).map((pp) => pp.id)));
+  }, [findKey, used, s.panels]);
+
+  const checked = usedPanels.filter(({ pp }) => sel.has(pp.id));
+  const panelsTotal = checked.length;
+  const ready = !!find && !!repl && panelsTotal > 0;
+  const apply = () => { if (!ready) return; replaceComponent(find!.ref, find!.name, repl!, new Set(checked.map((x) => x.pp.id))); onClose(); };
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/40 p-4 pt-16 no-print"
@@ -9035,59 +9047,72 @@ function ReplaceComponentModal({ s, replaceComponent, factors, onClose }: {
             <p className="text-sm text-muted">No components in this quotation yet.</p>
           ) : (
             <>
+              {/* 1 · Find a part used anywhere in the quotation. */}
               <div>
                 <L>Find — a part used in this quotation</L>
                 <SearchSelect value={findKey} placeholder="Search a part used across the panels…"
                   options={used.map((u) => ({ key: `${u.ref}|${u.name}`, label: u.name, hint: `${u.ref} · ${u.count}× · ${u.panels.size} panel${u.panels.size === 1 ? "" : "s"}` }))}
                   onPick={setFindKey} />
               </div>
+
+              {/* 2 · The selected part + the panels it lives in, each with a checkbox. */}
+              {find && (
+                <div className="rounded-lg border border-line bg-surface/60 p-3">
+                  <div className="text-[13px] font-bold text-ink">{find.name}</div>
+                  <div className="text-[11px] text-muted">{find.ref} · {find.brand} · used {find.count}× in {usedPanels.length} panel{usedPanels.length === 1 ? "" : "s"}</div>
+
+                  <div className="mt-3 flex items-center justify-between">
+                    <L>Apply replacement to</L>
+                    <span className="flex items-center gap-2 text-xs">
+                      <button type="button" onClick={() => setSel(new Set(usedPanels.map((x) => x.pp.id)))}
+                        className="font-semibold text-brand hover:underline">Select all</button>
+                      <span className="text-line">·</span>
+                      <button type="button" onClick={() => setSel(new Set())}
+                        className="font-semibold text-muted hover:text-ink hover:underline">Clear all</button>
+                    </span>
+                  </div>
+                  <div className="mt-1 max-h-44 space-y-0.5 overflow-auto rounded-lg border border-line bg-white p-2">
+                    {usedPanels.map(({ pp, i, n }) => (
+                      <label key={pp.id} className="flex items-center gap-2 rounded px-1.5 py-0.5 text-[13px] hover:bg-brand-tint">
+                        <input type="checkbox" className="accent-brand" checked={sel.has(pp.id)}
+                          onChange={(e) => setSel((prev) => { const nx = new Set(prev); if (e.target.checked) nx.add(pp.id); else nx.delete(pp.id); return nx; })} />
+                        <span className="flex-1 truncate">{panelName(pp, i)}</span>
+                        <span className="text-[11px] text-muted">{n}×</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 3 · Pick the replacement from the whole catalogue. */}
               <div>
                 <L>Replace with — any catalogue component</L>
                 <ComponentSearch factors={factors} placeholder="Search the catalogue…" onPick={(c) => setRepl(c)} />
                 {repl && <p className="mt-1 text-[12px] font-semibold text-brand-dark">→ {repl.n} <span className="font-normal text-muted">{repl.ref} · {repl.brand} · {fmtEgp(componentPriceEgp(repl, factors))} EGP</span></p>}
               </div>
-              <div>
-                <L>Apply to</L>
-                <div className="flex items-center gap-2 text-xs">
-                  <button type="button" onClick={() => setAllPanels(true)} className={`rounded-full border px-3 py-1 font-bold transition ${allPanels ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"}`}>All panels ({s.panels.length})</button>
-                  <button type="button" onClick={() => setAllPanels(false)} className={`rounded-full border px-3 py-1 font-bold transition ${!allPanels ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted hover:border-brand/40"}`}>Selected panels</button>
-                  {!allPanels && (
-                    <span className="ml-auto flex items-center gap-2">
-                      <button type="button" onClick={() => setSel(new Set(s.panels.filter((pp) => instInPanel(pp) > 0).map((pp) => pp.id)))}
-                        className="font-semibold text-brand hover:underline">Select all</button>
-                      <span className="text-line">·</span>
-                      <button type="button" onClick={() => setSel(new Set())}
-                        className="font-semibold text-muted hover:text-ink hover:underline">Unselect all</button>
-                    </span>
-                  )}
-                </div>
-                {!allPanels && (
-                  <div className="mt-2 max-h-44 space-y-0.5 overflow-auto rounded-lg border border-line p-2">
-                    {s.panels.map((pp, i) => {
-                      const n = instInPanel(pp);
-                      return (
-                        <label key={pp.id} className={`flex items-center gap-2 rounded px-1.5 py-0.5 text-[13px] ${n ? "hover:bg-brand-tint" : "opacity-45"}`}>
-                          <input type="checkbox" className="accent-brand" checked={sel.has(pp.id)} disabled={!n}
-                            onChange={(e) => setSel((prev) => { const nx = new Set(prev); if (e.target.checked) nx.add(pp.id); else nx.delete(pp.id); return nx; })} />
-                          <span className="flex-1 truncate">{panelName(pp, i)}</span>
-                          <span className="text-[11px] text-muted">{n ? `${n}×` : "not used"}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              <div className="rounded-lg bg-surface px-3 py-2 text-[13px] font-semibold text-ink">
-                {find
-                  ? <>Will replace <b className="text-brand-dark">{instTotal}</b> instance{instTotal === 1 ? "" : "s"} of <b>{find.name}</b>{repl ? <> with <b className="text-brand-dark">{repl.n}</b></> : ""} across <b>{panelsTotal}</b> panel{panelsTotal === 1 ? "" : "s"}.</>
-                  : "Pick a part to find, then its replacement."}
+
+              {/* 4 · Summary — exactly what will change, and where. */}
+              <div className="rounded-lg bg-surface px-3 py-2 text-[13px] text-ink">
+                {find && repl ? (
+                  <>
+                    <div className="text-muted">Replace <b className="text-ink">{find.name}</b></div>
+                    <div className="text-muted">With <b className="text-brand-dark">{repl.n}</b></div>
+                    <div className="mt-1 font-semibold">Apply to {panelsTotal} panel{panelsTotal === 1 ? "" : "s"}{panelsTotal > 0 ? ":" : "."}</div>
+                    {panelsTotal > 0 && (
+                      <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                        {checked.map(({ pp, i }) => <span key={pp.id}>☑ {panelName(pp, i)}</span>)}
+                      </div>
+                    )}
+                    {panelsTotal === 0 && <div className="text-[12px] text-muted">Tick at least one panel above.</div>}
+                  </>
+                ) : find ? "Now choose the replacement component." : "Pick a part to find, then its replacement."}
               </div>
             </>
           )}
         </div>
         <div className="flex justify-end gap-2 border-t border-line px-5 py-3">
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary disabled:opacity-40" disabled={!ready} onClick={apply}>Replace{ready ? ` ${instTotal}` : ""}</button>
+          <button className="btn-primary disabled:opacity-40" disabled={!ready} onClick={apply}>Replace{ready ? ` in ${panelsTotal} panel${panelsTotal === 1 ? "" : "s"}` : ""}</button>
         </div>
       </div>
     </div>, document.body

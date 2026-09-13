@@ -23,6 +23,19 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**"Replace component" is now a full Find & Replace across the whole quotation, with per-panel checkboxes.**
+
+Opening ⇄ Replace component (from any panel) now works like the Excel replace. (1) The "Find" search looks at parts used
+anywhere in the quotation and shows each one's code, how many times it's used and in how many panels. (2) Once you pick a
+part, an "Apply replacement to" list appears with a checkbox for every panel that actually contains it — all ticked by
+default, with Select all / Clear all; panels that don't use the part aren't shown. (3) You pick the replacement from the
+catalogue. (4) A clear summary shows "Replace X with Y — apply to N panels:" and lists the ticked panels, then the
+Replace button. It changes only the ticked panels — an unticked panel keeps the old part, and each replaced part keeps
+its quantity, position and combination. Opening the tool while standing on a panel no longer limits the search to that
+panel; it always covers the whole quotation. (The old "All panels / Selected panels" toggle is gone.)
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **The Form of separation now adds a cost to the Enclosure Kit.**
 
 Choosing a higher Form on a panel now raises the **Enclosure Kit price only** — components, the enclosure box and copper
