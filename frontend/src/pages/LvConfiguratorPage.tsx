@@ -1777,10 +1777,12 @@ export default function LvConfiguratorPage() {
                 )}
               </span>
             )}
-            {/* Approved: the builder's primary is Submit, so their withdraw-back-to-draft lives
-                here as a secondary move. (Waiting-stage withdraw and the reviewer's withdraws are
-                now the primary button above.) */}
-            {!cancelled && status === "APPROVED" && amBuilder && (
+            {/* Approved, plain builder only: their primary is Submit, so their way back to draft
+                lives here as a secondary move. A self-approver doesn't get this — their primary
+                "Submit ▾" menu already offers "Withdraw approval", so a second withdraw here would
+                just be clutter. (The Waiting-stage withdraw and the reviewer's withdraws are the
+                primary button above.) */}
+            {!cancelled && status === "APPROVED" && amBuilder && !amSelfApprover && (
               <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
                 confirm: {
                   title: "Withdraw from approval",

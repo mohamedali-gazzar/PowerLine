@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**Removed the duplicate "Withdraw to draft" button on an approved quotation (for admins / self-approvers).**
+
+For someone who can approve their own work, an approved quotation showed both the "Submit ▾" menu (which already offers
+"Withdraw approval") and a separate "Withdraw to draft" button — the second one was clutter, so it's gone. A normal
+estimator still keeps their "Withdraw to draft" on an approved quotation, since for them it's the only way back to
+editing. Nothing else changed.
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **The approval buttons at the top of a quotation are now one smart button that shows only the moves you're allowed to make — and turns into the "undo" after you act.**
 
 Instead of several buttons scattered across two rows, there's now one main button at the top whose choices follow the
