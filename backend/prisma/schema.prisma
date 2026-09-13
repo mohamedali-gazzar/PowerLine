@@ -348,6 +348,9 @@ model QtnEvent {
   toStatus   String   @default("")
   /// Return reason or free-text comment.
   note       String   @default("")
+  /// WhatsApp-style reply: the id of the QtnEvent this message quotes (a REFERENCE only — the
+  /// quote is always rendered from the original, never a copy). Null for a normal message.
+  replyToId  String?
   actorId    String?
   actorEmail String   @default("")
   createdAt  DateTime @default(now())

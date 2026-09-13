@@ -7,7 +7,7 @@ import CoWorkModal from "../components/CoWorkModal";
 import { maskQtn, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
 import ActiveTimeBadge from "../components/ActiveTimeBadge";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
-import ApprovalChat from "../components/ApprovalChat";
+import { assistantStore } from "../assistant/assistantStore";
 import { useReviewLock } from "../hooks/useReviewLock";
 import { usePointerReorder } from "../hooks/usePointerReorder";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
@@ -463,15 +463,15 @@ export default function LvConfiguratorPage() {
   // The approver chosen from the Send-for-approval dropdown, held across the multi-step
   // send flow (validation → warnings modal → transition).
   const sendApproverRef = useRef<string | null>(null);
-  // The creator's reply to the reviewer (typed in the approval conversation), carried
-  // through the same multi-step send flow and sent as the re-approval message.
-  const replyNoteRef = useRef<string>("");
+  // The creator's staged replies (each with its own text + quoted-message reference), carried
+  // through the multi-step send flow and posted as separate messages when it lands.
+  const sendRepliesRef = useRef<{ text: string; replyToId: string | null }[]>([]);
   /** Move the quotation through the workflow. Surfaces the server's reason on
    *  refusal — the old submit/reopen handlers swallowed every error, so a rejected
    *  action looked like nothing happened at all. */
   const doTransition = async (
     to: QtnStatus,
-    opts?: { confirm?: ConfirmOptions; note?: string },
+    opts?: { confirm?: ConfirmOptions; note?: string; comments?: string[]; replies?: { text: string; replyToId: string | null }[] },
   ) => {
     if (!rec) return;
     // Themed dialog rather than window.confirm — the browser's own says
@@ -484,7 +484,7 @@ export default function LvConfiguratorPage() {
       // The chosen Section Head / Team Leader (Send-for-approval dropdown), carried in a
       // ref so the warnings-modal "Send anyway" continuation still has it.
       const approver = to === "WAITING_APPROVAL" ? sendApproverRef.current ?? undefined : undefined;
-      await transitionQtn(rec.id, to, opts?.note, approver);
+      await transitionQtn(rec.id, to, opts?.note, approver, undefined, opts?.comments, opts?.replies);
       setStatus(to);
       if (to === "RETURNED") setWf((w) => ({ ...w, returnReason: opts?.note ?? "" }));
       if (to === "DRAFT") setWf((w) => ({ ...w, returnReason: "" }));
@@ -505,7 +505,7 @@ export default function LvConfiguratorPage() {
   // is skipped to avoid a second dialog saying the same thing.
   const runSendForApproval = (skipConfirm = false) =>
     void doTransition("WAITING_APPROVAL", {
-      note: replyNoteRef.current || undefined, // the creator's reply, if any
+      replies: sendRepliesRef.current, // the creator's staged replies, each posted as its own message
       ...(skipConfirm ? {} : {
         confirm: {
           title: "Send for approval",
@@ -566,9 +566,9 @@ export default function LvConfiguratorPage() {
     if (warns.length) { setApprovalWarns(warns); return; } // the modal confirms the send
     runSendForApproval();
   };
-  const sendForApproval = (approverId: string, note = "") => {
+  const sendForApproval = (approverId: string, replies: { text: string; replyToId: string | null }[] = []) => {
     sendApproverRef.current = approverId || null; // chosen from the dropdown; used in doTransition
-    replyNoteRef.current = note.trim(); // the creator's reply to the reviewer, if any
+    sendRepliesRef.current = replies; // the creator's staged replies, posted as their own messages
     if (!s.project.supportEngineer.trim()) {
       setWfError("Select a Sales support engineer on the Project tab before sending for approval.");
       setTab("project");
@@ -747,8 +747,10 @@ export default function LvConfiguratorPage() {
   const submitReturn = (items: ReturnComment[]) => {
     setReturnOpen(false);
     if (!items.length) return;
-    const note = items.map((c) => `• ${c.label}\n${c.comment}`).join("\n\n");
-    void doTransition("RETURNED", { note });
+    // Each per-panel comment becomes its OWN chat message, so the estimator can reply to each one.
+    // The combined text is still the RETURNED banner reason.
+    const comments = items.map((c) => `• ${c.label}\n${c.comment}`);
+    void doTransition("RETURNED", { note: comments.join("\n\n"), comments });
   };
 
   const apply = (updater: (old: LvState) => LvState) =>
@@ -896,6 +898,28 @@ export default function LvConfiguratorPage() {
   const originalTotals = useMemo(() => (rec ? grandTotals(rec.state) : null), [rec]);
   const sel = s.panels.find((p) => p.id === s.selectedId) ?? null;
   const isSpareQtn = s.kind === "spare";
+
+  // ── QTN Assistant feed ───────────────────────────────────────────────────────
+  // Push this quotation's approval conversation into the app-level assistant store (the panel is
+  // mounted once in App.tsx). We only WRITE here and never subscribe, so opening/closing/resizing
+  // the panel never re-renders or resets any QTN edit. `sendForApproval` is read through a ref so
+  // the feed effect doesn't re-run every render. The feed is cleared when the QTN unmounts.
+  const sendForApprovalRef = useRef(sendForApproval);
+  sendForApprovalRef.current = sendForApproval;
+  const selName = sel?.name?.trim() ?? "";
+  const selNo = sel ? s.panels.findIndex((p) => p.id === sel.id) + 1 : 0;
+  useEffect(() => {
+    const scope = tab === "panels" && selNo > 0 ? `Panel ${selNo} — ${selName || "unnamed"}` : "";
+    assistantStore.setFeed({
+      qtnLabel: qtnNum || "quotation",
+      scopeLine: `Reviewing ${qtnNum || "quotation"}${scope ? ` · ${scope}` : ""}`,
+      events: approvalEvents,
+      canReply: status === "RETURNED",
+      busy: submitting,
+      onReSend: (approverId, replies) => sendForApprovalRef.current(approverId, replies),
+    });
+  }, [qtnNum, approvalEvents, status, submitting, tab, selNo, selName]);
+  useEffect(() => () => assistantStore.setFeed(null), []);
   // ── Co-Work ────────────────────────────────────────────────────────────────
   // Any number of sales-support share one QTN, split BY PANEL: each edits only the
   // panels they own, and the shared tabs (Project / Pricing / Terms) belong to the
@@ -1566,9 +1590,7 @@ export default function LvConfiguratorPage() {
               with the workflow stage. */}
           <div className="flex w-max flex-col items-stretch gap-2">
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <button className="btn-ghost" disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)">↶ Undo</button>
-            <button className="btn-ghost" disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
-            {/* Only the moves this user may actually make. */}
+            {/* Only the moves this user may actually make. (Undo / Redo moved to the tab strip.) */}
             {!cancelled && status === "DRAFT" && (
               <SendForApprovalMenu busy={submitting} onSend={sendForApproval} />
             )}
@@ -1819,16 +1841,9 @@ export default function LvConfiguratorPage() {
           </p>
         </div>
       )}
-      {/* The approval conversation — the reviewer's return comments and the creator's
-          replies as a two-sided chat. On a returned quotation it also carries the reply
-          box + "Reply & send for approval" (the re-send moved here from the toolbar). */}
-      <ApprovalChat
-        events={approvalEvents}
-        canReply={status === "RETURNED"}
-        busy={submitting}
-        onReSend={(approverId, note) => sendForApproval(approverId, note)}
-        className="mb-4 animate-fade-up"
-      />
+      {/* The approval conversation moved into the QTN Assistant side-panel (mounted app-wide in
+          App.tsx, fed from this page). Open it from the "Assistant" button in the top bar or the
+          floating launcher, bottom-right. */}
       {status === "WAITING_APPROVAL" && (
         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 no-print animate-fade-up">
           <p className="text-sm font-semibold text-amber-800">
@@ -1864,6 +1879,14 @@ export default function LvConfiguratorPage() {
             {label}
           </button>
         ))}
+        {/* Undo / Redo live at the right end of the tab strip, so they stay reachable (the strip is
+            sticky) without crowding the workflow buttons in the header. */}
+        <div className="ml-auto flex items-center gap-1.5">
+          <button onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)"
+            className="rounded-full border border-line bg-white px-3.5 py-1.5 text-sm font-semibold text-muted transition-colors hover:border-brand/40 hover:text-brand-dark disabled:opacity-40 disabled:hover:border-line disabled:hover:text-muted">↶ Undo</button>
+          <button onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)"
+            className="rounded-full border border-line bg-white px-3.5 py-1.5 text-sm font-semibold text-muted transition-colors hover:border-brand/40 hover:text-brand-dark disabled:opacity-40 disabled:hover:border-line disabled:hover:text-muted">↷ Redo</button>
+        </div>
       </div>
 
       {coWork && (
@@ -2411,7 +2434,9 @@ function ExportWarnModal({
   // lingering transform would otherwise capture `position: fixed`, pushing the
   // dialog down the tall page. Anchored near the top so it's visible without scrolling.
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print"
+    // z-[100] keeps this above the QTN Assistant panel (z-90): it's reached straight from the
+    // panel's "Reply & send" button, so its buttons must never sit behind the panel.
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 no-print"
       onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
       <div className="fixed inset-0 bg-ink/40 animate-fade-in" onClick={onClose} />
       <div role="dialog" aria-modal="true" aria-label={title}

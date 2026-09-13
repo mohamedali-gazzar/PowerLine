@@ -1051,11 +1051,35 @@ export async function transition(req: Request, res: Response) {
     const actorEmail = req.userEmail ?? "";
     const action = qtnAction(from, to);
     const isUnapprove = to === "WAITING_APPROVAL" && from === "APPROVED";
+
+    // A Return for revision can carry several per-panel comments. Each becomes its OWN chat
+    // message (a RETURN_COMMENT event) so the estimator can reply to each one individually — while
+    // the single RETURN transition still counts as one return in the rework metric. The combined
+    // text is kept as the returnReason (the RETURNED banner) and the notification body.
+    const comments = to === "RETURNED" && Array.isArray(req.body?.comments)
+      ? (req.body.comments as unknown[])
+          .filter((c): c is string => typeof c === "string" && c.trim().length > 0)
+          .map((c) => c.trim().slice(0, 2000))
+          .slice(0, 50)
+      : null;
+    const returnReasonText = comments && comments.length ? comments.join("\n\n") : note;
+
+    // Send for approval can carry SEVERAL replies (the estimator answered several review comments,
+    // pressing Enter between each). Each becomes its own REPLY_COMMENT message, keeping its quoted
+    // reference — while the single REQUEST_APPROVAL transition is still one "sent for approval".
+    const replies = to === "WAITING_APPROVAL" && Array.isArray(req.body?.replies)
+      ? (req.body.replies as unknown[])
+          .map((r) => (r && typeof r === "object" ? (r as { text?: unknown; replyToId?: unknown }) : {}))
+          .filter((r) => typeof r.text === "string" && r.text.trim().length > 0)
+          .map((r) => ({ text: String(r.text).trim().slice(0, 2000), replyToId: r.replyToId ? String(r.replyToId).trim() : null }))
+          .slice(0, 50)
+      : null;
+
     const approverFields =
       to === "APPROVED"
         ? { approverId: req.userId ?? null, approverEmail: actorEmail, returnReason: "" }
         : to === "RETURNED"
-        ? { approverId: req.userId ?? null, approverEmail: actorEmail, returnReason: note }
+        ? { approverId: req.userId ?? null, approverEmail: actorEmail, returnReason: returnReasonText }
         : isUnapprove
         ? { approverId: null, approverEmail: "", approvedAt: null } // clear the retracted approval
         : {};
@@ -1077,7 +1101,12 @@ export async function transition(req: Request, res: Response) {
           if (!note) eventNote = `Sent to ${appr.name || appr.email} for approval`;
         }
       }
+    } else if (comments && comments.length) {
+      // The comments carry the messages; the transition event itself stays out of the thread.
+      eventNote = "";
     }
+
+    const common = { qtnId: q.id, qtnNumber: q.number, ownerId: q.ownerId, ownerEmail: q.owner?.email ?? "", actorId: req.userId ?? null, actorEmail };
 
     // Status and audit row move together or not at all.
     await prisma.$transaction([
@@ -1087,16 +1116,24 @@ export async function transition(req: Request, res: Response) {
       }),
       prisma.qtnEvent.create({
         data: {
-          qtnId: q.id, qtnNumber: q.number, ownerId: q.ownerId,
-          ownerEmail: q.owner?.email ?? "",
+          ...common,
           action, fromStatus: from, toStatus: to, note: eventNote,
-          actorId: req.userId ?? null, actorEmail,
+          // WhatsApp-style reply reference — the id of the message this one quotes (or null).
+          replyToId: (() => { const r = String(req.body?.replyToId ?? "").trim(); return r || null; })(),
         },
       }),
+      // One message per per-panel comment (not counted as separate returns).
+      ...((comments ?? []).map((c) =>
+        prisma.qtnEvent.create({ data: { ...common, action: "RETURN_COMMENT", fromStatus: to, toStatus: to, note: c } }),
+      )),
+      // One message per staged reply, each keeping its quoted reference.
+      ...((replies ?? []).map((r) =>
+        prisma.qtnEvent.create({ data: { ...common, action: "REPLY_COMMENT", fromStatus: to, toStatus: to, note: r.text, replyToId: r.replyToId } }),
+      )),
     ]);
 
     // Outside the transaction: a mail failure must not roll back an approval.
-    await announce(q, to, actorEmail, note, originOf(req), sendApproverId, from);
+    await announce(q, to, actorEmail, returnReasonText, originOf(req), sendApproverId, from);
     res.json({ ok: true, status: to, statusLabel: QTN_STATUS_LABEL[to] });
   } catch (e) {
     fail(res, e);

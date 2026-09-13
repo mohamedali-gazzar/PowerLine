@@ -23,6 +23,30 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**The review chat for returned quotations is now a slide-in side panel ("QTN Assistant"), and you can reply to each comment on its own.**
+
+When a quotation is returned for revision, the old chat pop-up is replaced by a panel that slides in from the right
+edge. It sits **beside** the quotation instead of on top of it, so you can keep editing prices and settings while the
+chat is open — closing or resizing the chat never disturbs your edits. You can **pin** it (the quotation slides over and
+sits next to it) or leave it floating over the offer; it remembers your choice and the width you set. Open it from the
+round **"Assistant"** button at the bottom-right. What's new inside it:
+
+- **Every reviewer comment is its own message** you can answer individually, instead of one big lump.
+- **Reply to a specific comment:** hover a message, press the little reply arrow, and your answer is tied to that exact
+  comment — it shows the quoted comment, and clicking the quote jumps to the original and flashes it (WhatsApp-style).
+- **Queue several replies before sending:** type a reply and press Enter to park it as a draft, answer another comment,
+  Enter again — then one **"Send replies for approval"** sends them all at once, each as its own message keeping its
+  quote. (Enter parks a reply; Shift+Enter starts a new line.)
+- **Undo / Redo** moved to the right end of the tab row.
+
+Two problems were found and fixed while testing: (1) the "Review before sending" warning box used to be hidden behind
+the chat panel, so its "Send anyway" button couldn't be clicked — it now sits above the panel; (2) queued replies used
+to vanish if you pressed "Cancel" on that warning — they now stay so you can fix the issue and send without retyping.
+One small, safe addition to the database: each chat message can remember which message it is replying to (an optional
+reference; empty for normal messages).
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **Default rates are now handled inside "Check for updates" — the separate rate pop-up is gone, and the check opens by itself.**
 
 The standalone "Updated default rates available" pop-up has been removed. Rate changes already show inside the

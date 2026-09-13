@@ -170,6 +170,8 @@ export interface QtnEventDto {
   fromStatus: string | null;
   toStatus: string;
   note: string;
+  /** WhatsApp-style reply: the id of the event this message quotes, or null. */
+  replyToId?: string | null;
   actorEmail: string;
   createdAt: string;
 }
@@ -697,11 +699,14 @@ export const api = {
     /** Quotations waiting for approval (needs qtn.approve). */
     queue: () => request<QtnListItemDto[]>("/qtns/queue"),
     /** Move a quotation through the workflow. `note` is required when returning;
-     *  `approverId` is the chosen Section Head / Team Leader when sending for approval. */
-    transition: (id: string, to: QtnStatus, note?: string, approverId?: string) =>
+     *  `approverId` is the chosen Section Head / Team Leader when sending for approval;
+     *  `replyToId` is the id of the message this note quotes (WhatsApp-style reply);
+     *  `comments` (return only) splits a return into one chat message per per-panel comment;
+     *  `replies` (send-for-approval only) posts several staged replies, each its own message. */
+    transition: (id: string, to: QtnStatus, note?: string, approverId?: string, replyToId?: string | null, comments?: string[], replies?: { text: string; replyToId: string | null }[]) =>
       request<{ ok: true; status: QtnStatus; statusLabel: string }>(`/qtns/${id}/transition`, {
         method: "POST",
-        body: JSON.stringify({ to, ...(note ? { note } : {}), ...(approverId ? { approverId } : {}) }),
+        body: JSON.stringify({ to, ...(note ? { note } : {}), ...(approverId ? { approverId } : {}), ...(replyToId ? { replyToId } : {}), ...(comments && comments.length ? { comments } : {}), ...(replies && replies.length ? { replies } : {}) }),
       }),
     events: (id: string) => request<QtnEventDto[]>(`/qtns/${id}/events`),
     /** Colleagues a quotation can be handed over to. */

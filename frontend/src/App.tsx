@@ -4,6 +4,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, QTN_STATUS_STYLE, QTN_STATUS_LABEL, type QtnStatus, type NotificationDto, type MyAccess } from "./api";
 import { useAuth } from "./auth/AuthContext";
 import { useTheme } from "./theme";
+import AssistantPanel from "./assistant/AssistantPanel";
 
 const homeIcon = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -250,14 +251,23 @@ export default function App() {
         </aside>
       </div>
 
-      {/* Main content — "open" pushes it aside; "off"/"min" keep the thin rail. */}
+      {/* Main content — "open" pushes it aside; "off"/"min" keep the thin rail. The inner wrapper
+          reserves room on the RIGHT for a PINNED QTN Assistant panel (--assistant-dock, 0 when it
+          is floating, closed or on a narrow screen), so the workspace reflows beside it. */}
       <div className={`transition-[padding] duration-200 ${pinMode === "open" ? "pl-60" : "pl-14"}`}>
-        <main className="mx-auto w-full max-w-[1800px] px-4 py-6 sm:px-6">
-          <div key={pathname} className="animate-fade-up">
-            <Outlet />
-          </div>
-        </main>
+        <div id="assistant-dock-wrap" className="assistant-dock-wrap">
+          <main className="mx-auto w-full max-w-[1800px] px-4 py-6 sm:px-6">
+            <div key={pathname} className="animate-fade-up">
+              <Outlet />
+            </div>
+          </main>
+        </div>
       </div>
+
+      {/* The QTN Assistant lives here, above every route — mounted once, only ever slid off-screen,
+          so its thread survives navigation between the QTN's sections and tabs and never shares
+          state with the QTN. It stays idle until a QTN feeds it. */}
+      <AssistantPanel />
     </div>
   );
 }

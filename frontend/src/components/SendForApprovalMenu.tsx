@@ -27,14 +27,21 @@ export default function SendForApprovalMenu({
   const [open, setOpen] = useState(false);
   const [approvers, setApprovers] = useState<Approver[] | null>(null);
   const [sending, setSending] = useState(false);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Anchor the fixed menu under the button (right edges aligned).
+  // Anchor the fixed menu to the button (right edges aligned). Opens DOWNWARD by default, but flips
+  // UPWARD when there isn't room below and there's more room above — needed when the button sits at
+  // the bottom of the QTN Assistant panel, where a downward menu would fall off-screen.
   const place = () => {
     const b = btnRef.current?.getBoundingClientRect();
-    if (b) setPos({ top: b.bottom + 4, right: Math.max(8, window.innerWidth - b.right) });
+    if (!b) return;
+    const right = Math.max(8, window.innerWidth - b.right);
+    const MENU_H = 340; // approx max height (header + up to ~9 rows)
+    const below = window.innerHeight - b.bottom;
+    if (below < MENU_H && b.top > below) setPos({ bottom: window.innerHeight - b.top + 4, right });
+    else setPos({ top: b.bottom + 4, right });
   };
 
   useEffect(() => {
@@ -89,7 +96,7 @@ export default function SendForApprovalMenu({
           // Sits ABOVE the Approval-conversation modal (z-100): when this menu is opened from the
           // "Reply & send for approval" button inside that modal, a lower z-index put the list behind
           // the modal's backdrop — greyed out, and every click hit the backdrop instead of a name.
-          style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 120 }}
+          style={{ position: "fixed", ...(pos.top != null ? { top: pos.top } : { bottom: pos.bottom }), right: pos.right, zIndex: 120 }}
           className="w-64 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl2 border border-line bg-white shadow-lift animate-pop"
         >
           <div className="border-b border-line px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-muted">
