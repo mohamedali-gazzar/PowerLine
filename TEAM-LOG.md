@@ -23,6 +23,27 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**The approval buttons at the top of a quotation are now one smart button that shows only the moves you're allowed to make — and turns into the "undo" after you act.**
+
+Instead of several buttons scattered across two rows, there's now one main button at the top whose choices follow the
+stage and who you are:
+
+- **If you build the quotation:** it says **Send for approval**; once sent, the same button becomes **Withdraw** (takes
+  it back to draft so you can edit again).
+- **If you review other people's quotations:** the button offers **Return for revision** (the default) and **Approve**
+  under a small ▾. After you act it becomes **Withdraw** — either "withdraw the return" or "withdraw approval" — which
+  puts the quotation back to Waiting for approval. (New: a reviewer can now take back a return they made by mistake;
+  before, only the owner could move it back.)
+- **If you're allowed to approve your own work** (admins, or anyone granted "approve own"): the one button carries the
+  whole path — **Send for approval**, then **Approve / Return for revision / Withdraw**, then **Submit / Withdraw
+  approval**. Return for revision still opens the comments box.
+
+A normal estimator sees exactly what they saw before (Send → Withdraw); nobody gains a power they didn't already have —
+the buttons just stop showing moves the server would refuse anyway. Undo/Redo stay on the tab strip. One tiny
+permission was added on the server so a reviewer may reverse their own return, and it's covered by a new automated test.
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **The review chat for returned quotations is now a slide-in side panel ("QTN Assistant"), and you can reply to each comment on its own.**
 
 When a quotation is returned for revision, the old chat pop-up is replaced by a panel that slides in from the right

@@ -7,6 +7,7 @@ import CoWorkModal from "../components/CoWorkModal";
 import { maskQtn, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
 import ActiveTimeBadge from "../components/ActiveTimeBadge";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
+import WorkflowActionMenu, { type WfAction } from "../components/WorkflowActionMenu";
 import { assistantStore } from "../assistant/assistantStore";
 import { useReviewLock } from "../hooks/useReviewLock";
 import { usePointerReorder } from "../hooks/usePointerReorder";
@@ -719,6 +720,51 @@ export default function LvConfiguratorPage() {
   const canApprove = myPerms.includes("qtn.approve");
   const canReturn = canApprove || myPerms.includes("qtn.return");
   const canReopen = myPerms.includes("qtn.reopen");
+  // Which side of the approval the primary workflow button speaks for. A reviewer is
+  // someone with approve/return rights looking at a quotation they did NOT build — they
+  // get Return/Approve (and the undo afterwards). Whoever builds it (owner / co-worker)
+  // gets Send-for-approval and the withdraw afterwards. An owner never reviews their own,
+  // which matches the server (self-approval is off), so the two never collide.
+  const amBuilder = iAmOwner || iAmCoOwner;
+  const amReviewer = (canApprove || canReturn) && !amBuilder;
+  // A self-approver builds the quotation AND is allowed to approve their own work (the server
+  // gates self-approval on qtn.approveOwn; admins carry it). For them the one primary button
+  // carries the whole path: send → then Approve / Return / Withdraw → then Submit / Withdraw.
+  const canApproveOwn = canApprove && myPerms.includes("qtn.approveOwn");
+  const amSelfApprover = amBuilder && canApproveOwn;
+  // The individual workflow moves, as menu actions — reused across the reviewer and
+  // self-approver split buttons so the wording and confirmations stay identical everywhere.
+  const actReturn: WfAction = {
+    key: "return", label: "↩ Return for revision", tone: "brand",
+    onClick: () => setReturnOpen(true),
+  };
+  const actApprove: WfAction = {
+    key: "approve", label: "✓ Approve", tone: "approve",
+    onClick: () => doTransition("APPROVED", {
+      confirm: { title: "Approve this quotation", message: "The creator will be notified that it is ready to submit.", confirmLabel: "Approve" },
+    }),
+  };
+  const actWithdrawToDraft: WfAction = {
+    key: "withdrawDraft", label: "↩ Withdraw", tone: "muted",
+    onClick: () => doTransition("DRAFT", {
+      confirm: { title: "Withdraw from approval", message: "It goes back to draft and you can edit it again — the approval request is undone.", confirmLabel: "Withdraw" },
+    }),
+  };
+  const actSubmit: WfAction = {
+    key: "submit", label: "✓ Submit", tone: "approve",
+    onClick: () => doTransition("SUBMITTED", {
+      confirm: { title: "Submit this quotation", message: "This is final. The quotation becomes read-only and can only be changed by reopening it.", confirmLabel: "Submit", tone: "danger" },
+    }),
+  };
+  const actWithdrawApproval: WfAction = {
+    key: "withdrawApproval", label: "↩ Withdraw approval", tone: "muted",
+    onClick: () => {
+      sendApproverRef.current = null; // not a fresh send — no chosen approver
+      doTransition("WAITING_APPROVAL", {
+        confirm: { title: "Withdraw approval", message: "This retracts the approval and puts the quotation back to Waiting for approval. Only possible before it is submitted.", confirmLabel: "Withdraw approval" },
+      });
+    },
+  };
   // Review lock: while one approver is reviewing a waiting quotation, others can't act.
   const reviewLock = useReviewLock(rec?.id, status === "WAITING_APPROVAL" && canApprove);
   const lockedByOther = !reviewLock.mine && !!reviewLock.heldBy;
@@ -1590,35 +1636,86 @@ export default function LvConfiguratorPage() {
               with the workflow stage. */}
           <div className="flex w-max flex-col items-stretch gap-2">
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {/* Only the moves this user may actually make. (Undo / Redo moved to the tab strip.) */}
-            {!cancelled && status === "DRAFT" && (
+            {/* One primary workflow button, chosen by the viewer's role and the stage — and after
+                an action it becomes that action's Withdraw (undo), in the same slot. The builder
+                (owner / co-worker) sends and then withdraws; the reviewer returns-or-approves and
+                then withdraws that. (Undo / Redo moved to the tab strip.) */}
+
+            {/* Draft / Returned → send for approval. Same for a plain builder and a self-approver. */}
+            {!cancelled && !amReviewer && (status === "DRAFT" || status === "RETURNED") && (
               <SendForApprovalMenu busy={submitting} onSend={sendForApproval} />
             )}
-            {!cancelled && status === "WAITING_APPROVAL" && canApprove && (
-              <button className="btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={submitting || lockedByOther}
+
+            {/* Waiting for approval. */}
+            {!cancelled && status === "WAITING_APPROVAL" && amReviewer && (
+              // Reviewer: Return (default) or Approve.
+              <WorkflowActionMenu
+                primaryKey="return"
+                menuTitle="Review"
+                busy={submitting}
+                disabled={lockedByOther}
                 title={lockedByOther ? `${reviewLock.heldBy!.name || reviewLock.heldBy!.email} is reviewing this` : undefined}
-                onClick={() => doTransition("APPROVED", {
-                confirm: {
-                  title: "Approve this quotation",
-                  message: "The creator will be notified that it is ready to submit.",
-                  confirmLabel: "Approve",
-                },
-              })}>
-                ✓ Approve
+                actions={canApprove ? [actReturn, actApprove] : [actReturn]}
+              />
+            )}
+            {!cancelled && status === "WAITING_APPROVAL" && amSelfApprover && (
+              // Self-approver: Approve (default), Return, or Withdraw back to draft.
+              <WorkflowActionMenu
+                primaryKey="approve"
+                busy={submitting}
+                disabled={lockedByOther}
+                title={lockedByOther ? `${reviewLock.heldBy!.name || reviewLock.heldBy!.email} is reviewing this` : undefined}
+                actions={[actApprove, actReturn, actWithdrawToDraft]}
+              />
+            )}
+            {!cancelled && status === "WAITING_APPROVAL" && amBuilder && !amSelfApprover && (
+              // Plain builder: the only move back is Withdraw to draft.
+              <button className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50" disabled={submitting}
+                onClick={actWithdrawToDraft.onClick}>
+                ↩ Withdraw
               </button>
             )}
-            {!cancelled && status === "APPROVED" && (
-              <button className="btn-primary" disabled={submitting} onClick={() => doTransition("SUBMITTED", {
-                confirm: {
-                  title: "Submit this quotation",
-                  message: "This is final. The quotation becomes read-only and can only be changed by reopening it.",
-                  confirmLabel: "Submit",
-                  tone: "danger",
-                },
-              })}>
+
+            {/* Approved. */}
+            {!cancelled && status === "APPROVED" && amReviewer && (
+              // Reviewer: retract the approval.
+              <button className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50" disabled={submitting}
+                onClick={actWithdrawApproval.onClick}>
+                ↩ Withdraw approval
+              </button>
+            )}
+            {!cancelled && status === "APPROVED" && amSelfApprover && (
+              // Self-approver: Submit (default) or withdraw the approval.
+              <WorkflowActionMenu
+                primaryKey="submit"
+                busy={submitting}
+                actions={[actSubmit, actWithdrawApproval]}
+              />
+            )}
+            {!cancelled && status === "APPROVED" && amBuilder && !amSelfApprover && (
+              // Plain builder: submit it.
+              <button className="btn-primary" disabled={submitting} onClick={actSubmit.onClick}>
                 {submitting ? "Submitting…" : "✓ Submit"}
               </button>
             )}
+
+            {/* Reviewer only — take back a return they made (RETURNED → Waiting). */}
+            {!cancelled && amReviewer && status === "RETURNED" && (
+              <button className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50" disabled={submitting}
+                onClick={() => {
+                  sendApproverRef.current = null; // an undo, not a fresh send — no chosen approver
+                  doTransition("WAITING_APPROVAL", {
+                    confirm: {
+                      title: "Withdraw the return",
+                      message: "This takes back the return and puts the quotation back to Waiting for approval.",
+                      confirmLabel: "Withdraw",
+                    },
+                  });
+                }}>
+                ↩ Withdraw the return
+              </button>
+            )}
+
             {status === "SUBMITTED" && (
               // One primary control, two ways out: Outlook e-mail or WhatsApp. Modelled
               // on the Share dropdown below so the header stays consistent; it never
@@ -1680,14 +1777,10 @@ export default function LvConfiguratorPage() {
                 )}
               </span>
             )}
-            {!cancelled && status === "WAITING_APPROVAL" && canReturn && (
-              <button className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50" disabled={submitting || lockedByOther}
-                title={lockedByOther ? `${reviewLock.heldBy!.name || reviewLock.heldBy!.email} is reviewing this` : undefined}
-                onClick={() => setReturnOpen(true)}>
-                ↩ Return for revision
-              </button>
-            )}
-            {!cancelled && (status === "WAITING_APPROVAL" || status === "APPROVED") && isOwner && (
+            {/* Approved: the builder's primary is Submit, so their withdraw-back-to-draft lives
+                here as a secondary move. (Waiting-stage withdraw and the reviewer's withdraws are
+                now the primary button above.) */}
+            {!cancelled && status === "APPROVED" && amBuilder && (
               <button className="btn-ghost" disabled={submitting} onClick={() => doTransition("DRAFT", {
                 confirm: {
                   title: "Withdraw from approval",
@@ -1695,21 +1788,7 @@ export default function LvConfiguratorPage() {
                   confirmLabel: "Withdraw",
                 },
               })}>
-                Withdraw
-              </button>
-            )}
-            {!cancelled && status === "APPROVED" && canApprove && (
-              <button className="btn-ghost" disabled={submitting} onClick={() => {
-                sendApproverRef.current = null; // not a fresh send — no chosen approver
-                doTransition("WAITING_APPROVAL", {
-                  confirm: {
-                    title: "Withdraw approval",
-                    message: "This retracts your approval and puts the quotation back to Waiting for approval. Only possible before it is submitted.",
-                    confirmLabel: "Withdraw approval",
-                  },
-                });
-              }}>
-                Withdraw approval
+                Withdraw to draft
               </button>
             )}
             {status === "SUBMITTED" && canReopen && (

@@ -880,7 +880,9 @@ export async function amend(req: Request, res: Response) {
 // ── Workflow ────────────────────────────────────────────────────────────────
 
 /** Who may perform a given move, and why not. `null` = allowed. */
-async function transitionDenial(
+// Exported for the permission unit test (transitionDenial.test.ts). Returns null when the
+// move is allowed, or the human reason it is refused.
+export async function transitionDenial(
   req: Request,
   q: QtnListRow,
   from: QtnStatus,
@@ -899,13 +901,16 @@ async function transitionDenial(
 
   if (to === "WAITING_APPROVAL") {
     // From APPROVED this is the approver retracting their approval (un-approve); it needs
-    // approve rights, not ownership. From DRAFT/RETURNED it's a (re)send for approval.
+    // approve rights, not ownership.
     if (from === "APPROVED") {
       return need("qtn.approve", "You do not have permission to withdraw an approval.");
     }
-    return canSendForApproval
-      ? null
-      : "Only the owner, a co-worker, or an admin can send this quotation for approval.";
+    // From DRAFT/RETURNED it's a (re)send for approval by whoever builds it (owner / co-worker /
+    // admin). AND, from RETURNED, a reviewer may take back a return they just made — the same
+    // right that let them return it puts it back to Waiting for approval (an "undo return").
+    if (canSendForApproval) return null;
+    if (from === "RETURNED" && (acc.perms.has("qtn.approve") || acc.perms.has("qtn.return"))) return null;
+    return "Only the owner, a co-worker, or an admin can send this quotation for approval.";
   }
   if (to === "APPROVED") {
     const denied = need("qtn.approve", "You do not have permission to approve quotations.");
