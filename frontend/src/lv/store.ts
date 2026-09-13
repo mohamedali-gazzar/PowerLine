@@ -15,6 +15,7 @@ import {
   cellPriceEgp,
   enclosurePriceEgp,
   copperTypeFactor,
+  formKitFactor,
   findByName,
   findCellEnclosure,
   type DbComponent,
@@ -1306,7 +1307,9 @@ export interface PanelCalc {
   cuConnCost: number;
   busbarCost: number;
   busbarKg: number;
-  kits: number;
+  kits: number;      // final assembly-kit cost = kitsBase + kitsForm (this is what feeds the unit cost)
+  kitsBase: number;  // assembly-kit cost before the Form-of-separation surcharge
+  kitsForm: number;  // the Form-of-separation surcharge portion (kits − kitsBase)
   cablesCost?: number; // LCP only — cables line (else undefined)
   cuWeight: number;
   unitCost: number;
@@ -1365,14 +1368,16 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
         cuWeight += cuPanelKg(c) * c.qty * buswayCopperMult(c.note);   // Cu connections, like a panel
       }
       const enclCost = enclComp + lcpEnclosureEgp(p, f);
-      const kits = enclCost * 0.10;                // SR-Basic assembly kit = 10 % of enclosure
+      const kitsBase = enclCost * 0.10;                       // SR-Basic assembly kit = 10 % of enclosure
+      const kitsForm = kitsBase * formKitFactor(p.form, f);   // Form-of-separation surcharge — kit only
+      const kits = kitsBase + kitsForm;
       const cuConnCost = cuWeight * f.copper;
       const cablesCost = p.cablesEgp || 0;
       const unitCost = compCost + enclCost + kits + cuConnCost + cablesCost;
       const unitCostOps = unitCost * (1 + f.operations);   // operations overhead, like a panel
       const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
       const sellUnit = (factor > 0 ? unitCostOps / factor : unitCostOps) * (1 + (f.safetyFactor || 0));
-      return { compCost, enclCost, cuConnCost, busbarCost: 0, busbarKg: 0, kits, cablesCost, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
+      return { compCost, enclCost, cuConnCost, busbarCost: 0, busbarKg: 0, kits, kitsBase, kitsForm, cablesCost, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
     }
     let compCost = 0;
     for (const c of p.components) {
@@ -1385,7 +1390,7 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
     const unitCost = compCost + busbarCost;
     const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
     const sellUnit = (factor > 0 ? unitCost / factor : unitCost) * (1 + (f.safetyFactor || 0));
-    return { compCost, enclCost: 0, cuConnCost: 0, busbarCost, busbarKg, kits: 0, cuWeight: 0, unitCost, unitCostOps: unitCost, sellUnit, totalSell: sellUnit * p.qty };
+    return { compCost, enclCost: 0, cuConnCost: 0, busbarCost, busbarKg, kits: 0, kitsBase: 0, kitsForm: 0, cuWeight: 0, unitCost, unitCostOps: unitCost, sellUnit, totalSell: sellUnit * p.qty };
   }
   let compCost = 0;
   let cuWeight = 0;
@@ -1439,13 +1444,17 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   const busbarKg = (mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) * copperTypeFactor(p.copperType);
   const busbarCost = busbarKg * f.copper;
   // Kit = a % of the enclosure cost minus the cell Sides, per system (see kitRate).
-  const kits = Math.max(0, enclCost - sideCost) * kitRate(p);
+  const kitsBase = Math.max(0, enclCost - sideCost) * kitRate(p);
+  // Form-of-separation surcharge — a % on the kit only (Form 1 → 0 %, 2a/2b → 5 %, 3a/3b → 10 %,
+  // 4a/4b → 15 %). It never touches components, the enclosure box or copper.
+  const kitsForm = kitsBase * formKitFactor(p.form, f);
+  const kits = kitsBase + kitsForm;
   const unitCost = compCost + enclCost + cuConnCost + busbarCost + kits;
   const unitCostOps = unitCost * (1 + f.operations);
   // Per-panel selling factor overrides the global (Pricing Settings) when set (> 0).
   const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
   const sellUnit = (factor > 0 ? unitCostOps / factor : unitCostOps) * (1 + (f.safetyFactor || 0));
-  return { compCost, enclCost, cuConnCost, busbarCost, busbarKg, kits, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
+  return { compCost, enclCost, cuConnCost, busbarCost, busbarKg, kits, kitsBase, kitsForm, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
 }
 /**
  * The hand-written Commercial Offer lines, in EGP.

@@ -23,6 +23,21 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**The Form of separation now adds a cost to the Enclosure Kit.**
+
+Choosing a higher Form on a panel now raises the **Enclosure Kit price only** — components, the enclosure box and copper
+are not touched. The extra is a percentage on the kit: Form 1 → 0%, Form 2A/2B → 5%, Form 3A/3B → 10%, Form 4A/4B → 15%.
+In "Panel cost (live)" the Enclosure Kit box shows the breakdown when a Form adds cost — e.g. `Enclosure Kit + Form ·
+437 EGP` with `416 + 21 · Form 2B (+5%)` underneath. It recalculates the moment you change the Form or the enclosure, and
+the extra flows into the panel's selling price and the offer totals. The percentages come from the per-Form table already
+in the price book (it was there but unused until now), so they stay editable through the catalogue.
+
+⚠️ HEADS-UP: because prices are always recalculated live, any existing panel already set to Form 2A or higher will now
+show a slightly higher kit — and price — than before, since the Form had no price effect until today. This is the
+intended new rule; it applies when older quotations are reopened, not only to new ones.
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **Project factor now shows 3 decimals (e.g. 0.752).**
 
 The read-only Project factor in Pricing Settings — and the factor quoted in the sales email — now reads to three

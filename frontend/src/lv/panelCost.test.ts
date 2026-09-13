@@ -224,6 +224,61 @@ describe("the assembly kit percentage", () => {
   });
 });
 
+describe("the Form of separation adds a surcharge to the enclosure kit only", () => {
+  // A panel whose enclosure kit BASE is a clean 100 (10% of a 1000 EGP SR-Basic box).
+  const withKit = (over: Partial<LvPanel> = {}) => panel({
+    sizingMode: "panels",
+    panelsSizing: { layout: "Single", family: "SR-Basic", sizing1: "", sizing2: "" },
+    panelItems: [encItem({ egp: 1000 })],
+    ...over,
+  });
+
+  it("adds nothing at Form 1", () => {
+    const c = calcPanel(withKit({ form: "1" }), F);
+    expect(c.kitsBase).toBe(100);
+    expect(c.kitsForm).toBe(0);
+    expect(c.kits).toBe(100);
+  });
+
+  it("adds 5% at Form 2a/2b, 10% at 3a/3b, 15% at 4a/4b (standard schedule)", () => {
+    // F.forms is empty here, so the built-in fallback schedule applies.
+    for (const [form, pct] of [["2a", 0.05], ["2b", 0.05], ["3a", 0.1], ["3b", 0.1], ["4a", 0.15], ["4b", 0.15]] as const) {
+      const c = calcPanel(withKit({ form }), F);
+      expect(c.kitsBase, form).toBe(100);
+      expect(c.kitsForm, form).toBeCloseTo(100 * pct, 6);
+      expect(c.kits, form).toBeCloseTo(100 * (1 + pct), 6);
+    }
+  });
+
+  it("prefers the owner-editable per-form map over the built-in schedule", () => {
+    const G: Factors = { ...F, forms: { "2b": 0.2 } }; // owner set Form 2b to 20%
+    const c = calcPanel(withKit({ form: "2b" }), G);
+    expect(c.kitsForm).toBeCloseTo(20, 6); // 100 × 20%, not the default 5%
+    expect(c.kits).toBeCloseTo(120, 6);
+  });
+
+  it("touches only the kit — components, enclosure and copper are unchanged", () => {
+    const extras = { components: [comp({ egp: 5000, brand: "Other", cuP: 1, poles: 3 })], mainBusbarKg: 50 };
+    const base = calcPanel(withKit({ form: "1", ...extras }), F);
+    const form4 = calcPanel(withKit({ form: "4a", ...extras }), F);
+    expect(form4.compCost).toBe(base.compCost);
+    expect(form4.enclCost).toBe(base.enclCost);
+    expect(form4.cuConnCost).toBe(base.cuConnCost);
+    expect(form4.busbarCost).toBe(base.busbarCost);
+    // The only difference is the kit surcharge (15% of the 100 kit base), which flows into unit cost.
+    expect(form4.kits - base.kits).toBeCloseTo(15, 6);
+    expect(form4.unitCost - base.unitCost).toBeCloseTo(15, 6);
+  });
+
+  it("flows the surcharge through to the selling price and totals", () => {
+    // operations 0, factor 0.5, no safety → sellUnit = unitCost ÷ 0.5. Kit base 100, Form 4a = +15%.
+    const c = calcPanel(withKit({ form: "4a", qty: 2 }), F);
+    expect(c.unitCost).toBeCloseTo(1115, 6); // enclosure 1000 + kit 100 × 1.15
+    expect(c.sellUnit).toBeCloseTo(2230, 6); // ÷ 0.5
+    expect(c.totalSell).toBeCloseTo(4460, 6); // × 2 panels
+  });
+});
+
 describe("the full chain: cost -> overhead -> selling -> quantity", () => {
   it("adds overhead, divides by the selling factor, then multiplies by quantity", () => {
     const G: Factors = { ...F, operations: 0.1, factor: 0.5 };

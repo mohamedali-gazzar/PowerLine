@@ -143,6 +143,32 @@ export const RESTRICTED_FORMS = new Set<string>(["3a", "3b", "4a", "4b"]);
 export const formFamilyConflict = (form: string, family: string): boolean =>
   RESTRICTED_FORMS.has(form) && SHEET_METAL_FAMILIES.has(family);
 
+// Form-of-separation surcharge — applied ONLY to the enclosure assembly-kit cost, never to
+// components, the enclosure box, copper or anything else. A higher form of separation needs
+// more internal partitioning/segregation inside the panel, so the kit price rises by a fixed
+// percentage per form. The percentages are owner-editable and live in the catalogue's per-form
+// map (factors.forms), published with the price book; this is the standard schedule used as a
+// fallback for a quotation saved before that map existed:
+//    Form 1              → 0 %
+//    Form 2a / 2b        → 5 %
+//    Form 3a / 3b        → 10 %
+//    Form 4a / 4b        → 15 %
+// Values are fractions (0, 0.05, 0.10, 0.15) so they multiply the kit cost directly.
+export const DEFAULT_FORM_KIT_UPLIFT: Record<string, number> = {
+  "1": 0,
+  "2a": 0.05, "2b": 0.05,
+  "3a": 0.10, "3b": 0.10,
+  "4a": 0.15, "4b": 0.15,
+};
+/** The Form-of-separation surcharge fraction for a form. Reads the owner-editable per-form map
+ *  on the (frozen) factors when present, and falls back to the standard schedule above so an
+ *  older quotation whose frozen factors predate that map still prices consistently. */
+export const formKitFactor = (form?: string, factors?: Factors): number => {
+  const key = form ?? "1";
+  const fromFactors = factors?.forms?.[key];
+  return fromFactors != null ? fromFactors : (DEFAULT_FORM_KIT_UPLIFT[key] ?? 0);
+};
+
 // Sizing & Copper systems (RPT-01): Panels allowed only when incomer ≤ 800 A.
 export const PANEL_SYSTEMS = ["SR-Basic", "Unikit", "Local (Sheet Metal)", "Minicenter", "Primo", "Pillars", "Coffree"] as const;
 // Temporarily LOCKED enclosure families — hidden from the family pickers so no new panel can be

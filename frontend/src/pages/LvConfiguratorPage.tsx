@@ -15,7 +15,7 @@ import { useStaff, SALES_MANAGER } from "../staff";
 import PanelsBulkImport, { type ImportedPanel } from "../components/PanelsBulkImport";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
-  formFamilyConflict,
+  formFamilyConflict, formKitFactor,
   PANEL_SYSTEMS, SELECTABLE_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
   COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp,
   findByName, externalNeutralCT, copperTypeFactor, DEFAULT_FACTORS,
@@ -6862,7 +6862,17 @@ function PanelEditor({ s, p, up, upPanel }: {
         <div className="mt-3 grid flex-1 auto-rows-fr grid-cols-2 gap-2 text-sm [&_b]:text-base sm:grid-cols-3">
           <div className="rounded-lg bg-surface p-2.5">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Enclosure<br /><b>{fmtEgp(calc.enclCost)} EGP</b></div>
-          <div className="rounded-lg bg-surface p-2.5">Kits<br /><b>{fmtEgp(calc.kits)} EGP</b></div>
+          {/* Enclosure Kit — plus the Form-of-separation surcharge (a % on the kit only). When a form
+              above Form 1 adds cost, the cell shows the breakdown: base + form portion. */}
+          {calc.kitsForm > 0 ? (
+            <div className="rounded-lg bg-surface p-2.5"
+              title={`Enclosure Kit ${fmtEgp(calc.kitsBase)} + Form ${p.form.toUpperCase()} (+${Math.round(formKitFactor(p.form, s.factors) * 100)}%) ${fmtEgp(calc.kitsForm)}`}>
+              Enclosure Kit + Form<br /><b>{fmtEgp(calc.kits)} EGP</b>
+              <div className="mt-0.5 text-[10px] font-normal text-muted">{fmtEgp(calc.kitsBase)} + {fmtEgp(calc.kitsForm)} · Form {p.form.toUpperCase()} (+{Math.round(formKitFactor(p.form, s.factors) * 100)}%)</div>
+            </div>
+          ) : (
+            <div className="rounded-lg bg-surface p-2.5">Enclosure Kit<br /><b>{fmtEgp(calc.kits)} EGP</b></div>
+          )}
           <button type="button" onClick={() => setCopperOpen("busbar")} title="How is this calculated?"
             className="group relative rounded-lg bg-surface p-2.5 text-left transition hover:bg-brand-tint/60 hover:ring-1 hover:ring-brand/30">
             Main Busbar ({fmtNum(calc.busbarKg)} KG)<br /><b>{fmtEgp(calc.busbarCost)} EGP</b>
