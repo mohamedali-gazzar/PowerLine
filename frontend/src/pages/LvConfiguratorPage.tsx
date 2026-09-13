@@ -4504,6 +4504,44 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
   );
 }
 
+// A pricing number field that lets you type a decimal freely — including one that starts with
+// "0" (e.g. "0.7"). It holds the RAW text while you edit, so "0", "0." and "0.7" all survive on
+// screen instead of a bound number collapsing "0" back to empty; the parsed value is committed
+// live, and clamped to min/max on blur. Defined at module level so it isn't remounted (and doesn't
+// lose focus) on every parent re-render. `pct` fields show/enter a percentage (e.g. 5 for 0.05).
+function NumField({ label, value, pct, step, min, max, hint, onCommit }: {
+  label: string; value: number; pct?: boolean; step?: number; min?: number; max?: number; hint?: string;
+  onCommit: (v: number) => void;
+}) {
+  const toText = (v: number) => { const d = pct ? Math.round(v * 10000) / 100 : v; return d ? String(d) : ""; };
+  const [text, setText] = useState(() => toText(value));
+  const [editing, setEditing] = useState(false);
+  // Reflect an external change (e.g. "Apply current rates") only while the user isn't typing here.
+  useEffect(() => { if (!editing) setText(toText(value)); }, [value, editing]); // eslint-disable-line react-hooks/exhaustive-deps
+  const commit = (raw: string, clampIt: boolean) => {
+    let n = parseFloat(raw);
+    if (!Number.isFinite(n)) n = 0;
+    n = clampIt ? Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n)) : (max != null ? Math.min(max, n) : n);
+    onCommit(pct ? n / 100 : n);
+  };
+  return (
+    <div>
+      <L>{label}</L>
+      <input className="input" type="text" inputMode="decimal" step={step ?? 0.01} min={min} max={max}
+        value={text}
+        onFocus={() => setEditing(true)}
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (raw !== "" && !/^-?\d*\.?\d*$/.test(raw)) return; // only a valid partial decimal
+          setText(raw);
+          commit(raw, false);
+        }}
+        onBlur={(e) => { setEditing(false); commit(e.target.value, true); }} />
+      {hint && <p className="mt-1 text-[11px] text-muted">{hint}</p>}
+    </div>
+  );
+}
+
 // ── Pricing tab (RPT-01: Pricing Settings replaces "Panels Section") ─────────
 function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }) {
   const f = s.factors;
@@ -4516,22 +4554,13 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
   // Your USD/EUR rate must stay at or above the live rate — enforced as a field minimum.
   const liveUsd = liveRate2dp(fx.rates?.usd);
   const liveEur = liveRate2dp(fx.rates?.eur);
-  // plain function (NOT a nested component) so inputs keep focus across re-renders
+  // Each pricing field is a NumField (module-level component, so it keeps focus across re-renders
+  // and accepts decimals that start with "0" like 0.7).
   const num = (k: "euro" | "usd" | "safetyFactor" | "copper" | "sheetMetal" | "operations" | "factor" | "abbDiscount" | "vat",
-    label: string, opts?: { step?: number; pct?: boolean; hint?: string; min?: number; max?: number }) => {
-    const capMax = (v: number) => (opts?.max != null ? Math.min(opts.max, v) : v);         // enforce max as you type
-    const clamp = (v: number) => Math.min(opts?.max ?? Infinity, Math.max(opts?.min ?? -Infinity, v)); // full clamp on blur
-    return (
-      <div key={k}>
-        <L>{label}</L>
-        <input className="input" type="number" step={opts?.step ?? 0.01} min={opts?.min} max={opts?.max}
-          value={(opts?.pct ? Math.round(f[k] * 10000) / 100 : f[k]) || ""}
-          onChange={(e) => { const d = capMax(parseFloat(e.target.value) || 0); upF(k, opts?.pct ? d / 100 : d); }}
-          onBlur={(e) => { const d = clamp(parseFloat(e.target.value) || 0); upF(k, opts?.pct ? d / 100 : d); }} />
-        {opts?.hint && <p className="mt-1 text-[11px] text-muted">{opts.hint}</p>}
-      </div>
-    );
-  };
+    label: string, opts?: { step?: number; pct?: boolean; hint?: string; min?: number; max?: number }) => (
+    <NumField key={k} label={label} value={f[k]} pct={opts?.pct} step={opts?.step}
+      min={opts?.min} max={opts?.max} hint={opts?.hint} onCommit={(v) => upF(k, v)} />
+  );
   return (
     <div className="animate-fade-up mx-auto w-full max-w-[77rem]">
     <div className="flex flex-col items-start gap-4 lg:flex-row lg:justify-center">

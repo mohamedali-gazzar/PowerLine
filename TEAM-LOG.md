@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**Fixed the pricing fields so you can type a value that starts with "0" (like the Panels factor 0.7).**
+
+Before, the moment you typed the "0" the field wiped it, so you couldn't build "0.7"/"0.85". Now every pricing field
+(Panels factor, exchange rates, safety factor, copper, operations, margins, VAT) keeps exactly what you type while you
+type it, and only settles/clamps the number when you click away. Nothing about the prices themselves changed.
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **Rearranged the top of a quotation and the toolbar to be tidier.**
 
 - **Copy link** and **ERP CSV** now sit on the same line as the quotation number, framed to match it and aligned to it.
