@@ -7476,6 +7476,28 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     let k = 0;
     u({ components: p.components.map((c) => (c.section === sec ? reordered[k++] : c)) });
   };
+  // Drag-drop version of reorderGroup: move a combination's whole block to another combination's
+  // position within the same section (drop the dragged group's grip onto that group's header).
+  const moveGroupTo = (group: string, sec: string, targetGroup: string) => {
+    if (group === targetGroup) return;
+    const blocks: { g: string; items: PanelComponent[] }[] = [];
+    p.components.filter((c) => c.section === sec).forEach((c) => {
+      const g = effGroup.get(c.id) || "";
+      const last = blocks[blocks.length - 1];
+      if (last && last.g === g) last.items.push(c);
+      else blocks.push({ g, items: [c] });
+    });
+    const from = blocks.findIndex((b) => b.g === group);
+    const to = blocks.findIndex((b) => b.g === targetGroup);
+    if (from < 0 || to < 0) return;
+    const [moved] = blocks.splice(from, 1);
+    let ti = blocks.findIndex((b) => b.g === targetGroup);
+    if (to > from) ti += 1; // dragged downward past its old spot → land after the target
+    blocks.splice(ti, 0, moved);
+    const reordered = blocks.flatMap((b) => b.items);
+    let k = 0;
+    u({ components: p.components.map((c) => (c.section === sec ? reordered[k++] : c)) });
+  };
   // Rename a combination group — retags every member row's `group` to the new label.
   const renameGroup = (group: string, sec: string, name: string) => {
     const nm = name.trim();
@@ -7646,6 +7668,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   useEffect(() => { (listRef.current?.children[activeIdx] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" }); }, [activeIdx]);
   // drag-and-drop: reorder rows and move them across sections
   const [dragId, setDragId] = useState<string | null>(null);
+  // Separately, a whole combination can be dragged by its header grip to reorder it within its
+  // section (native HTML5 drag; independent of the per-row pointer drag above).
+  const [groupDrag, setGroupDrag] = useState<{ group: string; sec: string } | null>(null);
   // The drop-target highlight is applied IMPERATIVELY (a `.drop-over` class on the hovered
   // element) rather than via React state — so dragging a component over the list no longer
   // re-renders the whole card on every move, which is what made reordering laggy.
@@ -8876,8 +8901,19 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                           const selIds = secComps.filter((c) => !isSpacer(c) && (effGroup.get(c.id) || "") === g).map((c) => c.id);
                           const selOn = selIds.filter((id) => selected.has(id)).length;
                           rows.push(
-                            <tr key={`grp-${sec}-${g}`} className="align-middle">
-                              <td className="py-1" />
+                            <tr key={`grp-${sec}-${g}`}
+                              className={`align-middle${groupDrag?.group === g && groupDrag?.sec === sec ? " opacity-40" : ""}`}
+                              onDragOver={(e) => { if (groupDrag && groupDrag.sec === sec && groupDrag.group !== g) { e.preventDefault(); e.currentTarget.classList.add("drop-over"); } }}
+                              onDragLeave={(e) => e.currentTarget.classList.remove("drop-over")}
+                              onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("drop-over"); if (groupDrag && groupDrag.sec === sec) moveGroupTo(groupDrag.group, sec, g); setGroupDrag(null); }}>
+                              <td className="py-1 pl-1">
+                                <span draggable
+                                  onDragStart={(e) => { setGroupDrag({ group: g, sec }); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", g); } catch { /* older browsers */ } }}
+                                  onDragEnd={() => setGroupDrag(null)}
+                                  title="Drag to reorder this combination"
+                                  aria-label="Drag to reorder this combination"
+                                  className="inline-flex cursor-grab select-none px-1 leading-none text-brand-dark/50 hover:text-brand-dark">⠿</span>
+                              </td>
                               {/* Combination header — the "Combination qty" phrase first, then the qty box, then the name */}
                               <td colSpan={3} className="py-1 pr-2">
                                 <div className="flex items-center gap-2">

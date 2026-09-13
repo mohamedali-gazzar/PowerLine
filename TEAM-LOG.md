@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**You can now drag a whole combination to reorder it — a grip handle (⠿) on each combination's header.**
+
+Each combination (the coloured group headers like "Control CT", "Interlock") now has a little drag grip on the left,
+lined up with the ones on the component rows. Grab it and drag the combination onto another combination's header to drop
+it into that place — all of the combination's rows move together. The ↑ / ↓ arrows on the header still work as before if
+you prefer clicking.
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **Fixed the pricing fields so you can type a value that starts with "0" (like the Panels factor 0.7).**
 
 Before, the moment you typed the "0" the field wiped it, so you couldn't build "0.7"/"0.85". Now every pricing field
