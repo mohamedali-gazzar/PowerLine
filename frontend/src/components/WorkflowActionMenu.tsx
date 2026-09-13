@@ -135,9 +135,6 @@ export default function WorkflowActionMenu({
                   className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold transition-colors ${toneClass(a.tone)}`}
                 >
                   {a.label}
-                  {a.key === primary.key && (
-                    <span className="ml-auto rounded-full bg-brand-tint px-2 py-0.5 text-[10px] font-bold uppercase text-brand-dark">Default</span>
-                  )}
                 </button>
               </li>
             ))}

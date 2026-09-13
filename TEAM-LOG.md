@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**Dropped the small "DEFAULT" tag inside the workflow button's dropdown.**
+
+The dropdown under the main workflow button no longer prints a "DEFAULT" tag next to the first option. The default is
+still the same — it's just the main button itself (e.g. "✓ Approve"), so one click does it; the menu now simply lists
+the choices without labelling one.
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **Removed the duplicate "Withdraw to draft" button on an approved quotation (for admins / self-approvers).**
 
 For someone who can approve their own work, an approved quotation showed both the "Submit ▾" menu (which already offers
