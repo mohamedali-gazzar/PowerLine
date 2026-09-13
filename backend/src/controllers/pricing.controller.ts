@@ -446,6 +446,14 @@ export async function postPublish(req: Request, res: Response) {
     const version = await nextPriceVersion();
     const note = typeof req.body?.note === "string" ? req.body.note.slice(0, 200) : "";
 
+    // Record a new DEFAULT-RATE version if any of the four rates moved since the last
+    // publish. A no-op when only component prices changed, so the rate version tracks the
+    // rates specifically — a quotation only sees the "new rates" warning when rates change.
+    {
+      const { maybeRecordRateVersion } = await import("./pricing-lv.controller");
+      await maybeRecordRateVersion(req.userId ?? null, user?.email ?? "");
+    }
+
     await prisma.priceSnapshot.create({
       data: {
         domain: "RMU",

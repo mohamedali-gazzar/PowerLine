@@ -477,6 +477,18 @@ export interface PriceChangeRow {
   actorEmail: string;
   createdAt: string;
 }
+/** One published set of the four default rates — the audit trail behind rate versioning. */
+export interface RateVersionRow {
+  id: number;
+  usd: number;
+  euro: number;
+  safetyFactor: number;
+  copper: number;
+  /** JSON array of the rate keys that changed vs the previous version. */
+  changed: string;
+  publishedAt: string;
+  publishedBy: string;
+}
 export interface WeekStat {
   weekStart: string;
   label: string;
@@ -648,6 +660,15 @@ export const api = {
         method: "PUT",
         body: JSON.stringify(data),
       }),
+    /** Apply or keep the newly-published default rates on ONE quotation. Its own endpoint,
+     *  so an eligible quotation that is locked for approval can still take the latest rates —
+     *  it changes only the four rate fields + the stamped version, never the priced content.
+     *  `summary` carries the client's recomputed totals so the lists stay correct on apply. */
+    rateDecision: (id: string, action: "apply" | "keep", summary?: QtnSummaryInput) =>
+      request<{ ok: true; rateVersion: number }>(`/qtns/${id}/rate-decision`, {
+        method: "POST",
+        body: JSON.stringify({ action, summary }),
+      }),
     rename: (id: string, number: string) =>
       request<{ ok: boolean; error?: string }>(`/qtns/${id}/number`, {
         method: "PATCH",
@@ -807,6 +828,8 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ factors }),
       }),
+    /** The current default-rate version + publish history (audit trail). */
+    lvRates: () => request<{ latest: RateVersionRow; history: RateVersionRow[] }>("/pricing/lv/rates"),
     // Circuit-combination templates — owner only (access.manage).
     lvCombos: () => request<{ sections: LvComboSection[] }>("/pricing/lv/combos"),
     lvComboSave: (section: string, value: unknown) =>

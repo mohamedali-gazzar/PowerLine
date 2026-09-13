@@ -428,6 +428,24 @@ model PriceSnapshot {
   @@index([version])
 }
 
+/// An append-only history of published DEFAULT RATES (USD→EGP, EUR→EGP, safety
+/// factor, copper). Every publish that changes any of the four writes a NEW row;
+/// its `id` is the "rate version" each quotation stamps itself with. Rows are never
+/// updated or deleted, so this doubles as the admin audit trail of who changed which
+/// rate and when. A brand-new table, so its columns may be required (no back-fill).
+model RateVersion {
+  id            Int      @id @default(autoincrement())
+  usd           Float
+  euro          Float
+  safetyFactor  Float
+  copper        Float
+  /// JSON array of the rate keys that moved vs the previous version, e.g. ["usd","copper"].
+  changed       String   @default("[]")
+  publishedAt   DateTime @default(now())
+  publishedById String?
+  publishedBy   String   @default("")
+}
+
 /// One RMU price. `key` is DERIVED server-side from the attributes below using
 /// the same builder the configurator uses — never typed by hand — so a row that
 /// nothing can look up is structurally impossible.

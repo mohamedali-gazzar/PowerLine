@@ -16,6 +16,7 @@ import {
   restore,
   duplicate,
   amend,
+  rateDecision,
   submit,
   unsubmit,
   transition,
@@ -52,6 +53,7 @@ router.post("/:id/duplicate", duplicate);
 router.post("/:id/amend", amend); // cancels this revision, opens the next one
 router.post("/:id/activity", activity); // accrue active working time (owner/co-owner)
 router.put("/:id/sizing-review", putSizingReview); // reviewer's sizing calculation pad (editable while locked)
+router.post("/:id/rate-decision", rateDecision); // apply / keep the latest published default rates
 
 // Workflow. submit/unsubmit are thin aliases over /transition so an older client
 // mid-rollout keeps working.

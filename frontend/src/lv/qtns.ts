@@ -16,6 +16,7 @@ import {
   type LvState,
 } from "./store";
 import { DEFAULT_FACTORS, findCellEnclosure } from "./catalog";
+import { latestRateVersion } from "./catalogSource";
 
 export interface QtnRecord {
   id: string;
@@ -66,7 +67,7 @@ export interface QtnListItem {
 
 /** Client-computed summary stored next to the JSON state (so listing/stats need
  *  no pricing logic on the server). */
-function summaryOf(state: LvState): QtnSummaryInput {
+export function summaryOf(state: LvState): QtnSummaryInput {
   // One malformed panel is enough to turn the pricing chain into NaN, which
   // JSON.stringify writes as null — and the server rejects the whole request
   // ("Expected number, received null"). Since the save is fire-and-forget, that
@@ -350,6 +351,9 @@ export async function createQtn(
 ): Promise<QtnRecord> {
   const state = initialState();
   state.kind = kind;
+  // A brand-new quotation starts on the latest published default rates, so it never
+  // shows the "new rates available" warning for rates it already has.
+  state.rateVersion = latestRateVersion();
   // Default the Sales Support Engineer to whoever is creating the quotation (the offer's
   // support contact + approval routing). Still editable from the Project tab's dropdown.
   if (supportEngineer.trim()) state.project.supportEngineer = supportEngineer.trim();

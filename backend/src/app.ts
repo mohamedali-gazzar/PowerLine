@@ -43,6 +43,7 @@ import {
   getLvCatalog,
   getLvCatalogChanges,
   getLvDuplicateNames,
+  getLvRates,
 } from "./controllers/pricing-lv.controller";
 import {
   postLvImportPreview,
@@ -195,6 +196,8 @@ export function createApp() {
   app.post("/api/pricing/lv/:id/retire", requireAuth, requirePriceAdmin, retireLvItem);
   app.post("/api/pricing/lv/seed-chunk", requireAuth, requirePriceAdmin, postLvSeedChunk);
   app.post("/api/pricing/lv/settings", requireAuth, requirePriceAdmin, postLvSettings);
+  // Default-rate version + publish history (audit). Any price VIEWER may read it.
+  app.get("/api/pricing/lv/rates", requireAuth, requirePriceViewer, getLvRates);
   // Circuit-combination templates (ATS / photocell / MCC / WD / motorized).
   // OWNER ONLY (access.manage): these decide what goes into a quoted combination,
   // so a bad edit re-prices work rather than just mislabelling it — a stricter

@@ -549,6 +549,74 @@ export async function buildLvPayload() {
   };
 }
 
+// ── Default-rate versioning ──────────────────────────────────────────────────
+// The four published DEFAULT RATES (USD→EGP, EUR→EGP, safety factor, copper) carry
+// their OWN version, separate from the shared price-book counter, so a quotation can
+// tell whether it is behind on the RATES specifically — a component-price edit must not
+// make every quotation look "out of date on rates". Each version is an immutable
+// RateVersion row; the newest row's id is the current rate version, stamped onto a
+// quotation when it is created or when the user applies the latest rates.
+export const RATE_VERSION_KEYS = ["usd", "euro", "safetyFactor", "copper"] as const;
+type RateSet = { usd: number; euro: number; safetyFactor: number; copper: number };
+
+async function readLvRates(): Promise<RateSet> {
+  const rows = await prisma.priceSetting.findMany({
+    where: { scope: "LV", key: { in: [...RATE_VERSION_KEYS] } },
+  });
+  const by = new Map(rows.map((r) => [r.key, r.num ?? 0]));
+  return {
+    usd: by.get("usd") ?? 0,
+    euro: by.get("euro") ?? 0,
+    safetyFactor: by.get("safetyFactor") ?? 0,
+    copper: by.get("copper") ?? 0,
+  };
+}
+
+const RATE_EPS = 1e-9;
+function ratesChanged(a: RateSet, b: RateSet): (keyof RateSet)[] {
+  return RATE_VERSION_KEYS.filter((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) > RATE_EPS);
+}
+
+/** The current published rate version. Creates a baseline row from the live rate
+ *  settings the first time it is read, so there is always a version to compare against. */
+export async function getLatestRateVersion() {
+  const latest = await prisma.rateVersion.findFirst({ orderBy: { id: "desc" } });
+  if (latest) return latest;
+  const cur = await readLvRates();
+  return prisma.rateVersion.create({
+    data: { ...cur, changed: JSON.stringify([...RATE_VERSION_KEYS]) },
+  });
+}
+
+/** Record a new rate version when any of the four rates has moved since the last one.
+ *  Called at publish time. A no-op when nothing changed, so a component-only publish
+ *  never bumps the rate version. Returns the current (possibly new) version. */
+export async function maybeRecordRateVersion(actorId: string | null, actorEmail: string) {
+  const latest = await getLatestRateVersion();
+  const cur = await readLvRates();
+  const changed = ratesChanged(cur, latest);
+  if (changed.length === 0) return latest;
+  return prisma.rateVersion.create({
+    data: {
+      ...cur,
+      changed: JSON.stringify(changed),
+      publishedById: actorId,
+      publishedBy: actorEmail,
+    },
+  });
+}
+
+/** GET /api/pricing/lv/rates — the current default-rate version + publish history (audit). */
+export async function getLvRates(_req: Request, res: Response) {
+  try {
+    const latest = await getLatestRateVersion();
+    const history = await prisma.rateVersion.findMany({ orderBy: { id: "desc" }, take: 50 });
+    res.json({ latest, history });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
 /** GET /api/catalog/lv — the published LV catalogue the app loads at start-up. */
 export async function getLvCatalog(_req: Request, res: Response) {
   try {
@@ -560,9 +628,13 @@ export async function getLvCatalog(_req: Request, res: Response) {
       where: { domain_version: { domain: "LV", version: book.version } },
     });
     if (!snap) return res.json({ source: "bundled", version: 0, data: null });
+    const data = JSON.parse(snap.payload);
+    // Stamp the LIVE default-rate version onto the payload, so even an older snapshot
+    // hands the client the current rate version (the feature works without re-publishing).
+    try { data.rateVersion = (await getLatestRateVersion()).id; } catch { /* leave unset */ }
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("ETag", `"lv-${book.version}"`);
-    res.json({ source: "db", version: book.version, data: JSON.parse(snap.payload) });
+    res.json({ source: "db", version: book.version, data });
   } catch (e) {
     fail(res, e);
   }

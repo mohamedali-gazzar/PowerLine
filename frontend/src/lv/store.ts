@@ -254,6 +254,14 @@ export interface LvState {
    *  to via "Apply changes" (the changelog re-price). Drives the "Prices updated"
    *  mark in the QTN history; absent until the estimator applies a price list. */
   pricesAppliedVersion?: number;
+  /** The published DEFAULT-RATE version this quotation's four rates (USD, EUR, safety,
+   *  copper) are on. A new quotation stamps the latest; a clone/amend inherits its
+   *  source's. When a newer version is published, an eligible quotation offers to apply
+   *  it on open. Absent on quotations created before rate versioning existed. */
+  rateVersion?: number;
+  /** The latest rate version the user chose to KEEP (dismiss) against, so the "new rates"
+   *  warning stays hidden until a still-newer version is published. */
+  rateVersionDismissed?: number;
   /** Currency the Commercial Offer is quoted in. Lives on the quotation rather than
    *  in the tab's own state so the ERP export can quote in the same currency the
    *  customer was — otherwise the offer said USD and the CSV said EGP. */
@@ -1485,6 +1493,47 @@ export function projectFactor(s: LvState): number {
   });
   sell += customItemsTotal(s);
   return sell > 0 ? +(cost / sell).toFixed(3) : 0;
+}
+
+// ── Default-rate versioning ──────────────────────────────────────────────────
+// The four "Default rates for new quotations" (USD→EGP, EUR→EGP, safety factor, copper)
+// are published centrally by an admin and versioned server-side. Each quotation stamps the
+// rate version it is on; when a newer one is published, an eligible quotation offers to
+// apply it (see rateUpdate). These four fields are the ONLY ones an apply touches — every
+// other factor and per-panel override is left exactly as it was.
+export interface RateSet { usd: number; euro: number; safetyFactor: number; copper: number; }
+export const RATE_KEYS = ["usd", "euro", "safetyFactor", "copper"] as const;
+export function pickRates(f: RateSet): RateSet {
+  return { usd: f.usd, euro: f.euro, safetyFactor: f.safetyFactor, copper: f.copper };
+}
+export function ratesEqual(a: RateSet, b: RateSet): boolean {
+  return RATE_KEYS.every((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) < 1e-9);
+}
+/**
+ * Whether an open quotation should be offered the newly-published default rates, and with
+ * what before/after values. Returns null when no warning is due. Pure, so it is unit-tested.
+ *
+ *  - Submitted / Cancelled are frozen → never (the caller also passes those through).
+ *  - No published rate version yet → never.
+ *  - The quotation is already on the latest version → never.
+ *  - The user already chose "keep current" against this (or a newer) version → never.
+ *  - The numbers already match the latest → never (nothing to change).
+ */
+export function rateUpdate(
+  state: Pick<LvState, "factors" | "rateVersion" | "rateVersionDismissed">,
+  status: string,
+  latestVersion: number,
+  latestRates: RateSet,
+): { current: RateSet; latest: RateSet } | null {
+  if (status === "SUBMITTED" || status === "CANCELLED") return null;
+  if (!(latestVersion > 0)) return null;
+  const qv = state.rateVersion;
+  if (qv != null && qv >= latestVersion) return null;
+  const dismissed = state.rateVersionDismissed;
+  if (dismissed != null && dismissed >= latestVersion) return null;
+  const current = pickRates(state.factors);
+  if (ratesEqual(current, latestRates)) return null;
+  return { current, latest: pickRates(latestRates) };
 }
 
 export function grandTotals(s: LvState) {

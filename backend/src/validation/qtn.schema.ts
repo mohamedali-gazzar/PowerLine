@@ -29,6 +29,16 @@ export const createQtnSchema = z.object({ number, state: z.unknown(), summary })
 export const updateQtnSchema = z.object({ state: stateObject, summary });
 export const numberSchema = z.object({ number });
 
+// Apply or dismiss the newly-published default rates on ONE quotation. Written through
+// its own endpoint (like sizing-review) so the four rates can be brought up to date even
+// while the quotation is locked for approval — it never touches the priced content, only
+// the four rate fields + the stamped rate version. `summary` carries the client's
+// recomputed totals so the lists stay correct after an "apply".
+export const rateDecisionSchema = z.object({
+  action: z.enum(["apply", "keep"]),
+  summary,
+});
+
 // Sizing Review worksheet — the reviewer's calculation pad, saved through its own endpoint.
 export const sizingReviewSchema = z.object({
   rows: z

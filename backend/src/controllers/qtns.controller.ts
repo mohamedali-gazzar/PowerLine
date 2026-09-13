@@ -5,6 +5,7 @@ import {
   createQtnSchema,
   updateQtnSchema,
   sizingReviewSchema,
+  rateDecisionSchema,
   numberSchema,
   reassignSchema,
   coworkSchema,
@@ -391,6 +392,47 @@ export async function putSizingReview(req: Request, res: Response) {
     state.sizingReview = data;
     await prisma.lvQtn.update({ where: { id: q.id }, data: { state: JSON.stringify(state) } });
     res.json({ ok: true });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+// POST /api/qtns/:id/rate-decision  { action: "apply" | "keep", summary? }
+// Apply or dismiss the newly-published default rates on ONE quotation. Written through its
+// own endpoint (like sizing-review) so a quotation that is Waiting for approval / Approved —
+// otherwise frozen — can still be brought up to the latest rates: the user explicitly asked,
+// and this touches ONLY the four rate fields + the stamped version, never the priced content
+// the lock protects. Submitted and Cancelled stay completely frozen. The four values written
+// are read server-side from the current rate version, so a client cannot smuggle in others.
+export async function rateDecision(req: Request, res: Response) {
+  try {
+    const { action, summary } = rateDecisionSchema.parse(req.body ?? {});
+    const q = await writableQtn(req);
+    if (!q) return res.status(404).json({ error: "Quotation not found." });
+    const s = qtnStatus(q);
+    if (s === "SUBMITTED" || s === "CANCELLED") return lockedResponse(res, s);
+
+    let state: Record<string, unknown> = {};
+    try { state = JSON.parse(q.state) as Record<string, unknown>; } catch { state = {}; }
+
+    const { getLatestRateVersion } = await import("./pricing-lv.controller");
+    const latest = await getLatestRateVersion();
+
+    if (action === "apply") {
+      const f = (state.factors && typeof state.factors === "object" ? state.factors : {}) as Record<string, unknown>;
+      // Overwrite ONLY the four rate fields — every other factor and per-panel override is kept.
+      state.factors = { ...f, usd: latest.usd, euro: latest.euro, safetyFactor: latest.safetyFactor, copper: latest.copper };
+      state.rateVersion = latest.id;
+    } else {
+      // "Keep current" — remember the version, so the warning stays hidden until a newer one.
+      state.rateVersionDismissed = latest.id;
+    }
+
+    const data: Record<string, unknown> = { state: JSON.stringify(state) };
+    // The client sends its recomputed totals so the lists reflect the new prices after an apply.
+    if (action === "apply" && summary) Object.assign(data, summaryData(summary));
+    await prisma.lvQtn.update({ where: { id: q.id }, data });
+    res.json({ ok: true, rateVersion: latest.id });
   } catch (e) {
     fail(res, e);
   }

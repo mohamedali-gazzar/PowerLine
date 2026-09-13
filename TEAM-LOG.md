@@ -23,6 +23,27 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**Default rates (USD / EUR / Safety / Copper) are now admin-managed, versioned, and applied per quotation on request.**
+
+Only an admin can change and publish the four default rates on the Price list screen — everyone else now sees them
+read-only. When an admin publishes new rates, they become the starting point for every NEW quotation, and each publish
+that changes a rate is saved as a numbered version with a full history (values, date, which rates changed, and which
+admin published it — shown under "Rate history" on that screen).
+
+Quotations already made keep the rates they were built with — publishing never changes an existing one on its own.
+Instead, when you open a quotation that is behind on rates, a popup shows the old vs new values and asks whether to
+apply them. "Apply to this QTN" updates only those four rates and re-prices that one quotation (your panel factors and
+manual overrides are kept); "Keep current rates" leaves it alone and won't ask again until a still-newer version is
+published. The popup appears for Draft, Returned, Waiting-for-approval and Approved quotations; Submitted and Cancelled
+are never touched. A copied/amended quotation inherits its source's rates and version.
+
+⚠️ HEADS-UP: the old behaviour where a Draft silently picked up the latest copper price each time it was opened has been
+removed — it contradicted "nothing changes on its own". Copper (and the other three rates) now change only when someone
+clicks "Apply to this QTN". This deploy adds one new table (rate-version history); it does not change any existing
+quotation's stored prices.
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **"Replace component" is now a full Find & Replace across the whole quotation, with per-panel checkboxes.**
 
 Opening ⇄ Replace component (from any panel) now works like the Excel replace. (1) The "Find" search looks at parts used

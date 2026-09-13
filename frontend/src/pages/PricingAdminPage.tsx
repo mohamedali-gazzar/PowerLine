@@ -5,6 +5,7 @@ import {
   type PricingStatus,
   type RmuPriceRow,
   type PriceChangeRow,
+  type RateVersionRow,
   type LvRow,
   type LvDuplicateNames,
 } from "../api";
@@ -375,7 +376,7 @@ export default function PricingAdminPage() {
 
           {/* Only meaningful once the LV catalogue exists — before that, setup writes
               these itself. */}
-          {section === "LV" && status.counts.lvComponents > 0 && <DefaultRates onSaved={loadAll} />}
+          {section === "LV" && status.counts.lvComponents > 0 && <DefaultRates onSaved={loadAll} canEdit={status.canEdit} />}
 
           {section === "LV" && status.counts.lvComponents === 0 && (
             <div className="card p-6 text-center">
@@ -933,7 +934,7 @@ function LvPrices() {
  * quotations are untouched: each one carries the rates it was built with, on
  * purpose, so an offer already sent never re-prices itself.
  */
-function DefaultRates({ onSaved }: { onSaved: () => void }) {
+function DefaultRates({ onSaved, canEdit }: { onSaved: () => void; canEdit: boolean }) {
   const [usd, setUsd] = useState("");
   const [euro, setEuro] = useState("");
   const [safety, setSafety] = useState("");
@@ -941,6 +942,8 @@ function DefaultRates({ onSaved }: { onSaved: () => void }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [history, setHistory] = useState<RateVersionRow[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Seed the fields from what is published right now.
   useEffect(() => {
@@ -949,6 +952,11 @@ function DefaultRates({ onSaved }: { onSaved: () => void }) {
     setSafety(String(((DEFAULT_FACTORS.safetyFactor ?? 0) * 100).toFixed(2).replace(/\.?0+$/, "")));
     setCopper(String(DEFAULT_FACTORS.copper ?? ""));
   }, []);
+
+  // The publish history (audit) — who changed which rate, and when.
+  useEffect(() => {
+    api.pricing.lvRates().then((r) => setHistory(r.history)).catch(() => {});
+  }, [msg]);
 
   const save = async () => {
     const u = Number(usd), e = Number(euro), s = Number(safety), c = Number(copper);
@@ -976,36 +984,85 @@ function DefaultRates({ onSaved }: { onSaved: () => void }) {
       <h2 className="sec-head mb-0">Default rates for new quotations</h2>
       <p className="mb-3 mt-1 text-xs text-muted">
         What a brand-new quotation starts from. Quotations already saved keep the rates they
-        were built with, so nothing already sent to a customer changes — except that a DRAFT
-        picks up the latest copper price each time it's reopened.
+        were built with, so nothing already sent to a customer changes. When you publish new
+        rates, an open quotation that is still on the old ones is asked — on the person's screen —
+        whether to apply them; it never changes on its own.
+        {!canEdit && <> <b className="text-ink">Only an admin can change these.</b></>}
       </p>
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label className="label" htmlFor="dr-usd">USD → EGP</label>
-          <input id="dr-usd" className="input w-32" type="number" step="0.01" min="0"
+          <input id="dr-usd" className="input w-32" type="number" step="0.01" min="0" readOnly={!canEdit} disabled={!canEdit}
             value={usd} onChange={(e) => setUsd(e.target.value)} />
         </div>
         <div>
           <label className="label" htmlFor="dr-eur">EUR → EGP</label>
-          <input id="dr-eur" className="input w-32" type="number" step="0.01" min="0"
+          <input id="dr-eur" className="input w-32" type="number" step="0.01" min="0" readOnly={!canEdit} disabled={!canEdit}
             value={euro} onChange={(e) => setEuro(e.target.value)} />
         </div>
         <div>
           <label className="label" htmlFor="dr-sf">Safety factor (%)</label>
-          <input id="dr-sf" className="input w-32" type="number" step="0.1" min="0" max="10"
+          <input id="dr-sf" className="input w-32" type="number" step="0.1" min="0" max="10" readOnly={!canEdit} disabled={!canEdit}
             value={safety} onChange={(e) => setSafety(e.target.value)} />
         </div>
         <div>
           <label className="label" htmlFor="dr-cu">Copper (EGP/KG)</label>
-          <input id="dr-cu" className="input w-32" type="number" step="1" min="0"
+          <input id="dr-cu" className="input w-32" type="number" step="1" min="0" readOnly={!canEdit} disabled={!canEdit}
             value={copper} onChange={(e) => setCopper(e.target.value)} />
         </div>
-        <button className="btn-primary mb-0.5" disabled={busy} onClick={save}>
-          {busy ? "Saving…" : "Save & publish"}
-        </button>
+        {canEdit && (
+          <button className="btn-primary mb-0.5" disabled={busy} onClick={save}>
+            {busy ? "Saving…" : "Save & publish"}
+          </button>
+        )}
       </div>
       {err && <p className="mt-2 text-sm font-semibold text-red-700">{err}</p>}
       {msg && <p className="mt-2 text-sm font-semibold text-green-700">{msg}</p>}
+      {history.length > 0 && (
+        <div className="mt-4 border-t border-line pt-3">
+          <button type="button" onClick={() => setShowHistory((v) => !v)}
+            className="flex items-center gap-1.5 text-xs font-bold text-brand-dark hover:underline">
+            <span className={`text-[11px] text-muted transition-transform ${showHistory ? "rotate-90" : ""}`}>▶</span>
+            Rate history ({history.length})
+          </button>
+          {showHistory && (
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full min-w-[560px] border-collapse text-[12px]">
+                <thead>
+                  <tr className="border-b border-line text-left text-[10px] uppercase tracking-wide text-muted">
+                    <th className="py-1 pr-3 font-bold">Ver.</th>
+                    <th className="py-1 pr-3 text-right font-bold">USD</th>
+                    <th className="py-1 pr-3 text-right font-bold">EUR</th>
+                    <th className="py-1 pr-3 text-right font-bold">Safety</th>
+                    <th className="py-1 pr-3 text-right font-bold">Copper</th>
+                    <th className="py-1 pr-3 font-bold">Changed</th>
+                    <th className="py-1 pr-3 font-bold">Published</th>
+                    <th className="py-1 font-bold">By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((h) => {
+                    let changed: string[] = [];
+                    try { changed = JSON.parse(h.changed) as string[]; } catch { changed = []; }
+                    return (
+                      <tr key={h.id} className="border-b border-line/60 tabular-nums">
+                        <td className="py-1 pr-3 font-semibold text-ink">{h.id}</td>
+                        <td className="py-1 pr-3 text-right">{h.usd}</td>
+                        <td className="py-1 pr-3 text-right">{h.euro}</td>
+                        <td className="py-1 pr-3 text-right">{(h.safetyFactor * 100).toFixed(2).replace(/\.?0+$/, "")}%</td>
+                        <td className="py-1 pr-3 text-right">{h.copper}</td>
+                        <td className="py-1 pr-3 text-muted">{changed.join(", ") || "—"}</td>
+                        <td className="py-1 pr-3 text-muted">{new Date(h.publishedAt).toLocaleString()}</td>
+                        <td className="py-1 text-muted">{h.publishedBy || "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

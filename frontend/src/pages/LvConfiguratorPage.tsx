@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorkers, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
+import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorkers, listQtns, supersededNumbers, summaryOf, type QtnRecord } from "../lv/qtns";
 import ReassignQtnModal from "../components/ReassignQtnModal";
 import CoWorkModal from "../components/CoWorkModal";
 import { maskQtn, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
@@ -26,7 +26,7 @@ import {
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpEnclosureRecord, lcpSizes, lcpRealBox,
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog,
+  initialState, calcPanel, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog, rateUpdate, pickRates, type RateSet,
   panelLayout, panelNumbers, commonNamePrefix, resortByGroup, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
@@ -46,7 +46,7 @@ import {
 import { rankSearchOptions } from "../lv/search";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
-import { catalogVersion } from "../lv/catalogSource";
+import { catalogVersion, latestRateVersion, onCatalogChange } from "../lv/catalogSource";
 import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import {
   api, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
@@ -360,6 +360,14 @@ export default function LvConfiguratorPage() {
   // Cancelled = this revision was superseded by a newer amendment (a higher revision of
   // the same base exists). Derived from the QTN list; makes the revision read-only.
   const [cancelled, setCancelled] = useState(false);
+  // "Updated default rates available" — set when newer default rates have been published and
+  // this eligible quotation is still on an older version. Null = no warning.
+  const [rateModal, setRateModal] = useState<{ current: RateSet; latest: RateSet } | null>(null);
+  const [rateErr, setRateErr] = useState("");
+  const [rateBusy, setRateBusy] = useState(false);
+  // Bumped whenever the live catalogue swaps (a publish), so the rate-warning check re-runs
+  // once the freshly-published rates have loaded.
+  const [catalogTick, setCatalogTick] = useState(0);
 
   // Load the quotation from the backend on mount (redirect to the list if gone).
   useEffect(() => {
@@ -370,18 +378,11 @@ export default function LvConfiguratorPage() {
         if (!alive) return;
         if (!r) { navigate("/lv", { replace: true }); return; }
         setRec(r);
-        // A DRAFT follows the LIVE copper price: it hasn't been sent, so it should quote on today's
-        // copper (the "Default rates for new quotations" value), not whatever it was created with.
-        // Only the primary owner writes it — factors are an owner-owned/shared field — and only
-        // while it's a Draft; submitted / approved / cancelled stay frozen. The change persists on
-        // the load-time autosave. (Other rates are left alone; copper is the volatile commodity.)
+        // A quotation keeps the rates it was built with — nothing is auto-changed on open. When
+        // newer default rates have been published, the "Updated default rates" warning (below)
+        // offers to apply them, and only an explicit choice changes anything. (This replaced an
+        // old rule that silently bumped a Draft's copper to the live value on every open.)
         const st = r.state;
-        const coWork = (r.coOwners ?? []).length > 0;
-        const iAmPrimary = !coWork || user?.id === r.ownerId;
-        const liveCu = DEFAULT_FACTORS.copper ?? 0;
-        if (r.status === "DRAFT" && iAmPrimary && st.factors && liveCu > 0 && st.factors.copper !== liveCu) {
-          st.factors = { ...st.factors, copper: liveCu };
-        }
         setHist({ past: [], present: st, future: [] });
         setQtnNum(r.number);
         setStatus(r.status);
@@ -904,6 +905,45 @@ export default function LvConfiguratorPage() {
   // edits are gated per-panel in `upPanel`; the panel ARRANGEMENT (order) belongs to
   // the primary owner alone, so reorder is gated on `sharedReadOnly` too.
   const sharedReadOnly = readOnly || (coWork && !isPrimary);
+
+  // ── Updated default rates warning ────────────────────────────────────────────
+  // When an admin publishes new default rates (USD / EUR / safety / copper), an eligible
+  // quotation still on an older version is offered them on open — the ONLY way its rates
+  // change (publishing never touches an existing quotation on its own). Submitted / cancelled
+  // are frozen. Rates belong to the owner, so a co-worker is never prompted.
+  useEffect(() => onCatalogChange(() => setCatalogTick((n) => n + 1)), []);
+  useEffect(() => {
+    if (loading || !rec || cancelled || !isPrimary) { setRateModal(null); return; }
+    const data = rateUpdate(s, status, latestRateVersion(), pickRates(DEFAULT_FACTORS));
+    setRateModal(data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, rec, status, cancelled, isPrimary, s.rateVersion, s.rateVersionDismissed, s.factors, catalogTick]);
+
+  // Apply the latest published rates to THIS quotation, or keep its current ones. For an
+  // editable quotation the normal autosave persists the change; for one locked under approval
+  // the dedicated endpoint writes just the four rates (autosave is off in that state).
+  const decideRates = async (action: "apply" | "keep") => {
+    if (!rec) return;
+    const latest = latestRateVersion();
+    const patch: Partial<LvState> =
+      action === "apply"
+        ? { factors: { ...s.factors, ...pickRates(DEFAULT_FACTORS) }, rateVersion: latest }
+        : { rateVersionDismissed: latest };
+    setRateBusy(true); setRateErr("");
+    try {
+      if (readOnly) {
+        const summary = action === "apply" ? summaryOf({ ...s, ...patch } as LvState) : undefined;
+        await api.qtns.rateDecision(rec.id, action, summary);
+      }
+      setHist((h) => ({ ...h, present: { ...h.present, ...patch } }));
+      setRateModal(null);
+    } catch (e) {
+      setRateErr((e as Error).message || "Could not update the rates. Please try again.");
+    } finally {
+      setRateBusy(false);
+    }
+  };
+
   // Resolve a panel-owner id to a display name / initials for the co-work badges.
   const ownerNameById = (id?: string | null) => {
     if (!id) return "";
@@ -1754,6 +1794,18 @@ export default function LvConfiguratorPage() {
       )}
       {/* Themed replacement for window.confirm — renders only while one is open. */}
       {confirmModal}
+      {/* Newly-published default rates — offer to apply them to this quotation. */}
+      {rateModal && (
+        <RateUpdateModal
+          current={rateModal.current}
+          latest={rateModal.latest}
+          statusLabel={QTN_STATUS_LABEL[status]}
+          busy={rateBusy}
+          error={rateErr}
+          onApply={() => decideRates("apply")}
+          onKeep={() => decideRates("keep")}
+        />
+      )}
       {/* The offer-export warnings, shown before a quotation is sent for approval. */}
       {approvalWarns && (
         <ExportWarnModal
@@ -2427,6 +2479,67 @@ function ExportWarnModal({
         <div className="mt-5 flex justify-end gap-2">
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn-primary" onClick={onProceed}>{proceedLabel}</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/** "Updated default rates available" — shown when newer default rates (USD / EUR / safety /
+ *  copper) have been published and this eligible quotation is still on an older version. The
+ *  user applies them to this quotation or keeps its current ones; nothing else changes them.
+ *  A choice is required (no dismiss) — "Keep current rates" is the safe one. */
+function RateUpdateModal({
+  current, latest, statusLabel, busy, error, onApply, onKeep,
+}: {
+  current: RateSet; latest: RateSet; statusLabel: string;
+  busy: boolean; error: string; onApply: () => void; onKeep: () => void;
+}) {
+  const num = (n: number) => (n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const pct = (n: number) => `${((n ?? 0) * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+  const rows = [
+    { label: "USD → EGP", cur: num(current.usd), next: num(latest.usd), changed: current.usd !== latest.usd },
+    { label: "EUR → EGP", cur: num(current.euro), next: num(latest.euro), changed: current.euro !== latest.euro },
+    { label: "Safety factor", cur: pct(current.safetyFactor), next: pct(latest.safetyFactor), changed: current.safetyFactor !== latest.safetyFactor },
+    { label: "Copper (EGP/KG)", cur: num(current.copper), next: num(latest.copper), changed: current.copper !== latest.copper },
+  ];
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 no-print">
+      <div className="fixed inset-0 bg-ink/40 animate-fade-in" />
+      <div role="dialog" aria-modal="true" aria-label="Updated default rates available"
+        className="relative w-full max-w-md rounded-xl2 border border-line bg-white p-6 shadow-lift animate-pop">
+        <div className="mb-3 flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-light text-xl text-brand-dark">↻</div>
+          <div>
+            <h2 className="text-lg font-extrabold tracking-tight text-ink">Updated default rates available</h2>
+            <p className="text-sm text-muted">New default rates have been published since this quotation. It is currently <b>{statusLabel}</b>.</p>
+          </div>
+        </div>
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-muted">
+              <th className="py-1.5 font-bold">Rate</th>
+              <th className="py-1.5 text-right font-bold">Current QTN</th>
+              <th className="py-1.5 text-right font-bold">New default</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.label} className="border-b border-line/60">
+                <td className="py-1.5">{r.label}</td>
+                <td className="py-1.5 text-right tabular-nums text-muted">{r.cur}</td>
+                <td className={`py-1.5 text-right tabular-nums ${r.changed ? "font-bold text-brand-dark" : "text-muted"}`}>{r.next}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-4 text-sm font-semibold text-ink">Apply these new rates to this quotation?</p>
+        <p className="mt-0.5 text-[12px] text-muted">Applying updates only the four rates above and re-prices this quotation. Your panel factors and any manual overrides are kept, and no other quotation is affected.</p>
+        {error && <p className="mt-2 text-sm font-semibold text-red-700">{error}</p>}
+        <div className="mt-5 flex justify-end gap-2">
+          <button className="btn-ghost" disabled={busy} onClick={onKeep}>Keep current rates</button>
+          <button className="btn-primary" disabled={busy} onClick={onApply}>{busy ? "Applying…" : "Apply to this QTN"}</button>
         </div>
       </div>
     </div>,

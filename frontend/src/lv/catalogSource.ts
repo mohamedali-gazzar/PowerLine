@@ -33,10 +33,20 @@ export interface CatalogPayload {
   /** Optional: absent from an older server, or when the combinations table has
    *  not been seeded. Either way the bundled templates stay in use. */
   combos?: Partial<CombosData>;
+  /** The current published DEFAULT-RATE version (see pricing-lv.controller). A new
+   *  quotation stamps this; an open one warns when it is behind. 0 / absent = unknown. */
+  rateVersion?: number;
 }
 
 const LS_KEY = "powerline-catalog"; // one key, overwritten — never version-suffixed
 let loadedVersion = 0;
+// The latest published default-rate version (USD/EUR/safety/copper). Rides in the LV
+// catalogue payload; 0 until the first catalogue with rate versioning is loaded.
+let rateVersionN = 0;
+/** The current published default-rate version, or 0 if not known yet. */
+export function latestRateVersion(): number {
+  return rateVersionN;
+}
 
 // The catalogue arrays are mutated in place, so React cannot see a new version
 // land. Anything that publishes (a price edit, an import, the publish button)
@@ -101,6 +111,7 @@ function restoreBundled(): void {
   const { forms, ...flat } = BUNDLED_FACTORS;
   Object.assign(DEFAULT_FACTORS, flat);
   Object.assign(DEFAULT_FACTORS.forms, forms);
+  rateVersionN = 0; // bundled catalogue has no published rate version
   // Deep-copied on the way back out too, so the pristine copy cannot be mutated
   // through COMBOS by a later install.
   installCombos(JSON.parse(JSON.stringify(BUNDLED_COMBOS)));
@@ -143,6 +154,7 @@ export function installCatalog(p: CatalogPayload, version: number): void {
     Object.assign(DEFAULT_FACTORS, flat);
     if (forms) Object.assign(DEFAULT_FACTORS.forms, forms);
   }
+  if (typeof p.rateVersion === "number") rateVersionN = p.rateVersion;
 
   // Combination templates are owner-editable and published with the catalogue.
   // Guarded on all five sections being present: a partial set would leave the
