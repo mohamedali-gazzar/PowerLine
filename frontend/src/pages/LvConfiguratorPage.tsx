@@ -1611,10 +1611,29 @@ export default function LvConfiguratorPage() {
             </button>
             {!headerMin && <span>{s.project.name || (isCustomQtn ? "Custom Commercial Offer" : "LV Quotation")}</span>}
           </h1>
-          <p className={`text-sm text-muted ${headerMin ? "hidden" : ""}`}>
-            {fmtEgp(totals.sell)} EGP excl. VAT
-            {totals.sell > 0 && <> · <strong className="text-ink">{fmtEgp(totals.incl)}</strong> incl. {Math.round(s.factors.vat * 100)}% VAT</>}
-          </p>
+          {/* The price used to sit here; the owner asked for the quick actions instead — Copy link
+              and the ERP export — right under the quotation number. */}
+          <div className={`mt-1 ${headerMin ? "hidden" : "flex flex-wrap items-center gap-2"}`}>
+            <button type="button" onClick={copyOfferLink}
+              title="Copy a clickable link to this offer, named by its quotation number — paste it into the ERP"
+              className="rounded-full border border-line bg-white px-4 py-1.5 text-xs font-bold text-ink hover:border-brand/50 hover:text-brand-dark no-print">
+              {linkCopied ? "✓ Copied" : "🔗 Copy link"}
+            </button>
+            {showErp && erpUrl && (
+              <a href={erpUrl} target="_blank" rel="noopener noreferrer"
+                title={`Open this quotation in the ERP — ${erpUrl}`}
+                className="inline-flex items-center gap-1 rounded-full border border-brand bg-brand-light px-4 py-1.5 text-xs font-bold text-brand-dark transition-colors hover:bg-brand hover:text-white no-print">
+                ↗ Go to ERP
+              </a>
+            )}
+            {erpCount > 0 && (
+              <button onClick={exportErpCsv}
+                title={`Download ${erpCount} panel${erpCount > 1 ? "s" : ""} as an ERPNext "Bulk Edit Items" CSV for your ERP`}
+                className="rounded-full border border-brand bg-white px-4 py-1.5 text-xs font-bold text-brand-dark hover:bg-brand-light no-print">
+                ⬇ ERP CSV
+              </button>
+            )}
+          </div>
           {/* Workflow stage, under the price — it belongs with the quotation's own
               details rather than among the buttons that act on it. */}
           {/* text-sm (14px) rather than text-xs (12px) — the 2px the owner asked for. */}
@@ -1628,13 +1647,7 @@ export default function LvConfiguratorPage() {
           </div>
         </div>
         <div className={headerMin ? "hidden" : "flex flex-col items-end gap-2"}>
-          {/* The action buttons and the Share dropdown form their own group, sized by
-              `w-max` to the buttons' natural width — so the dropdown below spans exactly
-              their combined width. It has to be a separate group: the ERP / Check-for-
-              updates row underneath is wider, and would otherwise stretch the dropdown
-              past the buttons. Widths are not fixed per button because the set changes
-              with the workflow stage. */}
-          <div className="flex w-max flex-col items-stretch gap-2">
+          {/* Primary workflow button and the Share dropdown sit side by side on one row. */}
           <div className="flex flex-wrap items-center justify-end gap-2">
             {/* One primary workflow button, chosen by the viewer's role and the stage — and after
                 an action it becomes that action's Withdraw (undo), in the same slot. The builder
@@ -1739,27 +1752,23 @@ export default function LvConfiguratorPage() {
                 <option value="whatsapp">🟢 WhatsApp — message, with the two PDFs</option>
               </select>
             )}
-          </div>
-          {/* Hand over and Co-Work both answer "give this to someone else", so they
-              share one dropdown, on its own line under the action buttons and matching
-              their width. It stays on its placeholder — picking an entry opens that
-              dialog rather than setting a value. Only the options the user is allowed
-              to use are listed, so the permissions behave exactly as before. */}
-          {!cancelled && (canReassign || canCoWork) && status !== "SUBMITTED" && (
-            <select
-              className={`btn-ghost w-0 min-w-full cursor-pointer ${coWork ? "text-brand-dark" : ""}`}
-              value=""
-              title="Hand this quotation to someone else, or build it together"
-              onChange={(e) => {
-                if (e.target.value === "handover") setReassignOpen(true);
-                if (e.target.value === "cowork") setCoWorkOpen(true);
-              }}
-            >
-              <option value="">{coWork ? "👥 Shared ✓" : "👥 Share…"}</option>
-              {canReassign && <option value="handover">⇄ Hand over — give it to someone else</option>}
-              {canCoWork && <option value="cowork">👥 Co-Work{coWork ? " ✓" : ""} — build it together, split by panel</option>}
-            </select>
-          )}
+            {/* Share sits right beside the main workflow button (Hand over / Co-Work). It stays on
+                its placeholder — picking an entry opens that dialog rather than setting a value. */}
+            {!cancelled && (canReassign || canCoWork) && status !== "SUBMITTED" && (
+              <select
+                className={`btn-ghost cursor-pointer ${coWork ? "text-brand-dark" : ""}`}
+                value=""
+                title="Hand this quotation to someone else, or build it together"
+                onChange={(e) => {
+                  if (e.target.value === "handover") setReassignOpen(true);
+                  if (e.target.value === "cowork") setCoWorkOpen(true);
+                }}
+              >
+                <option value="">{coWork ? "👥 Shared ✓" : "👥 Share…"}</option>
+                {canReassign && <option value="handover">⇄ Hand over — give it to someone else</option>}
+                {canCoWork && <option value="cowork">👥 Co-Work{coWork ? " ✓" : ""} — build it together, split by panel</option>}
+              </select>
+            )}
           </div>
           {/* Second row: the secondary workflow moves — Return for revision, Withdraw,
               Reopen — alongside the file/refresh actions. Keeping them out of the top
@@ -1804,25 +1813,8 @@ export default function LvConfiguratorPage() {
                 🔓 Reopen
               </button>
             )}
-            <button type="button" onClick={copyOfferLink}
-              title="Copy a clickable link to this offer, named by its quotation number — paste it into the ERP"
-              className="rounded-full border border-line bg-white px-4 py-1.5 text-xs font-bold text-ink hover:border-brand/50 hover:text-brand-dark no-print">
-              {linkCopied ? "✓ Copied" : "🔗 Copy link"}
-            </button>
-            {showErp && erpUrl && (
-              <a href={erpUrl} target="_blank" rel="noopener noreferrer"
-                title={`Open this quotation in the ERP — ${erpUrl}`}
-                className="inline-flex items-center gap-1 rounded-full border border-brand bg-brand-light px-4 py-1.5 text-xs font-bold text-brand-dark transition-colors hover:bg-brand hover:text-white no-print">
-                ↗ Go to ERP
-              </a>
-            )}
-            {erpCount > 0 && (
-              <button onClick={exportErpCsv}
-                title={`Download ${erpCount} panel${erpCount > 1 ? "s" : ""} as an ERPNext "Bulk Edit Items" CSV for your ERP`}
-                className="rounded-full border border-brand bg-white px-4 py-1.5 text-xs font-bold text-brand-dark hover:bg-brand-light no-print">
-                ⬇ ERP CSV
-              </button>
-            )}
+            {/* Copy link and the ERP export moved up under the quotation number (they replaced the
+                price). "Check for updates" stays here. */}
             {/* Re-price this quotation to the current price list — offered only while it's an
                 editable draft/returned QTN (the estimator's own work), never once it's locked. */}
             {!readOnly && !reviewSandbox && <CatalogUpdateCheck onApply={applyCatalogPrices} autoOpen />}

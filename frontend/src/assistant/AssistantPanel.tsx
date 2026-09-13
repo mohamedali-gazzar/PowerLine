@@ -205,19 +205,24 @@ export default function AssistantPanel() {
 
   return createPortal(
     <div className="no-print" aria-hidden={!open}>
-      {/* Floating launcher, bottom-right — fades out while the panel is open. Only on a QTN. */}
+      {/* Floating launcher, bottom-right — fades out while the panel is open. Only on a QTN.
+          Idle it's a compact round icon so it doesn't bury the row action controls beneath it;
+          it expands to show the "Assistant" label on hover. */}
       <button
         type="button"
         onClick={() => assistantStore.open()}
         title="Open the QTN Assistant"
-        className={`fixed bottom-5 right-5 z-[80] inline-flex items-center gap-2 rounded-full bg-brand px-4 py-3 text-sm font-bold text-white shadow-lift transition-all duration-300 hover:bg-brand-dark ${
+        aria-label="Open the QTN Assistant"
+        className={`group fixed bottom-4 right-4 z-[80] inline-flex items-center rounded-full bg-brand p-3 text-sm font-bold text-white shadow-lift transition-all duration-300 hover:bg-brand-dark hover:pr-4 ${
           feed && !open ? "opacity-100" : "pointer-events-none translate-y-2 opacity-0"
         }`}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
-        Assistant
+        <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 group-hover:ml-2 group-hover:max-w-[7rem] group-hover:opacity-100">
+          Assistant
+        </span>
       </button>
 
       {/* A very faint tint behind a FLOATING open panel — never intercepts pointer events, so the

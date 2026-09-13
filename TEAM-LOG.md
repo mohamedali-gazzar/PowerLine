@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**Tidied the top of a quotation: the Assistant button no longer covers the row buttons, the price line is replaced by the Copy link / ERP CSV buttons, and Share sits next to Send for approval.**
+
+Three small layout fixes:
+- The floating **Assistant** button used to sit on top of the delete / edit / checkbox controls at the right of the
+  rows. It's now a small round icon tucked in the corner (it grows to show the word "Assistant" when you hover), so it
+  no longer covers anything.
+- The **price line** under the quotation number is gone; **Copy link** and **ERP CSV** now sit there instead. (The
+  total still shows on the Summary and Commercial Offer tabs.)
+- **Share…** now sits right beside **Send for approval** on the same row; **Check for updates** stays where it was.
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **Dropped the small "DEFAULT" tag inside the workflow button's dropdown.**
 
 The dropdown under the main workflow button no longer prints a "DEFAULT" tag next to the first option. The default is
