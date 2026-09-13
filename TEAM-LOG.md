@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**Rearranged the top of a quotation and the toolbar to be tidier.**
+
+- **Copy link** and **ERP CSV** now sit on the same line as the quotation number, framed to match it and aligned to it.
+- On the right, the actions are one clean row lined up with the quotation number: **Check for updates · Share · Send for
+  approval** (Share sits just left of Send for approval, at a sensible width).
+- **Undo / Redo** are now just their arrows (↶ ↷) to save space; hover still shows what they do.
+- **Replace component** moved out of the Components section up to the toolbar, right beside Undo / Redo.
+- Removed the per-panel **"Draft" notes box** (any text already typed there is kept in the saved file, just no longer
+  shown) and the little helper line under **"Notes & sticky board"**.
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **"Copy link" and "Go to ERP" are now one button, and the header shows just the quotation number.**
 
 - The button under the quotation number does both jobs in sequence: click it once and it copies the link and turns into

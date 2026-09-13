@@ -317,6 +317,7 @@ export default function LvConfiguratorPage() {
   });
   const [matAbbOnly, setMatAbbOnly] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false); // after copying, the same button flips to "Go to ERP"
+  const [replaceOpen, setReplaceOpen] = useState(false); // "Replace component across panels" window (toolbar button)
   // Decides the "Copy link" button's branch on click — copy first, then (next click) open the ERP.
   // A ref (not state) so a real double-click's two rapid clicks don't race the re-render. Declared
   // here with the other hooks so it's always called, never after an early return.
@@ -1193,6 +1194,18 @@ export default function LvConfiguratorPage() {
     }
     apply((old) => ({ ...old, panels: old.panels.map((p) => (p.id === id ? { ...p, ...next } : p)) }));
   };
+  // Replace every catalogue instance (matched by reference + name) with `nc`, across the given
+  // panels — keeps each instance's qty / adjustments / group / section and swaps only the
+  // catalogue fields. Lifted here so the "Replace component" button can sit in the top toolbar,
+  // beside Undo/Redo, rather than inside the Components section.
+  const replaceComponent = (matchRef: string, matchName: string, nc: DbComponent, panelIds: Set<string>) => {
+    const swap = (x: PanelComponent): PanelComponent =>
+      (!isSpacer(x) && x.ref === matchRef && x.name === matchName)
+        ? { ...x, name: nc.n, desc: nc.d, ref: nc.ref, type: nc.t, brand: nc.brand, rating: nc.r,
+            eur: nc.eur, egp: nc.egp, poles: nc.poles, cuP: nc.cuP, cuC: nc.cuC, stock: nc.stock }
+        : x;
+    up({ panels: s.panels.map((pp) => (panelIds.has(pp.id) ? { ...pp, components: pp.components.map(swap) } : pp)) });
+  };
   // "Revert changes" on the EDMS warning: restore the panel to the snapshot taken
   // when the warning first fired (undoes every protected change made since).
   const revertEdmsPanel = () => {
@@ -1595,23 +1608,21 @@ export default function LvConfiguratorPage() {
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3 animate-fade-up no-print">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 animate-fade-up no-print">
         <div>
           <div className="flex items-center gap-3">
             <Link to="/" className="text-xs font-semibold text-brand hover:underline">← My QTNs</Link>
           </div>
-          <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight">
-            <span className="code-chip">{offerLabel}</span>
-          </h1>
-          {/* The price used to sit here; the owner asked for the quick actions instead — Copy link
-              and the ERP export — right under the quotation number. */}
-          <div className="mt-1 flex flex-wrap items-center gap-2">
+          {/* The quotation number, with the quick actions (Copy link / ERP export) on the same line
+              beside it. */}
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <h1 className="flex items-center text-2xl font-extrabold leading-none tracking-tight"><span className="code-chip">{offerLabel}</span></h1>
             {/* One button in this spot: a click copies the link, then it flips to "Go to ERP" so a
                 second click (or a double-click) opens the ERP. Falls back to a "✓ Copied" flash when
                 the quotation has no ERP number yet. */}
             <button type="button" onClick={copyOrGoErp}
               title={linkCopied && erpUrl ? `Open this quotation in the ERP — ${erpUrl}` : "Copy a clickable link to this offer — click again to open the ERP"}
-              className={`rounded-full border px-4 py-1.5 text-xs font-bold transition-colors no-print ${
+              className={`rounded-lg border px-3 py-1 text-sm font-bold transition-colors no-print ${
                 linkCopied && erpUrl
                   ? "border-brand bg-brand-light text-brand-dark hover:bg-brand hover:text-white"
                   : "border-line bg-white text-ink hover:border-brand/50 hover:text-brand-dark"
@@ -1621,7 +1632,7 @@ export default function LvConfiguratorPage() {
             {erpCount > 0 && (
               <button onClick={exportErpCsv}
                 title={`Download ${erpCount} panel${erpCount > 1 ? "s" : ""} as an ERPNext "Bulk Edit Items" CSV for your ERP`}
-                className="rounded-full border border-brand bg-white px-4 py-1.5 text-xs font-bold text-brand-dark hover:bg-brand-light no-print">
+                className="rounded-lg border border-brand bg-white px-3 py-1 text-sm font-bold text-brand-dark hover:bg-brand-light no-print">
                 ⬇ ERP CSV
               </button>
             )}
@@ -1639,8 +1650,29 @@ export default function LvConfiguratorPage() {
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
-          {/* Primary workflow button and the Share dropdown sit side by side on one row. */}
+          {/* Check for updates, then Share, then the primary workflow button — all on one row. */}
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {/* Re-price this quotation to the current price list — offered only while it's an
+                editable draft/returned QTN (the estimator's own work), never once it's locked. */}
+            {!readOnly && !reviewSandbox && <CatalogUpdateCheck onApply={applyCatalogPrices} autoOpen />}
+            {/* Share — Hand over / Co-Work. Stays on its placeholder; picking an entry opens that
+                dialog rather than setting a value. A compact fixed width so the dropdown doesn't
+                stretch to fit its longest option. */}
+            {!cancelled && (canReassign || canCoWork) && status !== "SUBMITTED" && (
+              <select
+                className={`btn-ghost w-36 cursor-pointer ${coWork ? "text-brand-dark" : ""}`}
+                value=""
+                title="Hand this quotation to someone else, or build it together"
+                onChange={(e) => {
+                  if (e.target.value === "handover") setReassignOpen(true);
+                  if (e.target.value === "cowork") setCoWorkOpen(true);
+                }}
+              >
+                <option value="">{coWork ? "👥 Shared ✓" : "👥 Share…"}</option>
+                {canReassign && <option value="handover">⇄ Hand over — give it to someone else</option>}
+                {canCoWork && <option value="cowork">👥 Co-Work{coWork ? " ✓" : ""} — build it together, split by panel</option>}
+              </select>
+            )}
             {/* One primary workflow button, chosen by the viewer's role and the stage — and after
                 an action it becomes that action's Withdraw (undo), in the same slot. The builder
                 (owner / co-worker) sends and then withdraws; the reviewer returns-or-approves and
@@ -1744,23 +1776,6 @@ export default function LvConfiguratorPage() {
                 <option value="whatsapp">🟢 WhatsApp — message, with the two PDFs</option>
               </select>
             )}
-            {/* Share sits right beside the main workflow button (Hand over / Co-Work). It stays on
-                its placeholder — picking an entry opens that dialog rather than setting a value. */}
-            {!cancelled && (canReassign || canCoWork) && status !== "SUBMITTED" && (
-              <select
-                className={`btn-ghost cursor-pointer ${coWork ? "text-brand-dark" : ""}`}
-                value=""
-                title="Hand this quotation to someone else, or build it together"
-                onChange={(e) => {
-                  if (e.target.value === "handover") setReassignOpen(true);
-                  if (e.target.value === "cowork") setCoWorkOpen(true);
-                }}
-              >
-                <option value="">{coWork ? "👥 Shared ✓" : "👥 Share…"}</option>
-                {canReassign && <option value="handover">⇄ Hand over — give it to someone else</option>}
-                {canCoWork && <option value="cowork">👥 Co-Work{coWork ? " ✓" : ""} — build it together, split by panel</option>}
-              </select>
-            )}
           </div>
           {/* Second row: the secondary workflow moves — Return for revision, Withdraw,
               Reopen — alongside the file/refresh actions. Keeping them out of the top
@@ -1805,11 +1820,7 @@ export default function LvConfiguratorPage() {
                 🔓 Reopen
               </button>
             )}
-            {/* Copy link and the ERP export moved up under the quotation number (they replaced the
-                price). "Check for updates" stays here. */}
-            {/* Re-price this quotation to the current price list — offered only while it's an
-                editable draft/returned QTN (the estimator's own work), never once it's locked. */}
-            {!readOnly && !reviewSandbox && <CatalogUpdateCheck onApply={applyCatalogPrices} autoOpen />}
+            {/* Check for updates moved up to the primary row (beside Share). */}
           </div>
         </div>
       </div>
@@ -1947,12 +1958,23 @@ export default function LvConfiguratorPage() {
         {/* Undo / Redo live at the right end of the tab strip, so they stay reachable (the strip is
             sticky) without crowding the workflow buttons in the header. */}
         <div className="ml-auto flex items-center gap-1.5">
-          <button onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)"
-            className="rounded-full border border-line bg-white px-3.5 py-1.5 text-sm font-semibold text-muted transition-colors hover:border-brand/40 hover:text-brand-dark disabled:opacity-40 disabled:hover:border-line disabled:hover:text-muted">↶ Undo</button>
-          <button onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)"
-            className="rounded-full border border-line bg-white px-3.5 py-1.5 text-sm font-semibold text-muted transition-colors hover:border-brand/40 hover:text-brand-dark disabled:opacity-40 disabled:hover:border-line disabled:hover:text-muted">↷ Redo</button>
+          {/* Replace component — beside Undo/Redo; Panels tab only, when editing is allowed. */}
+          {activeTab === "panels" && !readOnly && s.panels.length > 0 && (
+            <button type="button" onClick={() => setReplaceOpen(true)}
+              title="Find a component used in this quotation and replace it across all / selected panels"
+              className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-white px-3.5 py-1.5 text-sm font-bold text-brand-dark transition hover:border-brand hover:bg-brand-light">
+              ⇄ Replace component
+            </button>
+          )}
+          {/* Undo / Redo — icons only (the tooltip and aria-label carry the meaning). */}
+          <button onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)" aria-label="Undo (Ctrl+Z)"
+            className="rounded-full border border-line bg-white px-3 py-1.5 text-base font-semibold leading-none text-muted transition-colors hover:border-brand/40 hover:text-brand-dark disabled:opacity-40 disabled:hover:border-line disabled:hover:text-muted">↶</button>
+          <button onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo (Ctrl+Shift+Z)"
+            className="rounded-full border border-line bg-white px-3 py-1.5 text-base font-semibold leading-none text-muted transition-colors hover:border-brand/40 hover:text-brand-dark disabled:opacity-40 disabled:hover:border-line disabled:hover:text-muted">↷</button>
         </div>
       </div>
+
+      {replaceOpen && <ReplaceComponentModal s={s} replaceComponent={replaceComponent} factors={s.factors} onClose={() => setReplaceOpen(false)} />}
 
       {coWork && (
         <div className="mb-4 rounded-xl border border-brand/30 bg-brand-tint/60 px-4 py-3 text-sm no-print">
@@ -6035,7 +6057,6 @@ function SummaryTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
         <div className="flex items-center justify-between gap-2">
           <div>
             <h2 className="sec-head mb-0">Notes &amp; sticky board</h2>
-            <p className="text-xs text-muted">Drag to arrange · click to edit · pick a colour. Saved with the QTN.</p>
           </div>
           <button type="button" onClick={addNote}
             className="shrink-0 rounded-full border border-brand bg-brand px-4 py-1.5 text-xs font-bold text-white hover:bg-brand-dark">+ Add note</button>
@@ -7143,14 +7164,6 @@ function PanelEditor({ s, p, up, upPanel }: {
 
       {/* No. of poles — its own standalone section (sizing summary, not part of Panel type) */}
       <div className="card p-5"><PolesSummary p={p} /></div>
-
-      {/* RPT-1: per-panel Draft — notes & calculations, never included in outputs */}
-      <div className="card p-5">
-        <h2 className="sec-head">Draft <span className="text-[11px] font-normal text-muted">· notes &amp; calculations for this panel (not included in any offer)</span></h2>
-        <textarea className="input min-h-[120px] w-full font-mono text-xs"
-          placeholder="Scratchpad for this panel — calculations, reminders, notes…"
-          value={p.draft ?? ""} onChange={(e) => u({ draft: e.target.value })} />
-      </div>
     </div>
   );
 }
@@ -7381,7 +7394,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   const [pastePreview, setPastePreview] = useState<null | { rows: { name: string; qty: number; match: DbComponent | null }[] }>(null);
   const [pfcTab, setPfcTab] = useState<"known" | "calc">("known"); // P.F.C window: known-data entry vs calculation
   const [pfcCalcKvar, setPfcCalcKvar] = useState<number | null>(null); // required kVAR from the calc tab → known tab
-  const [replaceOpen, setReplaceOpen] = useState(false); // "Replace component" (across panels) window
   // The Standard Panels picker is a Standard EDMS feature only.
   const isEdmsPanel = s.kind === "edms";
   // Standard EDMS builds either a standard Panel or a standard ATS (toggle above the picker).
@@ -8280,15 +8292,10 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   return (
     <div ref={cardRef} className="card relative p-5">
       {dialogs}
+      {/* "Replace component" moved to the top toolbar (beside Undo/Redo). */}
       <div className="-mx-5 -mt-5 mb-0 flex flex-wrap items-center justify-between gap-3 rounded-t-xl2 bg-brand-tint px-5 pb-3 pt-5">
         <h2 className="sec-head !mb-0">{isEdmsPanel ? "Standard Panels" : "Components"}</h2>
-        <button type="button" onClick={() => setReplaceOpen(true)}
-          title="Find a component used in this quotation and replace it across all / selected panels"
-          className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-white px-3 py-1 text-[11px] font-bold text-brand-dark transition hover:border-brand hover:bg-brand-light">
-          ⇄ Replace component
-        </button>
       </div>
-      {replaceOpen && <ReplaceComponentModal s={s} replaceComponent={replaceComponent} factors={s.factors} onClose={() => setReplaceOpen(false)} />}
       {neutralPrompt && <NeutralPromptModal breaker={neutralPrompt.breaker} sensor={neutralPrompt.sensor} onAdd={confirmNeutral} onClose={() => setNeutralPrompt(null)} />}
 
       {/* Standard EDMS only. The picker sits ABOVE the component body — the sections,
