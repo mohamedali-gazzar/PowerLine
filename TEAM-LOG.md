@@ -23,6 +23,28 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-13 · Mohamed's side · Claude
 
+**Default rates are now handled inside "Check for updates" — the separate rate pop-up is gone, and the check opens by itself.**
+
+The standalone "Updated default rates available" pop-up has been removed. Rate changes already show inside the
+"Check for updates" screen (the General settings tab), so that is now the single place for them. Two improvements make
+it work end to end: (1) "Check for updates" now **opens by itself** when an editable quotation (new / draft / returned)
+has anything new — it refreshes from the server first, so it catches changes even if the quotation was left open and
+never reloaded. (2) Its **"Apply changes"** button now also brings the four default rates (USD / EUR / safety / copper)
+up to date, not just component prices — one click updates the whole quotation, keeping your panel factors and manual
+overrides. And before sending for approval, the pre-send review now flags stale default rates too ("the default rates
+have changed — press Check for updates"), so nothing goes to approval on old prices. (Waiting/approved quotations are
+locked, so they update after being returned or withdrawn to an editable state.)
+
+## 2026-09-13 · Mohamed's side · Claude
+
+**"Check for updates": the "User experience" tab was removed.**
+
+The What-changed-in-this-update screen no longer has the "User experience" tab (the hand-written list of app tips). It
+now shows only the real catalogue changes — Prices, General settings and Components. The little "new updates" count now
+reflects only those real changes.
+
+## 2026-09-13 · Mohamed's side · Claude
+
 **The "new default rates" check now also runs at Send for approval — so a quotation left open can't be sent on stale rates.**
 
 Before, the "Updated default rates" popup only appeared when a quotation was opened or reloaded. So if someone left a

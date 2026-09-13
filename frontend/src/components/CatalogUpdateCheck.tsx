@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getToken, api, type CatalogChanges, type CatalogChangeItem } from "../api";
 import { checkCatalogUpdates, catalogVersion } from "../lv/catalogSource";
@@ -6,7 +6,8 @@ import { checkCatalogUpdates, catalogVersion } from "../lv/catalogSource";
 /**
  * "What changed in this update" — the price list / settings / catalogue are edited centrally and
  * published, so a quotation can be started on a catalogue that has since moved. This re-reads the
- * published catalogue and shows what changed across four tabs, with per-row read/unread so the
+ * published catalogue and shows what changed across the Prices / General settings / Components tabs,
+ * with per-row read/unread so the
  * modal is a "seen it once" list. It only swaps what THIS browser quotes from and never writes to
  * the price list; "Apply changes" re-prices the open quotation to the current list.
  */
@@ -38,32 +39,32 @@ const saveReadChanges = (s: Set<string>) => {
 const changeKey = (version: number, it: CatalogChangeItem): string =>
   `${version}|${it.field}|${it.label || it.detail?.ref || it.detail?.d || ""}|${it.oldValue ?? ""}|${it.newValue ?? ""}`;
 
-// ── "User experience" tab — a short, hand-maintained list of app improvements. Each id is stable,
-// so a NEW entry is unread for everyone until they open this modal, then stays read. ───────────────
-const UX_ITEMS: { id: string; title: string; body: string }[] = [
-  { id: "ux-mcc-combo", title: "New circuit combination: MCC starter",
-    body: "Build a DOL or Star-Delta motor starter in one click from the combinations row on the Panels tab — contactors, overload and CB are added as one named group." },
-  { id: "ux-form-warning", title: "Warning when a form isn’t buildable",
-    body: "Choosing Form 3a / 3b / 4a / 4b on an SR-Basic, Unikit or Local panel now asks “proceed anyway?” before it’s set — in either order you pick the form and the family." },
-  { id: "ux-aux-selectivity", title: "Auxiliary panels in Selectivity",
-    body: "LCP and KWHM panels now appear in the Selectivity coordination table alongside the ordinary panels." },
-  { id: "ux-insert-anyway", title: "Insert a no-price item anyway",
-    body: "When you import a price list, a new item that has no price can now be inserted at 0 (and priced later) instead of being skipped — from the Review screen’s “Insert anyway” tab." },
-];
-const uxKey = (id: string) => `ux|${id}`;
-
-export default function CatalogUpdateCheck({ onApply }: { onApply?: () => { changed: number; removed: number } }) {
+export default function CatalogUpdateCheck({ onApply, autoOpen = false }: { onApply?: () => { changed: number; removed: number }; autoOpen?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [changes, setChanges] = useState<CatalogChanges | null>(null);
   const [open, setOpen] = useState(false);
   const [read, setRead] = useState<Set<string>>(() => loadReadChanges());
+  const autoOpenedRef = useRef(false);
 
-  // Load the recent changelog on mount so the red notification count appears without a click.
+  // On mount, load the changelog so the red notification count appears without a click. When
+  // `autoOpen` is set (an editable quotation), first REFRESH from the server — so changes
+  // published while this quotation sat open, with no reload, are seen too.
   useEffect(() => {
     let alive = true;
-    api.catalog.lvChanges(catalogVersion() || undefined).then((c) => { if (alive) setChanges(c); }).catch(() => {});
+    (async () => {
+      if (autoOpen) {
+        const before = catalogVersion();
+        let ok = false;
+        try { ok = (await checkCatalogUpdates(getToken())).ok; } catch { /* offline → use what we have */ }
+        if (!alive) return;
+        try { const c = await api.catalog.lvChanges((ok ? before : catalogVersion()) || undefined); if (alive) setChanges(c); } catch { /* keep */ }
+      } else {
+        try { const c = await api.catalog.lvChanges(catalogVersion() || undefined); if (alive) setChanges(c); } catch { /* ignore */ }
+      }
+    })();
     return () => { alive = false; };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen]);
 
   const run = async () => {
     setBusy(true);
@@ -80,12 +81,21 @@ export default function CatalogUpdateCheck({ onApply }: { onApply?: () => { chan
   const version = changes?.version ?? 0;
   const items = useMemo(() => changes?.items ?? [], [changes]);
 
-  // Every readable thing has a key: a catalogue change (changeKey) or a UX entry (uxKey).
+  // Every readable thing has a key — a catalogue change (changeKey).
   const allKeys = useMemo(
-    () => [...items.map((it) => changeKey(version, it)), ...UX_ITEMS.map((u) => uxKey(u.id))],
+    () => items.map((it) => changeKey(version, it)),
     [items, version],
   );
   const unreadCount = allKeys.filter((k) => !read.has(k)).length;
+
+  // Open the modal by itself, once, when an editable quotation has unread updates — so a
+  // price/rate change can't be missed even if the person never presses the button.
+  useEffect(() => {
+    if (autoOpen && !autoOpenedRef.current && changes && unreadCount > 0) {
+      autoOpenedRef.current = true;
+      setOpen(true);
+    }
+  }, [autoOpen, changes, unreadCount]);
 
   const isRead = (key: string) => read.has(key);
   const markKeys = (keys: string[]) => {
@@ -165,7 +175,6 @@ function WhatChangedModal({ changes, version, onApply, isRead, markKeys, onClose
     { id: "prices", label: "Prices", keys: prices.map(ck) },
     { id: "settings", label: "General settings", keys: settings.map(ck) },
     { id: "components", label: "Components", keys: componentRows.map(ck) },
-    { id: "ux", label: "User experience", keys: UX_ITEMS.map((u) => uxKey(u.id)) },
   ].filter((t) => t.keys.length > 0);
 
   const unread = (t: { keys: string[] }) => t.keys.filter((k) => !isRead(k)).length;
@@ -187,7 +196,7 @@ function WhatChangedModal({ changes, version, onApply, isRead, markKeys, onClose
   const doApply = () => {
     if (!onApply) return;
     setApplied(onApply());
-    // Apply acts on Prices and General settings — mark those read (Components & UX are already live).
+    // Apply acts on Prices and General settings — mark those read (Components are already live).
     markKeys([...prices.map(ck), ...settings.map(ck)]);
   };
 
@@ -256,6 +265,11 @@ function WhatChangedModal({ changes, version, onApply, isRead, markKeys, onClose
 
         {/* Body */}
         <div className="min-h-[8rem] flex-1 overflow-y-auto">
+          {tabs.length === 0 && (
+            <div className="grid h-full min-h-[8rem] place-items-center p-8 text-center text-sm text-muted">
+              Nothing has changed since this quotation — you’re up to date.
+            </div>
+          )}
           {active === "prices" && (
             <PricesTab items={prices} isRead={isRead} mark={(it) => markKeys([ck(it)])} ck={ck} showAll={showAllPrices} onShowAll={() => setShowAllPrices(true)} />
           )}
@@ -267,16 +281,6 @@ function WhatChangedModal({ changes, version, onApply, isRead, markKeys, onClose
           {active === "components" && (
             <ComponentsTab added={added} removed={removed} edited={edited} isRead={isRead} mark={(it) => markKeys([ck(it)])} ck={ck} showAllEdited={showAllEdited} onShowAllEdited={() => setShowAllEdited(true)} />
           )}
-          {active === "ux" && UX_ITEMS.map((u) => {
-            const rd = isRead(uxKey(u.id));
-            return (
-              <Row key={u.id} read={rd} onRead={() => markKeys([uxKey(u.id)])}
-                main={<div>
-                  <div className={`text-sm font-bold ${rd ? "text-muted" : "text-ink"}`}>{u.title}</div>
-                  <div className="mt-0.5 max-w-[46ch] text-xs leading-relaxed text-muted">{u.body}</div>
-                </div>} />
-            );
-          })}
         </div>
 
         {/* Footer */}
@@ -287,7 +291,7 @@ function WhatChangedModal({ changes, version, onApply, isRead, markKeys, onClose
               Version {changes.version}{changes.publishedBy ? ` · published by ${changes.publishedBy}` : ""}{dateStr ? ` · ${dateStr}` : ""}
             </div>
           </div>
-          <button onClick={() => markKeys([...items.map(ck), ...UX_ITEMS.map((u) => uxKey(u.id))])}
+          <button onClick={() => markKeys(items.map(ck))}
             className="shrink-0 rounded-lg border border-line px-3 py-2 text-xs font-bold text-brand transition-colors hover:border-brand hover:bg-brand-tint">
             Mark all as read
           </button>
