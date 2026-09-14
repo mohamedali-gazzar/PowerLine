@@ -5,7 +5,19 @@
 
 import { describe, it, expect } from "vitest";
 import type { PanelComponent } from "./store";
-import { mergeSplitGroups, resolveComboMembershipOnDrop, dropTargetGroup } from "./combosHeal";
+import { mergeSplitGroups, resolveComboMembershipOnDrop, dropTargetGroup, effGroupOf } from "./combosHeal";
+
+// The number of separate header-runs a group name occupies (a healthy combination = exactly 1).
+const runCount = (arr: PanelComponent[], group: string, section = "Incoming") => {
+  const eff = effGroupOf(arr);
+  let runs = 0, inRun = false;
+  for (const c of arr) {
+    const hit = c.section === section && (eff.get(c.id) || "") === group;
+    if (hit && !inRun) runs++;
+    inRun = hit;
+  }
+  return runs;
+};
 
 let n = 0;
 function row(partial: Partial<PanelComponent> & { id?: string }): PanelComponent {
@@ -142,5 +154,55 @@ describe("resolveComboMembershipOnDrop (move a component between combinations)",
       row({ id: "c", group: "LP" }),
     ];
     expect(dropTargetGroup(arr, "b")).toBe("LP"); // sandwiched inside LP → joins LP
+  });
+});
+
+describe("drag-and-drop leaves combinations whole (no duplicate / empty headers)", () => {
+  // Real-world shape seen after buggy drags: an ATS combination whose "Control CT" sub-group ended
+  // up in TWO separate blocks (two headers), split apart by Source 1 / Interlock / Source 2.
+  const atsSplit = () => [
+    row({ id: "ct1", group: "Control CT" }), row({ id: "ct2", group: "Control CT" }),
+    row({ id: "s1a", group: "Source 1" }), row({ id: "s1b", group: "Source 1" }),
+    row({ id: "il1", group: "Interlock" }), row({ id: "il2", group: "Interlock" }),
+    row({ id: "s2a", group: "Source 2" }), row({ id: "s2b", group: "Source 2" }),
+    row({ id: "ct3", group: "Control CT" }), row({ id: "ct4", group: "Control CT" }), // second Control CT block
+  ];
+
+  it("re-knits a combination that was split into two blocks", () => {
+    const healed = mergeSplitGroups(atsSplit());
+    expect(runCount(healed, "Control CT")).toBe(1);   // one header again, not two
+    // every other combination is still a single block
+    for (const g of ["Source 1", "Interlock", "Source 2"]) expect(runCount(healed, g)).toBe(1);
+    // its members are contiguous
+    expect(ids(healed.filter((c) => c.group === "Control CT"))).toBe("ct1,ct2,ct3,ct4");
+  });
+
+  it("a row shown group-less mid-drag never splits the combination it is passing through", () => {
+    // While dragging, the moved row is written group:"" so it floats. Dropped among Source 1's
+    // members it must read as Source 1 (inherited) — NOT paint its own stray header there.
+    const arr = [
+      row({ id: "s1a", group: "Source 1" }),
+      row({ id: "drag", group: "" }),          // the dragged row, blanked, sitting inside Source 1
+      row({ id: "s1b", group: "Source 1" }),
+      row({ id: "ct1", group: "Control CT" }),
+    ];
+    const healed = mergeSplitGroups(arr);
+    expect(runCount(healed, "Source 1")).toBe(1);       // Source 1 stays one block
+    expect(runCount(healed, "Control CT")).toBe(1);
+    expect(effGroupOf(healed).get("drag")).toBe("Source 1"); // the floating row reads as Source 1
+  });
+
+  it("dragging a member out to open space leaves its old combination whole and one header", () => {
+    // ct1 pulled out of Control CT to the end (open space), blanked to group:"" as it would be mid-drag.
+    const arr = [
+      row({ id: "ct2", group: "Control CT" }),
+      row({ id: "s1a", group: "Source 1" }),
+      row({ id: "loose" }),                    // open space
+      row({ id: "ct1", group: "" }),           // the dragged-out member, blanked
+    ];
+    const healed = mergeSplitGroups(arr);
+    expect(runCount(healed, "Control CT")).toBe(1);     // what remains of Control CT is one block
+    expect(runCount(healed, "Source 1")).toBe(1);
+    expect(effGroupOf(healed).get("ct1") || "").toBe(""); // the dragged row is free, no stray header
   });
 });

@@ -10,7 +10,7 @@ import SendForApprovalMenu from "../components/SendForApprovalMenu";
 import WorkflowActionMenu, { type WfAction } from "../components/WorkflowActionMenu";
 import { assistantStore } from "../assistant/assistantStore";
 import { savedCombosStore, useSavedCombos, comboSig } from "../lv/savedCombos";
-import { resolveComboMembershipOnDrop } from "../lv/combosHeal";
+import { mergeSplitGroups, resolveComboMembershipOnDrop } from "../lv/combosHeal";
 import { useReviewLock } from "../hooks/useReviewLock";
 import { usePointerReorder } from "../hooks/usePointerReorder";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
@@ -7729,6 +7729,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   // onClick+preventDefault checkbox drifts out of sync). onClick fires just before onChange and
   // carries the modifier keys, so we stash Shift here for the range-select that onChange then reads.
   const shiftSelRef = useRef(false);
+  // Press a checkbox and drag up/down the column to select a whole range of rows at once.
+  // suppressCheckClickRef cancels the click that would otherwise toggle the row you started on.
+  const suppressCheckClickRef = useRef(false);
   const [moveOpen, setMoveOpen] = useState(false); // "Move to section" dropdown in the selection action bar
   useEffect(() => setMoveOpen(false), [selected]); // close it whenever the selection changes
   const [hoverSum, setHoverSum] = useState<{ col: "qty" | "unit" | "total"; x: number; y: number } | null>(null);
@@ -7796,6 +7799,42 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       return next;
     });
     setLastPickId(id);
+  };
+  // Press-and-drag on a row's checkbox to select a whole range: the rows between where you pressed
+  // and wherever the pointer is get ticked, live, as you drag up or down (any rows already selected
+  // elsewhere stay selected). A plain click without dragging still just toggles the one row.
+  const startCheckboxDragSelect = (e: React.PointerEvent, id: string) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return; // left button only for mouse
+    e.stopPropagation();
+    const ids = orderedIds;                 // selectable rows in render order (spacers excluded)
+    const startIdx = ids.indexOf(id);
+    if (startIdx < 0) return;
+    const base = new Set(selected);         // preserve whatever was already selected
+    const startX = e.clientX, startY = e.clientY;
+    let dragging = false;
+    const paint = (overIdx: number) => {
+      const [lo, hi] = startIdx < overIdx ? [startIdx, overIdx] : [overIdx, startIdx];
+      const next = new Set(base);
+      for (let i = lo; i <= hi; i++) next.add(ids[i]);
+      setSelected(next);
+    };
+    const onMove = (ev: PointerEvent) => {
+      if (!dragging && Math.abs(ev.clientX - startX) < 4 && Math.abs(ev.clientY - startY) < 4) return;
+      dragging = true;
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+      const overId = el?.closest<HTMLElement>("tr[data-cid]")?.getAttribute("data-cid");
+      const overIdx = overId ? ids.indexOf(overId) : -1;
+      if (overIdx >= 0) paint(overIdx);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      if (dragging) { suppressCheckClickRef.current = true; setLastPickId(id); } // the drag set the selection; cancel the trailing click-toggle
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   };
   // Drag-to-select: press-and-hold anywhere on a row body (grip is reserved for reorder) and drag.
   // Selecting rows is done with the checkbox: click to toggle one, Shift-click to select a range up
@@ -8133,7 +8172,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     for (let i = 0; i < arr.length; i++) if (arr[i].section === section) lastIdx = i;
     if (lastIdx >= 0) arr.splice(lastIdx + 1, 0, moved);
     else arr.push(moved);
-    u({ components: arr });
+    u({ components: mergeSplitGroups(arr) }); // keep both sections' combinations whole (no split leftovers)
   };
 
   // Smooth pointer drag-to-reorder for component rows, matching the panel list: the grabbed row
@@ -8183,8 +8222,12 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
           if (to !== from) {
             const copy = arr.slice();
             const [m] = copy.splice(from, 1);
-            copy.splice(to, 0, m);
-            u({ components: copy });
+            // Show the dragged row as a free (group-less) line while it moves, so it no longer drags
+            // its old combination's header along with it — that was what painted the duplicate /
+            // empty combination headers wherever it passed. The row's real combination is decided on
+            // drop (from where it lands); mergeSplitGroups also re-knits any combination left split.
+            copy.splice(to, 0, { ...m, group: "" });
+            u({ components: mergeSplitGroups(copy) });
           }
         } else {
           dropSec = arr[over].section; // hovering another section's rows → move there on release
@@ -8973,9 +9016,10 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                       </td>
                       <td className="whitespace-nowrap py-1 pr-1 text-right">
                         <input type="checkbox" data-rowcheck className="mr-1.5 h-3.5 w-3.5 cursor-pointer accent-brand align-middle" checked={selected.has(c.id)}
-                          onClick={(e) => { shiftSelRef.current = e.shiftKey; e.stopPropagation(); }}
+                          onPointerDown={(e) => startCheckboxDragSelect(e, c.id)}
+                          onClick={(e) => { if (suppressCheckClickRef.current) { suppressCheckClickRef.current = false; e.preventDefault(); return; } shiftSelRef.current = e.shiftKey; e.stopPropagation(); }}
                           onChange={() => toggleSelect(c.id, shiftSelRef.current)}
-                          title="Click to toggle · Shift-click to select a range" />
+                          title="Click to toggle · Shift-click a range · press and drag to select many" />
                         <button className="px-1 text-muted hover:text-brand-dark" title="Change component" onClick={() => setEditComp(c.id)}>✎</button>
                         <button className="px-1 text-red-500" title="Remove" onClick={() => delComp(c.id)}>✕</button>
                       </td>

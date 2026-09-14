@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-14 · Mohamed's side · Claude
 
+**Drag-and-drop no longer makes duplicate combination headers, and you can drag across the tick boxes to select many rows.**
+
+Two fixes in the component list (Panels tab). Neither changes any price, quantity, or what prints on the offer.
+
+- **Dragging a component no longer splits combinations.** Before, while you dragged a part it carried its combination's label with it, so passing over another combination painted extra / empty headers (e.g. the same "CONTROL CT" header stacked several times), and sometimes that split stuck after you dropped. Now a part being dragged behaves as a free line — it belongs to no combination until you drop it, and simply joins wherever it lands. Combinations stay whole, and any combination that was already left split gets stitched back into one block the moment you drag anything in that panel.
+- **Drag across the tick boxes to select many rows at once.** Press a row's tick box and, holding, drag up or down the column — every row between where you started and where the pointer is gets ticked, live. Rows you'd already selected stay selected; a plain click still toggles just one row, and Shift-click a range still works. (Dragging the rest of a row still reorders it, as before — only the tick box does the multi-select.)
+
+## 2026-09-14 · Mohamed's side · Claude
+
 **Combination headers tidied up, double-click-to-copy, drag-from-anywhere, and a checkbox-selection fix.**
 
 A batch of improvements to the component list (the Panels tab). Nothing here changes any price, quantity, numbering, or what prints on the offer.
