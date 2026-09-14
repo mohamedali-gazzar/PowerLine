@@ -10,6 +10,7 @@ import SendForApprovalMenu from "../components/SendForApprovalMenu";
 import WorkflowActionMenu, { type WfAction } from "../components/WorkflowActionMenu";
 import { assistantStore } from "../assistant/assistantStore";
 import { savedCombosStore, useSavedCombos, comboSig } from "../lv/savedCombos";
+import { resolveComboMembershipOnDrop } from "../lv/combosHeal";
 import { useReviewLock } from "../hooks/useReviewLock";
 import { usePointerReorder } from "../hooks/usePointerReorder";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
@@ -103,12 +104,6 @@ function effectiveGroups(comps: PanelComponent[]): Map<string, string> {
   });
   return out;
 }
-
-// Cross-panel clipboard for Copy/Paste of a whole combination (module-level so it survives
-// switching between panels; not persisted to the quotation). `section` is where it was
-// copied FROM, so paste can put it back in the matching section rather than whatever
-// section happened to be active.
-let comboClipboard: { label: string; section: string; comps: PanelComponent[] } | null = null;
 
 // ── Keyboard field navigation (arrow keys move between fields by layout) ───────
 type ArrowKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
@@ -6338,19 +6333,24 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
   // Smooth pointer drag-to-reorder (handle-driven, touch-friendly). Reordering only changes
   // display order — the saved order autosaves to the QTN; no pricing math is touched. Hooks
   // must precede the early return.
-  // The reorder commit lives in the parent (reorderPanels). The drag handle only shows for the
+  // The reorder commit lives in the parent (reorderPanels). Reordering only shows for the
   // person who may reorder (canReorder) — the primary owner. A Co-Work co-worker owns their
-  // panels' content, not the arrangement, so hiding the handle keeps the order from a drag that
-  // the server would not keep anyway.
-  const { setRowRef, handleProps } = usePointerReorder(s.panels.length, reorderPanels);
+  // panels' content, not the arrangement, so dragging is disabled for them (the server would
+  // not keep the order anyway). Dragging a TICKED panel moves the whole ticked set together
+  // (handleReorderRef, set below once the selection state exists).
+  const handleReorderRef = useRef<(from: number, to: number) => void>(() => {});
+  const { setRowRef, rowDragProps } = usePointerReorder(s.panels.length, (from, to) => handleReorderRef.current(from, to));
   // Themed confirm (PowerLine dialog) instead of the browser's window.confirm.
   const { confirm, dialogs } = useDialogs();
   // ── Panel grouping (organisational only — no pricing effect) ────────────────
   const groups = s.groups ?? [];
   const numbers = panelNumbers(s);
   const layout = panelLayout(s);
-  const [selMode, setSelMode] = useState(false);
+  // Every panel row carries a tick-box (always visible). Ticking panels lets the owner act on
+  // several at once: Group / Move to another group, or drag any ticked panel to reorder the whole
+  // ticked set together. (This replaces the old drag-dots handle + separate "select mode".)
   const [selPanels, setSelPanels] = useState<Set<string>>(new Set());
+  const [lastPanelPick, setLastPanelPick] = useState<string | null>(null); // anchor for Shift-click range
   const [editGroupId, setEditGroupId] = useState<string | null>(null);
   const [editGroupVal, setEditGroupVal] = useState("");
   const [naming, setNaming] = useState<{ ids: string[]; name: string } | null>(null);
@@ -6364,115 +6364,79 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
     try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...next])); } catch { /* storage blocked — non-fatal */ }
     return next;
   });
-  const toggleSel = (id: string) => setSelPanels((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const exitSel = () => { setSelMode(false); setSelPanels(new Set()); setNaming(null); };
-  // Drag-select across the panel checkboxes — press one and hold, then drag down/up over the
-  // rows to select a contiguous range (anchor → cursor), exactly like the components list. A
-  // quick click on a checkbox (no drag) just toggles that one panel.
-  const panelDrag = useRef<{ anchorId: string; moved: boolean; onCheckbox: boolean } | null>(null);
-  const lastRange = useRef<string>(""); // last selected range key, to skip redundant setState during a drag
-  // Extend the drag-selection to whatever panel row sits at the given viewport point. Used both by
-  // onMouseEnter (in-view dragging) and by the auto-scroll tick (so rows revealed by scrolling get
-  // selected even when the pointer never moves — the browser fires no enter events on scroll).
-  const extendSelToPoint = (x: number, y: number) => {
-    const d = panelDrag.current;
-    if (!d) return;
-    const rowEl = (document.elementFromPoint(x, y) as HTMLElement | null)?.closest("[data-panelid]") as HTMLElement | null;
-    const overId = rowEl?.getAttribute("data-panelid");
-    if (!overId) return;
-    d.moved = true;
-    const ids = s.panels.map((p) => p.id);          // top-to-bottom display order
-    const a = ids.indexOf(d.anchorId), b = ids.indexOf(overId);
-    if (a < 0 || b < 0) return;
-    const [lo, hi] = a < b ? [a, b] : [b, a];
-    const key = `${lo}-${hi}`;
-    if (key === lastRange.current) return;           // no change → skip the setState (60fps guard)
-    lastRange.current = key;
-    setSelPanels(new Set(ids.slice(lo, hi + 1)));    // selection = the contiguous start→cursor range
-  };
-  const onPanelRowDown = (id: string, onCheckbox: boolean, startX: number, startY: number) => {
-    if (!selMode) return;
-    panelDrag.current = { anchorId: id, moved: false, onCheckbox };
-    lastRange.current = "";
-    // Auto-scroll while the pointer is held near the top/bottom edge, so a long list can be
-    // range-selected end to end. Each frame we also re-select the row under the pointer, so the
-    // rows scrolling into view under a stationary cursor get added too. Scrolls whichever container
-    // actually scrolls: the panel-list card if it has its own scrollbar (wide screens), else the page.
-    let lastX = startX, lastY = startY;
-    let raf = 0;
-    const EDGE = 56, MAX = 16; // px from the edge where scrolling starts · max px/frame
-    const findScroller = (): HTMLElement | null => {
-      for (let el = panelListRef.current as HTMLElement | null; el; el = el.parentElement) {
-        const oy = getComputedStyle(el).overflowY;
-        if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight) return el;
+  const clearPanelSel = () => { setSelPanels(new Set()); setLastPanelPick(null); setNaming(null); };
+  // Panels top-to-bottom in the exact order they render (grouped layout), which is what a drag
+  // index and a Shift-range both count against.
+  const flatOrder = () => panelLayout(s).flatMap((sec) => sec.panels);
+  // Tick / untick one panel; Shift-click ticks the whole run from the last pick to this one.
+  const togglePanelSel = (id: string, shift: boolean) => {
+    if (shift && lastPanelPick) {
+      const ids = flatOrder().map((p) => p.id);
+      const a = ids.indexOf(lastPanelPick), b = ids.indexOf(id);
+      if (a >= 0 && b >= 0) {
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        setSelPanels(new Set(ids.slice(lo, hi + 1)));
+        setLastPanelPick(id);
+        return;
       }
-      return null; // → scroll the window instead
-    };
-    const tick = () => {
-      const sc = findScroller();
-      let top: number, bottom: number, canUp: boolean, canDown: boolean;
-      if (sc) {
-        const r = sc.getBoundingClientRect();
-        top = r.top; bottom = r.bottom;
-        canUp = sc.scrollTop > 0;
-        canDown = sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1;
-      } else {
-        top = 0; bottom = window.innerHeight;
-        const doc = document.scrollingElement || document.documentElement;
-        canUp = doc.scrollTop > 0;
-        canDown = doc.scrollTop + doc.clientHeight < doc.scrollHeight - 1;
-      }
-      let dy = 0;
-      if (lastY < top + EDGE && canUp) dy = -Math.ceil(((top + EDGE - lastY) / EDGE) * MAX);
-      else if (lastY > bottom - EDGE && canDown) dy = Math.ceil(((lastY - (bottom - EDGE)) / EDGE) * MAX);
-      // Only extend the range from the tick while actually auto-scrolling — that's the case a
-      // stationary cursor needs help with (rows moving under it). An in-view drag is handled by
-      // onPanelRowEnter (mouseenter), and a plain click must NOT be treated as a drag, or it would
-      // replace the selection with just the clicked row instead of toggling it into the set.
-      if (dy) { if (sc) sc.scrollTop += dy; else window.scrollBy(0, dy); extendSelToPoint(lastX, lastY); }
-      raf = requestAnimationFrame(tick);
-    };
-    const onMove = (e: MouseEvent) => { lastX = e.clientX; lastY = e.clientY; };
-    const onUp = () => {
-      const d = panelDrag.current; panelDrag.current = null;
-      window.removeEventListener("mouseup", onUp);
-      window.removeEventListener("mousemove", onMove);
-      cancelAnimationFrame(raf);
-      if (d && !d.moved && d.onCheckbox) toggleSel(d.anchorId); // plain click on the box → toggle
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    raf = requestAnimationFrame(tick);
+    }
+    setSelPanels((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+    setLastPanelPick(id);
   };
-  const onPanelRowEnter = (id: string) => {
-    const d = panelDrag.current;
-    if (!d) return;
-    d.moved = true;
-    const ids = s.panels.map((p) => p.id);          // top-to-bottom display order
-    const a = ids.indexOf(d.anchorId), b = ids.indexOf(id);
-    if (a < 0 || b < 0) return;
-    const [lo, hi] = a < b ? [a, b] : [b, a];
-    lastRange.current = `${lo}-${hi}`;
-    setSelPanels(new Set(ids.slice(lo, hi + 1)));    // selection = the contiguous start→cursor range
+  // Move EVERY ticked panel together, keeping their order, to where the dragged one is dropped.
+  // Mirrors reorderPanels' group handling: the moved block adopts the group it is dropped into.
+  const reorderPanelsMany = (flat: LvPanel[], to: number) => {
+    if (!canReorder) return;
+    const selSet = new Set(flat.map((p, i) => (selPanels.has(p.id) ? i : -1)).filter((i) => i >= 0));
+    const movedPanels = flat.filter((_, i) => selSet.has(i)); // ascending → keeps their relative order
+    if (movedPanels.length < 2) return;
+    const remaining = flat.filter((_, i) => !selSet.has(i));
+    // Land the block right before the first NON-ticked panel at/after the drop slot (else at the end).
+    let refId: string | null = null;
+    for (let i = to; i < flat.length; i++) { if (!selSet.has(i)) { refId = flat[i].id; break; } }
+    const insertAt = refId != null ? Math.max(0, remaining.findIndex((p) => p.id === refId)) : remaining.length;
+    remaining.splice(insertAt, 0, ...movedPanels);
+    const neighbour = insertAt > 0 ? remaining[insertAt - 1] : remaining[insertAt + movedPanels.length];
+    for (const mp of movedPanels) mp.groupId = neighbour?.groupId;
+    up({ panels: resortByGroup(remaining, s.groups ?? []) });
   };
-  // Click anywhere outside the panel list (while selecting) to drop the selection and leave
-  // select mode. Skipped while the group-name popup is open — that portal handles its own close.
+  // Drag commit: a ticked panel drags the whole ticked set; otherwise it's a plain single move.
+  handleReorderRef.current = (from, to) => {
+    const flat = flatOrder();
+    const draggedId = flat[from]?.id;
+    if (draggedId && selPanels.size >= 2 && selPanels.has(draggedId)) reorderPanelsMany(flat, to);
+    else reorderPanels(from, to);
+  };
+  // Click anywhere outside the panel list (while panels are ticked) to drop the selection.
+  // Skipped while the group-name popup is open — that portal handles its own close.
   const panelListRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null); // the editor column — clicks here keep the selection
   useEffect(() => {
-    if (!selMode) return;
+    if (selPanels.size === 0) return;
     const onDocDown = (e: MouseEvent) => {
       if (naming) return;                                    // naming popup dismisses itself
       const card = panelListRef.current;
-      if (card && !card.contains(e.target as Node)) exitSel();
+      if (card && !card.contains(e.target as Node)) clearPanelSel();
     };
     document.addEventListener("mousedown", onDocDown);
     return () => document.removeEventListener("mousedown", onDocDown);
-  }, [selMode, naming]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selPanels, naming]); // eslint-disable-line react-hooks/exhaustive-deps
   const nameOf = (id: string) => s.panels.find((p) => p.id === id)?.name || "";
   const openNaming = (ids: string[]) => setNaming({ ids, name: commonNamePrefix(ids.map(nameOf)) });
-  const doCreateGroup = (ids: string[], name: string) => { if (name.trim()) { up(createPanelGroup(s, name, ids)); exitSel(); } };
-  const doMoveTo = (ids: string[], gid: string | null) => { up(movePanelsToGroup(s, ids, gid)); exitSel(); };
+  const doCreateGroup = (ids: string[], name: string) => { if (name.trim()) { up(createPanelGroup(s, name, ids)); clearPanelSel(); } };
+  const doMoveTo = (ids: string[], gid: string | null) => { up(movePanelsToGroup(s, ids, gid)); clearPanelSel(); };
+  // Delete every ticked panel at once. A larger batch asks first (it's undoable either way).
+  const doDeletePanels = async (idsArr: string[]) => {
+    if (!idsArr.length) return;
+    if (idsArr.length > 3 && !(await confirm({
+      title: `Delete ${idsArr.length} panels`,
+      message: "The selected panels are removed from this quotation. You can undo it afterwards.",
+      confirmLabel: `Delete ${idsArr.length} panels`,
+      tone: "danger",
+    }))) return;
+    idsArr.forEach((id) => onDel(id)); // onDel = removePanel (functional update → all removed; respects Co-Work ownership)
+    clearPanelSel();
+  };
   const doDeleteGroup = async (gid: string) => {
     const g = groups.find((x) => x.id === gid);
     const n = s.panels.filter((p) => p.groupId === gid).length;
@@ -6557,7 +6521,7 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
         const t = e.target as HTMLElement;
         if (panelListRef.current?.contains(t) || editorRef.current?.contains(t)) return;
         if (s.selectedId != null || s.activeGroupId != null) up({ selectedId: null, activeGroupId: null });
-        if (selMode) exitSel();
+        if (selPanels.size) clearPanelSel();
       }}>
       {/* panel list — sticks below the tab header, with its own scroll (independent of the editor) */}
       <div ref={panelListRef} className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar"
@@ -6567,42 +6531,36 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
           const t = e.target as HTMLElement;
           if (t.closest("[data-panelrow], [data-grouphead], button, a, input, select, textarea, label")) return;
           if (s.selectedId != null || s.activeGroupId != null) up({ selectedId: null, activeGroupId: null });
-          if (selMode) exitSel();
+          if (selPanels.size) clearPanelSel();
         }}>
-        {/* New-group / select-mode header — the Group / Move-to actions live right here in
-            the panel list (they appear once panels are ticked), not in a floating bar. */}
-        {selMode ? (
+        {/* Actions for ticked panels — Group / Delete / Move-to appear here once one or more are
+            ticked. (Reordering several at once is done by dragging any ticked panel.) */}
+        {selPanels.size > 0 && (
           <div className="mb-2 rounded-lg border border-brand/30 bg-brand-tint p-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-brand-dark">
-                {selPanels.size > 0 ? `${selPanels.size} selected` : "Tick panels, then Group / Move…"}
-              </span>
-              <button className="text-xs text-muted hover:text-ink" onClick={exitSel}>Cancel</button>
+              <span className="text-xs font-semibold text-brand-dark">{selPanels.size} selected</span>
+              <button className="text-xs text-muted hover:text-ink" onClick={clearPanelSel}>Clear</button>
             </div>
-            {selPanels.size > 0 && (
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button onClick={() => openNaming([...selPanels])}
-                  className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-dark">
-                  <span className="text-base leading-none">⊞</span> Group
-                </button>
-                {groups.length > 0 && (
-                  <select value="" onChange={(e) => { const v = e.target.value; if (v) doMoveTo([...selPanels], v === "__ungroup" ? null : v); }}
-                    title="Move the selected panels into an existing group"
-                    className="h-8 cursor-pointer rounded-full border border-line bg-white px-2 text-sm text-ink focus:border-brand focus:outline-none">
-                    <option value="">Move to…</option>
-                    {groups.slice().sort((a, b) => a.order - b.order).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                    <option value="__ungroup">— Ungrouped —</option>
-                  </select>
-                )}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <button className="flex items-center gap-1 text-xs font-semibold text-brand-dark hover:underline"
-              onClick={() => { setSelMode(true); setSelPanels(new Set()); }}>
-              <span className="text-sm leading-none">⊞</span> New group
-            </button>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button onClick={() => openNaming([...selPanels])}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-dark">
+                <span className="text-base leading-none">⊞</span> Group
+              </button>
+              <button onClick={() => doDeletePanels([...selPanels])}
+                title="Delete the selected panels"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-red-200 bg-white px-3 py-1.5 text-sm font-semibold text-red-600 transition hover:bg-red-50">
+                <span className="text-base leading-none">✕</span> Delete
+              </button>
+              {groups.length > 0 && (
+                <select value="" onChange={(e) => { const v = e.target.value; if (v) doMoveTo([...selPanels], v === "__ungroup" ? null : v); }}
+                  title="Move the selected panels into an existing group"
+                  className="h-8 cursor-pointer rounded-full border border-line bg-white px-2 text-sm text-ink focus:border-brand focus:outline-none">
+                  <option value="">Move to…</option>
+                  {groups.slice().sort((a, b) => a.order - b.order).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  <option value="__ungroup">— Ungrouped —</option>
+                </select>
+              )}
+            </div>
           </div>
         )}
         {(() => {
@@ -6615,35 +6573,25 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
             const checked = selPanels.has(p.id);
             return (
               <div key={p.id} ref={setRowRef(i)} data-panelrow data-panelid={p.id}
-                onMouseDown={selMode ? (e) => { const t = e.target as HTMLElement; if (t.closest("[data-panelgrip]")) return; onPanelRowDown(p.id, !!t.closest("[data-rowcheck]"), e.clientX, e.clientY); } : undefined}
-                onMouseEnter={selMode ? () => onPanelRowEnter(p.id) : undefined}
-                // Click anywhere in the card (not just the name) to open the panel — but let the
-                // card's own controls (grip, jump / edit / duplicate / remove buttons) act on their
-                // own clicks. Only in normal mode; select-mode uses onMouseDown for range-select.
-                onClick={!selMode ? (e) => { const t = e.target as HTMLElement; if (t.closest("button, a, input, [data-panelgrip]")) return; up({ selectedId: p.id, activeGroupId: null }); } : undefined}
-                className={`mb-1.5 rounded-lg border px-2 py-1.5 transition-colors duration-150 ${selMode ? "select-none" : "cursor-pointer"} ${
-                  p.highlight
-                    ? `bg-yellow-200 hover:bg-yellow-300 ${active ? "border-brand" : "border-yellow-400"}`
-                    : active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
-                } ${freshIds?.has(p.id) ? "animate-flash-new" : ""} ${checked ? "ring-2 ring-brand ring-offset-1" : ""}`}>
+                {...(canReorder ? rowDragProps(i) : {})}
+                // Click anywhere in the card (not the tick-box or a control) to open the panel — but a
+                // press-and-drag anywhere reorders it (rowDragProps). A ticked panel drags the whole
+                // ticked set together. The card's own controls (tick-box / jump / edit / duplicate /
+                // remove) are inputs or data-nodrag, so they still act on their own clicks.
+                onClick={(e) => { const t = e.target as HTMLElement; if (t.closest("button, a, input, [data-nodrag]")) return; up({ selectedId: p.id, activeGroupId: null }); }}
+                className={`mb-1.5 select-none rounded-lg border px-2 py-1.5 transition-colors duration-150 ${canReorder ? "cursor-grab active:cursor-grabbing" : ""} ${
+                  checked
+                    ? "border-brand bg-brand-light ring-2 ring-brand ring-offset-1"  // every ticked panel: orange fill + frame
+                    : p.highlight
+                      ? `bg-yellow-200 hover:bg-yellow-300 ${active ? "border-brand" : "border-yellow-400"}`
+                      : active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
+                } ${freshIds?.has(p.id) ? "animate-flash-new" : ""}`}>
                 <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
                   <div className="flex min-w-0 items-center gap-1">
-                    {selMode && (
-                      <input type="checkbox" data-rowcheck checked={checked} readOnly
-                        className="mr-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-brand" title="Select for grouping — or press and drag over the rows to select a range" />
-                    )}
-                    {canReorder && (
-                      <span
-                        {...handleProps(i)} data-panelgrip
-                        title="Drag to reorder — or into a group's rows to add it"
-                        className="shrink-0 select-none px-0.5 text-muted/50 transition-colors hover:text-brand">
-                        <svg width="14" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                          <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
-                          <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
-                          <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
-                        </svg>
-                      </span>
-                    )}
+                    <input type="checkbox" data-rowcheck data-nodrag checked={checked} readOnly
+                      onClick={(e) => { e.stopPropagation(); togglePanelSel(p.id, e.shiftKey); }}
+                      className="mr-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-brand"
+                      title="Tick to select — Shift-click for a range. Drag any ticked panel to move them together." />
                     <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{num}</span>
                     {panelBadge && (() => { const b = panelBadge(p); return (
                       <span title={`Owner: ${b.title}${b.mine ? " (you)" : ""}`}
@@ -6651,11 +6599,11 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
                         {b.text}
                       </span>
                     ); })()}
-                    <button onClick={() => selMode ? toggleSel(p.id) : up({ selectedId: p.id, activeGroupId: null })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
+                    <button onClick={() => up({ selectedId: p.id, activeGroupId: null })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
                       <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{p.name.trim() || "(unnamed panel)"}</div>
                     </button>
                   </div>
-                  <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                  <div data-nodrag className="ml-auto flex shrink-0 items-center gap-0.5">
                     {!!p.groupId && groups.some((g) => g.id === p.groupId) && (
                       <button onClick={() => up(movePanelsToGroup(s, [p.id], null))} title="Move this panel out of the group"
                         className="shrink-0 rounded p-0.5 text-muted transition-colors hover:bg-white hover:text-brand-dark">
@@ -6703,10 +6651,9 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
                 <div key={g.id} className="mb-1.5">
                   {/* Drop indicator — where the dragged group will land (above this group). */}
                   {gDragId && gDropIdx === gi && <div className="mx-0.5 mb-1 h-[3px] rounded-full bg-brand" />}
-                  {/* 42px orange header strip — same look as the BOM combination row */}
+                  {/* 42px header strip — a neutral grey frame + fill, matching the panel rows. */}
                   <div ref={setGroupHeaderRef(g.id)} data-grouphead
-                    className={`flex h-[42px] items-center gap-1.5 rounded-lg border bg-[#FFF3EC] pr-1 transition-shadow ${groupActive ? "border-brand ring-2 ring-brand ring-offset-1" : "border-[#F16722]/35"} ${gDragId === g.id ? "opacity-90 shadow-lift" : ""}`}
-                    style={{ borderLeft: "4px solid #F16722" }}>
+                    className={`flex h-[42px] items-center gap-1.5 rounded-lg border bg-surface pr-1 transition-shadow ${groupActive ? "border-brand ring-2 ring-brand ring-offset-1" : "border-line"} ${gDragId === g.id ? "opacity-90 shadow-lift" : ""}`}>
                     <span onPointerDown={startGroupDrag(g.id, gi)} title="Drag to reorder this group"
                       className="shrink-0 cursor-grab select-none pl-1.5 text-brand-dark/40 transition-colors hover:text-brand-dark active:cursor-grabbing"
                       style={{ touchAction: "none" }}>
@@ -6726,9 +6673,9 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
                         onFocus={(e) => e.target.select()}
                         onBlur={() => { up(renamePanelGroup(s, g.id, editGroupVal)); setEditGroupId(null); }}
                         onKeyDown={(e) => { if (e.key === "Enter") { up(renamePanelGroup(s, g.id, editGroupVal)); setEditGroupId(null); } else if (e.key === "Escape") setEditGroupId(null); }}
-                        className="h-6 min-w-0 flex-1 rounded border border-brand px-1.5 text-[13px] font-bold uppercase tracking-wide text-[#F16722] focus:outline-none" />
+                        className="h-6 min-w-0 flex-1 rounded border border-brand px-1.5 text-[15px] font-bold uppercase tracking-wide text-ink focus:outline-none" />
                     ) : (
-                      <button onClick={() => up({ selectedId: null, activeGroupId: g.id })} title={`Select “${g.name}” — a new + Add panel goes into this group`} className="min-w-0 flex-1 truncate text-left text-[13px] font-bold uppercase tracking-wide text-[#F16722]">{g.name}</button>
+                      <button onClick={() => up({ selectedId: null, activeGroupId: g.id })} title={`Select “${g.name}” — a new + Add panel goes into this group`} className="min-w-0 flex-1 truncate text-left text-[15px] font-bold uppercase tracking-wide text-ink">{g.name}</button>
                     )}
                     <span className="shrink-0 rounded-full bg-[#F16722]/15 px-1.5 text-[11px] font-bold text-brand-dark">{sec.panels.length}</span>
                     <div className="ml-auto flex shrink-0 items-center">
@@ -7527,11 +7474,19 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     u({ components: p.components.map((c) => (c.section === sec ? reordered[k++] : c)) });
   };
   // Rename a combination group — retags every member row's `group` to the new label.
-  const renameGroup = (group: string, sec: string, name: string) => {
+  // Rename a combination. Two combinations in the same section may NOT share a name (that would
+  // draw two identical headers), so a clash is rejected and the existing combinations are left
+  // unchanged — the caller keeps the rename box open and asks for a different name. Returns whether
+  // the rename went through.
+  const renameGroup = (group: string, sec: string, name: string): boolean => {
     const nm = name.trim();
-    if (!nm || nm === group) return;
+    if (!nm) return false;
+    if (nm === group) return true; // unchanged — allow the box to close
+    const clash = p.components.some((c) => c.section === sec && !isSpacer(c) && (effGroup.get(c.id) || "") === nm);
+    if (clash) return false; // a combination named nm already exists in this section → reject
     u({ components: p.components.map((c) =>
       c.section === sec && !isSpacer(c) && (effGroup.get(c.id) || "") === group ? { ...c, group: nm } : c) });
+    return true;
   };
   // Duplicate a whole combination — clone every member (fresh ids) under a new unique
   // "<name> copy" label, inserted right after the original group.
@@ -7549,43 +7504,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     arr.splice(lastIdx + 1, 0, ...clones);
     u({ components: arr });
   };
-  // Copy a combination to the cross-panel clipboard; Paste clones it (fresh ids + unique name)
-  // into the active section of whatever panel is open — so a combo can move between panels.
-  const [, bumpClip] = useState(0);
-  const copyGroup = (group: string, sec: string) => {
-    const members = p.components.filter((c) => c.section === sec && (effGroup.get(c.id) || "") === group);
-    if (!members.length) return;
-    comboClipboard = { label: group, section: sec, comps: members.map((c) => ({ ...c })) };
-    bumpClip((v) => v + 1);
-  };
-  // Where a paste of the copied combination lands: the section you're WORKING IN (active), so a
-  // combo drops where you are — switch to Outgoings, paste, and it goes to Outgoings even if it was
-  // copied from Main Incoming. Only if this panel has no such section (e.g. pasting into a different
-  // panel that lacks the active one) does it fall back to the copied-from section, then the first.
-  const pasteTargetSec = (): string =>
-    comboClipboard
-      ? (p.sections.includes(p.activeSection) ? p.activeSection
-        : p.sections.includes(comboClipboard.section) ? comboClipboard.section
-        : p.sections[0] ?? "")
-      : "";
-  const pasteCombo = () => {
-    if (!comboClipboard) return;
-    const sec = pasteTargetSec();
-    if (!sec) return;
-    const used = new Set(p.components.filter((c) => c.section === sec && !isSpacer(c)).map((c) => effGroup.get(c.id) || "").filter(Boolean));
-    let name = comboClipboard.label;
-    for (let k = 2; used.has(name); k++) name = `${comboClipboard.label} (${k})`;
-    const cid = uid();
-    const clones = comboClipboard.comps.map((c) => (isSpacer(c)
-      ? { ...c, id: uid(), section: sec }
-      : { ...c, id: uid(), section: sec, group: name, comboId: cid }));
-    const arr = [...p.components];
-    let lastIdx = -1;
-    for (let i = 0; i < arr.length; i++) if (arr[i].section === sec) lastIdx = i;
-    arr.splice(lastIdx + 1, 0, ...clones);
-    u({ components: arr });
-  };
-
   const [newSection, setNewSection] = useState("");
   const [preview, setPreview] = useState<ComboLine[]>([]); // active circuit-combination preview
   const [tag, setTag] = useState("");                       // combination name (from the builder)
@@ -7658,8 +7576,11 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   );
   const [editingSec, setEditingSec] = useState<string | null>(null); // custom-section rename
   const [editVal, setEditVal] = useState("");
+  const [secDrag, setSecDrag] = useState<string | null>(null); // the section tab being dragged (for the dimmed look)
+  const secDragRef = useRef<string | null>(null); // same, read synchronously by onDragOver (no re-render needed)
   const [editGroup, setEditGroup] = useState<string | null>(null); // combination rename — "sec|group"
   const [editGroupVal, setEditGroupVal] = useState("");
+  const [editGroupErr, setEditGroupErr] = useState(false); // rename rejected: a combination with that name already exists
   // "Add into an existing combination" — armed from a group's "+ Add" button; the next
   // component(s) picked from the search drop into this group instead of the section end.
   const [addTarget, setAddTarget] = useState<{ sec: string; group: string } | null>(null);
@@ -7749,31 +7670,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     setLastPickId(id);
   };
   // Drag-to-select: press-and-hold anywhere on a row body (grip is reserved for reorder) and drag.
-  // The selection tracks the contiguous range between the start row and the row under the cursor —
-  // dragging down grows it, dragging back up shrinks it (rows leaving the range are unchecked).
-  // A press with no cross-row movement is a plain click (checkbox toggles; inputs/buttons act).
-  const dragRef = useRef<{ anchorId: string; moved: boolean; onCheckbox: boolean; shift: boolean } | null>(null);
-  const onRowDown = (id: string, onCheckbox: boolean, shift: boolean) => {
-    dragRef.current = { anchorId: id, moved: false, onCheckbox, shift };
-    const onUp = () => {
-      const d = dragRef.current;
-      if (d && !d.moved && d.onCheckbox) toggleSelect(d.anchorId, d.shift); // quick click on the checkbox → toggle / shift-range
-      dragRef.current = null;
-      document.body.style.userSelect = ""; // re-enable text selection
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mouseup", onUp);
-  };
-  const onRowEnter = (id: string) => {
-    const d = dragRef.current;
-    if (!d) return;
-    if (!d.moved) { d.moved = true; document.body.style.userSelect = "none"; window.getSelection()?.removeAllRanges(); } // drag begins on first cross-row move
-    const a = orderedIds.indexOf(d.anchorId), b = orderedIds.indexOf(id);
-    if (a < 0 || b < 0) return;
-    const [lo, hi] = a < b ? [a, b] : [b, a];
-    setSelected(new Set(orderedIds.slice(lo, hi + 1))); // selection = the contiguous start→cursor range
-    setLastPickId(id);
-  };
+  // Selecting rows is done with the checkbox: click to toggle one, Shift-click to select a range up
+  // to the last one clicked. (The old drag-across-rows range-select was dropped so a press-and-drag
+  // anywhere on a row reorders it instead.)
   const setSectionSel = (sec: string, on: boolean) => {
     const ids = p.components.filter((c) => c.section === sec && !isSpacer(c)).map((c) => c.id);
     setSelected((prev) => { const next = new Set(prev); ids.forEach((id) => (on ? next.add(id) : next.delete(id))); return next; });
@@ -8016,13 +7915,19 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     } : x)) });
   // Reorder whole sections — swaps with the adjacent VISIBLE section; the new
   // order flows straight into the Technical offer (which iterates p.sections).
-  const moveSection = (sec: string, dir: -1 | 1) => {
-    const visible = p.sections.filter((x) => p.components.some((c) => c.section === x));
-    const target = visible[visible.indexOf(sec) + dir];
-    if (!target) return;
+  // Reorder sections by dragging the top tabs: move `sec` to sit where `targetSec` is. Called live
+  // while a tab is dragged over another, so the tabs shift as you go and the stacked section content
+  // below (which also reads p.sections) reorders in lock-step — one shared order, persisted with the
+  // QTN. Components never move; only the section's position changes.
+  const moveSectionTo = (sec: string, targetSec: string) => {
+    if (sec === targetSec) return;
     const arr = [...p.sections];
-    const a = arr.indexOf(sec), b = arr.indexOf(target);
-    [arr[a], arr[b]] = [arr[b], arr[a]];
+    const from = arr.indexOf(sec), to = arr.indexOf(targetSec);
+    if (from < 0 || to < 0) return;
+    arr.splice(from, 1);
+    let ti = arr.indexOf(targetSec);
+    if (to > from) ti += 1; // dragged rightward past its old spot → land after the target
+    arr.splice(ti, 0, sec);
     u({ sections: arr });
   };
   // Every section except the three fixed ones (Main Incoming / Outgoings /
@@ -8081,43 +7986,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     const idx = p.sections.indexOf(sec);
     const sections = [...p.sections.slice(0, idx + 1), newName, ...p.sections.slice(idx + 1)];
     u({ sections, components: [...p.components, ...clones], activeSection: newName });
-  };
-
-  // Drop a dragged row onto another row: it takes the target's section (move
-  // across sections) and is inserted just before it (reorder).
-  // When a loose row lands inside a scalable combination (a group with a ×N qty), give it the
-  // group's ×N so a component added by dragging scales like the rest — same as the group's "+ Add".
-  const applyGroupScaling = (arr: PanelComponent[], idx: number) => {
-    const c = arr[idx];
-    if (isSpacer(c)) return;
-    let prev = "", next = ""; // infer the group from same-section grouped neighbours (mirrors effectiveGroups)
-    for (let j = idx - 1; j >= 0 && arr[j].section === c.section; j--) { if (isSpacer(arr[j]) || arr[j].id === c.id) continue; const g = arr[j].group; if (g) { prev = g; break; } }
-    for (let j = idx + 1; j < arr.length && arr[j].section === c.section; j++) { if (isSpacer(arr[j]) || arr[j].id === c.id) continue; const g = arr[j].group; if (g) { next = g; break; } }
-    const grp = prev && prev === next ? prev : "";
-    // Nothing to do when the row isn't dropped inside a combination, or is already in that one.
-    // A row that ALREADY belongs to a different combination adopts the one it was dropped into —
-    // so a duplicated item dragged from "Source 1" into "Source 2" takes Source 2's header
-    // instead of staying under Source 1's. (Before, only loose rows could adopt a group here.)
-    if (!grp || (c.group || "") === grp) return;
-    const members = arr.filter((x) => x.section === c.section && !isSpacer(x) && x.id !== c.id && x.group === grp);
-    const cid = members.find((m) => m.comboId)?.comboId;       // the combination instance (whole-combo select-all)
-    const scalable = /\(Type \d+\)/.test(grp) || members.some((x) => x.comboScalable);
-    if (!scalable && !cid) {
-      // Target isn't a real combination (a bare group). Still adopt its name so a grouped row
-      // doesn't keep the old header, but carry no combo scaling/instance.
-      arr[idx] = { ...c, group: grp, comboScalable: false, baseQty: undefined };
-      return;
-    }
-    const idPatch = cid ? { comboId: cid } : {};
-    if (scalable) {
-      const first = members[0];
-      const fb = first?.baseQty ?? first?.qty ?? 1;
-      const cq = fb > 0 ? Math.max(1, Math.round((first?.qty ?? 0) / fb)) : 1; // the group's current ×N
-      const base = c.baseQty ?? c.qty;
-      arr[idx] = { ...c, group: grp, baseQty: base, qty: base * cq, comboScalable: true, ...idPatch };
-    } else {
-      arr[idx] = { ...c, group: grp, comboScalable: false, baseQty: undefined, ...idPatch }; // non-scalable combination — just join it
-    }
   };
 
   // Drop a dragged row onto a section tab/header: move it to the end of that section.
@@ -8233,10 +8101,20 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       if (dropSec && me && me.section !== dropSec) {
         dropOnSection(id, dropSec); // cross-section: move to that section's end (drops group membership)
       } else {
-        // Same section: the live reorder already positioned it — settle group membership (join a
-        // combination it was dropped inside; a plain reorder is a no-op via applyGroupScaling).
-        const idx = cur.findIndex((c) => c.id === id);
-        if (idx >= 0) { const arr = cur.slice(); applyGroupScaling(arr, idx); u({ components: arr }); }
+        // Same section: the live reorder already positioned the row. Now settle its combination
+        // membership from where it landed — dropped inside/next to a combination it JOINS that
+        // combination and takes on its properties; dropped in open space it becomes a standalone
+        // component. Its old combination updates by it simply leaving (an emptied one disappears),
+        // and everything is kept contiguous (one header per combination).
+        const before = cur.find((c) => c.id === id);
+        const next = resolveComboMembershipOnDrop(cur, id);
+        const after = next.find((c) => c.id === id);
+        const orderChanged = next.length !== cur.length || next.some((c, i) => c.id !== cur[i].id);
+        const propsChanged = !!before && !!after && (
+          (before.group || "") !== (after.group || "") || !!before.comboScalable !== !!after.comboScalable ||
+          before.comboId !== after.comboId || before.baseQty !== after.baseQty || before.qty !== after.qty
+        );
+        if (orderChanged || propsChanged) u({ components: next });
       }
       setDragId(null);
     };
@@ -8450,7 +8328,13 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
             <Fragment key={sec}>
             <span
               data-section-drop={sec}
-              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+              draggable
+              onDragStart={(e) => { secDragRef.current = sec; setSecDrag(sec); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", sec); } catch { /* older browsers */ } }}
+              onDragOver={(e) => { const from = secDragRef.current; if (from && from !== sec) { e.preventDefault(); moveSectionTo(from, sec); } }}
+              onDrop={(e) => { e.preventDefault(); secDragRef.current = null; setSecDrag(null); }}
+              onDragEnd={() => { secDragRef.current = null; setSecDrag(null); }}
+              title="Drag to reorder sections"
+              className={`inline-flex cursor-grab items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition active:cursor-grabbing ${secDrag === sec ? "opacity-50" : ""} ${
                 active ? "border-brand bg-brand-light text-brand" : "border-line bg-white text-muted hover:border-brand/40"
               }`}>
               <button type="button" data-section={sec} onClick={() => { u({ activeSection: sec }); if (comboKind === "pfc") setComboKind(null); setAddTarget(null); }}
@@ -8512,13 +8396,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
             + {label}
           </button>
         ))}
-        {comboClipboard && (
-          <button type="button" onClick={pasteCombo}
-            title={`Paste the copied “${comboClipboard.label}” into “${pasteTargetSec()}”`}
-            className="ml-1 rounded-full border border-brand/60 bg-brand-light px-2.5 py-1 text-[11px] font-bold text-brand-dark transition hover:bg-brand-tint">
-            📋 Paste combination
-          </button>
-        )}
       </div>
 
       {/* search */}
@@ -8792,7 +8669,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
           No components — search above, or add a circuit combination from the row above.
         </p>
       ) : (
-        p.sections.filter((sec) => p.components.some((c) => c.section === sec)).map((sec, si, arr) => (
+        p.sections.filter((sec) => p.components.some((c) => c.section === sec)).map((sec) => (
           <div key={sec} className="mb-3">
             <div
               data-section-drop={sec}
@@ -8812,12 +8689,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                       title="Select / clear all in this section" />
                   );
                 })()}
-                <button type="button" title="Move section up" disabled={si === 0}
-                  onClick={() => moveSection(sec, -1)}
-                  className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark disabled:opacity-25">↑</button>
-                <button type="button" title="Move section down" disabled={si === arr.length - 1}
-                  onClick={() => moveSection(sec, 1)}
-                  className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark disabled:opacity-25">↓</button>
               </span>
             </div>
             <div className="overflow-x-auto overflow-y-hidden">
@@ -8839,18 +8710,19 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                     const secComps = p.components.filter((c) => c.section === sec);
                     const renderRow = (c: PanelComponent) => isSpacer(c) ? (
                     <tr key={c.id} data-cid={c.id}
-                      className={`border-t border-line/70 align-middle transition-colors ${dragId === c.id ? "opacity-90" : ""}`}>
+                      onPointerDown={(e) => {
+                        if (e.pointerType === "touch") return;
+                        const t = e.target as HTMLElement;
+                        if (t.closest("button, [data-grip]")) return;
+                        startCompDrag(e, c.id); // press-and-drag anywhere on the spacer to reorder it
+                      }}
+                      className={`cursor-grab border-t border-line/70 align-middle transition-colors ${dragId === c.id ? "opacity-90" : ""}`}>
                       <td
                         data-grip
                         onPointerDown={(e) => startCompDrag(e, c.id)}
                         style={{ touchAction: "none" }}
                         title="Drag to reorder — or drop on another section to move it there"
                         className="cursor-grab select-none py-2.5 pl-1.5 pr-2 text-muted/70 hover:text-brand active:cursor-grabbing">
-                        <svg width="14" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                          <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
-                          <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
-                          <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
-                        </svg>
                       </td>
                       <td colSpan={7} className="py-0.5">
                         <div className="h-3 rounded bg-line/25" />
@@ -8861,9 +8733,13 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                     </tr>
                   ) : (
                     <tr key={c.id} data-selrow="" data-cid={c.id}
-                      onMouseDown={(e) => { const t = e.target as HTMLElement; if (t.closest("[data-grip]")) return; onRowDown(c.id, !!t.closest("[data-rowcheck]"), e.shiftKey); }}
-                      onMouseEnter={() => onRowEnter(c.id)}
-                      className={`border-t align-middle transition-colors hover:bg-brand-tint/50 hover:font-bold ${
+                      onPointerDown={(e) => {
+                        if (e.pointerType === "touch") return; // touch scrolls the list (or drags from the grip)
+                        const t = e.target as HTMLElement;
+                        if (t.closest("input, textarea, select, button, a, [contenteditable], [data-rowcheck], [data-grip]")) return; // let the controls act
+                        startCompDrag(e, c.id); // press-and-drag anywhere on the row to reorder it
+                      }}
+                      className={`cursor-grab border-t align-middle transition-colors hover:bg-brand-tint/50 hover:font-bold ${
                         selected.has(c.id) ? "bg-[#FFF0E8]" : "border-line/70"
                       } ${dragId === c.id ? "opacity-90" : ""}`}>
                       <td
@@ -8872,11 +8748,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                         style={{ touchAction: "none" }}
                         title="Drag to reorder — or drop on another section to move it there"
                         className={`cursor-grab select-none py-2.5 pl-1.5 pr-2 text-muted/70 hover:text-brand active:cursor-grabbing ${selected.has(c.id) ? "border-l-[3px] border-[#F16722]" : "border-l-[3px] border-transparent"}`}>
-                        <svg width="14" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                          <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
-                          <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
-                          <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
-                        </svg>
                       </td>
                       <td className="py-1 pr-2"
                         onMouseEnter={(e) => { if (selected.has(c.id)) setHoverSum({ col: "qty", x: e.clientX, y: e.clientY }); }}
@@ -8922,8 +8793,8 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                         onMouseLeave={() => setHoverSum(null)}>{fmtEgp(itemPriceEgp(c, s) * c.qty)}</td>
                       <td className="whitespace-nowrap py-1 pr-1 text-right">
                         <input type="checkbox" data-rowcheck className="mr-1.5 h-3.5 w-3.5 cursor-pointer accent-brand align-middle" checked={selected.has(c.id)} readOnly
-                          onClick={(e) => e.preventDefault()}
-                          title="Click to toggle · drag anywhere on the row to select a range · Shift-click for a range" />
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelect(c.id, e.shiftKey); }}
+                          title="Click to toggle · Shift-click to select a range" />
                         <button className="px-1 text-muted hover:text-brand-dark" title="Change component" onClick={() => setEditComp(c.id)}>✎</button>
                         <button className="px-1 text-red-500" title="Remove" onClick={() => delComp(c.id)}>✕</button>
                       </td>
@@ -8979,19 +8850,23 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                                   )}
                                   <div className="min-w-0 flex-1">
                                     {editGroup === `${sec}|${g}` ? (
-                                      <input autoFocus value={editGroupVal}
-                                        onChange={(e) => setEditGroupVal(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") { renameGroup(g, sec, editGroupVal); setEditGroup(null); }
-                                          else if (e.key === "Escape") setEditGroup(null);
-                                        }}
-                                        onBlur={() => { renameGroup(g, sec, editGroupVal); setEditGroup(null); }}
-                                        className="h-6 w-full rounded border border-brand px-1.5 text-[13px] uppercase tracking-wide text-brand-dark focus:outline-none" />
+                                      <div className="min-w-0 flex-1">
+                                        <input autoFocus value={editGroupVal}
+                                          onChange={(e) => { setEditGroupVal(e.target.value); if (editGroupErr) setEditGroupErr(false); }}
+                                          onKeyDown={(e) => {
+                                            // A duplicate name is rejected: keep the box open and ask for another.
+                                            if (e.key === "Enter") { if (renameGroup(g, sec, editGroupVal)) { setEditGroup(null); setEditGroupErr(false); } else setEditGroupErr(true); }
+                                            else if (e.key === "Escape") { setEditGroup(null); setEditGroupErr(false); }
+                                          }}
+                                          onBlur={() => { if (renameGroup(g, sec, editGroupVal)) { setEditGroup(null); setEditGroupErr(false); } else setEditGroupErr(true); }}
+                                          className={`h-6 w-full rounded border px-1.5 text-[13px] uppercase tracking-wide text-brand-dark focus:outline-none ${editGroupErr ? "border-red-500 bg-red-50" : "border-brand"}`} />
+                                        {editGroupErr && <p className="mt-0.5 text-[11px] font-semibold text-red-600">A combination named “{editGroupVal.trim()}” already exists here — choose another name.</p>}
+                                      </div>
                                     ) : (
                                       <span className="text-[13px] font-normal leading-tight text-brand-dark underline underline-offset-2">
                                         <span className="uppercase tracking-wide">{g}</span>{scalable ? `, QTY (${cq}) each contain:` : ""}
                                         <button type="button" title="Rename combination"
-                                          onClick={() => { setEditGroupVal(g); setEditGroup(`${sec}|${g}`); }}
+                                          onClick={() => { setEditGroupVal(g); setEditGroup(`${sec}|${g}`); setEditGroupErr(false); }}
                                           className="ml-1.5 rounded px-1 leading-none text-brand-dark/50 no-underline hover:bg-white hover:text-brand-dark">✎</button>
                                       </span>
                                     )}
@@ -9020,8 +8895,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                                     className="rounded px-1 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">↓</button>
                                   <button type="button" title="Duplicate this combination" onClick={() => duplicateGroup(g, sec)}
                                     className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">⧉</button>
-                                  <button type="button" title="Copy this combination — paste into any panel" onClick={() => copyGroup(g, sec)}
-                                    className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">📋</button>
                                   {p.sections.length > 1 && (
                                     <select value="" onChange={(e) => { if (e.target.value) moveGroupToSection(g, sec, e.target.value); }}
                                       title="Move this group to another section"

@@ -55,121 +55,143 @@ export function usePointerReorder(count: number, onReorder: (from: number, to: n
     }
   };
 
-  const handleProps = (i: number) => ({
-    style: { touchAction: "none" as const, cursor: "grab" },
-    onPointerDown: (e: React.PointerEvent) => {
-      if (e.pointerType === "mouse" && e.button !== 0) return; // left button only for mouse
-      const list = rows.current;
-      if (list.length < 2) return; // nothing to reorder
-      e.preventDefault();
-      e.stopPropagation();
+  // Shared drag start, used both by a dedicated grip and by pressing anywhere on the row. A small
+  // movement THRESHOLD tells a click apart from a drag: nothing lifts and nothing is prevented until
+  // the pointer has moved past it, so a plain click still selects the panel; once it becomes a drag,
+  // the click that follows is swallowed so dragging the row doesn't also select it.
+  const beginPointerDrag = (i: number, e: React.PointerEvent) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return; // left button only for mouse
+    const list = rows.current;
+    if (list.length < 2) return; // nothing to reorder
+    const THRESH = 4; // px before a press becomes a drag
+    const from = i;
+    const startX = e.clientX;
+    let startY = e.clientY; // drag origin — shifted by auto-scroll so the maths stays true
+    let lastY = e.clientY;
+    let to = from;
+    let started = false, raf = 0, scrolled = 0, step = 0;
+    let mids: number[] = [];
+    const grabbed = list[from];
+    let scroller: HTMLElement | null = null;
 
+    // Drop target resolved by POSITION (which row the pointer is over), robust to group-header strips
+    // and variable-height rows between items.
+    const resolveTo = (): number => {
+      let idx = 0;
+      for (let j = 0; j < count; j++) if (j !== from && mids[j] < lastY + scrolled) idx++;
+      return Math.max(0, Math.min(count - 1, idx));
+    };
+    const apply = () => {
+      const dy = lastY - startY;
+      if (grabbed) grabbed.style.transform = `translateY(${dy}px)`;
+      to = resolveTo();
+      for (let j = 0; j < count; j++) {
+        if (j === from) continue;
+        const el = rows.current[j];
+        if (!el) continue;
+        let shift = 0; // rows between the origin and the target glide one step aside to open the gap
+        if (from < to && j > from && j <= to) shift = -step;
+        else if (from > to && j < from && j >= to) shift = step;
+        el.style.transition = EASE;
+        el.style.transform = shift ? `translateY(${shift}px)` : "";
+      }
+    };
+    const tick = () => {
+      const doc = document.scrollingElement || document.documentElement;
+      let top: number, bottom: number, canUp: boolean, canDown: boolean;
+      if (scroller) {
+        const rect = scroller.getBoundingClientRect();
+        top = rect.top; bottom = rect.bottom;
+        canUp = scroller.scrollTop > 0;
+        canDown = scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 1;
+      } else {
+        top = 0; bottom = window.innerHeight;
+        canUp = doc.scrollTop > 0;
+        canDown = doc.scrollTop + doc.clientHeight < doc.scrollHeight - 1;
+      }
+      let d = 0;
+      if (lastY < top + EDGE && canUp) d = -Math.ceil(((top + EDGE - lastY) / EDGE) * MAX_SPEED);
+      else if (lastY > bottom - EDGE && canDown) d = Math.ceil(((lastY - (bottom - EDGE)) / EDGE) * MAX_SPEED);
+      if (d) {
+        const target = scroller ?? doc;
+        const before = target.scrollTop;
+        target.scrollTop += d;
+        const moved = target.scrollTop - before;
+        if (moved) { startY -= moved; scrolled += moved; apply(); }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    // Actually lift and start — only after the movement threshold is crossed.
+    const begin = () => {
+      started = true;
+      setDragging(true);
       const r0 = list[0]?.getBoundingClientRect();
       const r1 = list[1]?.getBoundingClientRect();
-      // A representative row pitch for the GLIDE gap only. Targeting no longer uses it (see below).
-      const step = r0 && r1 ? Math.abs(r1.top - r0.top) : (list[i]?.getBoundingClientRect().height ?? 44) + 6;
-      const from = i;
-      let startY = e.clientY; // drag origin — shifted by auto-scroll so the maths stays true
-      let lastY = e.clientY; // latest pointer position (viewport coords)
-      let to = from;
-      setDragging(true);
-
-      // Original midpoints of every row (captured before any glide) → the drop target is resolved by
-      // POSITION (which row the pointer is over), not by a uniform pitch. A uniform pitch is wrong when
-      // the list has group-header strips or variable-height rows between items — that made grabbing a
-      // panel underestimate the move and snap back instead of reordering.
-      const mids = rows.current.map((el) => { const r = el?.getBoundingClientRect(); return r ? r.top + r.height / 2 : Number.POSITIVE_INFINITY; });
-      let scrolled = 0; // cumulative auto-scroll, so the (viewport) midpoints stay comparable to lastY
-      const resolveTo = (): number => {
-        let idx = 0;
-        for (let j = 0; j < count; j++) if (j !== from && mids[j] < lastY + scrolled) idx++;
-        return Math.max(0, Math.min(count - 1, idx));
-      };
-
-      const grabbed = list[from];
+      step = r0 && r1 ? Math.abs(r1.top - r0.top) : (list[from]?.getBoundingClientRect().height ?? 44) + 6;
+      mids = rows.current.map((el) => { const r = el?.getBoundingClientRect(); return r ? r.top + r.height / 2 : Number.POSITIVE_INFINITY; });
       if (grabbed) {
-        grabbed.style.transition = "none"; // follows the pointer instantly
+        grabbed.style.transition = "none";
         grabbed.style.zIndex = "30";
         grabbed.style.boxShadow = "0 10px 24px rgba(0,0,0,.13)";
         grabbed.style.opacity = ".97";
         grabbed.style.cursor = "grabbing";
         grabbed.style.willChange = "transform";
       }
-
-      // Position the grabbed row under the pointer and glide the neighbours it passes aside.
-      const apply = () => {
-        const dy = lastY - startY;
-        if (grabbed) grabbed.style.transform = `translateY(${dy}px)`;
-        to = resolveTo();
-        for (let j = 0; j < count; j++) {
-          if (j === from) continue;
-          const el = rows.current[j];
-          if (!el) continue;
-          // Rows between the origin and the target slide one step to open the gap.
-          let shift = 0;
-          if (from < to && j > from && j <= to) shift = -step;
-          else if (from > to && j < from && j >= to) shift = step;
-          el.style.transition = EASE;
-          el.style.transform = shift ? `translateY(${shift}px)` : "";
-        }
-      };
-
-      // Auto-scroll the container (or the window) while the pointer sits near an edge.
-      const scroller = scrollParent(grabbed);
-      let raf = 0;
-      const tick = () => {
-        const doc = document.scrollingElement || document.documentElement;
-        let top: number, bottom: number, canUp: boolean, canDown: boolean;
-        if (scroller) {
-          const rect = scroller.getBoundingClientRect();
-          top = rect.top; bottom = rect.bottom;
-          canUp = scroller.scrollTop > 0;
-          canDown = scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 1;
-        } else {
-          top = 0; bottom = window.innerHeight;
-          canUp = doc.scrollTop > 0;
-          canDown = doc.scrollTop + doc.clientHeight < doc.scrollHeight - 1;
-        }
-        let d = 0;
-        if (lastY < top + EDGE && canUp) d = -Math.ceil(((top + EDGE - lastY) / EDGE) * MAX_SPEED);
-        else if (lastY > bottom - EDGE && canDown) d = Math.ceil(((lastY - (bottom - EDGE)) / EDGE) * MAX_SPEED);
-        if (d) {
-          const target = scroller ?? doc;
-          const before = target.scrollTop;
-          target.scrollTop += d;
-          const moved = target.scrollTop - before;
-          // keep the row glued under the pointer AND keep the captured (viewport) midpoints
-          // comparable to the pointer as the container scrolls under it.
-          if (moved) { startY -= moved; scrolled += moved; apply(); }
-        }
-        raf = requestAnimationFrame(tick);
-      };
-
-      const move = (ev: PointerEvent) => { lastY = ev.clientY; apply(); };
-
-      const up = (ev: PointerEvent) => {
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", up);
-        window.removeEventListener("pointercancel", up);
-        cancelAnimationFrame(raf);
-        lastY = ev.clientY;
-        const finalTo = resolveTo();
-        // Let the grabbed row glide to its slot, then commit the reorder and clear styles.
-        if (grabbed && finalTo !== from) {
-          grabbed.style.transition = EASE;
-          grabbed.style.transform = `translateY(${(finalTo - from) * step}px)`;
-        }
-        const finish = () => { clearStyles(); setDragging(false); if (finalTo !== from) onReorder(from, finalTo); };
-        if (finalTo !== from) window.setTimeout(finish, 190);
-        else finish();
-      };
-
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", up);
-      window.addEventListener("pointercancel", up);
+      scroller = scrollParent(grabbed);
+      document.body.style.userSelect = "none";
       raf = requestAnimationFrame(tick);
+    };
+    const move = (ev: PointerEvent) => {
+      lastY = ev.clientY;
+      if (!started) {
+        if (Math.abs(ev.clientX - startX) < THRESH && Math.abs(ev.clientY - startY) < THRESH) return;
+        begin();
+      }
+      apply();
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      cancelAnimationFrame(raf);
+      document.body.style.userSelect = "";
+      if (!started) return; // never crossed the threshold → a plain click → let it select the panel
+      lastY = ev.clientY;
+      const finalTo = resolveTo();
+      // Swallow the click that a real drag would otherwise fire (so dragging the row's body — even
+      // the name — doesn't also select the panel).
+      const swallow = (ce: Event) => { ce.stopPropagation(); ce.preventDefault(); };
+      window.addEventListener("click", swallow, { capture: true, once: true });
+      window.setTimeout(() => window.removeEventListener("click", swallow, true), 400);
+      if (grabbed && finalTo !== from) {
+        grabbed.style.transition = EASE;
+        grabbed.style.transform = `translateY(${(finalTo - from) * step}px)`;
+      }
+      const finish = () => { clearStyles(); setDragging(false); if (finalTo !== from) onReorder(from, finalTo); };
+      if (finalTo !== from) window.setTimeout(finish, 190);
+      else finish();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
+
+  // The dedicated grip (also works on touch — `touch-action: none`).
+  const handleProps = (i: number) => ({
+    style: { touchAction: "none" as const, cursor: "grab" },
+    onPointerDown: (e: React.PointerEvent) => beginPointerDrag(i, e),
+  });
+
+  // Press-and-drag anywhere on the row (mouse/pen only, so touch still scrolls the list). Skips the
+  // grip (it has its own handler) and any interactive control, so buttons / inputs keep working.
+  const rowDragProps = (i: number) => ({
+    onPointerDown: (e: React.PointerEvent) => {
+      if (e.pointerType === "touch") return;
+      const t = e.target as HTMLElement;
+      if (t.closest("[data-panelgrip], [data-nodrag], input, textarea, select, label")) return;
+      beginPointerDrag(i, e);
     },
   });
 
-  return { setRowRef, handleProps, dragging };
+  return { setRowRef, handleProps, rowDragProps, dragging };
 }

@@ -23,6 +23,24 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-14 · Mohamed's side · Claude
 
+**Big round of panel-list, combination and section drag-and-drop improvements.**
+
+*Panel list (left side of the Panels tab):*
+- The little drag-dots are gone; every panel now has a **tick-box**. Tick several panels and **drag any ticked one — they all move together**. With nothing ticked, dragging still moves just one panel.
+- When panels are ticked, a small bar shows **Group** and **Delete** (delete removes all the ticked panels; it's undoable), plus **Move to…** a group.
+- **All** ticked panels are now shown highlighted (orange fill + frame), not only the one that's open.
+- The **group headers** are restyled: the group name is **black and a bit bigger**, and the header strip is now a **neutral grey frame and background like the panels** (the orange fill and orange bar are gone).
+
+*Components & combinations:*
+- **Dragging a component now moves it between combinations.** Drop it inside/next to another combination and it **joins that one and takes on its settings** (its ×N quantity, etc.); drop it in open space and it becomes a **plain standalone item** again. The combination it left updates instantly, and if a combination loses its last item its header **disappears on its own**.
+- Two combinations in the same section **can't share a name** any more — if you rename one to a name that's already used, it's refused and asks you for a different name. This also means a drag can no longer leave **two identical combination rows stacked** on top of each other (the earlier glitch).
+- Removed the **Copy / Paste combination** buttons (the toolbar "Paste combination" and the 📋 on each combination). **Duplicate (⧉) stays.**
+
+*Sections:*
+- The **section tabs at the top are now draggable** — drag a tab left/right to reorder the sections, and the section blocks below reorder to match immediately. The old **up/down arrows** on the section headers are removed (the tabs control the order now). The order saves with the quotation.
+
+## 2026-09-14 · Mohamed's side · Claude
+
 **Reordering components and combinations now feels like a natural drag-and-drop list.**
 
 Grab an item's handle and drag it up or down: the other rows slide out of the way and an empty slot opens exactly where
