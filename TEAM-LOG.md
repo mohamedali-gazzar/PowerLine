@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-14 · Mohamed's side · Claude
 
+**Cleaner look for a selected (ticked) panel.**
+
+The old selected style had an orange border plus an offset ring, which looked like a heavy double outline. It's now a
+soft orange fill with a single clean orange border and a solid orange bar down the left edge — clearer and tidier, with
+no layout shift, in both light and dark themes.
+
+## 2026-09-14 · Mohamed's side · Claude
+
 **Clicking outside a panel now does nothing.**
 
 Before, clicking in the empty area (or into the panel editor) would close the open panel and clear any ticked panels.

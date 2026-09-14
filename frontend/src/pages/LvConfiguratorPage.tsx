@@ -6627,7 +6627,9 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
                 onClick={(e) => { const t = e.target as HTMLElement; if (t.closest("button, a, input, [data-nodrag]")) return; up({ selectedId: p.id, activeGroupId: null }); }}
                 className={`mb-1.5 select-none rounded-lg border px-2 py-1.5 transition-colors duration-150 ${canReorder ? "cursor-grab active:cursor-grabbing" : ""} ${
                   checked
-                    ? "border-brand bg-brand-light ring-2 ring-brand ring-offset-1"  // every ticked panel: orange fill + frame
+                    // Ticked panel: soft orange fill + a single clean orange border and a solid
+                    // left accent bar (inset — no layout shift), instead of the old doubled ring.
+                    ? "border-brand bg-brand-light shadow-[inset_3px_0_0_0_#F16722]"
                     : p.highlight
                       ? `bg-yellow-200 hover:bg-yellow-300 ${active ? "border-brand" : "border-yellow-400"}`
                       : active ? "border-brand bg-brand-light" : "border-line bg-white hover:bg-brand-tint"
