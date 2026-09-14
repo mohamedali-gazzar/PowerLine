@@ -23,7 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-14 · Mohamed's side · Claude
 
-**Standard-EDMS Draft: back to the simple notepad we used to have.**
+**Combination ↑ / ↓ arrows: smooth slide + a little pulse, and greyed-out at the ends.**
+
+In the component list, the ↑ / ↓ buttons on a combination header now reorder it with a smooth slide (the rows glide into
+their new place instead of jumping), and the moved combination flashes orange once so you can see where it landed. The ↑
+is greyed-out and dead on the top combination and the ↓ on the bottom one. Dragging a combination by its ⠿ grip is
+unchanged. No effect on prices, numbering or the offer.
 
 The Standard-EDMS per-panel Draft (which last shipped as a spreadsheet grid) is now the plain **"Draft — notes &
 calculations for this panel"** notepad from before: a simple free-text box in the panel editor, right after "No. of

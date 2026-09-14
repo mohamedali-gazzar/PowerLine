@@ -7738,6 +7738,44 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   const cardRef = useRef<HTMLDivElement>(null);
   const [barTop, setBarTop] = useState<number | null>(null); // action-bar y, just below the lowest selected row (card-relative)
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null); // free viewport position once the bar is dragged
+
+  // ── Combination reorder motion: press-and-hold lift, smooth FLIP slide, land pulse ─────────
+  // FLIP: animate any combination reorder (drag or ↑↓). Capture each row's screen position just
+  // BEFORE the order changes; a layout effect after the re-render slides each row old → new.
+  const flipRef = useRef<Map<string, number> | null>(null);
+  const captureFlip = () => {
+    const card = cardRef.current; if (!card) return;
+    const m = new Map<string, number>();
+    card.querySelectorAll<HTMLElement>("tr[data-cid], tr[data-grp]").forEach((el) => {
+      m.set(el.dataset.cid ? `c:${el.dataset.cid}` : `g:${el.dataset.grp}`, el.getBoundingClientRect().top);
+    });
+    flipRef.current = m;
+  };
+  useLayoutEffect(() => {
+    const prev = flipRef.current; flipRef.current = null;
+    const card = cardRef.current;
+    if (!prev || !card) return;
+    card.querySelectorAll<HTMLElement>("tr[data-cid], tr[data-grp]").forEach((el) => {
+      const key = el.dataset.cid ? `c:${el.dataset.cid}` : `g:${el.dataset.grp}`;
+      const was = prev.get(key); if (was == null) return;
+      const dy = was - el.getBoundingClientRect().top;
+      if (!dy) return;
+      el.style.transition = "none";
+      el.style.transform = `translateY(${dy}px)`;
+      requestAnimationFrame(() => {
+        el.style.transition = "transform 350ms cubic-bezier(.22,1,.36,1)";
+        el.style.transform = "";
+        const done = () => { el.style.transition = ""; el.style.transform = ""; el.removeEventListener("transitionend", done); };
+        el.addEventListener("transitionend", done);
+      });
+    });
+  });
+  const [comboPulse, setComboPulse] = useState<string | null>(null);   // "sec::group" to flash once after it lands (↑/↓)
+  const firePulse = (sec: string, group: string) => {
+    const key = `${sec}::${group}`;
+    setComboPulse(key);
+    window.setTimeout(() => setComboPulse((k) => (k === key ? null : k)), 560);
+  };
   const orderedIds = p.components.filter((c) => !isSpacer(c)).map((c) => c.id); // selectable rows in render order
   const toggleSelect = (id: string, shift: boolean) => {
     setSelected((prev) => {
@@ -8789,6 +8827,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                 <tbody>
                   {(() => {
                     const secComps = p.components.filter((c) => c.section === sec);
+                    // Ordered runs (blocks) of this section — used to dim the ↑ / ↓ arrows at the ends.
+                    const secBlocks: string[] = [];
+                    secComps.forEach((c) => { const bg = effGroup.get(c.id) || ""; if (secBlocks[secBlocks.length - 1] !== bg) secBlocks.push(bg); });
                     const renderRow = (c: PanelComponent) => isSpacer(c) ? (
                     <tr key={c.id} data-cid={c.id}
                       onPointerDown={(e) => {
@@ -8907,8 +8948,8 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                           const selIds = secComps.filter((c) => !isSpacer(c) && (effGroup.get(c.id) || "") === g).map((c) => c.id);
                           const selOn = selIds.filter((id) => selected.has(id)).length;
                           rows.push(
-                            <tr key={`grp-${sec}-${g}`}
-                              className={`align-middle${groupDrag?.group === g && groupDrag?.sec === sec ? " opacity-60" : ""}`}
+                            <tr key={`grp-${sec}-${g}`} data-grp={`${sec}::${g}`}
+                              className={`pl-combo-band align-middle${groupDrag?.group === g && groupDrag?.sec === sec ? " opacity-60" : ""}${comboPulse === `${sec}::${g}` ? " pl-combo-pulse" : ""}`}
                               onDragOver={(e) => { if (groupDrag && groupDrag.sec === sec && groupDrag.group !== g) { e.preventDefault(); moveGroupTo(groupDrag.group, sec, g); } }}
                               onDrop={(e) => { e.preventDefault(); setGroupDrag(null); }}>
                               <td className="py-1 pl-1">
@@ -8970,10 +9011,18 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                                       </button>
                                     );
                                   })()}
-                                  <button type="button" title="Move group up (sort within section)" onClick={() => reorderGroup(g, sec, -1)}
-                                    className="rounded px-1 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">↑</button>
-                                  <button type="button" title="Move group down (sort within section)" onClick={() => reorderGroup(g, sec, 1)}
-                                    className="rounded px-1 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">↓</button>
+                                  {(() => {
+                                    const gi = secBlocks.indexOf(g);
+                                    const firstBlk = gi <= 0, lastBlk = gi === secBlocks.length - 1;
+                                    return (<>
+                                      <button type="button" title="Move combination up" disabled={firstBlk}
+                                        onClick={() => { captureFlip(); reorderGroup(g, sec, -1); firePulse(sec, g); }}
+                                        className="rounded px-1 text-xs leading-none text-brand-dark/60 transition hover:bg-white hover:text-brand-dark disabled:pointer-events-none disabled:opacity-30">↑</button>
+                                      <button type="button" title="Move combination down" disabled={lastBlk}
+                                        onClick={() => { captureFlip(); reorderGroup(g, sec, 1); firePulse(sec, g); }}
+                                        className="rounded px-1 text-xs leading-none text-brand-dark/60 transition hover:bg-white hover:text-brand-dark disabled:pointer-events-none disabled:opacity-30">↓</button>
+                                    </>);
+                                  })()}
                                   <button type="button" title="Duplicate this combination" onClick={() => duplicateGroup(g, sec)}
                                     className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">⧉</button>
                                   {p.sections.length > 1 && (

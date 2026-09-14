@@ -199,6 +199,12 @@
     100% { box-shadow: 0 0 0 3px rgba(241, 103, 34, 0); }
   }
   .assistant-flash { animation: assistant-flash 1.4s ease-out; border-radius: 1rem; }
+  /* A single orange pulse on a combination header when it lands after an ↑ / ↓ reorder. */
+  @keyframes pl-combo-pulse {
+    0%   { background: rgba(241, 103, 34, 0.22); }
+    100% { background: transparent; }
+  }
+  tr.pl-combo-band.pl-combo-pulse > td { animation: pl-combo-pulse 550ms ease; }
   /* Scroll with no visible scrollbar (wheel/trackpad still scroll). Used on the
      Panels tab's independently-scrolling columns. */
   .no-scrollbar {
