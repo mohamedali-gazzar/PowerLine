@@ -6411,6 +6411,80 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
   // Skipped while the group-name popup is open — that portal handles its own close.
   const panelListRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null); // the editor column — clicks here keep the selection
+  // Press a panel's tick-box and drag up/down across the list to select every panel you sweep over
+  // (mouse/pen). A plain press-and-release (no drag) is left to the tick-box's own click, so the
+  // single-toggle / Shift-range behaviour is unchanged. Auto-scrolls near the top/bottom edge so a
+  // long list can be swept end to end. The gesture is dedicated to selecting — it never opens a
+  // panel or starts a reorder (the box is data-nodrag, so the row's drag-reorder ignores it).
+  const dragSelRef = useRef<{ anchorId: string; moved: boolean } | null>(null);
+  const startCheckboxDragSelect = (anchorId: string) => (e: React.PointerEvent) => {
+    if (e.pointerType === "touch") return; // let touch scroll the list; a tap still toggles one box
+    if (e.button !== 0) return;             // left button only
+    dragSelRef.current = { anchorId, moved: false };
+    const startX = e.clientX, startY = e.clientY;
+    let lastX = startX, lastY = startY, raf = 0;
+    const orderIds = () => flatOrder().map((pp) => pp.id);
+    const extendToPoint = () => {
+      const overId = (document.elementFromPoint(lastX, lastY) as HTMLElement | null)?.closest("[data-panelid]")?.getAttribute("data-panelid");
+      if (!overId) return;
+      const list = orderIds();
+      const a = list.indexOf(anchorId), b = list.indexOf(overId);
+      if (a < 0 || b < 0) return;
+      const [lo, hi] = a < b ? [a, b] : [b, a];
+      setSelPanels(new Set(list.slice(lo, hi + 1))); // the swept range, anchor → cursor
+      setLastPanelPick(overId);
+    };
+    const EDGE = 56, MAX = 18; // px from the edge where auto-scroll starts · max px/frame
+    const findScroller = (): HTMLElement | null => {
+      for (let el = panelListRef.current as HTMLElement | null; el; el = el.parentElement) {
+        const oy = getComputedStyle(el).overflowY;
+        if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight) return el;
+      }
+      return null; // → scroll the window
+    };
+    const tick = () => {
+      const sc = findScroller();
+      let top: number, bottom: number, canUp: boolean, canDown: boolean;
+      if (sc) { const r = sc.getBoundingClientRect(); top = r.top; bottom = r.bottom; canUp = sc.scrollTop > 0; canDown = sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1; }
+      else { const doc = document.scrollingElement || document.documentElement; top = 0; bottom = window.innerHeight; canUp = doc.scrollTop > 0; canDown = doc.scrollTop + doc.clientHeight < doc.scrollHeight - 1; }
+      let dy = 0;
+      if (lastY < top + EDGE && canUp) dy = -Math.ceil(((top + EDGE - lastY) / EDGE) * MAX);
+      else if (lastY > bottom - EDGE && canDown) dy = Math.ceil(((lastY - (bottom - EDGE)) / EDGE) * MAX);
+      if (dy) { if (sc) sc.scrollTop += dy; else window.scrollBy(0, dy); extendToPoint(); }
+      raf = requestAnimationFrame(tick);
+    };
+    const onMove = (ev: PointerEvent) => {
+      lastX = ev.clientX; lastY = ev.clientY;
+      const d = dragSelRef.current; if (!d) return;
+      if (!d.moved) {
+        if (Math.abs(ev.clientX - startX) < 4 && Math.abs(ev.clientY - startY) < 4) return; // click vs drag
+        d.moved = true;
+        document.body.style.userSelect = "none";
+        setSelPanels(new Set([anchorId])); // the sweep includes the box you started on
+        raf = requestAnimationFrame(tick);
+      }
+      extendToPoint();
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      cancelAnimationFrame(raf);
+      document.body.style.userSelect = "";
+      const moved = !!dragSelRef.current?.moved;
+      dragSelRef.current = null;
+      if (moved) {
+        // A real sweep happened — swallow the click that release would fire, so it can't toggle the
+        // starting box back off. A plain click (never moved) is left alone → its onClick toggles one.
+        const swallow = (ce: Event) => { ce.stopPropagation(); ce.preventDefault(); };
+        window.addEventListener("click", swallow, { capture: true, once: true });
+        window.setTimeout(() => window.removeEventListener("click", swallow, true), 400);
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
   useEffect(() => {
     if (selPanels.size === 0) return;
     const onDocDown = (e: MouseEvent) => {
@@ -6589,9 +6663,10 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
                 <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
                   <div className="flex min-w-0 items-center gap-1">
                     <input type="checkbox" data-rowcheck data-nodrag checked={checked} readOnly
+                      onPointerDown={startCheckboxDragSelect(p.id)}
                       onClick={(e) => { e.stopPropagation(); togglePanelSel(p.id, e.shiftKey); }}
                       className="mr-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-brand"
-                      title="Tick to select — Shift-click for a range. Drag any ticked panel to move them together." />
+                      title="Tick to select — or press and drag up/down across the boxes to select a range." />
                     <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{num}</span>
                     {panelBadge && (() => { const b = panelBadge(p); return (
                       <span title={`Owner: ${b.title}${b.mine ? " (you)" : ""}`}

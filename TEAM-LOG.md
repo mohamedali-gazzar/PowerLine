@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-14 · Mohamed's side · Claude
 
+**Panel tick-boxes: press-and-drag to select several at once.**
+
+In the panel list, press a panel's tick-box and drag up or down across the other boxes — every panel you sweep over is
+selected as you move (works both directions, and the list auto-scrolls if you hold near the top or bottom edge). A plain
+single click still just toggles that one box (Shift-click still does a range), and the sweep never opens a panel or moves
+one around — it's only for selecting.
+
+## 2026-09-14 · Mohamed's side · Claude
+
 **Sizing (2) is now required for Double panels.**
 
 When a panel's layout is **Double**, the second enclosure width — **Sizing (2)** — must be chosen. The field is
