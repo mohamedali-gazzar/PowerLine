@@ -9977,18 +9977,26 @@ function SizingCard({ p, u, factors }: {
                 }))}
                 onPick={(k) => setSlot(1, sizing1Pool.find((x) => `${x.name}|${x.ref}` === k) ?? null)} heightMatch />
             </div>
-            {ps.layout === "Double" && (
-              <div>
-                <L>Sizing (2) — width only (H &amp; D match panel 1)</L>
-                <SearchSelect value={keyOf(slotItem(2))} placeholder="Search size — one selection…"
-                  options={sizing2Pool.map((e) => ({
-                    key: `${e.name}|${e.ref}`,
-                    label: e.name,
-                    hint: `${e.ref} · ${fmtEgp(enclosurePriceEgp(e, factors))} EGP`,
-                  }))}
-                  onPick={(k) => setSlot(2, sizing2Pool.find((x) => `${x.name}|${x.ref}` === k) ?? null)} heightMatch />
-              </div>
-            )}
+            {ps.layout === "Double" && (() => {
+              const missing2 = !slotItem(2); // mandatory for a Double panel
+              return (
+                <div>
+                  <L>Sizing (2) — width only (H &amp; D match panel 1) <span className="text-red-500">*</span></L>
+                  <SearchSelect value={keyOf(slotItem(2))} placeholder="Search size — one selection…"
+                    options={sizing2Pool.map((e) => ({
+                      key: `${e.name}|${e.ref}`,
+                      label: e.name,
+                      hint: `${e.ref} · ${fmtEgp(enclosurePriceEgp(e, factors))} EGP`,
+                    }))}
+                    onPick={(k) => setSlot(2, sizing2Pool.find((x) => `${x.name}|${x.ref}` === k) ?? null)} heightMatch />
+                  {missing2 && (
+                    <p className="mt-1 text-[11px] font-semibold text-red-600">
+                      Required for a Double panel — pick the 2nd width{ps.family?.trim() ? "" : " after choosing an enclosure family"}.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* the selected enclosure(s) — one per slot */}

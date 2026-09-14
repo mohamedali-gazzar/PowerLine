@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-14 · Mohamed's side · Claude
 
+**Sizing (2) is now required for Double panels.**
+
+When a panel's layout is **Double**, the second enclosure width — **Sizing (2)** — must be chosen. The field is
+marked with a red **\*** and shows *"Required for a Double panel — pick the 2nd width"* while it's empty, and until
+it's filled the panel is flagged under **"Sizing (2) missing on Double panels"** in the export warnings (Technical /
+Commercial Offer) and the send-for-approval checks — the same gate that catches empty panels and missing prices. This
+stops a half-configured Double panel (a 2nd box with no width) reaching a customer offer. Single panels are unaffected,
+and no prices change.
+
+## 2026-09-14 · Mohamed's side · Claude
+
 **Big round of panel-list, combination and section drag-and-drop improvements.**
 
 *Panel list (left side of the Panels tab):*

@@ -1658,6 +1658,7 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   const emptyPanels: string[] = []; // costed, but nothing to show the customer
   const dupNames: string[] = []; // two panels a reader cannot tell apart
   const noFamily: string[] = []; // panels-mode panel with no enclosure family chosen yet
+  const noSizing2: string[] = []; // Double-layout panel missing its 2nd enclosure (Sizing (2), mandatory)
   s.panels.forEach((p, i) => {
     const label = `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}`;
     if (p.highlight) highlighted.push(label);
@@ -1720,6 +1721,13 @@ export function exportBlockers(s: LvState): ExportCheck[] {
     } else if (!NO_BUSBAR_FAMILIES.has(family) && (mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) <= 0) {
       reasons.push("busbar weight is 0");
     }
+    // A Double-layout panel is two enclosures side by side — the 2nd width (Sizing (2)) is
+    // mandatory. Once a family is chosen, require an enclosure in slot 2 or the panel isn't
+    // fully sized (its 2nd box would be unpriced/undefined).
+    if (p.sizingMode === "panels" && family.trim() && p.panelsSizing?.layout === "Double"
+        && !(p.panelItems ?? []).some((it) => (it.slot ?? 1) === 2)) {
+      noSizing2.push(`${tag}: Sizing (2) not selected — required for a Double panel`);
+    }
     if (reasons.length) missingCopper.push(`${tag}: ${reasons.join("; ")}`);
   });
   // Two unnamed auxiliary cells are two indistinguishable rows on the offer for the
@@ -1730,6 +1738,7 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   if (highlighted.length) out.push({ title: "🖍️ Highlighted panels", items: highlighted });
   if (dupNames.length) out.push({ title: "Two panels with the same name", items: dupNames });
   if (noFamily.length) out.push({ title: "No enclosure family chosen", items: noFamily });
+  if (noSizing2.length) out.push({ title: "Sizing (2) missing on Double panels", items: noSizing2 });
   if (emptyPanels.length) out.push({ title: "Empty panels — nothing would print", items: emptyPanels });
   if (zeroPrice.length) out.push({ title: "Zero price", items: zeroPrice });
   if (noCells.length) out.push({ title: "No cells selected", items: noCells });
