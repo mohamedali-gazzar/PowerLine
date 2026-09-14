@@ -540,6 +540,15 @@ export interface AnnouncementInput {
   published: boolean;
 }
 
+/** A user's saved combination — its definition (component list) only, reusable across panels. */
+export interface SavedComboDto {
+  id: string;
+  name: string;
+  sig: string;
+  comps: unknown[]; // PanelComponent[] on the LV side
+  createdAt: string;
+}
+
 export const api = {
   // ── RMU offers ─────────────────────────────────────────────────────────────
   // includeRemoved mirrors the LV list: hidden offers are kept, and only an admin may
@@ -913,6 +922,17 @@ export const api = {
       request<LockState>(`/locks/${id}`, { method: "POST", body: JSON.stringify({ force }) }),
     /** Release the lock (only if the caller holds it). */
     release: (id: string) => request<{ ok: true }>(`/locks/${id}`, { method: "DELETE" }),
+  },
+
+  // ── Saved combinations (per-user, reusable across panels) ────────────────────
+  savedCombos: {
+    /** The current user's saved combinations, newest first. */
+    list: () => request<{ items: SavedComboDto[] }>("/saved-combos"),
+    /** Save a combination (or refresh the one already saved under the same signature). */
+    save: (body: { name: string; sig: string; comps: unknown[] }) =>
+      request<{ item: SavedComboDto }>("/saved-combos", { method: "POST", body: JSON.stringify(body) }),
+    /** Remove one of the current user's saved combinations. */
+    remove: (id: string) => request<{ ok: true }>(`/saved-combos/${id}`, { method: "DELETE" }),
   },
 
   // ── Announcements ───────────────────────────────────────────────────────────

@@ -21,6 +21,21 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-14 · Mohamed's side · Claude
+
+**Saved Combinations — save any combination once and reuse it in any panel, from the QTN Assistant.**
+
+- Every combination now has a **heart (♥)** on its header. Click it to save that combination to your own list; click
+  again to remove it. The same combination can't be saved twice.
+- The **QTN Assistant** now has two tabs: **Conversation** and **Saved combinations**. The Saved tab lists everything
+  you've saved (with a count on the tab).
+- Open a panel, go to the Saved tab, and **tap a saved combination to drop a fresh copy into that panel** — the same
+  way "Paste combination" works. You can reuse the same saved combination in as many panels as you like; inserting never
+  changes or moves the saved one, and edits to a copy don't affect the saved version.
+- Saved combinations are **per-user** (each person has their own list), kept on the server.
+
+Under the hood this adds one brand-new server table (`SavedCombo`) — nothing existing is touched, so no data is at risk.
+
 ## 2026-09-13 · Mohamed's side · Claude
 
 **You can now drag a whole combination to reorder it — a grip handle (⠿) on each combination's header.**

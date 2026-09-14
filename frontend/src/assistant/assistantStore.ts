@@ -21,6 +21,10 @@ export interface AssistantFeed {
   busy: boolean;
   /** Post all staged replies (each its own message, keeping its quote) and send for approval. */
   onReSend?: (approverId: string, replies: { text: string; replyToId: string | null }[]) => Promise<void> | void;
+  /** True when a panel is open to receive an inserted saved combination. */
+  canInsertCombo?: boolean;
+  /** Insert a saved combination as a fresh copy into the currently active panel. */
+  onInsertCombo?: (combo: { name: string; comps: unknown[] }) => void;
 }
 
 export interface AssistantState {

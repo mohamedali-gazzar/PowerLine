@@ -623,6 +623,20 @@ model LvCombo {
   updatedBy String   @default("")
 }
 
+/// A user's saved/favourited combination — its definition only (a JSON list of components), so it
+/// can be reused across panels. `sig` is a content signature; a user can't save the same one twice.
+model SavedCombo {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  sig       String
+  data      String   // JSON: { name, comps: PanelComponent[] }
+  createdAt DateTime @default(now())
+
+  @@unique([userId, sig])
+  @@index([userId])
+}
+
 /// Regression guard for the LV combination builders (ATS / MCC / photocell),
 /// which find their parts by DESCRIPTION. One row per distinct description, with
 /// the part it resolves to today. Publishing is refused if any of them stops

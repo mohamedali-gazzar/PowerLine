@@ -9,6 +9,7 @@ import ActiveTimeBadge from "../components/ActiveTimeBadge";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
 import WorkflowActionMenu, { type WfAction } from "../components/WorkflowActionMenu";
 import { assistantStore } from "../assistant/assistantStore";
+import { savedCombosStore, useSavedCombos, comboSig } from "../lv/savedCombos";
 import { useReviewLock } from "../hooks/useReviewLock";
 import { usePointerReorder } from "../hooks/usePointerReorder";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
@@ -947,6 +948,31 @@ export default function LvConfiguratorPage() {
   sendForApprovalRef.current = sendForApproval;
   const selName = sel?.name?.trim() ?? "";
   const selNo = sel ? s.panels.findIndex((p) => p.id === sel.id) + 1 : 0;
+  // Insert a saved combination as a FRESH copy into the currently active panel — the same clone-with-
+  // new-ids logic as "Paste combination", so it never moves or touches the saved definition. Read
+  // through a ref (latest selected panel) so the Assistant's Saved tab always targets the open panel.
+  const selRef = useRef(sel);
+  selRef.current = sel;
+  const insertSavedCombo = (combo: { name: string; comps: unknown[] }) => {
+    const panel = selRef.current;
+    if (!panel) return;
+    const sections = panel.sections ?? [];
+    const sec = sections.includes(panel.activeSection) ? panel.activeSection : (sections[0] ?? "");
+    if (!sec) return;
+    const eg = effectiveGroups(panel.components);
+    const used = new Set(panel.components.filter((c) => c.section === sec && !isSpacer(c)).map((c) => eg.get(c.id) || "").filter(Boolean));
+    let name = combo.name; for (let k = 2; used.has(name); k++) name = `${combo.name} (${k})`;
+    const cid = uid();
+    const clones = (combo.comps as PanelComponent[]).map((c) => isSpacer(c)
+      ? { ...c, id: uid(), section: sec }
+      : { ...c, id: uid(), section: sec, group: name, comboId: cid });
+    const arr = [...panel.components];
+    let lastIdx = -1; for (let i = 0; i < arr.length; i++) if (arr[i].section === sec) lastIdx = i;
+    arr.splice(lastIdx + 1, 0, ...clones);
+    upPanel(panel.id, { components: arr });
+  };
+  const insertComboRef = useRef(insertSavedCombo);
+  insertComboRef.current = insertSavedCombo;
   useEffect(() => {
     const scope = tab === "panels" && selNo > 0 ? `Panel ${selNo} — ${selName || "unnamed"}` : "";
     assistantStore.setFeed({
@@ -956,6 +982,8 @@ export default function LvConfiguratorPage() {
       canReply: status === "RETURNED",
       busy: submitting,
       onReSend: (approverId, replies) => sendForApprovalRef.current(approverId, replies),
+      canInsertCombo: tab === "panels" && selNo > 0,
+      onInsertCombo: (combo) => insertComboRef.current(combo),
     });
   }, [qtnNum, approvalEvents, status, submitting, tab, selNo, selName]);
   useEffect(() => () => assistantStore.setFeed(null), []);
@@ -7671,6 +7699,15 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   // Separately, a whole combination can be dragged by its header grip to reorder it within its
   // section (native HTML5 drag; independent of the per-row pointer drag above).
   const [groupDrag, setGroupDrag] = useState<{ group: string; sec: string } | null>(null);
+  // Saved combinations (per-user) — subscribe so the heart on each combination reflects saved state.
+  useSavedCombos();
+  // The definition of one combination (its member components, cloned) — used by the heart to save it.
+  const groupComps = (group: string, sec: string) =>
+    p.components.filter((c) => c.section === sec && (effGroup.get(c.id) || "") === group).map((c) => ({ ...c }));
+  const toggleSaveCombo = (group: string, sec: string) => {
+    const comps = groupComps(group, sec);
+    if (comps.length) void savedCombosStore.toggle(group, comps);
+  };
   // The drop-target highlight is applied IMPERATIVELY (a `.drop-over` class on the hovered
   // element) rather than via React state — so dragging a component over the list no longer
   // re-renders the whole card on every move, which is what made reordering laggy.
@@ -8951,6 +8988,16 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                                   <button type="button" title={`Add a component into “${g}”`}
                                     onClick={() => { const armed = addTarget?.sec === sec && addTarget?.group === g; setAddTarget(armed ? null : { sec, group: g }); if (!armed) { u({ activeSection: sec }); refocusSearch(); } }}
                                     className={`rounded px-1.5 py-0.5 text-[11px] font-bold leading-none transition ${addTarget?.sec === sec && addTarget?.group === g ? "bg-brand text-white" : "text-brand-dark/70 hover:bg-white hover:text-brand-dark"}`}>+ Add</button>
+                                  {(() => {
+                                    const saved = savedCombosStore.hasSig(comboSig(g, groupComps(g, sec)));
+                                    return (
+                                      <button type="button" onClick={() => toggleSaveCombo(g, sec)} aria-pressed={saved}
+                                        title={saved ? "Saved to your combinations — click to remove" : "Save this combination to reuse in other panels"}
+                                        className={`rounded px-1 text-sm leading-none transition hover:bg-white ${saved ? "text-red-500" : "text-brand-dark/50 hover:text-red-500"}`}>
+                                        {saved ? "♥" : "♡"}
+                                      </button>
+                                    );
+                                  })()}
                                   <button type="button" title="Move group up (sort within section)" onClick={() => reorderGroup(g, sec, -1)}
                                     className="rounded px-1 text-xs leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">↑</button>
                                   <button type="button" title="Move group down (sort within section)" onClick={() => reorderGroup(g, sec, 1)}

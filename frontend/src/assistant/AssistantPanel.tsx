@@ -6,11 +6,12 @@
 // is fed by whichever QTN is open (assistantStore), and is never unmounted on close, so the thread
 // and the QTN never share local state.
 
-import { useEffect, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import type { QtnEventDto } from "../api";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
 import { assistantStore, useAssistant } from "./assistantStore";
+import { savedCombosStore, useSavedCombos } from "../lv/savedCombos";
 
 // A reply-less re-send stores a generated "Sent to … for approval" line — routing noise, not a
 // message — so it is filtered out (same rule the old chat used).
@@ -72,6 +73,8 @@ const pinGlyph = (
 
 export default function AssistantPanel() {
   const { feed, open, pinned, width, draft, mobile, replyTo, pendingReplies } = useAssistant();
+  const [assistTab, setAssistTab] = useState<"chat" | "saved">("chat");
+  const savedCombos = useSavedCombos(); // per-user saved combinations (for the Saved tab + badge)
   const listRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const sendWrapRef = useRef<HTMLDivElement>(null);
@@ -285,8 +288,19 @@ export default function AssistantPanel() {
           {feed?.scopeLine || "No quotation open"}
         </div>
 
+        {/* Two tabs: the approval conversation, and the user's saved combinations. */}
+        <div className="flex shrink-0 border-b border-line text-xs font-bold">
+          {([["chat", "Conversation"], ["saved", "Saved combinations"]] as const).map(([k, label]) => (
+            <button key={k} type="button" onClick={() => setAssistTab(k)}
+              className={`flex-1 px-3 py-2 transition-colors ${assistTab === k ? "border-b-2 border-brand text-brand-dark" : "text-muted hover:text-ink"}`}>
+              {label}{k === "saved" && savedCombos.length > 0 ? ` (${savedCombos.length})` : ""}
+            </button>
+          ))}
+        </div>
+
         {/* Message list — scrollable. Hover a bubble (or long-press on touch) to reveal a ↩ reply
             button on its outer edge; a reply carries a one-level quote of the message it answers. */}
+        {assistTab === "chat" ? (
         <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
           {messages.length === 0 ? (
             <p className="mt-8 text-center text-sm text-muted">
@@ -350,9 +364,38 @@ export default function AssistantPanel() {
             </div>
           ))}
         </div>
+        ) : (
+          /* Saved combinations tab — the user's saved combinations; tap one to insert a fresh copy
+             into the open panel (never moves or changes the saved definition). */
+          <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
+            <p className="mb-1 text-[11px] text-muted">
+              {feed?.canInsertCombo ? "Tap a combination to add a fresh copy into the open panel." : "Open a panel to insert a saved combination."}
+            </p>
+            {savedCombos.length === 0 ? (
+              <p className="mt-8 text-center text-sm text-muted">
+                No saved combinations yet.<br />Tap the ♥ on any combination to save it here.
+              </p>
+            ) : (
+              savedCombos.map((c) => (
+                <div key={c.id} className="flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-2 dark:bg-surface">
+                  <button type="button" disabled={!feed?.canInsertCombo}
+                    onClick={() => feed?.onInsertCombo?.({ name: c.name, comps: c.comps })}
+                    title={feed?.canInsertCombo ? `Insert “${c.name}” into the open panel` : "Open a panel first"}
+                    className="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-50">
+                    <span className="block truncate text-sm font-bold text-ink">{c.name}</span>
+                    <span className="block text-[11px] text-muted">{c.comps.length} item{c.comps.length === 1 ? "" : "s"}{feed?.canInsertCombo ? " · tap to insert" : ""}</span>
+                  </button>
+                  <button type="button" onClick={() => void savedCombosStore.remove(c.id)}
+                    title="Remove from saved" aria-label="Remove from saved"
+                    className="shrink-0 rounded-full p-1.5 text-muted transition hover:bg-surface hover:text-red-500">✕</button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
 
-        {/* Composer — only when the creator can reply (a returned quotation). */}
-        {canReply ? (
+        {/* Composer — only on the Conversation tab, when the creator can reply (a returned quotation). */}
+        {assistTab === "chat" && (canReply ? (
           <div className="border-t border-line px-3 py-3">
             {/* Reply quote bar — orange rail, author, one-line snippet, ✕ to cancel (Escape too). */}
             {replyTarget && (
@@ -408,7 +451,7 @@ export default function AssistantPanel() {
               Replying is available when the quotation is returned for revision.
             </div>
           )
-        )}
+        ))}
       </aside>
     </div>,
     document.body,
