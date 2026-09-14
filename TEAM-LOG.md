@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-14 · Mohamed's side · Claude
 
+**Clicking outside a panel now does nothing.**
+
+Before, clicking in the empty area (or into the panel editor) would close the open panel and clear any ticked panels.
+Now a click outside a panel is inert: the ticked selection stays (cleared only via "Clear" or an action — Group /
+Delete / Move), and the open panel stays open. Small knock-on: clicking empty space was also how a new "+ Add panel"
+went ungrouped; with outside-clicks inert, a new panel follows the current selection's group (can add a dedicated
+"add ungrouped" control later if wanted).
+
+## 2026-09-14 · Mohamed's side · Claude
+
 **Panel tick-boxes: press-and-drag to select several at once.**
 
 In the panel list, press a panel's tick-box and drag up or down across the other boxes — every panel you sweep over is

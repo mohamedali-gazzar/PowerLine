@@ -6485,16 +6485,8 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
   };
-  useEffect(() => {
-    if (selPanels.size === 0) return;
-    const onDocDown = (e: MouseEvent) => {
-      if (naming) return;                                    // naming popup dismisses itself
-      const card = panelListRef.current;
-      if (card && !card.contains(e.target as Node)) clearPanelSel();
-    };
-    document.addEventListener("mousedown", onDocDown);
-    return () => document.removeEventListener("mousedown", onDocDown);
-  }, [selPanels, naming]); // eslint-disable-line react-hooks/exhaustive-deps
+  // (Clicking outside the panel list no longer clears the tick selection — a selection stays until
+  //  you press "Clear" or act on it. Requested: clicking outside a panel should do nothing.)
   const nameOf = (id: string) => s.panels.find((p) => p.id === id)?.name || "";
   const openNaming = (ids: string[]) => setNaming({ ids, name: commonNamePrefix(ids.map(nameOf)) });
   const doCreateGroup = (ids: string[], name: string) => { if (name.trim()) { up(createPanelGroup(s, name, ids)); clearPanelSel(); } };
@@ -6582,31 +6574,11 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
     );
   }
   return (
-    <div className="grid items-start gap-5 lg:grid-cols-[260px_1fr] animate-fade-up"
-      onMouseDown={(e) => {
-        // Click outside the panel list AND outside the editor (the empty area around/below the list)
-        // to deselect the active panel — the next "+ Add panel" then adds ungrouped. Clicks on the
-        // list, the editor, or any popup keep the selection.
-        // A popup (P.F.C, component search, …) is portalled into <body>, so its React events bubble
-        // here even though its DOM sits OUTSIDE this grid. Guard on the grid's OWN DOM first: if the
-        // click didn't physically land inside this grid, it came from a portalled popup — never
-        // deselect (that would unmount the editor and close the popup mid-interaction).
-        if (!e.currentTarget.contains(e.target as Node)) return;
-        const t = e.target as HTMLElement;
-        if (panelListRef.current?.contains(t) || editorRef.current?.contains(t)) return;
-        if (s.selectedId != null || s.activeGroupId != null) up({ selectedId: null, activeGroupId: null });
-        if (selPanels.size) clearPanelSel();
-      }}>
+    <div className="grid items-start gap-5 lg:grid-cols-[260px_1fr] animate-fade-up">
+      {/* Clicking the empty area around or below the list does nothing — the open panel stays open
+          and any tick selection is kept (cleared only via "Clear" or an action). */}
       {/* panel list — sticks below the tab header, with its own scroll (independent of the editor) */}
-      <div ref={panelListRef} className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar"
-        onMouseDown={(e) => {
-          // Click an empty spot in the list (not a panel row, group header or control) to
-          // deselect — the next "+ Add panel" then adds ungrouped, after the last group/panel.
-          const t = e.target as HTMLElement;
-          if (t.closest("[data-panelrow], [data-grouphead], button, a, input, select, textarea, label")) return;
-          if (s.selectedId != null || s.activeGroupId != null) up({ selectedId: null, activeGroupId: null });
-          if (selPanels.size) clearPanelSel();
-        }}>
+      <div ref={panelListRef} className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
         {/* Actions for ticked panels — Group / Delete / Move-to appear here once one or more are
             ticked. (Reordering several at once is done by dragging any ticked panel.) */}
         {selPanels.size > 0 && (
