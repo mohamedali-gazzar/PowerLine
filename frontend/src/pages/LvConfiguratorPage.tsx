@@ -7532,28 +7532,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     let k = 0;
     u({ components: p.components.map((c) => (c.section === sec ? reordered[k++] : c)) });
   };
-  // Drag-drop version of reorderGroup: move a combination's whole block to another combination's
-  // position within the same section (drop the dragged group's grip onto that group's header).
-  const moveGroupTo = (group: string, sec: string, targetGroup: string) => {
-    if (group === targetGroup) return;
-    const blocks: { g: string; items: PanelComponent[] }[] = [];
-    p.components.filter((c) => c.section === sec).forEach((c) => {
-      const g = effGroup.get(c.id) || "";
-      const last = blocks[blocks.length - 1];
-      if (last && last.g === g) last.items.push(c);
-      else blocks.push({ g, items: [c] });
-    });
-    const from = blocks.findIndex((b) => b.g === group);
-    const to = blocks.findIndex((b) => b.g === targetGroup);
-    if (from < 0 || to < 0) return;
-    const [moved] = blocks.splice(from, 1);
-    let ti = blocks.findIndex((b) => b.g === targetGroup);
-    if (to > from) ti += 1; // dragged downward past its old spot → land after the target
-    blocks.splice(ti, 0, moved);
-    const reordered = blocks.flatMap((b) => b.items);
-    let k = 0;
-    u({ components: p.components.map((c) => (c.section === sec ? reordered[k++] : c)) });
-  };
   // Rename a combination group — retags every member row's `group` to the new label.
   // Rename a combination. Two combinations in the same section may NOT share a name (that would
   // draw two identical headers), so a clash is rejected and the existing combinations are left
@@ -7584,6 +7562,24 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     arr.forEach((c, i) => { if (inGroup(c)) lastIdx = i; });
     arr.splice(lastIdx + 1, 0, ...clones);
     u({ components: arr });
+  };
+  // Delete a whole combination — remove every member (and any spacer sitting inside it), then
+  // drop those rows from the current selection so nothing dangles.
+  const deleteGroup = (group: string, sec: string) => {
+    const ids = new Set(p.components.filter((c) => c.section === sec && (effGroup.get(c.id) || "") === group).map((c) => c.id));
+    if (!ids.size) return;
+    u({ components: p.components.filter((c) => !ids.has(c.id)) });
+    setSelected((prev) => { const next = new Set(prev); ids.forEach((id) => next.delete(id)); return next; });
+  };
+  // Uncombine a combination — dissolve the group so each member becomes a plain, standalone
+  // component. The rows and their CURRENT total quantities stay exactly as they are (a scalable
+  // member's qty already = baseQty × ×N), so counts and prices don't change — only the grouping
+  // and the ×N control go away.
+  const uncombineGroup = (group: string, sec: string) => {
+    u({ components: p.components.map((c) =>
+      (c.section === sec && !isSpacer(c) && (effGroup.get(c.id) || "") === group)
+        ? { ...c, group: "", comboScalable: false, comboId: undefined, baseQty: undefined }
+        : c) });
   };
   const [newSection, setNewSection] = useState("");
   const [preview, setPreview] = useState<ComboLine[]>([]); // active circuit-combination preview
@@ -7698,9 +7694,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   useEffect(() => { (listRef.current?.children[activeIdx] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" }); }, [activeIdx]);
   // drag-and-drop: reorder rows and move them across sections
   const [dragId, setDragId] = useState<string | null>(null);
-  // Separately, a whole combination can be dragged by its header grip to reorder it within its
-  // section (native HTML5 drag; independent of the per-row pointer drag above).
-  const [groupDrag, setGroupDrag] = useState<{ group: string; sec: string } | null>(null);
   // Always-current components, so the LIVE drag reorders against the latest order rather than the
   // stale `p` captured in the drag closure when it started.
   const componentsRef = useRef(p.components);
@@ -7732,6 +7725,10 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   // ── Multi-row selection: checkbox column, running sum, floating action bar ──
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [lastPickId, setLastPickId] = useState<string | null>(null);
+  // A row checkbox toggles via onChange (so it stays perfectly in sync with `selected` — an
+  // onClick+preventDefault checkbox drifts out of sync). onClick fires just before onChange and
+  // carries the modifier keys, so we stash Shift here for the range-select that onChange then reads.
+  const shiftSelRef = useRef(false);
   const [moveOpen, setMoveOpen] = useState(false); // "Move to section" dropdown in the selection action bar
   useEffect(() => setMoveOpen(false), [selected]); // close it whenever the selection changes
   const [hoverSum, setHoverSum] = useState<{ col: "qty" | "unit" | "total"; x: number; y: number } | null>(null);
@@ -7763,18 +7760,30 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       el.style.transition = "none";
       el.style.transform = `translateY(${dy}px)`;
       requestAnimationFrame(() => {
-        el.style.transition = "transform 350ms cubic-bezier(.22,1,.36,1)";
+        el.style.transition = "transform 250ms cubic-bezier(.22,1,.36,1)"; // 0.25s slide
         el.style.transform = "";
         const done = () => { el.style.transition = ""; el.style.transform = ""; el.removeEventListener("transitionend", done); };
         el.addEventListener("transitionend", done);
       });
     });
   });
-  const [comboPulse, setComboPulse] = useState<string | null>(null);   // "sec::group" to flash once after it lands (↑/↓)
+  const [comboPulse, setComboPulse] = useState<string | null>(null);   // "sec::group" to flash once after an ↑/↓ reorder
   const firePulse = (sec: string, group: string) => {
     const key = `${sec}::${group}`;
     setComboPulse(key);
     window.setTimeout(() => setComboPulse((k) => (k === key ? null : k)), 560);
+  };
+  // Double-click a component name or reference to copy it. copiedKey briefly flashes a "Copied ✓"
+  // next to whichever cell was copied (keyed "<id>:name" / "<id>:ref").
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const copyCellText = (key: string, text: string) => {
+    const t = (text ?? "").trim();
+    if (!t) return;
+    // Clipboard can be refused (insecure origin/permissions); a failure just does nothing.
+    navigator.clipboard?.writeText(t).then(
+      () => { setCopiedKey(key); window.setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1000); },
+      () => undefined,
+    );
   };
   const orderedIds = p.components.filter((c) => !isSpacer(c)).map((c) => c.id); // selectable rows in render order
   const toggleSelect = (id: string, shift: boolean) => {
@@ -8136,22 +8145,16 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     if (e.pointerType === "mouse" && e.button !== 0) return; // left button only for mouse
     const grabbed = cardRef.current?.querySelector<HTMLElement>(`tr[data-cid="${CSS.escape(id)}"]`);
     if (!grabbed) return;
-    e.preventDefault();
     e.stopPropagation();
-    setDragId(id); // the row lifts and floats; the empty slot it leaves is the live drop preview
-    const grabOffset = e.clientY - grabbed.getBoundingClientRect().top; // where in the row it was grabbed
-    let lastX = e.clientX, lastY = e.clientY, raf = 0;
+    // Don't lift the row on press — wait until the pointer actually MOVES past a small threshold.
+    // That way a plain click, or a double-click to copy a name / reference, never starts a drag,
+    // while a real press-and-move still reorders — and from ANYWHERE on the row, not just the grip.
+    const startX = e.clientX, startY = e.clientY;
+    const grabOffset = startY - grabbed.getBoundingClientRect().top; // where in the row it was grabbed
+    const THRESHOLD = 4; // px the pointer must travel before a press becomes a drag
+    let lastX = startX, lastY = startY, raf = 0;
     let dropSec: string | null = null; // set while hovering a DIFFERENT section → move there on release
-    grabbed.style.position = "relative";
-    grabbed.style.zIndex = "30";
-    grabbed.style.pointerEvents = "none"; // so elementFromPoint sees the rows UNDER the lifted one
-    grabbed.style.boxShadow = "0 10px 24px rgba(0,0,0,.13)";
-    grabbed.style.cursor = "grabbing";
-    grabbed.style.willChange = "transform";
-    // Solid white behind the lifted row (its cells are transparent by default, so the row it
-    // overlaps would otherwise show through). Painted on the cells to be reliable across browsers.
     const cells = Array.from(grabbed.children) as HTMLElement[];
-    for (const td of cells) td.style.background = "#fff";
     // Keep the lifted row under the pointer — recomputed from its CURRENT flow position each frame, so
     // it stays put after a live reorder has shuffled the rows around it (or the list auto-scrolled).
     const place = () => {
@@ -8215,6 +8218,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       grabbed.style.position = ""; grabbed.style.zIndex = ""; grabbed.style.pointerEvents = "";
       grabbed.style.boxShadow = ""; grabbed.style.cursor = ""; grabbed.style.willChange = ""; grabbed.style.transform = "";
       for (const td of Array.from(grabbed.children) as HTMLElement[]) td.style.background = "";
+      document.body.style.userSelect = ""; // restore text selection (suppressed during the drag)
       const cur = componentsRef.current;
       const me = cur.find((c) => c.id === id);
       if (dropSec && me && me.section !== dropSec) {
@@ -8237,10 +8241,46 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       }
       setDragId(null);
     };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-    raf = requestAnimationFrame(tick);
+    // Arm the actual drag: lift the row, suppress text selection, and switch from the pre-drag
+    // threshold watchers to the live drag handlers.
+    const beginDrag = () => {
+      setDragId(id); // the row lifts and floats; the empty slot it leaves is the live drop preview
+      grabbed.style.position = "relative";
+      grabbed.style.zIndex = "30";
+      grabbed.style.pointerEvents = "none"; // so elementFromPoint sees the rows UNDER the lifted one
+      grabbed.style.boxShadow = "0 10px 24px rgba(0,0,0,.13)";
+      grabbed.style.cursor = "grabbing";
+      grabbed.style.willChange = "transform";
+      // Solid white behind the lifted row (its cells are transparent by default, so the row it
+      // overlaps would otherwise show through). Painted on the cells to be reliable across browsers.
+      for (const td of cells) td.style.background = "#fff";
+      document.body.style.userSelect = "none"; // no stray text selection while dragging
+      window.getSelection()?.removeAllRanges();
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+      raf = requestAnimationFrame(tick);
+      syncOrder();
+      place();
+    };
+    // Pre-drag phase: a press that travels past the threshold becomes a drag; a press that is
+    // released first (a click / double-click) does nothing here and leaves the click intact.
+    const preMove = (ev: PointerEvent) => {
+      if (Math.abs(ev.clientX - startX) < THRESHOLD && Math.abs(ev.clientY - startY) < THRESHOLD) return;
+      lastX = ev.clientX; lastY = ev.clientY;
+      window.removeEventListener("pointermove", preMove);
+      window.removeEventListener("pointerup", preEnd);
+      window.removeEventListener("pointercancel", preEnd);
+      beginDrag();
+    };
+    const preEnd = () => {
+      window.removeEventListener("pointermove", preMove);
+      window.removeEventListener("pointerup", preEnd);
+      window.removeEventListener("pointercancel", preEnd);
+    };
+    window.addEventListener("pointermove", preMove);
+    window.addEventListener("pointerup", preEnd);
+    window.addEventListener("pointercancel", preEnd);
   };
 
   // Return focus to the search box after an add. Double rAF on purpose: a QtyCell's own
@@ -8858,7 +8898,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                       onPointerDown={(e) => {
                         if (e.pointerType === "touch") return; // touch scrolls the list (or drags from the grip)
                         const t = e.target as HTMLElement;
-                        if (t.closest("input, textarea, select, button, a, [contenteditable], [data-rowcheck], [data-grip]")) return; // let the controls act
+                        if (t.closest("input, textarea, select, button, a, [contenteditable], [data-rowcheck], [data-grip]")) return; // let the controls act — the row still drags from anywhere else, name/ref cells included (a press that doesn't move is a click, so double-click-to-copy still works)
                         startCompDrag(e, c.id); // press-and-drag anywhere on the row to reorder it
                       }}
                       className={`cursor-grab border-t align-middle transition-colors hover:bg-brand-tint/50 hover:font-bold ${
@@ -8889,8 +8929,11 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                             onCommit={(v, eq) => setComp(c.id, { qty: v, qtyEq: eq })} />
                         )}
                       </td>
-                      <td className="max-w-[330px] py-1 pr-2">
+                      <td data-copy className="max-w-[330px] cursor-grab select-none py-1 pr-2"
+                        title="Double-click to copy"
+                        onDoubleClick={() => copyCellText(`${c.id}:name`, c.name)}>
                         {c.name}
+                        {copiedKey === `${c.id}:name` && <span className="ml-1.5 align-middle text-[10px] font-semibold text-brand">Copied ✓</span>}
                         {editComp === c.id && (
                           <ComponentEditSelect current={c} panelCount={s.panels.length}
                             onPick={(nc, scope) => {
@@ -8902,20 +8945,36 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                             onClose={() => setEditComp(null)} />
                         )}
                       </td>
-                      <td className="py-1 pr-2 text-[11px] text-muted">{c.ref}</td>
+                      <td data-copy className="cursor-grab select-none py-1 pr-2 text-[11px] text-muted"
+                        title="Double-click to copy"
+                        onDoubleClick={() => copyCellText(`${c.id}:ref`, c.ref)}>
+                        {c.ref}
+                        {copiedKey === `${c.id}:ref` && <span className="ml-1 align-middle text-[10px] font-semibold text-brand">✓</span>}
+                      </td>
                       <td className="py-1 pr-2"><input className="input h-7 px-1.5 text-xs" value={c.adj} placeholder="—"
                         onChange={(e) => setComp(c.id, { adj: e.target.value })} /></td>
                       <td className="py-1 pr-2"><input className="input h-7 px-1.5 text-xs" value={c.note} placeholder="—"
                         onChange={(e) => setComp(c.id, { note: e.target.value })} /></td>
-                      <td className="py-1 pr-2 text-right text-muted"
+                      <td data-copy className="cursor-grab select-none py-1 pr-2 text-right text-muted"
+                        title="Double-click to copy"
                         onMouseEnter={(e) => { if (selected.has(c.id)) setHoverSum({ col: "unit", x: e.clientX, y: e.clientY }); }}
-                        onMouseLeave={() => setHoverSum(null)}>{fmtEgp(itemPriceEgp(c, s))}</td>
-                      <td className="py-1 pr-2 text-right font-semibold"
+                        onMouseLeave={() => setHoverSum(null)}
+                        onDoubleClick={() => copyCellText(`${c.id}:unit`, fmtEgp(itemPriceEgp(c, s)))}>
+                        {copiedKey === `${c.id}:unit` && <span className="mr-1 align-middle text-[10px] font-semibold text-brand">✓</span>}
+                        {fmtEgp(itemPriceEgp(c, s))}
+                      </td>
+                      <td data-copy className="cursor-grab select-none py-1 pr-2 text-right font-semibold"
+                        title="Double-click to copy"
                         onMouseEnter={(e) => { if (selected.has(c.id)) setHoverSum({ col: "total", x: e.clientX, y: e.clientY }); }}
-                        onMouseLeave={() => setHoverSum(null)}>{fmtEgp(itemPriceEgp(c, s) * c.qty)}</td>
+                        onMouseLeave={() => setHoverSum(null)}
+                        onDoubleClick={() => copyCellText(`${c.id}:total`, fmtEgp(itemPriceEgp(c, s) * c.qty))}>
+                        {copiedKey === `${c.id}:total` && <span className="mr-1 align-middle text-[10px] font-semibold text-brand">✓</span>}
+                        {fmtEgp(itemPriceEgp(c, s) * c.qty)}
+                      </td>
                       <td className="whitespace-nowrap py-1 pr-1 text-right">
-                        <input type="checkbox" data-rowcheck className="mr-1.5 h-3.5 w-3.5 cursor-pointer accent-brand align-middle" checked={selected.has(c.id)} readOnly
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelect(c.id, e.shiftKey); }}
+                        <input type="checkbox" data-rowcheck className="mr-1.5 h-3.5 w-3.5 cursor-pointer accent-brand align-middle" checked={selected.has(c.id)}
+                          onClick={(e) => { shiftSelRef.current = e.shiftKey; e.stopPropagation(); }}
+                          onChange={() => toggleSelect(c.id, shiftSelRef.current)}
                           title="Click to toggle · Shift-click to select a range" />
                         <button className="px-1 text-muted hover:text-brand-dark" title="Change component" onClick={() => setEditComp(c.id)}>✎</button>
                         <button className="px-1 text-red-500" title="Remove" onClick={() => delComp(c.id)}>✕</button>
@@ -8949,30 +9008,40 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                           const selOn = selIds.filter((id) => selected.has(id)).length;
                           rows.push(
                             <tr key={`grp-${sec}-${g}`} data-grp={`${sec}::${g}`}
-                              className={`pl-combo-band align-middle${groupDrag?.group === g && groupDrag?.sec === sec ? " opacity-60" : ""}${comboPulse === `${sec}::${g}` ? " pl-combo-pulse" : ""}`}
-                              onDragOver={(e) => { if (groupDrag && groupDrag.sec === sec && groupDrag.group !== g) { e.preventDefault(); moveGroupTo(groupDrag.group, sec, g); } }}
-                              onDrop={(e) => { e.preventDefault(); setGroupDrag(null); }}>
-                              <td className="py-1 pl-1">
-                                <span draggable
-                                  onDragStart={(e) => { setGroupDrag({ group: g, sec }); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", g); } catch { /* older browsers */ } }}
-                                  onDragEnd={() => setGroupDrag(null)}
-                                  title="Drag to reorder this combination"
-                                  aria-label="Drag to reorder this combination"
-                                  className="inline-flex cursor-grab select-none px-1 leading-none text-brand-dark/50 hover:text-brand-dark">⠿</span>
+                              className={`pl-combo-band align-middle${comboPulse === `${sec}::${g}` ? " pl-combo-pulse" : ""}`}>
+                              {/* Col 1 (same column as the row reorder grips) — the ↑ / ↓ reorder arrows, centred. */}
+                              <td className="py-1 px-0 text-center">
+                                {(() => {
+                                  const gi = secBlocks.indexOf(g);
+                                  const firstBlk = gi <= 0, lastBlk = gi === secBlocks.length - 1;
+                                  return (
+                                    <div className="flex items-center justify-center gap-0.5 leading-none">
+                                      <button type="button" title="Move combination up" disabled={firstBlk}
+                                        onClick={() => { captureFlip(); reorderGroup(g, sec, -1); firePulse(sec, g); }}
+                                        className="text-[15px] font-black leading-none text-brand-dark transition hover:text-brand disabled:pointer-events-none disabled:opacity-30">↑</button>
+                                      <button type="button" title="Move combination down" disabled={lastBlk}
+                                        onClick={() => { captureFlip(); reorderGroup(g, sec, 1); firePulse(sec, g); }}
+                                        className="text-[15px] font-black leading-none text-brand-dark transition hover:text-brand disabled:pointer-events-none disabled:opacity-30">↓</button>
+                                    </div>
+                                  );
+                                })()}
                               </td>
-                              {/* Combination header — the "Combination qty" phrase first, then the qty box, then the name */}
-                              <td colSpan={3} className="py-1 pr-2">
-                                <div className="flex items-center gap-2">
-                                  {scalable && <span className="whitespace-nowrap text-[13px] font-bold text-muted">Combination qty</span>}
-                                  {scalable && (
-                                    <input type="number" min={1} value={cq}
-                                      onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
-                                      className="input h-7 w-16 shrink-0 px-1.5 text-center text-xs"
-                                      title="Quantity of the whole combination — scales all its items" />
-                                  )}
-                                  <div className="min-w-0 flex-1">
+                              {/* Col 2 (QTY column) — the combination's ×N qty box, aligned under the component quantities. */}
+                              <td className="py-1 pr-2">
+                                {scalable && (
+                                  <input type="number" min={1} value={cq}
+                                    onChange={(e) => setComboQty(g, sec, parseInt(e.target.value) || 1)}
+                                    className="input h-7 w-full px-1 text-center text-xs"
+                                    title="Quantity of the whole combination (×N) — scales all its items" />
+                                )}
+                              </td>
+                              {/* Cols 3–8 (from the DESCRIPTION column on) — title on the left, aligned with the
+                                  component descriptions; the + Add / ♥ / ⧉ / Move to… actions on the right. */}
+                              <td colSpan={6} className="py-1 pr-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="min-w-0">
                                     {editGroup === `${sec}|${g}` ? (
-                                      <div className="min-w-0 flex-1">
+                                      <div className="min-w-0">
                                         <input autoFocus value={editGroupVal}
                                           onChange={(e) => { setEditGroupVal(e.target.value); if (editGroupErr) setEditGroupErr(false); }}
                                           onKeyDown={(e) => {
@@ -8987,63 +9056,58 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                                     ) : (
                                       <span className="text-[13px] font-normal leading-tight text-brand-dark underline underline-offset-2">
                                         <span className="uppercase tracking-wide">{g}</span>{scalable ? `, QTY (${cq}) each contain:` : ""}
-                                        <button type="button" title="Rename combination"
-                                          onClick={() => { setEditGroupVal(g); setEditGroup(`${sec}|${g}`); setEditGroupErr(false); }}
-                                          className="ml-1.5 rounded px-1 leading-none text-brand-dark/50 no-underline hover:bg-white hover:text-brand-dark">✎</button>
                                       </span>
+                                    )}
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-1">
+                                    <button type="button" title={`Add a component into “${g}”`}
+                                      onClick={() => { const armed = addTarget?.sec === sec && addTarget?.group === g; setAddTarget(armed ? null : { sec, group: g }); if (!armed) { u({ activeSection: sec }); refocusSearch(); } }}
+                                      className={`rounded px-1.5 py-0.5 text-[11px] font-bold leading-none transition ${addTarget?.sec === sec && addTarget?.group === g ? "bg-brand text-white" : "text-brand-dark/70 hover:bg-white hover:text-brand-dark"}`}>+ Add</button>
+                                    {(() => {
+                                      const saved = savedCombosStore.hasSig(comboSig(g, groupComps(g, sec)));
+                                      return (
+                                        <button type="button" onClick={() => toggleSaveCombo(g, sec)} aria-pressed={saved}
+                                          title={saved ? "Saved to your combinations — click to remove" : "Save this combination to reuse in other panels"}
+                                          className={`rounded px-1 text-[16px] leading-none transition hover:bg-white ${saved ? "text-red-500" : "text-brand-dark/50 hover:text-red-500"}`}>
+                                          {saved ? "♥" : "♡"}
+                                        </button>
+                                      );
+                                    })()}
+                                    <button type="button" title="Duplicate this combination" onClick={() => duplicateGroup(g, sec)}
+                                      className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">⧉</button>
+                                    <button type="button" title="Uncombine — split this combination back into separate components" onClick={() => uncombineGroup(g, sec)}
+                                      className="inline-flex items-center rounded px-1 leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">
+                                      {/* Same "move out of the group" icon the panel list uses. */}
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <polyline points="9 14 4 9 9 4" />
+                                        <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                                      </svg>
+                                    </button>
+                                    {p.sections.length > 1 && (
+                                      <select value="" onChange={(e) => { if (e.target.value) moveGroupToSection(g, sec, e.target.value); }}
+                                        title="Move this group to another section"
+                                        className="ml-1 h-6 w-24 cursor-pointer rounded border border-line bg-white px-1 text-[11px] text-muted focus:border-brand focus:outline-none">
+                                        <option value="">Move to…</option>
+                                        {p.sections.filter((x) => x !== sec).map((x) => <option key={x} value={x}>{x}</option>)}
+                                      </select>
                                     )}
                                   </div>
                                 </div>
                               </td>
-                              {/* Adj → Total columns — actions on the left, "Move to" pushed to the right */}
-                              <td colSpan={4} className="py-1 pr-1">
-                                <div className="flex items-center justify-end gap-1">
-                                  <button type="button" title={`Add a component into “${g}”`}
-                                    onClick={() => { const armed = addTarget?.sec === sec && addTarget?.group === g; setAddTarget(armed ? null : { sec, group: g }); if (!armed) { u({ activeSection: sec }); refocusSearch(); } }}
-                                    className={`rounded px-1.5 py-0.5 text-[11px] font-bold leading-none transition ${addTarget?.sec === sec && addTarget?.group === g ? "bg-brand text-white" : "text-brand-dark/70 hover:bg-white hover:text-brand-dark"}`}>+ Add</button>
-                                  {(() => {
-                                    const saved = savedCombosStore.hasSig(comboSig(g, groupComps(g, sec)));
-                                    return (
-                                      <button type="button" onClick={() => toggleSaveCombo(g, sec)} aria-pressed={saved}
-                                        title={saved ? "Saved to your combinations — click to remove" : "Save this combination to reuse in other panels"}
-                                        className={`rounded px-1 text-sm leading-none transition hover:bg-white ${saved ? "text-red-500" : "text-brand-dark/50 hover:text-red-500"}`}>
-                                        {saved ? "♥" : "♡"}
-                                      </button>
-                                    );
-                                  })()}
-                                  {(() => {
-                                    const gi = secBlocks.indexOf(g);
-                                    const firstBlk = gi <= 0, lastBlk = gi === secBlocks.length - 1;
-                                    return (<>
-                                      <button type="button" title="Move combination up" disabled={firstBlk}
-                                        onClick={() => { captureFlip(); reorderGroup(g, sec, -1); firePulse(sec, g); }}
-                                        className="rounded px-1 text-xs leading-none text-brand-dark/60 transition hover:bg-white hover:text-brand-dark disabled:pointer-events-none disabled:opacity-30">↑</button>
-                                      <button type="button" title="Move combination down" disabled={lastBlk}
-                                        onClick={() => { captureFlip(); reorderGroup(g, sec, 1); firePulse(sec, g); }}
-                                        className="rounded px-1 text-xs leading-none text-brand-dark/60 transition hover:bg-white hover:text-brand-dark disabled:pointer-events-none disabled:opacity-30">↓</button>
-                                    </>);
-                                  })()}
-                                  <button type="button" title="Duplicate this combination" onClick={() => duplicateGroup(g, sec)}
-                                    className="rounded px-1 text-sm leading-none text-brand-dark/60 hover:bg-white hover:text-brand-dark">⧉</button>
-                                  {p.sections.length > 1 && (
-                                    <select value="" onChange={(e) => { if (e.target.value) moveGroupToSection(g, sec, e.target.value); }}
-                                      title="Move this group to another section"
-                                      className="ml-1 h-6 w-24 cursor-pointer rounded border border-line bg-white px-1 text-[11px] text-muted focus:border-brand focus:outline-none">
-                                      <option value="">Move to…</option>
-                                      {p.sections.filter((x) => x !== sec).map((x) => <option key={x} value={x}>{x}</option>)}
-                                    </select>
-                                  )}
-                                </div>
-                              </td>
-                              {/* Last column — select / clear every row in THIS group. Shown in every section. */}
-                              <td className="py-1 pr-1 text-right">
+                              {/* Last column — mirrors the component action cell: select-all checkbox,
+                                  rename (✎) and delete-combination (✕), so all three line up column-wise. */}
+                              <td className="whitespace-nowrap py-1 pr-1 text-right">
                                 {selIds.length > 0 && (
-                                  <input type="checkbox" className="h-3.5 w-3.5 cursor-pointer accent-brand align-middle"
+                                  <input type="checkbox" className="mr-1.5 h-3.5 w-3.5 cursor-pointer accent-brand align-middle"
                                     checked={selOn === selIds.length}
                                     ref={(el) => { if (el) el.indeterminate = selOn > 0 && selOn < selIds.length; }}
                                     onChange={(e) => setIdsSel(selIds, e.target.checked)}
                                     title="Select / clear all in this group" />
                                 )}
+                                <button type="button" className="px-1 text-muted hover:text-brand-dark" title="Rename combination"
+                                  onClick={() => { setEditGroupVal(g); setEditGroup(`${sec}|${g}`); setEditGroupErr(false); }}>✎</button>
+                                <button type="button" className="px-1 text-red-500" title="Delete this whole combination"
+                                  onClick={() => deleteGroup(g, sec)}>✕</button>
                               </td>
                             </tr>
                           );

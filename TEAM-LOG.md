@@ -23,6 +23,19 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-14 · Mohamed's side · Claude
 
+**Combination headers tidied up, double-click-to-copy, drag-from-anywhere, and a checkbox-selection fix.**
+
+A batch of improvements to the component list (the Panels tab). Nothing here changes any price, quantity, numbering, or what prints on the offer.
+
+- **Combination header lines up with the columns.** On a combination's grey header, the combination's quantity box now sits directly above the components' **QTY** column, and the combination name sits above the **DESCRIPTION** column. The ↑ / ↓ reorder arrows sit on the far left (above the row handles), centred, with a small gap between them.
+- **Header buttons line up with the row buttons.** The rename pencil (✎), the select-all tick, and a new delete (✕) on a combination header now sit exactly above each component's own pencil / tick / ✕. The delete removes the whole combination.
+- **Bigger favourite heart**, and a new **uncombine / split** button on each combination header (it uses the same "move out" arrow icon as the panel list). It breaks a combination back into separate, standalone components **without changing any quantities or prices** — only the grouping goes away.
+- **Double-click to copy.** Double-clicking a component's **name**, **reference**, **unit cost**, or **total** copies that text to the clipboard, with a small "✓" to confirm.
+- **Drag a component from anywhere on its row again.** You can grab a row anywhere (not just the handle) to reorder it; a quick click or double-click no longer starts a drag, so copy still works. The mouse shows a "grab hand" over the row.
+- **Fixed a checkbox-selection bug.** The tick box on each component row could get out of step — you'd click it and the tick wouldn't show even though the row was selected (the count said one thing, the ticks another). The tick now always matches the real selection, immediately. Shift-click to select a range still works.
+
+## 2026-09-14 · Mohamed's side · Claude
+
 **Combination ↑ / ↓ arrows: smooth slide + a little pulse, and greyed-out at the ends.**
 
 In the component list, the ↑ / ↓ buttons on a combination header now reorder it with a smooth slide (the rows glide into
