@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-14 · Mohamed's side · Claude
 
+**Reordering components and combinations now feels like a natural drag-and-drop list.**
+
+Grab an item's handle and drag it up or down: the other rows slide out of the way and an empty slot opens exactly where
+it will land, the item you're holding floats on top and follows the cursor, the list auto-scrolls near the top/bottom,
+and when you let go it drops right where the slot is — the new order is saved straight away. A whole combination drags
+the same way (grab its grip and the combinations shift around it). The drag handle is also bigger and easier to grab.
+
+(Note: the rows keep the existing "click-drag across rows to select several at once", so the drag-to-reorder stays on a
+dedicated handle rather than the whole row — but the handle is now a large, easy target.)
+
+## 2026-09-14 · Mohamed's side · Claude
+
 **Saved Combinations — save any combination once and reuse it in any panel, from the QTN Assistant.**
 
 - Every combination now has a **heart (♥)** on its header. Click it to save that combination to your own list; click

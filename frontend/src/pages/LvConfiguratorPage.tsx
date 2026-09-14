@@ -6637,7 +6637,7 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
                         {...handleProps(i)} data-panelgrip
                         title="Drag to reorder — or into a group's rows to add it"
                         className="shrink-0 select-none px-0.5 text-muted/50 transition-colors hover:text-brand">
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <svg width="14" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                           <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
                           <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
                           <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
@@ -7699,6 +7699,10 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   // Separately, a whole combination can be dragged by its header grip to reorder it within its
   // section (native HTML5 drag; independent of the per-row pointer drag above).
   const [groupDrag, setGroupDrag] = useState<{ group: string; sec: string } | null>(null);
+  // Always-current components, so the LIVE drag reorders against the latest order rather than the
+  // stale `p` captured in the drag closure when it started.
+  const componentsRef = useRef(p.components);
+  componentsRef.current = p.components;
   // Saved combinations (per-user) — subscribe so the heart on each combination reflects saved state.
   useSavedCombos();
   // The definition of one combination (its member components, cloned) — used by the heart to save it.
@@ -8115,32 +8119,6 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       arr[idx] = { ...c, group: grp, comboScalable: false, baseQty: undefined, ...idPatch }; // non-scalable combination — just join it
     }
   };
-  const dropOnRow = (dId: string, targetId: string) => {
-    markDropOver(null);
-    setDragId(null);
-    if (!dId || dId === targetId) return;
-    const arr = [...p.components];
-    const from = arr.findIndex((c) => c.id === dId);
-    const tgt = arr.find((c) => c.id === targetId);
-    if (from < 0 || !tgt) return;
-    const crossSection = arr[from].section !== tgt.section;
-    // A cross-section move drops combination membership and lands loose at the END of the
-    // target section — so it can't be absorbed into a combination it was dropped onto.
-    const moved = crossSection
-      ? { ...arr[from], section: tgt.section, group: "", comboScalable: false, comboId: undefined }
-      : { ...arr[from], section: tgt.section };
-    arr.splice(from, 1);
-    if (crossSection) {
-      let lastIdx = -1;
-      for (let i = 0; i < arr.length; i++) if (arr[i].section === tgt.section) lastIdx = i;
-      arr.splice(lastIdx + 1, 0, moved);
-    } else {
-      const tIdx = arr.findIndex((c) => c.id === targetId);
-      arr.splice(tIdx, 0, moved);
-      applyGroupScaling(arr, tIdx); // only a within-section drop can join a combination
-    }
-    u({ components: arr });
-  };
 
   // Drop a dragged row onto a section tab/header: move it to the end of that section.
   const dropOnSection = (dId: string, section: string) => {
@@ -8173,9 +8151,10 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     if (!grabbed) return;
     e.preventDefault();
     e.stopPropagation();
-    setDragId(id); // dims the source row (opacity-40) and highlights its grip, as before
-    let startY = e.clientY, lastX = e.clientX, lastY = e.clientY, raf = 0;
-    let dropId: string | null = null, dropSec: string | null = null;
+    setDragId(id); // the row lifts and floats; the empty slot it leaves is the live drop preview
+    const grabOffset = e.clientY - grabbed.getBoundingClientRect().top; // where in the row it was grabbed
+    let lastX = e.clientX, lastY = e.clientY, raf = 0;
+    let dropSec: string | null = null; // set while hovering a DIFFERENT section → move there on release
     grabbed.style.position = "relative";
     grabbed.style.zIndex = "30";
     grabbed.style.pointerEvents = "none"; // so elementFromPoint sees the rows UNDER the lifted one
@@ -8186,17 +8165,46 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     // overlaps would otherwise show through). Painted on the cells to be reliable across browsers.
     const cells = Array.from(grabbed.children) as HTMLElement[];
     for (const td of cells) td.style.background = "#fff";
-    const resolve = () => {
+    // Keep the lifted row under the pointer — recomputed from its CURRENT flow position each frame, so
+    // it stays put after a live reorder has shuffled the rows around it (or the list auto-scrolled).
+    const place = () => {
+      grabbed.style.transform = "";
+      const baseTop = grabbed.getBoundingClientRect().top;
+      grabbed.style.transform = `translateY(${lastY - grabOffset - baseTop}px)`;
+    };
+    // Live reorder: drop the dragged component before/after whatever row is under the pointer, WITHIN
+    // its section — the list rearranges around it and the empty slot it left previews the drop. Over
+    // another section's rows/header, remember it for a cross-section move on release.
+    const syncOrder = () => {
       const el = document.elementFromPoint(lastX, lastY) as HTMLElement | null;
       const rowEl = el?.closest<HTMLElement>("tr[data-cid]") ?? null;
-      const rowCid = rowEl?.getAttribute("data-cid") ?? null;
-      const secEl = el?.closest<HTMLElement>("[data-section-drop]") ?? null;
-      if (rowCid && rowCid !== id) { dropId = rowCid; dropSec = null; markDropOver(rowEl); }
-      else if (secEl) { dropId = null; dropSec = secEl.getAttribute("data-section-drop"); markDropOver(secEl); }
-      else { dropId = null; dropSec = null; markDropOver(null); }
+      const overId = rowEl?.getAttribute("data-cid") ?? null;
+      const arr = componentsRef.current;
+      const from = arr.findIndex((c) => c.id === id);
+      if (from < 0) return;
+      if (overId && overId !== id) {
+        const over = arr.findIndex((c) => c.id === overId);
+        if (over < 0) return;
+        if (arr[over].section === arr[from].section) {
+          dropSec = null;
+          const r = rowEl!.getBoundingClientRect();
+          let to = lastY > r.top + r.height / 2 ? over + 1 : over;
+          if (from < to) to -= 1;
+          if (to !== from) {
+            const copy = arr.slice();
+            const [m] = copy.splice(from, 1);
+            copy.splice(to, 0, m);
+            u({ components: copy });
+          }
+        } else {
+          dropSec = arr[over].section; // hovering another section's rows → move there on release
+        }
+        return;
+      }
+      const secEl = el?.closest<HTMLElement>("[data-section-drop]");
+      if (secEl) dropSec = secEl.getAttribute("data-section-drop");
     };
-    const apply = () => { grabbed.style.transform = `translateY(${lastY - startY}px)`; resolve(); };
-    const onMove = (ev: PointerEvent) => { lastX = ev.clientX; lastY = ev.clientY; apply(); };
+    const onMove = (ev: PointerEvent) => { lastX = ev.clientX; lastY = ev.clientY; syncOrder(); place(); };
     const EDGE = 64, MAX = 20;
     let sc: HTMLElement | null = grabbed.parentElement;
     while (sc) { const oy = getComputedStyle(sc).overflowY; if ((oy === "auto" || oy === "scroll") && sc.scrollHeight > sc.clientHeight) break; sc = sc.parentElement; }
@@ -8208,7 +8216,8 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       let d = 0;
       if (lastY < top + EDGE && canUp) d = -Math.ceil(((top + EDGE - lastY) / EDGE) * MAX);
       else if (lastY > bottom - EDGE && canDown) d = Math.ceil(((lastY - (bottom - EDGE)) / EDGE) * MAX);
-      if (d) { const t = sc ?? doc; const before = t.scrollTop; t.scrollTop += d; const moved = t.scrollTop - before; if (moved) { startY -= moved; apply(); } }
+      if (d) { const t = sc ?? doc; t.scrollTop += d; syncOrder(); }
+      place(); // keep the row under the pointer as the list scrolls / reorders
       raf = requestAnimationFrame(tick);
     };
     const onUp = () => {
@@ -8219,9 +8228,17 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       grabbed.style.position = ""; grabbed.style.zIndex = ""; grabbed.style.pointerEvents = "";
       grabbed.style.boxShadow = ""; grabbed.style.cursor = ""; grabbed.style.willChange = ""; grabbed.style.transform = "";
       for (const td of Array.from(grabbed.children) as HTMLElement[]) td.style.background = "";
-      if (dropId) dropOnRow(id, dropId);
-      else if (dropSec) dropOnSection(id, dropSec);
-      else { markDropOver(null); setDragId(null); }
+      const cur = componentsRef.current;
+      const me = cur.find((c) => c.id === id);
+      if (dropSec && me && me.section !== dropSec) {
+        dropOnSection(id, dropSec); // cross-section: move to that section's end (drops group membership)
+      } else {
+        // Same section: the live reorder already positioned it — settle group membership (join a
+        // combination it was dropped inside; a plain reorder is a no-op via applyGroupScaling).
+        const idx = cur.findIndex((c) => c.id === id);
+        if (idx >= 0) { const arr = cur.slice(); applyGroupScaling(arr, idx); u({ components: arr }); }
+      }
+      setDragId(null);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -8822,14 +8839,14 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                     const secComps = p.components.filter((c) => c.section === sec);
                     const renderRow = (c: PanelComponent) => isSpacer(c) ? (
                     <tr key={c.id} data-cid={c.id}
-                      className={`border-t border-line/70 align-middle transition-colors ${dragId === c.id ? "opacity-40" : ""}`}>
+                      className={`border-t border-line/70 align-middle transition-colors ${dragId === c.id ? "opacity-90" : ""}`}>
                       <td
                         data-grip
                         onPointerDown={(e) => startCompDrag(e, c.id)}
                         style={{ touchAction: "none" }}
                         title="Drag to reorder — or drop on another section to move it there"
-                        className="cursor-grab select-none py-1 pl-1 pr-1 text-muted/50 hover:text-brand active:cursor-grabbing">
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        className="cursor-grab select-none py-2.5 pl-1.5 pr-2 text-muted/70 hover:text-brand active:cursor-grabbing">
+                        <svg width="14" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                           <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
                           <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
                           <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
@@ -8848,14 +8865,14 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                       onMouseEnter={() => onRowEnter(c.id)}
                       className={`border-t align-middle transition-colors hover:bg-brand-tint/50 hover:font-bold ${
                         selected.has(c.id) ? "bg-[#FFF0E8]" : "border-line/70"
-                      } ${dragId === c.id ? "opacity-40" : ""}`}>
+                      } ${dragId === c.id ? "opacity-90" : ""}`}>
                       <td
                         data-grip
                         onPointerDown={(e) => startCompDrag(e, c.id)}
                         style={{ touchAction: "none" }}
                         title="Drag to reorder — or drop on another section to move it there"
-                        className={`cursor-grab select-none py-1 pl-1 pr-1 text-muted/50 hover:text-brand active:cursor-grabbing ${selected.has(c.id) ? "border-l-[3px] border-[#F16722]" : "border-l-[3px] border-transparent"}`}>
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        className={`cursor-grab select-none py-2.5 pl-1.5 pr-2 text-muted/70 hover:text-brand active:cursor-grabbing ${selected.has(c.id) ? "border-l-[3px] border-[#F16722]" : "border-l-[3px] border-transparent"}`}>
+                        <svg width="14" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                           <circle cx="5" cy="3" r="1.3" /><circle cx="11" cy="3" r="1.3" />
                           <circle cx="5" cy="8" r="1.3" /><circle cx="11" cy="8" r="1.3" />
                           <circle cx="5" cy="13" r="1.3" /><circle cx="11" cy="13" r="1.3" />
@@ -8939,10 +8956,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                           const selOn = selIds.filter((id) => selected.has(id)).length;
                           rows.push(
                             <tr key={`grp-${sec}-${g}`}
-                              className={`align-middle${groupDrag?.group === g && groupDrag?.sec === sec ? " opacity-40" : ""}`}
-                              onDragOver={(e) => { if (groupDrag && groupDrag.sec === sec && groupDrag.group !== g) { e.preventDefault(); e.currentTarget.classList.add("drop-over"); } }}
-                              onDragLeave={(e) => e.currentTarget.classList.remove("drop-over")}
-                              onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("drop-over"); if (groupDrag && groupDrag.sec === sec) moveGroupTo(groupDrag.group, sec, g); setGroupDrag(null); }}>
+                              className={`align-middle${groupDrag?.group === g && groupDrag?.sec === sec ? " opacity-60" : ""}`}
+                              onDragOver={(e) => { if (groupDrag && groupDrag.sec === sec && groupDrag.group !== g) { e.preventDefault(); moveGroupTo(groupDrag.group, sec, g); } }}
+                              onDrop={(e) => { e.preventDefault(); setGroupDrag(null); }}>
                               <td className="py-1 pl-1">
                                 <span draggable
                                   onDragStart={(e) => { setGroupDrag({ group: g, sec }); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", g); } catch { /* older browsers */ } }}
