@@ -3022,12 +3022,20 @@ function SeparatorPage({ text, onChange, onRemove }: { text: string; onChange: (
 // part of the offer or the PDF — it lives outside the printed source. It's kept per-quotation in the
 // browser (localStorage), so it survives tab switches and reloads but is private to this machine and
 // never sent to the server. Numeric columns auto-sum in the footer.
-function OfferScratchPad({ value, onChange, geomKey, panelId, disabled, title, defaultHeight }: {
+function OfferScratchPad({ value, onChange, geomKey, panelId, disabled, title, defaultHeight, inline, heading, cols, minRows, collapsible, hideHeaders }: {
   value: ScratchPad | undefined; onChange: (d: ScratchPad) => void; geomKey: string;
   panelId: string; disabled?: boolean; title?: string; defaultHeight: number;
+  // `inline`: render in normal flow at full width (fixed height), no drag/move/resize — for embedding
+  // inside a panel editor rather than floating in the Technical-Offer gutter. `heading`: titlebar label.
+  inline?: boolean; heading?: string;
+  // `cols`: number of columns (default 4). `minRows`: always show at least this many rows.
+  // `collapsible`: show a minimize (▾) button in the titlebar that folds the table away.
+  // `hideHeaders`: hide the editable column-labels row (leave just the A–J letters) — for a plain grid.
+  cols?: number; minRows?: number; collapsible?: boolean; hideHeaders?: boolean;
 }) {
-  const COLS = 4;
-  const DEFAULT_HEADERS = ["Item", "Qty", "Value", "Total"];
+  const COLS = cols ?? 4;
+  // First four columns keep their familiar names; any extra columns start blank (editable anyway).
+  const DEFAULT_HEADERS = Array.from({ length: COLS }, (_, i) => (["Item", "Qty", "Value", "Total"][i] ?? ""));
   const DEFAULT_W = 300, MIN_W = 200, MIN_H = 140;
   const blankRow = () => Array<string>(COLS).fill("");
   type Data = { headers: string[]; rows: string[][] };
@@ -3095,7 +3103,11 @@ function OfferScratchPad({ value, onChange, geomKey, panelId, disabled, title, d
   // the computed result. The raw formula is what's stored, so it re-computes on reload. Only digits and
   // + - * / ( ) . % are ever evaluated; anything containing letters stays as plain text.
   const [editing, setEditing] = useState<{ r: number; c: number } | null>(null); // the cell being typed in
-  const COL_LETTERS = ["A", "B", "C", "D"];
+  const COL_LETTERS = Array.from({ length: COLS }, (_, i) => String.fromCharCode(65 + i)); // A, B, C … (≤26 cols)
+  // Minimize (fold the table to just its titlebar) — a per-user view preference kept in the browser.
+  const minKey = `${geomKey}:min`;
+  const [minimized, setMinimized] = useState<boolean>(() => { try { return localStorage.getItem(minKey) === "1"; } catch { return false; } });
+  const toggleMin = () => setMinimized((m) => { const n = !m; try { localStorage.setItem(minKey, n ? "1" : "0"); } catch { /* ignore */ } return n; });
   const addr = (r: number, c: number) => `${COL_LETTERS[c] ?? ""}${r + 1}`; // (0,0) → "A1"
   const cellAt = (ri: number, ci: number) => data.rows[ri]?.[ci] ?? "";
   // Evaluate a cell like a spreadsheet: a formula (starts with "=") may reference other cells by their
@@ -3144,7 +3156,7 @@ function OfferScratchPad({ value, onChange, geomKey, panelId, disabled, title, d
     const rowH = oneRow ? oneRow.getBoundingClientRect().height : 25.5;
     setFillRows(Math.max(4, Math.floor((el.clientHeight - theadH - 2) / rowH)));
   }, [box.h]);
-  const nRows = Math.max(data.rows.length, fillRows);
+  const nRows = Math.max(data.rows.length, fillRows, minRows ?? 0);
   const cellCls = "w-full bg-transparent px-1.5 py-1 text-xs outline-none focus:bg-brand-tint/40";
 
   // Excel-style fill handle: click a cell, then drag the little square at its bottom-right corner down —
@@ -3233,22 +3245,27 @@ function OfferScratchPad({ value, onChange, geomKey, panelId, disabled, title, d
   const actBtn = "rounded-md border border-line bg-white px-1.5 py-0.5 text-[11px] font-semibold text-muted transition";
 
   return (
-    <div className="offer-scratch no-print relative flex flex-col overflow-hidden rounded-xl2 border border-line bg-white shadow-lift"
-      style={{ width: box.w, height: box.h, transform: `translate(${box.dx}px, ${box.dy}px)` }}>
-      <div onMouseDown={startMove} title="Drag to move"
-        className="scratch-titlebar flex shrink-0 cursor-move items-center justify-between gap-2 border-b border-line bg-surface px-3 py-2">
-        <p className="min-w-0 truncate text-sm font-extrabold uppercase tracking-wide text-brand-dark">🧮 Scratch pad{title ? ` · ${title}` : ""}</p>
+    <div className={`offer-scratch no-print flex flex-col overflow-hidden rounded-xl2 border border-line bg-white ${inline ? "w-full" : "relative shadow-lift"}`}
+      style={inline ? { height: minimized ? undefined : defaultHeight } : { width: box.w, height: minimized ? undefined : box.h, transform: `translate(${box.dx}px, ${box.dy}px)` }}>
+      <div onMouseDown={inline ? undefined : startMove} title={inline ? undefined : "Drag to move"}
+        className={`scratch-titlebar flex shrink-0 items-center justify-between gap-2 border-b border-line bg-surface px-3 py-2 ${inline ? "" : "cursor-move"}`}>
+        <p className="min-w-0 truncate text-sm font-extrabold uppercase tracking-wide text-brand-dark">{heading ?? "🧮 Scratch pad"}{title ? ` · ${title}` : ""}</p>
         <div className="flex shrink-0 items-center gap-1.5">
-          {multi && (
+          {!minimized && multi && (
             <>
               <span title="Sum of the selected cells" className="rounded bg-brand-tint px-1.5 py-0.5 text-[11px] font-bold text-brand-dark">Σ {sumSel.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
               {!disabled && <button type="button" onClick={deleteSel} title="Clear the selected cells" className={`${actBtn} hover:text-red-600`}>Delete</button>}
               <button type="button" onClick={copySel} title="Copy the selected cells" className={`${actBtn} hover:text-brand`}>Copy</button>
             </>
           )}
-          {!disabled && <button type="button" onClick={clearAll} title="Clear the whole table" className={`${actBtn} hover:text-red-600`}>Clear</button>}
+          {!minimized && !disabled && <button type="button" onClick={clearAll} title="Clear the whole table" className={`${actBtn} hover:text-red-600`}>Clear</button>}
+          {collapsible && (
+            <button type="button" onClick={toggleMin} title={minimized ? "Expand the draft table" : "Minimize the draft table"}
+              aria-label={minimized ? "Expand" : "Minimize"} className={`${actBtn} hover:text-brand`}>{minimized ? "▸ Show" : "▾ Hide"}</button>
+          )}
         </div>
       </div>
+      {!minimized && (<>{/* formula bar + grid — folded away while minimized */}
       {/* Formula bar — the address of the selected cell + its raw content (edit equations here). */}
       <div className="flex shrink-0 items-center gap-1.5 border-b border-line bg-white px-2 py-1">
         <span className="w-7 shrink-0 text-center text-[11px] font-bold text-muted">{sel ? `${COL_LETTERS[sel.c]}${sel.r + 1}` : "—"}</span>
@@ -3261,7 +3278,7 @@ function OfferScratchPad({ value, onChange, geomKey, panelId, disabled, title, d
           placeholder={sel ? (disabled ? "" : "value or =formula (e.g. =A1+B2)") : "select a cell"}
           className="min-w-0 flex-1 bg-transparent px-1 py-0.5 text-xs outline-none placeholder:text-muted/50" />
       </div>
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-hidden p-2">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto p-2">
         <table className="w-full table-fixed border-collapse">
           <colgroup>
             <col style={{ width: "22px" }} />
@@ -3275,16 +3292,18 @@ function OfferScratchPad({ value, onChange, geomKey, panelId, disabled, title, d
                 <th key={c} className="border border-line bg-surface px-1 py-0.5 text-center text-[10px] font-bold text-muted">{L}</th>
               ))}
             </tr>
-            {/* Editable column labels */}
-            <tr>
-              <th className="border border-line bg-surface" />
-              {data.headers.map((h, c) => (
-                <th key={c} className="border border-line p-0">
-                  <input value={h} readOnly={disabled} onChange={(e) => setHeader(c, e.target.value)} aria-label={`Column ${COL_LETTERS[c]} title`}
-                    className="w-full bg-surface px-1.5 py-1 text-center text-xs font-bold text-brand-dark outline-none" />
-                </th>
-              ))}
-            </tr>
+            {/* Editable column labels — hidden when `hideHeaders` (the Draft table uses plain A–J columns) */}
+            {!hideHeaders && (
+              <tr>
+                <th className="border border-line bg-surface" />
+                {data.headers.map((h, c) => (
+                  <th key={c} className="border border-line p-0">
+                    <input value={h} readOnly={disabled} onChange={(e) => setHeader(c, e.target.value)} aria-label={`Column ${COL_LETTERS[c]} title`}
+                      className="w-full bg-surface px-1.5 py-1 text-center text-xs font-bold text-brand-dark outline-none" />
+                  </th>
+                ))}
+              </tr>
+            )}
           </thead>
           <tbody ref={tbodyRef}>
             {Array.from({ length: nRows }).map((_, ri) => (
@@ -3341,12 +3360,15 @@ function OfferScratchPad({ value, onChange, geomKey, panelId, disabled, title, d
           </tbody>
         </table>
       </div>
-      <div onMouseDown={startResize} title="Drag to resize"
-        className="absolute bottom-0 right-0 flex h-4 w-4 cursor-nwse-resize items-end justify-end p-0.5 text-muted">
-        <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1">
-          <path d="M10 3 3 10M10 6 6 10M10 9 9 10" strokeLinecap="round" />
-        </svg>
-      </div>
+      </>)}
+      {!inline && !minimized && (
+        <div onMouseDown={startResize} title="Drag to resize"
+          className="absolute bottom-0 right-0 flex h-4 w-4 cursor-nwse-resize items-end justify-end p-0.5 text-muted">
+          <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1">
+            <path d="M10 3 3 10M10 6 6 10M10 9 9 10" strokeLinecap="round" />
+          </svg>
+        </div>
+      )}
     </div>
   );
 }
@@ -6808,6 +6830,17 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
             </div>
           );
         })()}
+        {/* Standard EDMS: a per-panel DRAFT table (spreadsheet) inside the editor, for working
+            calculations. Its own table per panel, independent of the Technical-Offer scratch pad;
+            saved with the quotation but never shown on the offer or the PDF. */}
+        {sel && !sel.spare && s.kind === "edms" && (
+          <div className="mt-4 animate-fade-up">
+            <OfferScratchPad inline collapsible hideHeaders cols={10} minRows={10} heading="📝 Draft" title={sel.name.trim() || undefined}
+              value={s.panelDraft?.[sel.id]}
+              onChange={(d) => up({ panelDraft: { ...(s.panelDraft ?? {}), [sel.id]: d } })}
+              panelId={sel.id} geomKey={`pl-draft-${sel.id}`} defaultHeight={360} disabled={!canReorder} />
+          </div>
+        )}
       </div>
     </div>
   );

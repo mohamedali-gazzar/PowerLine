@@ -23,6 +23,19 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-14 · Mohamed's side · Claude
 
+**New: a Draft table inside each Standard-EDMS panel.**
+
+On a Standard EDMS quotation, every panel's editor now has a **📝 Draft** table for working calculations — the same
+spreadsheet-style grid as the Technical Offer scratch pad (type numbers/notes, and equations like `=A1+B2`, with column
+letters A–J).
+- Defaults to a **10-column × 10-row** grid (plain A–J columns, no fixed "Item/Qty/…" labels).
+- Each panel has its **own** table, independent from the Technical-Offer scratch pad.
+- It can be **minimized** — a ▾ Hide button folds it away to just its title (▸ Show to bring it back); remembered per browser.
+- **Saved with the quotation** (teammates see it, survives reload) but **screen-only** — never shown on the offer or PDF.
+- Standard-EDMS quotations only; normal LV / RMU quotations are unaffected, and the Technical Offer's own scratch pad is unchanged (still 4 columns).
+
+## 2026-09-14 · Mohamed's side · Claude
+
 **Cleaner look for a selected (ticked) panel.**
 
 The old selected style had an orange border plus an offset ring, which looked like a heavy double outline. It's now a
