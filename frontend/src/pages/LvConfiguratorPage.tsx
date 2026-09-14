@@ -6830,17 +6830,6 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
             </div>
           );
         })()}
-        {/* Standard EDMS: a per-panel DRAFT table (spreadsheet) inside the editor, for working
-            calculations. Its own table per panel, independent of the Technical-Offer scratch pad;
-            saved with the quotation but never shown on the offer or the PDF. */}
-        {sel && !sel.spare && s.kind === "edms" && (
-          <div className="mt-4 animate-fade-up">
-            <OfferScratchPad inline collapsible hideHeaders cols={10} minRows={10} heading="📝 Draft" title={sel.name.trim() || undefined}
-              value={s.panelDraft?.[sel.id]}
-              onChange={(d) => up({ panelDraft: { ...(s.panelDraft ?? {}), [sel.id]: d } })}
-              panelId={sel.id} geomKey={`pl-draft-${sel.id}`} defaultHeight={360} disabled={!canReorder} />
-          </div>
-        )}
       </div>
     </div>
   );
@@ -7250,6 +7239,16 @@ function PanelEditor({ s, p, up, upPanel }: {
 
       {/* No. of poles — its own standalone section (sizing summary, not part of Panel type) */}
       <div className="card p-5"><PolesSummary p={p} /></div>
+
+      {/* Per-panel Draft — notes & calculations, never included in outputs. Standard EDMS only. */}
+      {s.kind === "edms" && (
+        <div className="card p-5">
+          <h2 className="sec-head">Draft <span className="text-[11px] font-normal text-muted">· notes &amp; calculations for this panel (not included in any offer)</span></h2>
+          <textarea className="input min-h-[120px] w-full font-mono text-xs"
+            placeholder="Scratchpad for this panel — calculations, reminders, notes…"
+            value={p.draft ?? ""} onChange={(e) => u({ draft: e.target.value })} />
+        </div>
+      )}
     </div>
   );
 }

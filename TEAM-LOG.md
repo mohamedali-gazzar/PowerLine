@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-14 · Mohamed's side · Claude
 
+**Standard-EDMS Draft: back to the simple notepad we used to have.**
+
+The Standard-EDMS per-panel Draft (which last shipped as a spreadsheet grid) is now the plain **"Draft — notes &
+calculations for this panel"** notepad from before: a simple free-text box in the panel editor, right after "No. of
+poles". No grid, no minimize button. Still Standard-EDMS only, saved on the panel, and never shown on the offer or PDF.
+(Existing notes are kept — it's the same per-panel field.)
+
+## 2026-09-14 · Mohamed's side · Claude
+
 **New: a Draft table inside each Standard-EDMS panel.**
 
 On a Standard EDMS quotation, every panel's editor now has a **📝 Draft** table for working calculations — the same

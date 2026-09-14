@@ -223,9 +223,6 @@ export interface LvState {
   // Per-panel Technical-Offer scratch pad (a side-calculation table beside each panel), keyed by
   // panel id → its content. Saved with the quotation so teammates see it; screen-only, never printed.
   offerScratch?: Record<string, ScratchPad>;
-  // Per-panel DRAFT table shown inside the panel editor (Standard EDMS quotations), keyed by panel
-  // id → its content. Independent of offerScratch. Saved with the quotation; screen-only, never printed.
-  panelDraft?: Record<string, ScratchPad>;
   // Divider/separator pages for the Technical Offer, each rendered before its panel.
   offerSeparators?: OfferSeparator[];
   // Manual page breaks in the Technical Offer: component ids before which the offer
