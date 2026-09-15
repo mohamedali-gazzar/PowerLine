@@ -6470,6 +6470,8 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
     return next;
   });
   const clearPanelSel = () => { setSelPanels(new Set()); setLastPanelPick(null); setNaming(null); };
+  // Inline rename from the list (used on MV, where the list has no editor to edit the name in).
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   // Panels top-to-bottom in the exact order they render (grouped layout), which is what a drag
   // index and a Shift-range both count against.
   const flatOrder = () => panelLayout(s).flatMap((sec) => sec.panels);
@@ -6755,11 +6757,23 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
                         {b.text}
                       </span>
                     ); })()}
-                    <button onClick={() => up({ selectedId: p.id, activeGroupId: null })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
-                      <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{p.mvType && <span className="mr-1 rounded bg-brand-light px-1 py-0.5 align-middle text-[9px] font-bold uppercase tracking-wide text-brand-dark">{p.mvType}</span>}{p.name.trim() || "(unnamed panel)"}</div>
-                    </button>
+                    {renamingId === p.id ? (
+                      <input autoFocus value={p.name} placeholder="(unnamed)" onChange={(e) => upPanel(p.id, { name: e.target.value })}
+                        onFocus={(e) => e.target.select()}
+                        onBlur={() => setRenamingId(null)}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setRenamingId(null); } }}
+                        className="min-w-0 flex-1 rounded border border-brand px-1.5 py-0.5 text-sm font-bold text-ink outline-none" />
+                    ) : (
+                      <button onClick={() => up({ selectedId: p.id, activeGroupId: null })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
+                        <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{p.mvType && <span className="mr-1 rounded bg-brand-light px-1 py-0.5 align-middle text-[9px] font-bold uppercase tracking-wide text-brand-dark">{p.mvType}</span>}{p.name.trim() || "(unnamed panel)"}</div>
+                      </button>
+                    )}
                   </div>
                   <div data-nodrag className="ml-auto flex shrink-0 items-center gap-0.5">
+                    {hideEditor && (
+                      <button onClick={() => setRenamingId(p.id)} title="Edit name"
+                        className="shrink-0 rounded p-0.5 text-sm leading-none text-muted transition-colors hover:bg-white hover:text-brand-dark">✎</button>
+                    )}
                     {!!p.groupId && groups.some((g) => g.id === p.groupId) && (
                       <button onClick={() => up(movePanelsToGroup(s, [p.id], null))} title="Move this panel out of the group"
                         className="shrink-0 rounded p-0.5 text-muted transition-colors hover:bg-white hover:text-brand-dark">

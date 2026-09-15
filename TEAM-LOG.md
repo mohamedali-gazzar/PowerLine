@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV: edit-pen to rename a panel from the list.**
+
+Each MV panel row now has a ✎ pen — click it and the panel name turns into an inline box (type it, press Enter). Since the MV panel editor is blank, this is how you name a Kiosk/RMU/Transformer panel. MV only; LV panels are unchanged. Frontend only.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV: the "MV" tab is now a panel list (Kiosk / RMU / Transformer), with a blank editor.**
 
 MV's last tab is now called **MV** (the old empty "MV" tab was removed and the "Panels" tab renamed to it). It's a panel list like LV's, but:
