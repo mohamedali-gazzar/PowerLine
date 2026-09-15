@@ -4824,13 +4824,19 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             <span className="text-right">Total ({currency})</span>
           </div>
           {(() => {
-            // One line per RMU. Any add-on (RTU, metering, …) is folded INTO the RMU line —
-            // its name goes in the description and its price into the RMU's unit/total — never
-            // a separate dependent row.
+            // One line per RMU. Every add-on PRICE (RTU, outdoor enclosure, …) is folded into
+            // the RMU's unit/total — never a separate dependent row. In the DESCRIPTION we only
+            // name extras the base line doesn't already state, so nothing is duplicated: the
+            // outdoor enclosure is dropped (the base already says "outdoor installation"), and
+            // the RTU's redundant "Smart / RTU —" prefix is trimmed (its level already says
+            // "…Smart…").
             const items = lines.map((l) => {
               const baseDesc = l.preview?.commercialDescription || `${l.preview?.panelCode || "RMU"} — Ring Main Unit`;
-              const addNames = l.addOns.map((a) => a.name);
-              const desc = addNames.length ? `${baseDesc} — incl. ${addNames.join(", ")}` : baseDesc;
+              const extras = l.addOns
+                .filter((a) => !/outdoor|enclosure/i.test(a.name))
+                .map((a) => a.name.replace(/^\s*smart\s*\/\s*rtu\s*—\s*/i, "").trim())
+                .filter(Boolean);
+              const desc = extras.length ? `${baseDesc.replace(/\.\s*$/, "")}, including ${extras.join(" and ")}.` : baseDesc;
               const unit = l.unit + l.addUnit;
               return { desc, qty: l.qty, unit, total: unit * l.qty, poa: l.poa };
             });

@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV: tidied the RMU commercial line so nothing is said twice.**
+
+When an RMU's extras were folded into its line, the wording repeated itself — e.g. the line already said "for outdoor installation" and then added "incl. Outdoor Enclosure", and the Smart/RTU read "Smart / RTU — Ready to be Smart — Type 1" ("Smart" twice). Now the RMU line only names extras the sentence doesn't already state: the outdoor enclosure isn't repeated (its price is still included), and the Smart/RTU is trimmed to just its level (e.g. "including Ready to be Smart — Type 1"). Still one row per RMU with all prices folded in. Frontend only, no database or server change.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV: reverted the "group by type" idea, tidied Pricing Settings, and folded RMU extras into their line.**
 
 Three MV changes:
