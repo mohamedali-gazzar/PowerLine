@@ -1274,11 +1274,15 @@ export default function LvConfiguratorPage() {
   };
   const addPanel = (mvType?: MvPanelType) => {
     if (readOnly) return;
+    // The LV add buttons wire onClick={onAdd} → addPanel(clickEvent), so `mvType` may be a
+    // click event rather than a panel type. Only treat a real MV kind string as the type,
+    // or the event object lands on p.mvType and crashes the row (React can't render it).
+    const kind: MvPanelType | undefined = typeof mvType === "string" ? mvType : undefined;
     // A new panel starts from whatever was chosen on the Specs tab, so the
     // project-wide fields don't have to be re-picked for every panel.
     const p = withProjectSpecs(newPanel(s.panels.length + 1), s.projectSpecs);
-    if (mvType) p.mvType = mvType; // MV: tag it Kiosk / RMU / Transformer
-    if (mvType === "rmu") p.mvRmuConfig = { ...DEFAULT_RMU_CONFIG }; // MV RMU: seed the RMU configurator
+    if (kind) p.mvType = kind; // MV: tag it Kiosk / RMU / Transformer
+    if (kind === "rmu") p.mvRmuConfig = { ...DEFAULT_RMU_CONFIG }; // MV RMU: seed the RMU configurator
     if (coWork && user?.id) p.ownerId = user.id; // co-work: a new panel belongs to its creator
     // Contextual placement: join the open panel's group; or, with no panel open, the group made
     // active by clicking its header. Nothing active → appended ungrouped after the last group/panel.
@@ -6997,7 +7001,7 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
                         className="min-w-0 flex-1 rounded border border-brand px-1.5 py-0.5 text-sm font-bold text-ink outline-none" />
                     ) : (
                       <button onClick={() => up({ selectedId: p.id, activeGroupId: null })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
-                        <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{p.mvType && <span className="mr-1 rounded bg-brand-light px-1 py-0.5 align-middle text-[9px] font-bold uppercase tracking-wide text-brand-dark">{p.mvType}</span>}{p.name.trim() || "(unnamed panel)"}</div>
+                        <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{typeof p.mvType === "string" && <span className="mr-1 rounded bg-brand-light px-1 py-0.5 align-middle text-[9px] font-bold uppercase tracking-wide text-brand-dark">{p.mvType}</span>}{p.name.trim() || "(unnamed panel)"}</div>
                       </button>
                     )}
                   </div>

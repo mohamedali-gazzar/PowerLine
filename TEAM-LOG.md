@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**HOTFIX: "Add panel" showed a white/broken page — fixed.**
+
+Adding a panel to an LV quotation crashed the whole page (blank white screen). Cause: a change made for the MV package let the button's click get mistaken for a panel type and stored on the panel, which the panel list couldn't draw — so the page broke. Fixed so only a real MV type (Kiosk/RMU/Transformer) is stored, and any quotation that had already picked up a bad value is now repaired automatically when it opens (so no quotation stays broken). Added an automated test so this can't come back. Add panel now works normally in both LV and MV. Frontend only, no database or server change.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV: Download PDF button on the Technical and Commercial tabs.**
 
 Both MV offer tabs now have a **⬇ PDF / Print** button. It saves exactly what's on screen — the branded cover plus the RMU technical pages, or the priced commercial offer — as an A4 PDF, named like the RMU offer (`TO-QTN… Rev 00` / `CO-QTN… Rev 00`). It uses the same on-screen-to-PDF engine the LV offers already use. RMU panels only for now; frontend only, no database or server change.

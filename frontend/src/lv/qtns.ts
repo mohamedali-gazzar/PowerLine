@@ -87,7 +87,7 @@ export function summaryOf(state: LvState): QtnSummaryInput {
 }
 
 /** Forward-compatible defaults for a state loaded from the server. */
-function normalize(state: LvState): LvState {
+export function normalize(state: LvState): LvState {
   // STRUCTURAL DEFAULTS FIRST. The server is deliberately lenient — it stores
   // `state ?? {}` and hands back `{}` for a row it cannot parse — so any of these
   // can be missing, and each one is dereferenced further down (state.panels
@@ -108,6 +108,15 @@ function normalize(state: LvState): LvState {
   {
     const gids = new Set(state.groups.map((g) => g.id));
     for (const p of state.panels) if (p?.groupId && !gids.has(p.groupId)) p.groupId = undefined;
+  }
+  // Heal a bad MV panel type. A brief regression let the "+ Add panel" click event land
+  // on p.mvType (an object) — rendering it as the row's badge crashes the whole page, and
+  // a saved copy would re-crash on every load. Only a real MV kind string is valid; anything
+  // else is cleared. mvRmuConfig is meaningful only on an RMU panel.
+  for (const p of state.panels) {
+    if (!p) continue;
+    if (p.mvType !== "kiosk" && p.mvType !== "rmu" && p.mvType !== "transformer") p.mvType = undefined;
+    if (p.mvType !== "rmu") p.mvRmuConfig = undefined;
   }
   // Keep the physical panel array in the SAME order the sidebar renders it (grouped by
   // group.order, ungrouped last). That order is the app's invariant everywhere — the 1..n
