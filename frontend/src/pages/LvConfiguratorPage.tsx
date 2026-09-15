@@ -52,6 +52,8 @@ import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
 import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalogSource";
 import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
+import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
+import { DEFAULT_RMU_CONFIG } from "../components/RmuConfigForm";
 import {
   api, getToken, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type QtnAttachmentDto, type QtnStatus,
@@ -1274,6 +1276,7 @@ export default function LvConfiguratorPage() {
     // project-wide fields don't have to be re-picked for every panel.
     const p = withProjectSpecs(newPanel(s.panels.length + 1), s.projectSpecs);
     if (mvType) p.mvType = mvType; // MV: tag it Kiosk / RMU / Transformer
+    if (mvType === "rmu") p.mvRmuConfig = { ...DEFAULT_RMU_CONFIG }; // MV RMU: seed the RMU configurator
     if (coWork && user?.id) p.ownerId = user.id; // co-work: a new panel belongs to its creator
     // Contextual placement: join the open panel's group; or, with no panel open, the group made
     // active by clicking its header. Nothing active → appended ungrouped after the last group/panel.
@@ -6916,10 +6919,16 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
           every other cell the full PanelEditor. */}
       <div ref={editorRef} className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
         {hideEditor ? (
-          <div className="flex min-h-[45vh] flex-col items-center justify-center rounded-xl2 border border-dashed border-line bg-white/60 p-10 text-center no-print animate-fade-up">
-            <div className="text-sm font-bold uppercase tracking-wide text-muted">MV panel</div>
-            <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted/70">Empty for now — the MV panel view will be built here.</p>
-          </div>
+          sel && sel.mvType === "rmu" ? (
+            <MvRmuPanelEditor key={sel.id} p={sel} upPanel={upPanel} />
+          ) : (
+            <div className="flex min-h-[45vh] flex-col items-center justify-center rounded-xl2 border border-dashed border-line bg-white/60 p-10 text-center no-print animate-fade-up">
+              <div className="text-sm font-bold uppercase tracking-wide text-muted">MV panel</div>
+              <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted/70">
+                {sel ? "This panel type isn't built yet." : "Empty for now — the MV panel view will be built here."}
+              </p>
+            </div>
+          )
         ) : sel ? (sel.spareKind === "lcp" || sel.spareKind === "kwhm"
           ? <LcpEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />
           : sel.spare

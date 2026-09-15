@@ -25,6 +25,7 @@ import {
 } from "./catalog";
 import { defaultCellConfig, type CellConfig } from "./cells";
 import { type CopperTool } from "./copper";
+import type { RmuConfigInput } from "../types";
 
 let uidCtr = 0;
 export const uid = () => `u${++uidCtr}_${Math.random().toString(36).slice(2, 7)}`;
@@ -88,6 +89,10 @@ export interface LvPanel {
   /** MV only: which package part this panel is (Kiosk / RMU / Transformer), set by the MV
    *  Panels tab's add buttons. Absent on ordinary LV panels. */
   mvType?: MvPanelType;
+  /** MV RMU panels only: the RMU configurator state for this panel, driving the SAME
+   *  RMU form + backend pricing as a standalone RMU offer. Absent until an RMU panel is
+   *  added; other panel kinds never set it. */
+  mvRmuConfig?: RmuConfigInput;
   name: string;
   code: string;
   fedFrom: string;   // RPT-01: next to panel name

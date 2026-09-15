@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV: the RMU panel now opens the real RMU configurator.**
+
+In an MV quotation, open the **MV** tab and press **+ RMU** — the panel now opens the full RMU configurator you already use on the standalone RMU offer screen (product type, brand, voltage, ring/transformer feeders, metering, Smart/RTU). It pulls the official RMU code from the server exactly like the RMU offer does, and everything you set is saved with the quotation and comes back after a reload. Kiosk and Transformer panels still show the "coming soon" placeholder — those come next.
+
+Behind the scenes the RMU form is now a single shared piece used by both the RMU offer screen and MV, so there's no duplicate copy to drift apart. **The existing RMU offer screen is unchanged** — same fields, same behaviour (re-checked in the browser). No database or server change: the RMU settings ride inside the quotation. Frontend only.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV: edit-pen to rename a panel from the list.**
 
 Each MV panel row now has a ✎ pen — click it and the panel name turns into an inline box (type it, press Enter). Since the MV panel editor is blank, this is how you name a Kiosk/RMU/Transformer panel. MV only; LV panels are unchanged. Frontend only.
