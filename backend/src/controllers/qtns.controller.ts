@@ -39,6 +39,8 @@ type QtnRow = {
   createdAt: Date;
   updatedAt: Date;
   state: string;
+  /// Sub-kind mirrored from the state ("panels"/"edms"/"custom"/"spare" = LV, "mv" = MV).
+  kind?: string;
   submitted: boolean;
   /// Set when the quotation has been hidden from the lists (never erased).
   removedAt?: Date | null;
@@ -136,9 +138,17 @@ const record = (q: QtnRow) => {
   };
 };
 
+// Pull just the sub-kind out of the (opaque) JSON state to mirror onto the `kind` column — it
+// drives only the History TYPE badge. Anything but a known kind reads as a plain LV "panels".
+const kindOf = (state: unknown): string => {
+  const k = (state as { kind?: unknown } | null | undefined)?.kind;
+  return k === "mv" || k === "edms" || k === "custom" || k === "spare" ? k : "panels";
+};
+
 const listItem = (q: QtnListRow) => ({
   id: q.id,
   number: q.number,
+  kind: q.kind ?? "panels",
   updatedAt: q.updatedAt,
   projectName: q.projectName,
   customer: q.customer,
@@ -184,6 +194,7 @@ const ownerSelect = {
 export const listSelect = {
   id: true,
   number: true,
+  kind: true,
   updatedAt: true,
   projectName: true,
   customer: true,
@@ -460,6 +471,7 @@ export async function create(req: Request, res: Response) {
         ownerId,
         number: number.trim(),
         state: JSON.stringify(state ?? {}),
+        kind: kindOf(state),
         status: "DRAFT",
         statusAt: new Date(),
         ...summaryData(summary),
@@ -580,7 +592,7 @@ export async function update(req: Request, res: Response) {
      * no idea why. Amend is what sets a revision; typing one can only ever be a
      * label, so the stored value wins any argument.
      */
-    const data = { state: JSON.stringify(toStore), ...summaryData(summary) };
+    const data = { state: JSON.stringify(toStore), kind: kindOf(toStore), ...summaryData(summary) };
     if (data.revisionNo !== q.revisionNo &&
         (await numberTaken(q.ownerId, q.number, q.id, data.revisionNo))) {
       data.revisionNo = q.revisionNo;
@@ -705,6 +717,7 @@ export async function duplicate(req: Request, res: Response) {
         ownerId,
         number: await nextNumber(ownerId),
         state: src.state,
+        kind: src.kind,
         projectName: src.projectName,
         customer: src.customer,
         panelsCount: src.panelsCount,
@@ -823,6 +836,7 @@ export async function amend(req: Request, res: Response) {
           number: base,
           revisionNo: rev,
           state: stateAtRevision(q.state, rev),
+          kind: q.kind,
           projectName: q.projectName,
           customer: q.customer,
           panelsCount: q.panelsCount,

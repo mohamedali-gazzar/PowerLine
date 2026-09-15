@@ -139,6 +139,8 @@ export interface QtnWorkflow {
 export interface QtnListItemDto extends QtnWorkflow {
   id: string;
   number: string;
+  /** Sub-kind mirrored from the state: "panels"/"edms"/"custom"/"spare" = LV, "mv" = MV. */
+  kind?: string;
   updatedAt: string;
   projectName: string;
   customer: string;

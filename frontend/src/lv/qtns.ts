@@ -44,6 +44,8 @@ export interface QtnRecord {
 export interface QtnListItem {
   id: string;
   number: string;
+  /** Sub-kind mirrored from the state: "panels"/"edms"/"custom"/"spare" = LV, "mv" = MV. */
+  kind?: string;
   updatedAt: string;
   projectName: string;
   customer: string;

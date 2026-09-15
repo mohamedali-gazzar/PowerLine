@@ -30,11 +30,16 @@ function rmuTotalUsd(o: Offer): number | null {
 }
 
 type Kind = "LV" | "RMU";
+// The badge/filter shows three types: LV, RMU, and MV. MV rows are LV quotations under the hood
+// (kind stays "LV" so they keep every LV row behaviour) — `lvKind === "mv"` is what promotes them
+// to the "MV" type for display, filtering and their /mv link.
+type RowType = "LV" | "RMU" | "MV";
 /** One row of the unified history — an LV quotation or an RMU offer, normalised to
  *  a shared shape so both render in the same table. `lv` / `rmu` keep the raw record
  *  for the row's actions. */
 interface UniRow {
   kind: Kind;
+  lvKind?: string; // LV sub-kind ("mv" promotes the row to the MV type); undefined for RMU
   id: string;
   number: string;
   updatedAt: string;
@@ -56,6 +61,9 @@ interface UniRow {
   lv?: QtnListItem;
   rmu?: Offer;
 }
+
+/** The type shown in the TYPE column / filter: RMU, MV (an LV-kind "mv" quotation) or plain LV. */
+const rowType = (x: UniRow): RowType => (x.kind === "RMU" ? "RMU" : x.lvKind === "mv" ? "MV" : "LV");
 
 // ── Action icons (16px, stroke = currentColor) ────────────────────────────────
 const AmendIcon = (
@@ -115,7 +123,7 @@ export default function LvQtnListPage() {
   const [loadErr, setLoadErr] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [q, setQ] = useState("");
-  const [type, setType] = useState<"" | Kind>("");
+  const [type, setType] = useState<"" | RowType>("");
   const [status, setStatus] = useState<string>("");
   const [owner, setOwner] = useState("");
   const [approver, setApprover] = useState("");
@@ -210,7 +218,7 @@ export default function LvQtnListPage() {
     const lv: UniRow[] = (qtns ?? []).map((x) => {
       const st = (x.status ?? "DRAFT") as QtnStatus;
       return {
-        kind: "LV", id: x.id, number: x.number, updatedAt: x.updatedAt,
+        kind: "LV", lvKind: x.kind, id: x.id, number: x.number, updatedAt: x.updatedAt,
         projectName: x.projectName, customer: x.customer,
         units: String(x.panels ?? 0),
         totalUsd: Number.isFinite(x.totalEgp) ? x.totalEgp / DEFAULT_FACTORS.usd : null,
@@ -265,7 +273,7 @@ export default function LvQtnListPage() {
     const fromMs = from ? new Date(`${from}T00:00:00`).getTime() : null;
     const toMs = to ? new Date(`${to}T23:59:59.999`).getTime() : null;
     return rows.filter((x) => {
-      if (type && x.kind !== type) return false;
+      if (type && rowType(x) !== type) return false;
       if (status === CANCELLED_FILTER) { if (!x.cancelled) return false; }
       else if (status && x.statusKey !== status) return false;
       if (owner && x.ownerEmail !== owner) return false;
@@ -327,6 +335,8 @@ export default function LvQtnListPage() {
   const rowHref = (x: UniRow) =>
     x.kind === "RMU"
       ? rmuEditable(x) ? `/offers/${x.id}/edit` : `/offers/${x.id}`
+      : rowType(x) === "MV"
+      ? `/mv/${x.id}`
       : `/lv/qtn/${x.id}`;
 
   // The number shown in History, with the revision suffix. If the stored number already
@@ -465,6 +475,7 @@ export default function LvQtnListPage() {
               <select id="qtn-type" className="input w-32" value={type} onChange={(e) => setType(e.target.value as "" | Kind)}>
                 <option value="">All types</option>
                 <option value="LV">LV</option>
+                <option value="MV">MV</option>
                 <option value="RMU">RMU</option>
               </select>
             </div>
@@ -545,7 +556,9 @@ export default function LvQtnListPage() {
                         style={justChanged.has(x.id) ? undefined : { animationDelay: `${i * 0.04}s` }}
                         onClick={() => navigate(rowHref(x))}>
                         <td className="px-4 py-3">
-                          <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${x.kind === "RMU" ? "bg-violet-100 text-violet-700" : "bg-brand-light text-brand-dark"}`}>{x.kind}</span>
+                          {(() => { const rt = rowType(x); return (
+                          <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${rt === "RMU" ? "bg-violet-100 text-violet-700" : rt === "MV" ? "bg-emerald-100 text-emerald-700" : "bg-brand-light text-brand-dark"}`}>{rt}</span>
+                          ); })()}
                         </td>
                         <td className="px-4 py-3 font-bold text-ink">
                           <span className={`rounded-md px-2 py-0.5 font-mono text-xs font-bold ${dead ? "bg-surface text-muted line-through" : "bg-brand-light text-brand-dark"}`}>{displayNumber(x)}</span>

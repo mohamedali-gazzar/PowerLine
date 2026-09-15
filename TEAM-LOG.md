@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**Offer History now shows LV vs MV correctly (own badge + filter).**
+
+In Offer History, LV quotations keep their **LV** badge and MV quotations now show their own **MV** badge (green). The TYPE filter gained an **MV** option, so you can list just LV, just MV, or just RMU.
+
+- ⚠️ HEADS-UP (database): this adds **one small field to the quotation record** — its type (LV/MV) — so History can show the right badge without loading the whole quotation for every row (loading the full state for listing is what took the live site down in Aug 2026, so it's deliberately avoided). The field is **additive and safe**: every existing quotation is untouched and reads as **LV**; only new MV quotes carry the MV tag. The deploy adds the column automatically. Kept in sync whenever a quotation is created or saved.
+- Still frontend + a tiny backend column; no prices or existing data changed.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV now saves the quotation, like LV.**
 
 Creating an **MV** (still admins-only, still under construction) now makes a real, saved quotation — it keeps its QTN number and appears in **Offer History** next to your LV and RMU offers. Opening it (from the New QTN screen or from History) lands on the MV workspace showing its number.

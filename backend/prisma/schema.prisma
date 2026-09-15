@@ -235,6 +235,10 @@ model LvQtn {
   /// per-panel, so no two people can overwrite each other's work.
   coOwners    LvQtnCoOwner[]
   state       String // JSON-serialized LvState
+  /// The quotation sub-kind mirrored out of the JSON state so the History list can show its
+  /// TYPE badge (LV vs MV, …) without loading `state`. "panels"/"edms"/"custom"/"spare" all read
+  /// as LV; "mv" is the combined RMU+TR+Kiosk offer. Kept in sync on every create/save.
+  kind        String    @default("panels")
   // client-computed summary (avoids duplicating pricing logic on the server)
   projectName String    @default("")
   customer    String    @default("")
