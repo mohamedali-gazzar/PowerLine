@@ -201,6 +201,21 @@ export interface LvGroup {
 /** A Technical-Offer scratch pad's shared content (the geometry stays per-user in localStorage). */
 export interface ScratchPad { headers: string[]; rows: string[][] }
 
+/** RMU-style commercial settings, used by an MV quotation's Pricing Settings sub-tabs
+ *  (one block for RMU, one for Transformer). Mirrors the RMU offer's commercial fields. */
+export interface MvCommercial {
+  currency: "USD" | "EGP";
+  discountPct: number;
+  validityDays: number;
+  deliveryWeeks: number;
+  warrantyMonths: number;
+  paymentTerms: string;
+}
+export const DEFAULT_MV_COMMERCIAL: MvCommercial = {
+  currency: "USD", discountPct: 0, validityDays: 3, deliveryWeeks: 12,
+  warrantyMonths: 12, paymentTerms: "50% advance, 50% before delivery",
+};
+
 export interface LvState {
   project: LvProject;
   factors: Factors;
@@ -239,6 +254,9 @@ export interface LvState {
   // it was started from), or a spare-parts quotation whose single "Spare parts"
   // cell drives all offers.
   kind?: "panels" | "edms" | "spare" | "custom" | "mv";
+  /** MV Pricing Settings — RMU-style commercial blocks (the LV block reuses `factors`). */
+  mvRmu?: MvCommercial;
+  mvTransformer?: MvCommercial;
   /** Commercial Offer lines typed by hand. Only a "custom" quotation uses these — it
    *  has no panels, so the offer table is written rather than generated from them. */
   customItems?: CustomOfferItem[];

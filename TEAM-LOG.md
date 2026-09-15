@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV: added Pricing Settings (LV + RMU + Transformer), plus empty Specs and MV tabs.**
+
+More of the MV interface, built piece by piece:
+- **Pricing Settings** tab — one page holding three blocks: **LV** (the LV pricing settings, minus the read-only "Project factor" which doesn't apply to MV), and **RMU** and **Transformer** side-by-side commercial-settings cards (Discount, Validity, Delivery, Warranty, Payment terms). RMU and Transformer each keep their own values and save independently.
+- **Specs** tab and an **MV** tab — both added but **empty for now** (placeholders), to be filled in next.
+- MV's tab strip now reads: Project · Pricing Settings · Specs · MV.
+- Only MV is affected — LV / EDMS / Custom quotations are unchanged (their Specs and Project-factor stay). Still admins-only, frontend only, no data changes.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV: added the Project tab (like LV) — first piece of the MV interface.**
 
 The MV workspace now has a **Project** tab, identical to LV's — Project name, Customer, QTN/Revision/OPTY numbers, Sales support engineer, date, sales manager / person and their phones/emails, and the Staff lists. It's the same Project screen LV uses, so it saves the same way (project name & customer then show in Offer History).

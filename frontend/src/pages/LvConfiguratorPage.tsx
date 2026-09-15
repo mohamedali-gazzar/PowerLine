@@ -31,8 +31,8 @@ import {
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog, pickRates, ratesEqual,
   panelLayout, panelNumbers, commonNamePrefix, resortByGroup, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
-  withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS,
-  type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote,
+  withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS, DEFAULT_MV_COMMERCIAL,
+  type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote, type MvCommercial,
   type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow, type CustomOfferItem, type ScratchPad,
 } from "../lv/store";
 import {
@@ -77,7 +77,7 @@ import { panelPoles, POLE_CM, POLE_KINDS, GROUP_LABEL, KIND_LABEL, type PoleGrou
 import { stdPanel, applyStdPanel, STD_EDMS_KVA } from "../lv/standardEdms";
 import { stdAts, applyStdAts, stdAtsRatings, atsBreakersFor, type StdAtsVariant } from "../lv/standardAtsEdms";
 
-type Tab = "project" | "pricing" | "specs" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "sizing" | "summary";
+type Tab = "project" | "pricing" | "specs" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "sizing" | "summary" | "mv";
 const TABS: Tab[] = ["project", "pricing", "specs", "panels", "technical", "commercial", "material", "spare", "selectivity"];
 
 // How many edits Undo/Redo can step through. Text fields record one step PER KEYSTROKE, so the
@@ -1121,7 +1121,7 @@ export default function LvConfiguratorPage() {
   // anything on them. Its VAT and exchange rate are edited on the Commercial tab itself,
   // since Pricing Settings (where they normally live) is not shown.
   const tabs: [Tab, string][] = isMvQtn
-    ? [["project", "Project"]] // MV's interface is built one tab at a time — Project first, like LV.
+    ? [["project", "Project"], ["pricing", "Pricing Settings"], ["specs", "Specs"], ["mv", "MV"]] // MV's interface, built up tab by tab.
     : isCustomQtn
     ? [["project", "Project"], ["commercial", "Commercial Offer"]]
     : isSpareQtn
@@ -2030,8 +2030,9 @@ export default function LvConfiguratorPage() {
         {/* MV shows only the tabs it has been given so far (Project first). The other tab
             blocks below never match its activeTab, so its interface grows one tab at a time. */}
         {activeTab === "project" && <ProjectTab s={s} up={up} qtnNum={qtnNum} onRenameQtn={renameQtnNumber} />}
-        {activeTab === "pricing" && <PricingTab s={s} up={up} />}
-        {activeTab === "specs" && <SpecsTab s={s} up={up} qtnId={rec?.id ?? ""} readOnly={sharedReadOnly} />}
+        {activeTab === "pricing" && (isMvQtn ? <MvPricingSettings s={s} up={up} /> : <PricingTab s={s} up={up} />)}
+        {activeTab === "specs" && (isMvQtn ? <MvEmptyTab label="Specs" /> : <SpecsTab s={s} up={up} qtnId={rec?.id ?? ""} readOnly={sharedReadOnly} />)}
+        {activeTab === "mv" && <MvEmptyTab label="MV" />}
         {activeTab === "panels" && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} reorderPanels={reorderPanels} canReorder={!sharedReadOnly} panelBadge={panelBadge} freshIds={freshPanels}
             onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
@@ -4597,8 +4598,64 @@ function NumField({ label, value, pct, step, min, max, hint, onCommit }: {
   );
 }
 
+// A placeholder for an MV tab whose interface is not built yet — a clean empty panel.
+function MvEmptyTab({ label }: { label: string }) {
+  return (
+    <div className="flex min-h-[40vh] flex-col items-center justify-center rounded-xl2 border border-dashed border-line bg-white/60 p-10 text-center no-print">
+      <div className="text-sm font-bold uppercase tracking-wide text-muted">{label}</div>
+      <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted/70">Empty for now — this section will be built here.</p>
+    </div>
+  );
+}
+
+// ── MV Pricing Settings — three sub-tabs in one card: LV (the LV settings), RMU and
+//    Transformer (both RMU-style commercial blocks). Built for the MV quotation kind only. ──
+function MvCommercialCard({ title, value, onChange }: { title: string; value: MvCommercial; onChange: (v: MvCommercial) => void }) {
+  const set = (patch: Partial<MvCommercial>) => onChange({ ...value, ...patch });
+  return (
+    // Fills its half of the row (RMU beside Transformer); the parent grid caps the width.
+    <div className="card h-full w-full p-5">
+      <h2 className="sec-head">{title} — Commercial settings</h2>
+      <div className="space-y-4">
+        {/* min-h keeps every label the same height (2 lines) so all four inputs line up even when a
+            label like "Warranty (months)" wraps in the narrow column. */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div><label className="label flex min-h-[2rem] items-start leading-tight">Discount (%)</label>
+            <input type="number" step={0.5} className="input" value={value.discountPct}
+              onChange={(e) => set({ discountPct: parseFloat(e.target.value) || 0 })} /></div>
+          <div><label className="label flex min-h-[2rem] items-start leading-tight">Validity (days)</label>
+            <input type="number" className="input" value={value.validityDays}
+              onChange={(e) => set({ validityDays: parseInt(e.target.value) || 0 })} /></div>
+          <div><label className="label flex min-h-[2rem] items-start leading-tight">Delivery (weeks)</label>
+            <input type="number" className="input" value={value.deliveryWeeks}
+              onChange={(e) => set({ deliveryWeeks: parseInt(e.target.value) || 0 })} /></div>
+          <div><label className="label flex min-h-[2rem] items-start leading-tight">Warranty (months)</label>
+            <input type="number" className="input" value={value.warrantyMonths}
+              onChange={(e) => set({ warrantyMonths: parseInt(e.target.value) || 0 })} /></div>
+        </div>
+        <div><label className="label">Payment terms</label>
+          <input className="input" value={value.paymentTerms}
+            onChange={(e) => set({ paymentTerms: e.target.value })} placeholder="50% advance, 50% before delivery" /></div>
+      </div>
+    </div>
+  );
+}
+function MvPricingSettings({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }) {
+  // All three blocks (LV, RMU, Transformer) together on one page — no sub-tabs to switch between.
+  return (
+    <div className="space-y-6">
+      <PricingTab s={s} up={up} hideProjectFactor />
+      {/* RMU beside Transformer, together spanning the same width as the LV + Live Exchange row. */}
+      <div className="mx-auto grid w-full max-w-[77rem] grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+        <MvCommercialCard title="RMU" value={s.mvRmu ?? DEFAULT_MV_COMMERCIAL} onChange={(v) => up({ mvRmu: v })} />
+        <MvCommercialCard title="Transformer" value={s.mvTransformer ?? DEFAULT_MV_COMMERCIAL} onChange={(v) => up({ mvTransformer: v })} />
+      </div>
+    </div>
+  );
+}
+
 // ── Pricing tab (RPT-01: Pricing Settings replaces "Panels Section") ─────────
-function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }) {
+function PricingTab({ s, up, hideProjectFactor }: { s: LvState; up: (p: Partial<LvState>) => void; hideProjectFactor?: boolean }) {
   const f = s.factors;
   // The Project factor reads the APPLIED state (total cost ÷ total selling). A staged target in the
   // Panel pricing table is a preview until "Apply to Panels & Commercial Offer" writes it to the
@@ -4626,6 +4683,7 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
           {num("factor", "Panels factor", { hint: "cost ÷ factor = panel selling price" })}
+          {!hideProjectFactor && (
           <div key="projectFactor">
             <L>Project factor</L>
             <input className="input cursor-default bg-surface font-bold text-brand-dark" readOnly tabIndex={-1}
@@ -4633,6 +4691,7 @@ function PricingTab({ s, up }: { s: LvState; up: (p: Partial<LvState>) => void }
               value={projFactor > 0 ? projFactor.toFixed(3) : "—"} />
             <p className="mt-1 text-[11px] text-muted">View only · total cost ÷ total selling</p>
           </div>
+          )}
           {num("copper", "Copper (EGP/KG)", { step: 1 })}
           {num("sheetMetal", "Sheet metal (EGP/KG)", { step: 1 })}
           {num("euro", "EUR → EGP", { min: liveEur, hint: liveEur ? `must be ≥ live ${liveEur}` : undefined })}
