@@ -11,6 +11,9 @@ import NewOfferPage from "./pages/NewOfferPage";
 import OfferDetailPage from "./pages/OfferDetailPage";
 import LvQtnListPage from "./pages/LvQtnListPage";
 import LvConfiguratorPage from "./pages/LvConfiguratorPage";
+// The MV package workspace (RMU + TR + Kiosk) — a small stub while it's under construction,
+// self-guarded to admins, so it can live in the main bundle.
+import MvWorkspace from "./pages/MvWorkspace";
 // Loaded on demand: the price screen is used occasionally, so its code is only
 // downloaded when someone actually opens /pricing — it never weighs on the
 // everyday app or on first load.
@@ -105,6 +108,7 @@ function Gate() {
             </React.Suspense>
           }
         />
+        <Route path="mv" element={<MvWorkspace />} />
         <Route path="lv" element={<LvQtnListPage />} />
         <Route path="lv/qtn/:id" element={<LvConfiguratorPage />} />
         {/* Read-by-QTN-number link: /lv/qtn/<QTN number>/<record id>. The number is the

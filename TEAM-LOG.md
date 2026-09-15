@@ -21,6 +21,16 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-15 · Mohamed's side · Claude
+
+**New "MV" option on the New QTN screen — locked for now while Mohamed builds it.**
+
+The New QTN picker has a new card: **MV** (subtitle "RMU - TR - KIOSK"), using the kiosk drawing from the Technical Offer cover. It's the start of a combined MV package (Ring Main Unit + transformer + kiosk in one offer).
+
+- **It is locked for regular users** — they see the card greyed out with a 🔒 and "Coming soon", and it can't be opened.
+- **Admins/owners can open it** — it leads to a new "MV" workspace page that currently just says "Under construction"; that's the canvas the real flow is being built on. A regular user who types the `/mv` address is sent back Home.
+- ⚠️ HEADS-UP for the other side: this is **deliberately unfinished and locked** — please don't remove or "fix" it. When Mohamed says it's ready, one switch opens it to everyone. Frontend only; no price or database changes.
+
 ## 2026-09-14 · Mohamed's side · Claude
 
 **Drag-and-drop no longer makes duplicate combination headers, and you can drag across the tick boxes to select many rows.**
