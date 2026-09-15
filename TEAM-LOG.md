@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV: added Technical and Commercial tabs (RMU), like the RMU offer.**
+
+An MV quotation now has two more tabs after **MV**:
+- **Technical** — the branded cover page, then the full RMU technical offer for each RMU panel (general/electrical data, the Ring Main Unit structure) — the same pages the standalone RMU offer prints. Several RMU panels each get their own page.
+- **Commercial** — the branded cover, then a priced "Main Offer" table (one line per RMU with its real catalogue price and quantity), the subtotal / discount / VAT / total, and the Terms (validity, delivery, payment, warranty). The terms and discount come from **Pricing Settings → RMU**. An RMU with no catalogue price shows **POA**, exactly like the RMU offer.
+
+Both are built from the RMU panels only — Transformer and Kiosk aren't part of these yet. The **Download PDF** buttons the RMU offer has on these tabs are **not wired yet** — the on-screen offers are complete, PDF export is the next step. No database or server change; frontend only. LV / EDMS / Custom quotations are untouched.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV: the RMU panel now opens the real RMU configurator.**
 
 In an MV quotation, open the **MV** tab and press **+ RMU** — the panel now opens the full RMU configurator you already use on the standalone RMU offer screen (product type, brand, voltage, ring/transformer feeders, metering, Smart/RTU). It pulls the official RMU code from the server exactly like the RMU offer does, and everything you set is saved with the quotation and comes back after a reload. Kiosk and Transformer panels still show the "coming soon" placeholder — those come next.

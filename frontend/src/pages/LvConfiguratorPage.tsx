@@ -54,6 +54,8 @@ import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalog
 import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
 import { DEFAULT_RMU_CONFIG } from "../components/RmuConfigForm";
+import OfferView from "../components/OfferView";
+import type { GeneratedOffer, RmuConfigInput } from "../types";
 import {
   api, getToken, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type QtnAttachmentDto, type QtnStatus,
@@ -1124,7 +1126,7 @@ export default function LvConfiguratorPage() {
   // anything on them. Its VAT and exchange rate are edited on the Commercial tab itself,
   // since Pricing Settings (where they normally live) is not shown.
   const tabs: [Tab, string][] = isMvQtn
-    ? [["project", "Project"], ["pricing", "Pricing Settings"], ["specs", "Specs"], ["panels", "MV"]] // MV's interface, built up tab by tab.
+    ? [["project", "Project"], ["pricing", "Pricing Settings"], ["specs", "Specs"], ["panels", "MV"], ["technical", "Technical"], ["commercial", "Commercial"]] // MV's interface, built up tab by tab.
     : isCustomQtn
     ? [["project", "Project"], ["commercial", "Commercial Offer"]]
     : isSpareQtn
@@ -2056,8 +2058,8 @@ export default function LvConfiguratorPage() {
             onAdd={() => addSpareCell("spare")} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
             addLabel="+ Add cell" emptyLabel="No spare cells yet." emptyAddLabel="+ Add your first cell" />
         )}
-        {activeTab === "technical" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} onScratch={upScratch} readOnly={sharedReadOnly} />)}
-        {activeTab === "commercial" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} readOnly={readOnly} />)}
+        {activeTab === "technical" && (isMvQtn ? <MvTechnicalTab s={s} qtnNo={qtnNum} /> : (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} onScratch={upScratch} readOnly={sharedReadOnly} />))}
+        {activeTab === "commercial" && (isMvQtn ? <MvCommercialTab s={s} qtnNo={qtnNum} /> : (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} readOnly={readOnly} />))}
         {activeTab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
         {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} qtnNo={qtnNum} onOpenPanel={openPanelInPanels} />}
         {activeTab === "sizing" && <SizingReviewTab key={rec?.id ?? "none"} s={s} qtnId={rec?.id ?? ""} />}
@@ -4606,6 +4608,200 @@ function NumField({ label, value, pct, step, min, max, hint, onCommit }: {
         }}
         onBlur={(e) => { setEditing(false); commit(e.target.value, true); }} />
       {hint && <p className="mt-1 text-[11px] text-muted">{hint}</p>}
+    </div>
+  );
+}
+
+// ── MV Technical & Commercial tabs — the RMU offer's Technical/Commercial views, built
+//    from the MV quotation's RMU panels. Each RMU panel is priced and drawn with the SAME
+//    backend preview (/offers/preview) and OfferView the standalone RMU offer uses. The
+//    branded cover is the LV OfferCover (MV is an LvState). Transformer / Kiosk panels are
+//    not part of these yet. ──
+
+/** All RMU-kind panels in an MV quotation that carry a configuration. */
+function mvRmuPanels(s: LvState): LvPanel[] {
+  return s.panels.filter((p) => p.mvType === "rmu" && p.mvRmuConfig);
+}
+
+/** The short RMU code shown on a technical page header (e.g. PRAL12(2+1+M)). */
+function rmuShortCode(c: RmuConfigInput): string {
+  return `${c.productType}${c.voltageKv}(${c.nalCount}+${c.nalfCount}${c.hasMetering ? "+M" : ""})`;
+}
+
+/** Fetch backend previews for a set of RMU configs, cached by config signature. Identical
+ *  configs fetch once; adding an RMU never re-fetches the unchanged ones. */
+function useRmuPreviews(configs: RmuConfigInput[]): Record<string, GeneratedOffer> {
+  const [cache, setCache] = useState<Record<string, GeneratedOffer>>({});
+  const cacheRef = useRef(cache);
+  cacheRef.current = cache;
+  const sigs = configs.map((c) => JSON.stringify(c));
+  const key = sigs.join("|");
+  useEffect(() => {
+    let alive = true;
+    const missing = Array.from(new Set(sigs)).filter((sig) => !(sig in cacheRef.current));
+    if (!missing.length) return;
+    Promise.all(
+      missing.map((sig) =>
+        api
+          .previewConfig(JSON.parse(sig) as RmuConfigInput)
+          .then((g) => [sig, g] as const)
+          .catch(() => null)
+      )
+    ).then((pairs) => {
+      if (!alive) return;
+      const add: Record<string, GeneratedOffer> = {};
+      for (const p of pairs) if (p) add[p[0]] = p[1];
+      if (Object.keys(add).length) setCache((c) => ({ ...c, ...add }));
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return cache;
+}
+
+function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
+  const panels = mvRmuPanels(s);
+  const previews = useRmuPreviews(panels.map((p) => p.mvRmuConfig!));
+  return (
+    <div className="space-y-4 animate-fade-up">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted no-print">
+        <span className="h-2 w-2 rounded-full bg-green-500" /> Live technical offer · RMU
+      </div>
+      <OfferCover s={s} qtnNo={qtnNo} kind="Technical" />
+      {panels.length === 0 ? (
+        <div className="card p-10 text-center text-sm text-muted no-print">
+          Add an RMU on the <b className="text-brand-dark">MV</b> tab to build its technical offer.
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {panels.map((p, i) => {
+            const c = p.mvRmuConfig!;
+            const g = previews[JSON.stringify(c)];
+            return (
+              <div key={p.id} className="a4-sheet px-12 py-10">
+                {panels.length > 1 && (
+                  <div className="mb-4 flex items-center gap-2 border-b border-line pb-2">
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-brand text-xs font-bold text-white">{i + 1}</span>
+                    <span className="text-sm font-extrabold text-ink">RMU {i + 1} of {panels.length}</span>
+                    <span className="code-chip ml-auto">{g?.panelCode || rmuShortCode(c)}</span>
+                  </div>
+                )}
+                {g ? (
+                  <OfferView g={g} />
+                ) : (
+                  <div className="space-y-3">
+                    <div className="skeleton h-24" />
+                    <div className="skeleton h-32" />
+                    <div className="skeleton h-40" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
+  const panels = mvRmuPanels(s);
+  const previews = useRmuPreviews(panels.map((p) => p.mvRmuConfig!));
+  const cm = s.mvRmu ?? DEFAULT_MV_COMMERCIAL;
+  const currency = cm.currency;
+  // RMU base prices are in USD; EGP multiplies by the quotation's USD→EGP rate.
+  const rate = currency === "EGP" ? s.factors?.usd || 1 : 1;
+  const first = panels[0] ? previews[JSON.stringify(panels[0].mvRmuConfig)] : undefined;
+  const vatPct = first?.vatPct ?? 14;
+  const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+  const lines = panels.map((p) => {
+    const g = previews[JSON.stringify(p.mvRmuConfig)];
+    const baseUsd = g?.listPricing?.basePrice ?? null;
+    const base = baseUsd == null ? null : baseUsd * rate;
+    const addOns = g?.listPricing?.addOns ?? [];
+    const addUnit = addOns.reduce((sum, a) => sum + a.price, 0) * rate;
+    const qty = p.qty || 1;
+    const unit = base ?? 0;
+    return { p, preview: g, unit, addOns, qty, panelSub: unit * qty, addSub: addUnit * qty };
+  });
+  const subtotal = lines.reduce((sum, l) => sum + l.panelSub + l.addSub, 0);
+  const discount = subtotal * (cm.discountPct / 100);
+  const exVat = subtotal - discount;
+  const vat = exVat * (vatPct / 100);
+  const incVat = exVat + vat;
+
+  return (
+    <div className="space-y-4 animate-fade-up">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted no-print">
+        <span className="h-2 w-2 rounded-full bg-green-500" /> Live commercial offer · RMU
+      </div>
+      <OfferCover s={s} qtnNo={qtnNo} kind="Commercial" />
+      {panels.length === 0 ? (
+        <div className="card p-10 text-center text-sm text-muted no-print">
+          Add an RMU on the <b className="text-brand-dark">MV</b> tab to build its commercial offer.
+        </div>
+      ) : (
+        <div className="a4-sheet px-12 py-10 text-ink">
+          <h2 className="mb-5 text-3xl font-extrabold" style={{ color: TRED }}>Main Offer</h2>
+          <div className="grid grid-cols-[2rem_1fr_3rem_6.5rem_6.5rem] gap-x-3 border-b-2 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted" style={{ borderColor: TRED }}>
+            <span>Item</span>
+            <span>Description</span>
+            <span className="text-center">Qty</span>
+            <span className="text-right">Unit ({currency})</span>
+            <span className="text-right">Total ({currency})</span>
+          </div>
+          {(() => {
+            const items: { desc: string; qty: number; unit: number; total: number }[] = [];
+            lines.forEach((l) => {
+              const desc = l.preview?.commercialDescription || `${l.preview?.panelCode || "RMU"} — Ring Main Unit`;
+              items.push({ desc, qty: l.qty, unit: l.unit, total: l.panelSub });
+              l.addOns.forEach((a) => items.push({ desc: a.name, qty: l.qty, unit: a.price * rate, total: a.price * rate * l.qty }));
+            });
+            return items.map((it, i) => (
+              <div key={i} className="grid grid-cols-[2rem_1fr_3rem_6.5rem_6.5rem] gap-x-3 border-b border-line py-3 text-sm">
+                <span className="text-muted">{i + 1}</span>
+                <span className="font-bold">{it.desc}</span>
+                <span className="text-center">{it.qty}</span>
+                <span className="text-right">{it.unit > 0 ? fmt(it.unit) : <span className="font-bold text-amber-600">POA</span>}</span>
+                <span className="text-right font-bold">{it.unit > 0 ? fmt(it.total) : "POA"}</span>
+              </div>
+            ));
+          })()}
+          <div className="mt-6 flex justify-end">
+            <div className="w-72 text-sm">
+              <div className="flex justify-between py-1 text-muted">
+                <span>Subtotal (excl. VAT)</span>
+                <span>{currency} {fmt(subtotal)}</span>
+              </div>
+              {cm.discountPct > 0 && (
+                <div className="flex justify-between py-1 text-muted">
+                  <span>Discount ({cm.discountPct}%)</span>
+                  <span>− {currency} {fmt(discount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between py-1 text-muted">
+                <span>VAT ({vatPct}%)</span>
+                <span>{currency} {fmt(vat)}</span>
+              </div>
+              <div className="mt-1 flex justify-between border-t-2 pt-2 text-lg font-extrabold" style={{ borderColor: TRED }}>
+                <span>Total ({currency})</span>
+                <span style={{ color: TRED }}>{currency} {fmt(incVat)}</span>
+              </div>
+            </div>
+          </div>
+
+          <h3 className="mb-3 mt-8 text-xl font-extrabold" style={{ color: TRED }}>Terms</h3>
+          <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+            <div className="flex gap-2"><span className="w-20 font-bold text-muted">Validity:</span><span>{cm.validityDays} days</span></div>
+            <div className="flex gap-2"><span className="w-20 font-bold text-muted">Delivery:</span><span>{cm.deliveryWeeks ? `${cm.deliveryWeeks} weeks` : "To be confirmed"}</span></div>
+            <div className="flex gap-2"><span className="w-20 font-bold text-muted">Payment:</span><span>{cm.paymentTerms || "To be agreed"}</span></div>
+            <div className="flex gap-2"><span className="w-20 font-bold text-muted">Warranty:</span><span>{cm.warrantyMonths ? `${cm.warrantyMonths} months` : "Standard"}</span></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
