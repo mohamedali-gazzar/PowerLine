@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV: removed the tick-boxes and "Group" from the panel list.**
+
+The MV panel list no longer has the selection tick-boxes or the "Group / Delete" bar — MV doesn't use grouping. You still add, rename, open, duplicate and delete each panel with its own row icons. LV / EDMS / Custom quotations are unchanged (they keep their tick-boxes and grouping). Frontend only, no database or server change.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV: the RMU commercial description now reads over several lines.**
 
 The RMU line in the commercial offer is now laid out clause by clause — the product name, then the OEM/type, then the switches + installation, then "as per technical specifications enclosed", then any "including …" extras — each on its own line, so it reads like a tidy spec block instead of one long run-on sentence. Frontend only, no database or server change.

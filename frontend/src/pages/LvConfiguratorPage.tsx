@@ -2057,7 +2057,7 @@ export default function LvConfiguratorPage() {
               { label: "+ RMU", onClick: () => addPanel("rmu") },
               { label: "+ Transformer", onClick: () => addPanel("transformer") },
             ] : undefined}
-            hideEditor={isMvQtn}
+            hideEditor={isMvQtn} hideSelect={isMvQtn}
             knownComponentRefs={knownComponentRefs} />
         )}
         {activeTab === "spare" && (
@@ -6700,7 +6700,7 @@ function AddSpareMenu({ onAddSpare, trigger, wrap = "" }: { onAddSpare: (kind: s
   );
 }
 
-function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, onImport, knownComponentRefs, panelBadge, freshIds, addButtons, hideEditor, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
+function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, onImport, knownComponentRefs, panelBadge, freshIds, addButtons, hideEditor, hideSelect, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
   s: LvState; sel: LvPanel | null;
   up: (p: Partial<LvState>) => void;
   upPanel: (id: string, p: Partial<LvPanel>) => void;
@@ -6724,6 +6724,7 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
   /** When true, keep the panel list but blank the right-side editor (used by MV — its panel view is
    *  not built yet, so it shows a placeholder instead of the LV Panel details / cost / components). */
   hideEditor?: boolean;
+  hideSelect?: boolean;
   addLabel?: string; emptyLabel?: string; emptyAddLabel?: string;
 }) {
   // Smooth pointer drag-to-reorder (handle-driven, touch-friendly). Reordering only changes
@@ -6981,7 +6982,7 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
       <div ref={panelListRef} className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
         {/* Actions for ticked panels — Group / Delete / Move-to appear here once one or more are
             ticked. (Reordering several at once is done by dragging any ticked panel.) */}
-        {selPanels.size > 0 && (
+        {!hideSelect && selPanels.size > 0 && (
           <div className="mb-2 rounded-lg border border-brand/30 bg-brand-tint p-2">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-brand-dark">{selPanels.size} selected</span>
@@ -7036,11 +7037,13 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
                 } ${freshIds?.has(p.id) ? "animate-flash-new" : ""}`}>
                 <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
                   <div className="flex min-w-0 items-center gap-1">
+                    {!hideSelect && (
                     <input type="checkbox" data-rowcheck data-nodrag checked={checked} readOnly
                       onPointerDown={startCheckboxDragSelect(p.id)}
                       onClick={(e) => { e.stopPropagation(); togglePanelSel(p.id, e.shiftKey); }}
                       className="mr-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-brand"
                       title="Tick to select — or press and drag up/down across the boxes to select a range." />
+                    )}
                     <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-brand text-white" : "bg-surface text-muted"}`}>{num}</span>
                     {panelBadge && (() => { const b = panelBadge(p); return (
                       <span title={`Owner: ${b.title}${b.mine ? " (you)" : ""}`}
