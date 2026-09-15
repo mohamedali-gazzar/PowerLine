@@ -85,6 +85,9 @@ export interface LvPanel {
   /** Co-Work: which user owns/edits this panel (the QTN owner or its co-owner). Absent
    *  on non-co-work QTNs and legacy panels — treated as the primary owner. */
   ownerId?: string;
+  /** MV only: which package part this panel is (Kiosk / RMU / Transformer), set by the MV
+   *  Panels tab's add buttons. Absent on ordinary LV panels. */
+  mvType?: MvPanelType;
   name: string;
   code: string;
   fedFrom: string;   // RPT-01: next to panel name
@@ -215,6 +218,10 @@ export const DEFAULT_MV_COMMERCIAL: MvCommercial = {
   currency: "USD", discountPct: 0, validityDays: 3, deliveryWeeks: 12,
   warrantyMonths: 12, paymentTerms: "50% advance, 50% before delivery",
 };
+
+/** Which MV package part a panel is (Kiosk / RMU / Transformer). Tags an LvPanel on the MV
+ *  Panels tab; ordinary LV panels have none. */
+export type MvPanelType = "kiosk" | "rmu" | "transformer";
 
 export interface LvState {
   project: LvProject;

@@ -32,9 +32,10 @@ import {
   initialState, calcPanel, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog, pickRates, ratesEqual,
   panelLayout, panelNumbers, commonNamePrefix, resortByGroup, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS, DEFAULT_MV_COMMERCIAL,
-  type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote, type MvCommercial,
+  type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote, type MvCommercial, type MvPanelType,
   type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow, type CustomOfferItem, type ScratchPad,
 } from "../lv/store";
+// (MvPanel type is referenced only through LvState.mvPanels; MvPanelType is used directly.)
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
   buildSync, type SyncUnit,
@@ -1121,7 +1122,7 @@ export default function LvConfiguratorPage() {
   // anything on them. Its VAT and exchange rate are edited on the Commercial tab itself,
   // since Pricing Settings (where they normally live) is not shown.
   const tabs: [Tab, string][] = isMvQtn
-    ? [["project", "Project"], ["pricing", "Pricing Settings"], ["specs", "Specs"], ["mv", "MV"]] // MV's interface, built up tab by tab.
+    ? [["project", "Project"], ["pricing", "Pricing Settings"], ["specs", "Specs"], ["panels", "MV"]] // MV's interface, built up tab by tab.
     : isCustomQtn
     ? [["project", "Project"], ["commercial", "Commercial Offer"]]
     : isSpareQtn
@@ -1267,11 +1268,12 @@ export default function LvConfiguratorPage() {
     moved.groupId = neighbour?.groupId;
     apply((old) => ({ ...old, panels: resortByGroup(arr, s.groups ?? []) }));
   };
-  const addPanel = () => {
+  const addPanel = (mvType?: MvPanelType) => {
     if (readOnly) return;
     // A new panel starts from whatever was chosen on the Specs tab, so the
     // project-wide fields don't have to be re-picked for every panel.
     const p = withProjectSpecs(newPanel(s.panels.length + 1), s.projectSpecs);
+    if (mvType) p.mvType = mvType; // MV: tag it Kiosk / RMU / Transformer
     if (coWork && user?.id) p.ownerId = user.id; // co-work: a new panel belongs to its creator
     // Contextual placement: join the open panel's group; or, with no panel open, the group made
     // active by clicking its header. Nothing active → appended ungrouped after the last group/panel.
@@ -2032,12 +2034,19 @@ export default function LvConfiguratorPage() {
         {activeTab === "project" && <ProjectTab s={s} up={up} qtnNum={qtnNum} onRenameQtn={renameQtnNumber} />}
         {activeTab === "pricing" && (isMvQtn ? <MvPricingSettings s={s} up={up} /> : <PricingTab s={s} up={up} />)}
         {activeTab === "specs" && (isMvQtn ? <MvEmptyTab label="Specs" /> : <SpecsTab s={s} up={up} qtnId={rec?.id ?? ""} readOnly={sharedReadOnly} />)}
-        {activeTab === "mv" && <MvEmptyTab label="MV" />}
         {activeTab === "panels" && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} reorderPanels={reorderPanels} canReorder={!sharedReadOnly} panelBadge={panelBadge} freshIds={freshPanels}
             onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
-            onAddSpare={isEdmsQtn ? undefined : addSpareCell}
-            onImport={readOnly ? undefined : importPanels} knownComponentRefs={knownComponentRefs} />
+            // MV: no Auxiliary Panels, no Excel import — panels are added by the three type buttons instead.
+            onAddSpare={isMvQtn || isEdmsQtn ? undefined : addSpareCell}
+            onImport={isMvQtn || readOnly ? undefined : importPanels}
+            addButtons={isMvQtn ? [
+              { label: "+ Kiosk", onClick: () => addPanel("kiosk") },
+              { label: "+ RMU", onClick: () => addPanel("rmu") },
+              { label: "+ Transformer", onClick: () => addPanel("transformer") },
+            ] : undefined}
+            hideEditor={isMvQtn}
+            knownComponentRefs={knownComponentRefs} />
         )}
         {activeTab === "spare" && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} reorderPanels={reorderPanels} canReorder={!sharedReadOnly} panelBadge={panelBadge} freshIds={freshPanels}
@@ -6400,7 +6409,7 @@ function AddSpareMenu({ onAddSpare, trigger, wrap = "" }: { onAddSpare: (kind: s
   );
 }
 
-function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, onImport, knownComponentRefs, panelBadge, freshIds, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
+function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAdd, onDel, onClone, onOpenInOffer, onAddSpare, onImport, knownComponentRefs, panelBadge, freshIds, addButtons, hideEditor, addLabel = "+ Add panel", emptyLabel = "No panels yet.", emptyAddLabel = "+ Add your first panel" }: {
   s: LvState; sel: LvPanel | null;
   up: (p: Partial<LvState>) => void;
   upPanel: (id: string, p: Partial<LvPanel>) => void;
@@ -6419,6 +6428,11 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
   panelBadge?: (p: LvPanel) => { text: string; title: string; mine: boolean };
   /** Co-Work: panels that just arrived/changed from the other owner — flashed briefly. */
   freshIds?: Set<string>;
+  /** When set, these buttons replace the single "+ Add panel" (used by MV: + Kiosk / + RMU / + Transformer). */
+  addButtons?: { label: string; onClick: () => void }[];
+  /** When true, keep the panel list but blank the right-side editor (used by MV — its panel view is
+   *  not built yet, so it shows a placeholder instead of the LV Panel details / cost / components). */
+  hideEditor?: boolean;
   addLabel?: string; emptyLabel?: string; emptyAddLabel?: string;
 }) {
   // Smooth pointer drag-to-reorder (handle-driven, touch-friendly). Reordering only changes
@@ -6649,7 +6663,9 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-brand-tint text-2xl">⚡</div>
         <p className="text-muted">{emptyLabel}</p>
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-          <button className="btn-primary" onClick={onAdd}>{emptyAddLabel}</button>
+          {addButtons
+            ? addButtons.map((b) => (<button key={b.label} className="btn-primary" onClick={b.onClick}>{b.label}</button>))
+            : <button className="btn-primary" onClick={onAdd}>{emptyAddLabel}</button>}
           {onAddSpare && (
             <AddSpareMenu onAddSpare={onAddSpare}
               trigger="rounded-lg border border-dashed border-brand/40 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-tint" />
@@ -6740,7 +6756,7 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
                       </span>
                     ); })()}
                     <button onClick={() => up({ selectedId: p.id, activeGroupId: null })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
-                      <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{p.name.trim() || "(unnamed panel)"}</div>
+                      <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{p.mvType && <span className="mr-1 rounded bg-brand-light px-1 py-0.5 align-middle text-[9px] font-bold uppercase tracking-wide text-brand-dark">{p.mvType}</span>}{p.name.trim() || "(unnamed panel)"}</div>
                     </button>
                   </div>
                   <div data-nodrag className="ml-auto flex shrink-0 items-center gap-0.5">
@@ -6846,7 +6862,9 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
             );
           });
         })()}
-        <button className="btn-ghost mt-1 w-full" onClick={onAdd}>{addLabel}</button>
+        {addButtons
+          ? addButtons.map((b) => (<button key={b.label} className="btn-ghost mt-1 w-full" onClick={b.onClick}>{b.label}</button>))
+          : <button className="btn-ghost mt-1 w-full" onClick={onAdd}>{addLabel}</button>}
         {onAddSpare && (
           <AddSpareMenu onAddSpare={onAddSpare} wrap="mt-1 w-full"
             trigger="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-brand/40 px-3 py-1.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-tint" />
@@ -6883,7 +6901,12 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
           LCP / KWHM cells use the LcpEditor; any other spare cell the stripped SpareEditor;
           every other cell the full PanelEditor. */}
       <div ref={editorRef} className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
-        {sel ? (sel.spareKind === "lcp" || sel.spareKind === "kwhm"
+        {hideEditor ? (
+          <div className="flex min-h-[45vh] flex-col items-center justify-center rounded-xl2 border border-dashed border-line bg-white/60 p-10 text-center no-print animate-fade-up">
+            <div className="text-sm font-bold uppercase tracking-wide text-muted">MV panel</div>
+            <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted/70">Empty for now — the MV panel view will be built here.</p>
+          </div>
+        ) : sel ? (sel.spareKind === "lcp" || sel.spareKind === "kwhm"
           ? <LcpEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />
           : sel.spare
           ? <SpareEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />

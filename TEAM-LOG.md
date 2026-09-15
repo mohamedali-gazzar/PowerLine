@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV: the "MV" tab is now a panel list (Kiosk / RMU / Transformer), with a blank editor.**
+
+MV's last tab is now called **MV** (the old empty "MV" tab was removed and the "Panels" tab renamed to it). It's a panel list like LV's, but:
+- Panels are added with **+ Kiosk / + RMU / + Transformer** (instead of "+ Add panel"); each new panel shows its type as a small badge and starts **(unnamed)**.
+- **No Auxiliary Panels** and **no Import from Excel**.
+- The right-hand editing area (Panel details / cost / components) is **blank for now** — a placeholder — because the MV panel view is still to be defined. So you can add/remove/rename Kiosk/RMU/Transformer panels, and the editor is a clean slate.
+- LV / EDMS / Custom quotations are unchanged (they keep + Add panel, Auxiliary, Import and the full editor). Frontend only.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV: added Pricing Settings (LV + RMU + Transformer), plus empty Specs and MV tabs.**
 
 More of the MV interface, built piece by piece:
