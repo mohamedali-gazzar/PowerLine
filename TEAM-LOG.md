@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV: Download PDF button on the Technical and Commercial tabs.**
+
+Both MV offer tabs now have a **⬇ PDF / Print** button. It saves exactly what's on screen — the branded cover plus the RMU technical pages, or the priced commercial offer — as an A4 PDF, named like the RMU offer (`TO-QTN… Rev 00` / `CO-QTN… Rev 00`). It uses the same on-screen-to-PDF engine the LV offers already use. RMU panels only for now; frontend only, no database or server change.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV: added Technical and Commercial tabs (RMU), like the RMU offer.**
 
 An MV quotation now has two more tabs after **MV**:

@@ -4664,18 +4664,34 @@ function useRmuPreviews(configs: RmuConfigInput[]): Record<string, GeneratedOffe
 function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const panels = mvRmuPanels(s);
   const previews = useRmuPreviews(panels.map((p) => p.mvRmuConfig!));
+  const printRef = useRef<HTMLDivElement>(null);
+  const exportPdf = async () => {
+    if (!printRef.current) return;
+    // Same on-screen-DOM → A4 PDF path the LV/Commercial offers use (each .a4-sheet
+    // becomes a page). Captures exactly what's shown, so the RMU pages print as seen.
+    const { exportSheetsPdf } = await import("../lv/technicalPdf");
+    await exportSheetsPdf({ printArea: printRef.current, filename: offerTitle("TO", qtnNo, s.project.revisionNo) });
+  };
   return (
-    <div className="space-y-4 animate-fade-up">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted no-print">
-        <span className="h-2 w-2 rounded-full bg-green-500" /> Live technical offer · RMU
-      </div>
-      <OfferCover s={s} qtnNo={qtnNo} kind="Technical" />
+    <div className="animate-fade-up">
+      {panels.length > 0 ? (
+        <PrintBar
+          label={`${panels.length} RMU${panels.length === 1 ? "" : "s"} → A4 technical PDF.`}
+          docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)}
+          exportFn={exportPdf}
+        />
+      ) : (
+        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted no-print">
+          <span className="h-2 w-2 rounded-full bg-green-500" /> Live technical offer · RMU
+        </div>
+      )}
       {panels.length === 0 ? (
         <div className="card p-10 text-center text-sm text-muted no-print">
           Add an RMU on the <b className="text-brand-dark">MV</b> tab to build its technical offer.
         </div>
       ) : (
-        <div className="space-y-5">
+        <div ref={printRef} className="print-area space-y-5">
+          <OfferCover s={s} qtnNo={qtnNo} kind="Technical" />
           {panels.map((p, i) => {
             const c = p.mvRmuConfig!;
             const g = previews[JSON.stringify(c)];
@@ -4709,6 +4725,7 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
 function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const panels = mvRmuPanels(s);
   const previews = useRmuPreviews(panels.map((p) => p.mvRmuConfig!));
+  const printRef = useRef<HTMLDivElement>(null);
   const cm = s.mvRmu ?? DEFAULT_MV_COMMERCIAL;
   const currency = cm.currency;
   // RMU base prices are in USD; EGP multiplies by the quotation's USD→EGP rate.
@@ -4733,17 +4750,32 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const vat = exVat * (vatPct / 100);
   const incVat = exVat + vat;
 
+  const exportPdf = async () => {
+    if (!printRef.current) return;
+    const { exportSheetsPdf } = await import("../lv/technicalPdf");
+    await exportSheetsPdf({ printArea: printRef.current, filename: offerTitle("CO", qtnNo, s.project.revisionNo) });
+  };
+
   return (
-    <div className="space-y-4 animate-fade-up">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted no-print">
-        <span className="h-2 w-2 rounded-full bg-green-500" /> Live commercial offer · RMU
-      </div>
-      <OfferCover s={s} qtnNo={qtnNo} kind="Commercial" />
+    <div className="animate-fade-up">
+      {panels.length > 0 ? (
+        <PrintBar
+          label="Priced RMU offer → A4 commercial PDF."
+          docTitle={offerTitle("CO", qtnNo, s.project.revisionNo)}
+          exportFn={exportPdf}
+        />
+      ) : (
+        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted no-print">
+          <span className="h-2 w-2 rounded-full bg-green-500" /> Live commercial offer · RMU
+        </div>
+      )}
       {panels.length === 0 ? (
         <div className="card p-10 text-center text-sm text-muted no-print">
           Add an RMU on the <b className="text-brand-dark">MV</b> tab to build its commercial offer.
         </div>
       ) : (
+        <div ref={printRef} className="print-area space-y-5">
+        <OfferCover s={s} qtnNo={qtnNo} kind="Commercial" />
         <div className="a4-sheet px-12 py-10 text-ink">
           <h2 className="mb-5 text-3xl font-extrabold" style={{ color: TRED }}>Main Offer</h2>
           <div className="grid grid-cols-[2rem_1fr_3rem_6.5rem_6.5rem] gap-x-3 border-b-2 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted" style={{ borderColor: TRED }}>
@@ -4800,6 +4832,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             <div className="flex gap-2"><span className="w-20 font-bold text-muted">Payment:</span><span>{cm.paymentTerms || "To be agreed"}</span></div>
             <div className="flex gap-2"><span className="w-20 font-bold text-muted">Warranty:</span><span>{cm.warrantyMonths ? `${cm.warrantyMonths} months` : "Standard"}</span></div>
           </div>
+        </div>
         </div>
       )}
     </div>
