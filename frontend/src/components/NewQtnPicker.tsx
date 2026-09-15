@@ -83,11 +83,11 @@ export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClo
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // P-CSS is a tool, not a numbered quote — it goes straight to the selector.
+  // P-CSS is a tool, not a numbered quote — it goes straight to the selector. Everything else
+  // (MV included) takes a quotation number on the next step, just like LV.
   const start = () => {
     if (!pick || lockedFor(pick)) return;
     if (pick.flow === "pcss") { onClose(); navigate("/kiosks"); return; }
-    if (pick.flow === "mv") { onClose(); navigate("/mv"); return; }
     setErr("");
     // Leave the number field empty (the placeholder shows the QTN-YY-00000 format); the user
     // types the whole number and create() still accepts only a complete QTN-YY-NNNNN.
@@ -103,6 +103,13 @@ export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClo
     }
     setBusy(true);
     try {
+      if (pick.flow === "mv") {
+        // Under construction: the number card behaves like LV, but for now "Create" just opens the
+        // MV workspace carrying the typed number — no MV quotation is persisted yet.
+        onClose();
+        navigate(`/mv?qtn=${encodeURIComponent(number.trim())}`);
+        return;
+      }
       if (pick.flow === "rmu") {
         // Create the DRAFT offer up front (like LV creates its workspace), then drop
         // into the editor. Project + customer are required by the offer; the rest is

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 
 const ORANGE = "#F16722";
@@ -14,6 +14,8 @@ const ORANGE = "#F16722";
  */
 export default function MvWorkspace() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const qtn = params.get("qtn"); // the number typed on the New QTN card (if it came from there)
   const [state, setState] = useState<"checking" | "ok" | "denied">("checking");
   useEffect(() => {
     api.access
@@ -45,6 +47,9 @@ export default function MvWorkspace() {
         </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">MV</h1>
         <p className="mt-1 text-sm font-semibold text-muted">RMU · TR · Kiosk</p>
+        {qtn && (
+          <p className="mt-2 inline-block rounded-md bg-brand-tint px-2.5 py-1 font-mono text-sm font-bold text-brand-dark">{qtn}</p>
+        )}
         <div className="mx-auto mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand-tint px-3 py-1 text-xs font-bold text-brand-dark">
           🔒 Under construction
         </div>

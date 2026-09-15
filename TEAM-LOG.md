@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV now asks for a quotation number, like LV.**
+
+Picking **MV** (still admins-only, still under construction) now shows the same "Type the quotation number" card as LV — number box + "Create QTN" — instead of jumping straight in. After Create, it opens the MV workspace with that number shown on it. Note: it doesn't **save** an MV quotation yet (so it won't appear in Offer History) — for now the number is just carried into the workspace so we can see the whole flow. Frontend only.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **New "MV" option on the New QTN screen — locked for now while Mohamed builds it.**
 
 The New QTN picker has a new card: **MV** (subtitle "RMU - TR - KIOSK"), using the kiosk drawing from the Technical Offer cover. It's the start of a combined MV package (Ring Main Unit + transformer + kiosk in one offer).
