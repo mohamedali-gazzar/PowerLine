@@ -23,9 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
-**MV: one product photo per RMU type + an "arrange by type" nudge.**
+**MV: reverted the "group by type" idea, tidied Pricing Settings, and folded RMU extras into their line.**
 
-The RMU product photo in the Technical offer now shows **once per type**, not once per RMU — a run of same-type RMUs shares a single cover (with a small "× N units" tag). So no matter how many RMUs you have, you see at most 3 photos (Air / SF₆ / Lucy); ten Air RMUs give one Air photo, not ten. To make that clean, the MV panels tab now shows a pop-up when same-type RMUs are scattered, recommending you group them, with an **"Arrange by type"** button that reorders them for you (Kiosk/Transformer stay put). It only appears when grouping would actually help, and you can dismiss it. Frontend only, no database or server change.
+Three MV changes:
+- **A photo per RMU again.** The earlier "one photo per type + arrange-by-type pop-up" is removed — the Technical offer shows a product cover for every RMU, and the pop-up is gone.
+- **Pricing Settings is cleaner.** The "Panel pricing" table (the per-panel grid with the target-price column) no longer appears in MV — only the exchange rates and the RMU/Transformer settings remain.
+- **RMU extras are part of the RMU line.** Any add-on (RTU, metering, outdoor enclosure, …) is now written into the RMU's own commercial line — its name in the description and its price included in the RMU price — instead of a separate line underneath. Price-on-application RMUs still show POA.
+
+Frontend only, no database or server change.
 
 ## 2026-09-15 · Mohamed's side · Claude
 
