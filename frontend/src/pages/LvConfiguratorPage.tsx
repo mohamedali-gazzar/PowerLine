@@ -56,6 +56,9 @@ import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
 import { DEFAULT_RMU_CONFIG } from "../components/RmuConfigForm";
 import OfferView from "../components/OfferView";
 import type { GeneratedOffer, RmuConfigInput } from "../types";
+import rmuImgPral from "../assets/rmu/pral.webp";
+import rmuImgPsec from "../assets/rmu/psec.webp";
+import rmuImgLucy from "../assets/rmu/lucy.webp";
 import {
   api, getToken, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type QtnAttachmentDto, type QtnStatus,
@@ -4627,11 +4630,6 @@ function mvRmuPanels(s: LvState): LvPanel[] {
   return s.panels.filter((p) => p.mvType === "rmu" && p.mvRmuConfig);
 }
 
-/** The short RMU code shown on a technical page header (e.g. PRAL12(2+1+M)). */
-function rmuShortCode(c: RmuConfigInput): string {
-  return `${c.productType}${c.voltageKv}(${c.nalCount}+${c.nalfCount}${c.hasMetering ? "+M" : ""})`;
-}
-
 /** Fetch backend previews for a set of RMU configs, cached by config signature. Identical
  *  configs fetch once; adding an RMU never re-fetches the unchanged ones. */
 function useRmuPreviews(configs: RmuConfigInput[]): Record<string, GeneratedOffer> {
@@ -4663,6 +4661,45 @@ function useRmuPreviews(configs: RmuConfigInput[]): Record<string, GeneratedOffe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   return cache;
+}
+
+// Product hero per RMU family — the background-removed cabinet photo shown on the RMU cover
+// (Air → PRAL, SF6 → PSEC, GIS → Lucy Aegis).
+const RMU_COVER: Record<string, { img: string; family: string; tagline: string }> = {
+  PRAL: { img: rmuImgPral, family: "PRAL", tagline: "Air-Insulated Ring Main Unit" },
+  PSEC: { img: rmuImgPsec, family: "PSEC", tagline: "SF₆ Ring Main Unit" },
+  LUCY: { img: rmuImgLucy, family: "Lucy · Aegis", tagline: "SF₆ Gas-Insulated Ring Main Unit" },
+};
+
+// A branded cover page for one RMU item: the product photo (background removed, with a drop
+// shadow), a title, and the same orange left strip as the LV offer cover. One per RMU item.
+function RmuCover({ config, index, total, project }: {
+  config: RmuConfigInput; index: number; total: number; project: string;
+}) {
+  const meta = RMU_COVER[config.productType] ?? RMU_COVER.PRAL;
+  return (
+    <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>
+      {/* Orange left strip — same as the LV offer cover. */}
+      <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
+      <div className="flex flex-1 flex-col px-16 py-14">
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] font-bold uppercase tracking-[0.25em] text-muted">Medium Voltage · Ring Main Unit</div>
+          {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">RMU {index + 1} of {total}</div>}
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center py-10">
+          {/* The uploaded product photo (with its background), framed with rounded corners
+              and a soft box-shadow — box-shadow captures fast/reliably in the exported PDF. */}
+          <img src={meta.img} alt={meta.family} className="max-h-full w-auto max-w-full rounded-2xl object-contain"
+            style={{ boxShadow: "0 22px 50px rgba(0,0,0,0.22)" }} />
+        </div>
+        <div className="border-t-2 pt-6" style={{ borderColor: TRED }}>
+          <div className="text-5xl font-extrabold leading-none text-ink">{meta.family}</div>
+          <div className="mt-3 text-xl font-semibold text-muted">{meta.tagline}</div>
+          {project && <div className="mt-1.5 text-sm text-muted">{project}</div>}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
@@ -4700,14 +4737,10 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             const c = p.mvRmuConfig!;
             const g = previews[JSON.stringify(c)];
             return (
-              <div key={p.id} className="a4-sheet px-12 py-10">
-                {panels.length > 1 && (
-                  <div className="mb-4 flex items-center gap-2 border-b border-line pb-2">
-                    <span className="grid h-6 w-6 place-items-center rounded-full bg-brand text-xs font-bold text-white">{i + 1}</span>
-                    <span className="text-sm font-extrabold text-ink">RMU {i + 1} of {panels.length}</span>
-                    <span className="code-chip ml-auto">{g?.panelCode || rmuShortCode(c)}</span>
-                  </div>
-                )}
+              <Fragment key={p.id}>
+              {/* One product cover page per RMU, then its technical detail. */}
+              <RmuCover config={c} index={i} total={panels.length} project={s.project?.name || ""} />
+              <div className="a4-sheet px-12 py-10">
                 {g ? (
                   <OfferView g={g} />
                 ) : (
@@ -4718,6 +4751,7 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                   </div>
                 )}
               </div>
+              </Fragment>
             );
           })}
         </div>

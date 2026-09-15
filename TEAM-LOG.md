@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV: each RMU now gets a product cover page in the Technical offer.**
+
+In an MV quotation's Technical offer, every RMU item now opens with its own cover page showing the product photo — chosen automatically by the RMU type: Air (PRAL), SF₆ (PSEC), or Lucy (Aegis). The photo is the one you supplied (with its background), framed with rounded corners and a soft shadow, above the product name and the orange strip down the left edge — matching the LV offer cover. Several RMUs each get their own cover. The photos are built into the app so they load instantly and print in the PDF. Frontend only, no database or server change.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **HOTFIX: "Add panel" showed a white/broken page — fixed.**
 
 Adding a panel to an LV quotation crashed the whole page (blank white screen). Cause: a change made for the MV package let the button's click get mistaken for a panel type and stored on the panel, which the panel list couldn't draw — so the page broke. Fixed so only a real MV type (Kiosk/RMU/Transformer) is stored, and any quotation that had already picked up a bad value is now repaired automatically when it opens (so no quotation stays broken). Added an automated test so this can't come back. Add panel now works normally in both LV and MV. Frontend only, no database or server change.
