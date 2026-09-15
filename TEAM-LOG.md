@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV: one product photo per RMU type + an "arrange by type" nudge.**
+
+The RMU product photo in the Technical offer now shows **once per type**, not once per RMU — a run of same-type RMUs shares a single cover (with a small "× N units" tag). So no matter how many RMUs you have, you see at most 3 photos (Air / SF₆ / Lucy); ten Air RMUs give one Air photo, not ten. To make that clean, the MV panels tab now shows a pop-up when same-type RMUs are scattered, recommending you group them, with an **"Arrange by type"** button that reorders them for you (Kiosk/Transformer stay put). It only appears when grouping would actually help, and you can dismiss it. Frontend only, no database or server change.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV: each RMU now gets a product cover page in the Technical offer.**
 
 In an MV quotation's Technical offer, every RMU item now opens with its own cover page showing the product photo — chosen automatically by the RMU type: Air (PRAL), SF₆ (PSEC), or Lucy (Aegis). The photo is the one you supplied (with its background), framed with rounded corners and a soft shadow, above the product name and the orange strip down the left edge — matching the LV offer cover. Several RMUs each get their own cover. The photos are built into the app so they load instantly and print in the PDF. Frontend only, no database or server change.

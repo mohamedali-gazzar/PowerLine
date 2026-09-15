@@ -54,6 +54,7 @@ import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalog
 import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
 import { DEFAULT_RMU_CONFIG } from "../components/RmuConfigForm";
+import { mvRmuGroupedByType, arrangeMvRmusByType } from "../lv/mvArrange";
 import OfferView from "../components/OfferView";
 import type { GeneratedOffer, RmuConfigInput } from "../types";
 import rmuImgPral from "../assets/rmu/pral.webp";
@@ -1275,12 +1276,16 @@ export default function LvConfiguratorPage() {
     moved.groupId = neighbour?.groupId;
     apply((old) => ({ ...old, panels: resortByGroup(arr, s.groups ?? []) }));
   };
+  // MV: whether the "arrange RMUs by type" recommendation pop-up has been dismissed. Reset on
+  // every RMU add so the nudge returns if a new insert leaves same-type RMUs scattered.
+  const [mvArrangeDismissed, setMvArrangeDismissed] = useState(false);
   const addPanel = (mvType?: MvPanelType) => {
     if (readOnly) return;
     // The LV add buttons wire onClick={onAdd} → addPanel(clickEvent), so `mvType` may be a
     // click event rather than a panel type. Only treat a real MV kind string as the type,
     // or the event object lands on p.mvType and crashes the row (React can't render it).
     const kind: MvPanelType | undefined = typeof mvType === "string" ? mvType : undefined;
+    if (kind === "rmu") setMvArrangeDismissed(false);
     // A new panel starts from whatever was chosen on the Specs tab, so the
     // project-wide fields don't have to be re-picked for every panel.
     const p = withProjectSpecs(newPanel(s.panels.length + 1), s.projectSpecs);
@@ -2071,6 +2076,28 @@ export default function LvConfiguratorPage() {
         {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} qtnNo={qtnNum} onOpenPanel={openPanelInPanels} />}
         {activeTab === "sizing" && <SizingReviewTab key={rec?.id ?? "none"} s={s} qtnId={rec?.id ?? ""} />}
         {activeTab === "summary" && <SummaryTab s={s} up={up} />}
+        {/* MV: recommend grouping same-type RMUs so each product photo shows once in the offer. */}
+        {isMvQtn && activeTab === "panels" && !readOnly && !mvArrangeDismissed && (() => {
+          const rmus = mvRmuPanels(s);
+          if (rmus.length < 2 || mvRmuGroupedByType(rmus)) return null;
+          return createPortal(
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4 no-print animate-fade-up"
+              onClick={() => setMvArrangeDismissed(true)}>
+              <div className="w-full max-w-md rounded-xl2 border border-line bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-base font-extrabold text-ink">Group RMUs by type?</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  Some RMUs of the same type are in different places. Putting each type together — all Air, then all SF₆, then all Lucy — makes its product photo appear <b className="text-ink">once</b> in the Technical offer instead of repeating for every unit.
+                </p>
+                <div className="mt-5 flex justify-end gap-2">
+                  <button className="btn-ghost px-3 py-1.5 text-sm" onClick={() => setMvArrangeDismissed(true)}>Not now</button>
+                  <button className="btn-primary px-3 py-1.5 text-sm"
+                    onClick={() => { apply((old) => ({ ...old, panels: arrangeMvRmusByType(old.panels) })); setMvArrangeDismissed(true); }}>
+                    Arrange by type
+                  </button>
+                </div>
+              </div>
+            </div>, document.body);
+        })()}
       </div>
     </div>
   );
@@ -4673,8 +4700,8 @@ const RMU_COVER: Record<string, { img: string; family: string; tagline: string }
 
 // A branded cover page for one RMU item: the product photo (background removed, with a drop
 // shadow), a title, and the same orange left strip as the LV offer cover. One per RMU item.
-function RmuCover({ config, index, total, project }: {
-  config: RmuConfigInput; index: number; total: number; project: string;
+function RmuCover({ config, count, project }: {
+  config: RmuConfigInput; count: number; project: string;
 }) {
   const meta = RMU_COVER[config.productType] ?? RMU_COVER.PRAL;
   return (
@@ -4684,7 +4711,7 @@ function RmuCover({ config, index, total, project }: {
       <div className="flex flex-1 flex-col px-16 py-14">
         <div className="flex items-center justify-between">
           <div className="text-[11px] font-bold uppercase tracking-[0.25em] text-muted">Medium Voltage · Ring Main Unit</div>
-          {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">RMU {index + 1} of {total}</div>}
+          {count > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">× {count} units</div>}
         </div>
         <div className="flex min-h-0 flex-1 items-center justify-center py-10">
           {/* The uploaded product photo (with its background), framed with rounded corners
@@ -4736,10 +4763,16 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
           {panels.map((p, i) => {
             const c = p.mvRmuConfig!;
             const g = previews[JSON.stringify(c)];
+            // One cover per contiguous run of the same product type — so 10 Air RMUs in a row
+            // share a single Air cover (max 3 covers total). Its "× N units" is the run length.
+            const prevType = i > 0 ? panels[i - 1].mvRmuConfig?.productType : undefined;
+            const showCover = c.productType !== prevType;
+            let runLen = 0;
+            if (showCover) for (let j = i; j < panels.length && panels[j].mvRmuConfig?.productType === c.productType; j++) runLen++;
             return (
               <Fragment key={p.id}>
-              {/* One product cover page per RMU, then its technical detail. */}
-              <RmuCover config={c} index={i} total={panels.length} project={s.project?.name || ""} />
+              {/* Product cover at the start of each same-type run, then each RMU's detail. */}
+              {showCover && <RmuCover config={c} count={runLen} project={s.project?.name || ""} />}
               <div className="a4-sheet px-12 py-10">
                 {g ? (
                   <OfferView g={g} />
