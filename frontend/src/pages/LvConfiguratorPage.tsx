@@ -4760,6 +4760,17 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   );
 }
 
+// Lay a commercial RMU description out over several lines, breaking at each clause so the
+// line reads like a spec block (product name / OEM+type / switches+install / spec / extras).
+// Returns the text with "\n" at the breaks; render inside a `whitespace-pre-line` element.
+function formatRmuDesc(desc: string): string {
+  return desc
+    .replace(/ \(OEM-/, "\n(OEM-")                                            // after the product name
+    .replace(/, (SF6|Air) load break switches/, ",\n$1 load break switches")  // after the type / measuring
+    .replace(/ as per technical specifications/, "\nas per technical specifications") // after the installation
+    .replace(/enclosed, including/, "enclosed,\nincluding");                  // before the "including …" extras
+}
+
 function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const panels = mvRmuPanels(s);
   const previews = useRmuPreviews(panels.map((p) => p.mvRmuConfig!));
@@ -4843,7 +4854,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             return items.map((it, i) => (
               <div key={i} className="grid grid-cols-[2rem_1fr_3rem_6.5rem_6.5rem] gap-x-3 border-b border-line py-3 text-sm">
                 <span className="text-muted">{i + 1}</span>
-                <span className="font-bold">{it.desc}</span>
+                <span className="whitespace-pre-line font-bold">{formatRmuDesc(it.desc)}</span>
                 <span className="text-center">{it.qty}</span>
                 <span className="text-right">{it.poa ? <span className="font-bold text-amber-600">POA</span> : fmt(it.unit)}</span>
                 <span className="text-right font-bold">{it.poa ? "POA" : fmt(it.total)}</span>

@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV: the RMU commercial description now reads over several lines.**
+
+The RMU line in the commercial offer is now laid out clause by clause — the product name, then the OEM/type, then the switches + installation, then "as per technical specifications enclosed", then any "including …" extras — each on its own line, so it reads like a tidy spec block instead of one long run-on sentence. Frontend only, no database or server change.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV: tidied the RMU commercial line so nothing is said twice.**
 
 When an RMU's extras were folded into its line, the wording repeated itself — e.g. the line already said "for outdoor installation" and then added "incl. Outdoor Enclosure", and the Smart/RTU read "Smart / RTU — Ready to be Smart — Type 1" ("Smart" twice). Now the RMU line only names extras the sentence doesn't already state: the outdoor enclosure isn't repeated (its price is still included), and the Smart/RTU is trimmed to just its level (e.g. "including Ready to be Smart — Type 1"). Still one row per RMU with all prices folded in. Frontend only, no database or server change.
