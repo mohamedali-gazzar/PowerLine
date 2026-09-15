@@ -335,9 +335,7 @@ export default function LvQtnListPage() {
   const rowHref = (x: UniRow) =>
     x.kind === "RMU"
       ? rmuEditable(x) ? `/offers/${x.id}/edit` : `/offers/${x.id}`
-      : rowType(x) === "MV"
-      ? `/mv/${x.id}`
-      : `/lv/qtn/${x.id}`;
+      : `/lv/qtn/${x.id}`; // MV rows are LV-kind — they open in the same workspace
 
   // The number shown in History, with the revision suffix. If the stored number already
   // carries a "-N" (Amend flow) keep it; otherwise append the Project-tab Revision No.

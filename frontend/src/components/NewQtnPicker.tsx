@@ -104,12 +104,11 @@ export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClo
     setBusy(true);
     try {
       if (pick.flow === "mv") {
-        // Save an MV quotation the same way LV does (a real QTN record, listed in Offer History),
-        // then open it in the MV workspace. It's an LV-kind quotation tagged "mv"; the workspace
-        // itself is still under construction.
+        // MV saves and opens exactly like LV — the same workspace, header bar and full approval
+        // flow — it's just an LV-kind quotation tagged "mv" (which gives it the "MV" History badge).
         const rec = await createQtn(number, "mv", user?.name || "");
         onClose();
-        navigate(`/mv/${rec.id}`);
+        navigate(`/lv/qtn/${rec.id}`);
         return;
       }
       if (pick.flow === "rmu") {

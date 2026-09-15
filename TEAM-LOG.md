@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV opens as a clean, empty workspace — but with the full LV quotation workflow.**
+
+An MV quotation now opens in the same shared workspace LV uses, so it has the **whole LV top bar and approval process** — the QTN number, Draft status with the working-time timer, Copy link (→ ERP), Check for updates, Share (Co-Work / hand-over), and Send for approval with the full Draft → Waiting → Approved / Returned-with-comments / Submitted / Withdraw flow. Saving, permissions and History all work like LV.
+
+- **But the inside is intentionally empty** — no LV tabs (Project, Pricing, Panels, Technical, …), no LV content. Just a clean "MV workspace" placeholder. Mohamed is defining the MV interface from scratch, step by step; nothing MV-specific (RMU / transformer / kiosk) is built yet.
+- LV / EDMS / Custom / Spare quotations are unchanged (all their tabs still show).
+- ⚠️ HEADS-UP: MV is still admins-only and deliberately unfinished — please don't remove it. Frontend only; no data changes.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **Offer History now shows LV vs MV correctly (own badge + filter).**
 
 In Offer History, LV quotations keep their **LV** badge and MV quotations now show their own **MV** badge (green). The TYPE filter gained an **MV** option, so you can list just LV, just MV, or just RMU.
