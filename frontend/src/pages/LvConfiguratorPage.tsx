@@ -1121,7 +1121,7 @@ export default function LvConfiguratorPage() {
   // anything on them. Its VAT and exchange rate are edited on the Commercial tab itself,
   // since Pricing Settings (where they normally live) is not shown.
   const tabs: [Tab, string][] = isMvQtn
-    ? []
+    ? [["project", "Project"]] // MV's interface is built one tab at a time — Project first, like LV.
     : isCustomQtn
     ? [["project", "Project"], ["commercial", "Commercial Offer"]]
     : isSpareQtn
@@ -1976,9 +1976,7 @@ export default function LvConfiguratorPage() {
       {/* Tabs — sticky header so sections are reachable without scrolling up.
           Negative margins let the bg band span the full content width; py keeps a
           solid band so content scrolls cleanly underneath. */}
-      {/* The tab strip stays stuck to the top of the viewport as you scroll. MV has no tabs yet —
-          its interface is built later — so the strip is hidden for a clean, empty workspace. */}
-      {!isMvQtn && (
+      {/* The tab strip stays stuck to the top of the viewport as you scroll. */}
       <div className="-mx-4 mb-4 flex flex-wrap gap-1.5 border-b border-line/60 bg-surface px-4 py-2.5 no-print sm:-mx-6 sm:px-6 sticky top-0 z-30">
         {tabs.map(([t, label]) => (
           <button key={t} onClick={() => goToTab(t)}
@@ -2006,7 +2004,6 @@ export default function LvConfiguratorPage() {
             className="rounded-full border border-line bg-white px-3 py-1.5 text-base font-semibold leading-none text-muted transition-colors hover:border-brand/40 hover:text-brand-dark disabled:opacity-40 disabled:hover:border-line disabled:hover:text-muted">↷</button>
         </div>
       </div>
-      )}
 
       {replaceOpen && <ReplaceComponentModal s={s} replaceComponent={replaceComponent} factors={s.factors} onClose={() => setReplaceOpen(false)} />}
 
@@ -2030,17 +2027,8 @@ export default function LvConfiguratorPage() {
       )}
 
       <div ref={navRef} onKeyDown={onFieldArrowNav}>
-        {isMvQtn ? (
-          // Clean, empty MV workspace — the interface is defined step by step from here. The
-          // quotation itself (number, status, approval flow, saving, History) is fully live above.
-          <div className="flex min-h-[45vh] flex-col items-center justify-center rounded-xl2 border border-dashed border-line bg-white/60 p-10 text-center no-print">
-            <div className="text-sm font-bold uppercase tracking-wide text-muted">MV workspace</div>
-            <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted/70">
-              Empty for now — the MV interface will be built here. The quotation, its number, status
-              and the whole approval flow are already working in the bar above.
-            </p>
-          </div>
-        ) : (<>
+        {/* MV shows only the tabs it has been given so far (Project first). The other tab
+            blocks below never match its activeTab, so its interface grows one tab at a time. */}
         {activeTab === "project" && <ProjectTab s={s} up={up} qtnNum={qtnNum} onRenameQtn={renameQtnNumber} />}
         {activeTab === "pricing" && <PricingTab s={s} up={up} />}
         {activeTab === "specs" && <SpecsTab s={s} up={up} qtnId={rec?.id ?? ""} readOnly={sharedReadOnly} />}
@@ -2061,7 +2049,6 @@ export default function LvConfiguratorPage() {
         {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} qtnNo={qtnNum} onOpenPanel={openPanelInPanels} />}
         {activeTab === "sizing" && <SizingReviewTab key={rec?.id ?? "none"} s={s} qtnId={rec?.id ?? ""} />}
         {activeTab === "summary" && <SummaryTab s={s} up={up} />}
-        </>)}
       </div>
     </div>
   );

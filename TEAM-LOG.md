@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV: added the Project tab (like LV) — first piece of the MV interface.**
+
+The MV workspace now has a **Project** tab, identical to LV's — Project name, Customer, QTN/Revision/OPTY numbers, Sales support engineer, date, sales manager / person and their phones/emails, and the Staff lists. It's the same Project screen LV uses, so it saves the same way (project name & customer then show in Offer History).
+
+- MV still shows **only** this one tab for now (no Panels/Pricing/Technical/…). Mohamed is adding the MV interface one tab at a time; the rest come as he defines them. The full top bar and approval flow are unchanged. Frontend only.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV opens as a clean, empty workspace — but with the full LV quotation workflow.**
 
 An MV quotation now opens in the same shared workspace LV uses, so it has the **whole LV top bar and approval process** — the QTN number, Draft status with the working-time timer, Copy link (→ ERP), Check for updates, Share (Co-Work / hand-over), and Send for approval with the full Draft → Waiting → Approved / Returned-with-comments / Submitted / Withdraw flow. Saving, permissions and History all work like LV.
