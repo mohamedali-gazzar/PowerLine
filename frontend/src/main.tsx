@@ -109,6 +109,7 @@ function Gate() {
           }
         />
         <Route path="mv" element={<MvWorkspace />} />
+        <Route path="mv/:id" element={<MvWorkspace />} />
         <Route path="lv" element={<LvQtnListPage />} />
         <Route path="lv/qtn/:id" element={<LvConfiguratorPage />} />
         {/* Read-by-QTN-number link: /lv/qtn/<QTN number>/<record id>. The number is the

@@ -133,7 +133,7 @@ function normalize(state: LvState): LvState {
   // the explicit kinds and must survive the round-trip — anything else normalises
   // to "panels". Adding a kind means listing it here, or it is silently downgraded
   // on the next load and every check against it stops matching.
-  if (state.kind !== "spare" && state.kind !== "edms" && state.kind !== "custom") state.kind = "panels";
+  if (state.kind !== "spare" && state.kind !== "edms" && state.kind !== "custom" && state.kind !== "mv") state.kind = "panels";
   // Custom Commercial Offer lines. Defaulted for every kind so the array is never
   // undefined downstream; only a "custom" quotation ever puts anything in it.
   {
@@ -346,7 +346,7 @@ export async function getQtn(id: string): Promise<QtnRecord | null> {
 
 export async function createQtn(
   number: string,
-  kind: "panels" | "edms" | "spare" | "custom" = "panels",
+  kind: "panels" | "edms" | "spare" | "custom" | "mv" = "panels",
   supportEngineer = ""
 ): Promise<QtnRecord> {
   const state = initialState();

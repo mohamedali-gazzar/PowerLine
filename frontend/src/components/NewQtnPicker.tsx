@@ -104,10 +104,12 @@ export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClo
     setBusy(true);
     try {
       if (pick.flow === "mv") {
-        // Under construction: the number card behaves like LV, but for now "Create" just opens the
-        // MV workspace carrying the typed number — no MV quotation is persisted yet.
+        // Save an MV quotation the same way LV does (a real QTN record, listed in Offer History),
+        // then open it in the MV workspace. It's an LV-kind quotation tagged "mv"; the workspace
+        // itself is still under construction.
+        const rec = await createQtn(number, "mv", user?.name || "");
         onClose();
-        navigate(`/mv?qtn=${encodeURIComponent(number.trim())}`);
+        navigate(`/mv/${rec.id}`);
         return;
       }
       if (pick.flow === "rmu") {

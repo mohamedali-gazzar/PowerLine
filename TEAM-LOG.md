@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-15 · Mohamed's side · Claude
 
+**MV now saves the quotation, like LV.**
+
+Creating an **MV** (still admins-only, still under construction) now makes a real, saved quotation — it keeps its QTN number and appears in **Offer History** next to your LV and RMU offers. Opening it (from the New QTN screen or from History) lands on the MV workspace showing its number.
+
+- Under the hood it's an LV-type quotation tagged "mv", so for now it shows the **"LV"** badge in History (its own "MV" badge is a small follow-up that needs a server tweak).
+- The MV page itself is still the "Under construction" placeholder — the quotation *saves*, but there's no MV editor (RMU + transformer + kiosk inputs) yet. Frontend only; no price or database changes.
+- ⚠️ HEADS-UP: still deliberately locked/unfinished — please don't remove it.
+
+## 2026-09-15 · Mohamed's side · Claude
+
 **MV now asks for a quotation number, like LV.**
 
 Picking **MV** (still admins-only, still under construction) now shows the same "Type the quotation number" card as LV — number box + "Create QTN" — instead of jumping straight in. After Create, it opens the MV workspace with that number shown on it. Note: it doesn't **save** an MV quotation yet (so it won't appear in Offer History) — for now the number is just carried into the workspace so we can see the whole flow. Frontend only.

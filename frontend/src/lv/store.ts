@@ -238,7 +238,7 @@ export interface LvState {
   // quotation (same workspace as "panels" — the kind only records which option
   // it was started from), or a spare-parts quotation whose single "Spare parts"
   // cell drives all offers.
-  kind?: "panels" | "edms" | "spare" | "custom";
+  kind?: "panels" | "edms" | "spare" | "custom" | "mv";
   /** Commercial Offer lines typed by hand. Only a "custom" quotation uses these — it
    *  has no panels, so the offer table is written rather than generated from them. */
   customItems?: CustomOfferItem[];

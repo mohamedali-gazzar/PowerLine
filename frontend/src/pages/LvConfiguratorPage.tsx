@@ -359,6 +359,9 @@ export default function LvConfiguratorPage() {
       .then((r) => {
         if (!alive) return;
         if (!r) { navigate("/lv", { replace: true }); return; }
+        // MV quotations save through the LV system but open in their own workspace — a History
+        // link (which points at /lv/qtn/:id for every LV-kind row) bounces here.
+        if (r.state.kind === "mv") { navigate(`/mv/${r.id}`, { replace: true }); return; }
         setRec(r);
         // A quotation keeps the rates it was built with — nothing is auto-changed on open. When
         // newer default rates have been published, the "Updated default rates" warning (below)

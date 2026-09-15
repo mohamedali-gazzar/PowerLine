@@ -1,28 +1,37 @@
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
+import { getQtn } from "../lv/qtns";
 
 const ORANGE = "#F16722";
 
 /**
  * MV workspace — the combined MV package offer (RMU + transformer + kiosk).
  *
- * Under construction: opened only to ADMIN-tier users while it is being built (the New QTN
- * "MV" card is locked for everyone else). This is the canvas the real flow is built on; a
- * non-admin who reaches /mv directly is sent home. Flip the New QTN card's `adminOnly` off
- * and replace this stub when the flow is ready for everyone.
+ * An MV quotation saves through the LV system (an LV-kind QTN tagged "mv", listed in Offer
+ * History) but opens here in its own workspace, loaded by id from /mv/:id. Under construction:
+ * opened only to ADMIN-tier users while it is being built (the New QTN "MV" card is locked for
+ * everyone else); a non-admin who reaches it directly is sent home. When the real flow is ready,
+ * flip the New QTN card's `adminOnly` off and build the editor out here.
  */
 export default function MvWorkspace() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const qtn = params.get("qtn"); // the number typed on the New QTN card (if it came from there)
+  const { id } = useParams();
   const [state, setState] = useState<"checking" | "ok" | "denied">("checking");
+  const [number, setNumber] = useState<string | null>(null);
   useEffect(() => {
     api.access
       .me()
       .then((a) => setState(a.tier === "ADMIN" ? "ok" : "denied"))
       .catch(() => setState("denied"));
   }, []);
+  // Load the saved quotation's number, when opened as /mv/:id.
+  useEffect(() => {
+    if (!id) { setNumber(null); return; }
+    let alive = true;
+    getQtn(id).then((r) => { if (alive) setNumber(r?.number ?? null); });
+    return () => { alive = false; };
+  }, [id]);
 
   if (state === "checking") return <div className="skeleton mx-auto mt-10 h-64 max-w-2xl" />;
   if (state === "denied") return <Navigate to="/" replace />;
@@ -47,17 +56,21 @@ export default function MvWorkspace() {
         </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">MV</h1>
         <p className="mt-1 text-sm font-semibold text-muted">RMU · TR · Kiosk</p>
-        {qtn && (
-          <p className="mt-2 inline-block rounded-md bg-brand-tint px-2.5 py-1 font-mono text-sm font-bold text-brand-dark">{qtn}</p>
+        {number && (
+          <p className="mt-2 inline-block rounded-md bg-brand-tint px-2.5 py-1 font-mono text-sm font-bold text-brand-dark">{number}</p>
         )}
         <div className="mx-auto mt-4 inline-flex items-center gap-1.5 rounded-full bg-brand-tint px-3 py-1 text-xs font-bold text-brand-dark">
           🔒 Under construction
         </div>
         <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-muted">
-          The combined MV package — Ring Main Unit, transformer and kiosk in one offer — is being
-          built here. It stays hidden from everyone else until it's ready; this is the canvas we shape it on.
+          {id
+            ? "This MV quotation is saved and listed in Offer History. Its editor — Ring Main Unit, transformer and kiosk in one offer — is being built here."
+            : "The combined MV package — Ring Main Unit, transformer and kiosk in one offer — is being built here. It stays hidden from everyone else until it's ready; this is the canvas we shape it on."}
         </p>
-        <button className="btn-ghost mt-6" onClick={() => navigate("/")}>← Back to Home</button>
+        <div className="mt-6 flex justify-center gap-2">
+          <button className="btn-ghost" onClick={() => navigate("/")}>← Back to Home</button>
+          <button className="btn-ghost" onClick={() => navigate("/lv")}>Offer History</button>
+        </div>
       </div>
     </div>
   );
