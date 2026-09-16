@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-16 · Mohamed's side · Claude
 
+**Transformers get a full technical datasheet, and the MV cover pages are refreshed.**
+
+- **Transformer technical offer.** Every transformer on an MV quotation now has its own **A4 technical datasheet** on the Technical tab — the full Powerline PDTR cast-resin dry-type sheet (identification & ratings, service & mechanical, protection, design values, the HV tap-changer table, tests & insulation), rebuilt exactly from the official datasheets for **11 kV and 22 kV** in the six ratings **500 / 1000 / 1500 / 1600 / 2000 / 2500 kVA**. RMU and transformer pages come out in the same order as the MV panel list.
+- **Standalone vs inside-kiosk (IP 23 / IP 00).** Each transformer panel has a new **Installation** switch — *Standalone* → **IP23**, *Inside kiosk* → **IP00**. It sets the datasheet's enclosure rating and model number, and the wording on the commercial line ("…IP 23…" ⇄ "…IP 00…"), so the earlier fixed "IP 23" now follows this switch. Default is Standalone.
+- **New cover pages.** Each transformer datasheet is preceded by a **cover** (like the RMU one). The **RMU cover** was also refreshed: the product photos are gone, replaced by a clean spec-sheet look showing each unit's **code**, its key specs, and a faint Powerline **P** watermark.
+
+The detailed datasheet shows for **dry-type** transformers at those ratings/voltages; oil types (or ratings we don't publish a sheet for) get the cover plus a short note. Frontend only — no database change.
+
+## 2026-09-16 · Mohamed's side · Claude
+
 **MV commercial: a separate Terms page, and items sorted like the MV tab.**
 
 Two changes to the MV commercial offer:

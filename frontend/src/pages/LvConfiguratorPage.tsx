@@ -54,12 +54,11 @@ import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalog
 import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
 import MvTransformerPanelEditor, { DEFAULT_TRANSFORMER_CONFIG } from "../components/MvTransformerPanelEditor";
-import { DEFAULT_RMU_CONFIG } from "../components/RmuConfigForm";
+import { DEFAULT_RMU_CONFIG, rmuShortCode } from "../components/RmuConfigForm";
+import { TransformerCover, TransformerTechnicalSheet } from "../components/TransformerTechnicalSheet";
+import { findTransformerTech, trModel } from "../components/transformerTechData";
 import OfferView from "../components/OfferView";
 import type { GeneratedOffer, RmuConfigInput, TransformerConfigInput } from "../types";
-import rmuImgPral from "../assets/rmu/pral.webp";
-import rmuImgPsec from "../assets/rmu/psec.webp";
-import rmuImgLucy from "../assets/rmu/lucy.webp";
 import {
   api, getToken, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type QtnAttachmentDto, type QtnStatus,
@@ -4712,10 +4711,11 @@ function mvTransformerPanels(s: LvState): LvPanel[] {
   return s.panels.filter((p) => p.mvType === "transformer" && p.mvTransformerConfig);
 }
 
-// The MV commercial standard line for a transformer. IP 23 for a standalone transformer; a
-// transformer inside a kiosk will be IP 00 (added with the Kiosk part later).
+// The MV commercial standard line for a transformer. IP 23 for a standalone transformer; IP 00
+// when it sits inside a kiosk (the "Inside kiosk" toggle on the Transformer panel).
 function transformerDesc(c: TransformerConfigInput): string {
-  return `Supply of ${c.ratingKva ?? ""} KVA ${c.insulation || ""} Type Transformer, ${c.primaryKv ?? ""}/0.4KV, ${c.brand || ""}, IP 23 As per specification enclosed.`;
+  const ip = c.insideKiosk ? "00" : "23";
+  return `Supply of ${c.ratingKva ?? ""} KVA ${c.insulation || ""} Type Transformer, ${c.primaryKv ?? ""}/0.4KV, ${c.brand || ""}, IP ${ip} As per specification enclosed.`;
 }
 
 // One terms section (Validity / Delivery / Payment / Warranty) on the MV commercial Terms page —
@@ -4767,39 +4767,63 @@ function useRmuPreviews(configs: RmuConfigInput[]): Record<string, GeneratedOffe
   return cache;
 }
 
-// Product hero per RMU family — the background-removed cabinet photo shown on the RMU cover
-// (Air → PRAL, SF6 → PSEC, GIS → Lucy Aegis).
-const RMU_COVER: Record<string, { img: string; family: string; tagline: string }> = {
-  PRAL: { img: rmuImgPral, family: "PRAL", tagline: "Air-Insulated Ring Main Unit" },
-  PSEC: { img: rmuImgPsec, family: "PSEC", tagline: "SF₆ Ring Main Unit" },
-  LUCY: { img: rmuImgLucy, family: "Lucy · Aegis", tagline: "SF₆ Gas-Insulated Ring Main Unit" },
+// Product family name + tagline per RMU family (Air → PRAL, SF6 → PSEC, GIS → Lucy Aegis).
+// No photo any more — the cover is a clean, typographic spec sheet (see RmuCover below).
+const RMU_COVER: Record<string, { family: string; tagline: string }> = {
+  PRAL: { family: "PRAL", tagline: "Air-Insulated Ring Main Unit" },
+  PSEC: { family: "PSEC", tagline: "SF₆ Ring Main Unit" },
+  LUCY: { family: "Lucy · Aegis", tagline: "SF₆ Gas-Insulated Ring Main Unit" },
 };
 
-// A branded cover page for one RMU item: the product photo (background removed, with a drop
-// shadow), a title, and the same orange left strip as the LV offer cover. One per RMU item.
-function RmuCover({ config, index, total, project }: {
-  config: RmuConfigInput; index: number; total: number; project: string;
+// A branded cover page for one RMU item — a modern, photo-free spec sheet: the product
+// family name, its type CODE in a bordered chip, and a four-cell spec strip pulled straight
+// from the configuration. A faint concentric-ring motif (a nod to "Ring Main Unit") sits in
+// the corner. Same orange left strip as the LV offer cover. One per RMU item.
+function RmuCover({ config, code, index, total, project }: {
+  config: RmuConfigInput; code: string; index: number; total: number; project: string;
 }) {
   const meta = RMU_COVER[config.productType] ?? RMU_COVER.PRAL;
+  const specs: { label: string; value: string }[] = [
+    { label: "Rated voltage", value: `${config.voltageKv} kV` },
+    { label: "Configuration", value: `${config.nalCount}R + ${config.nalfCount}T` },
+    { label: "Installation", value: config.installation === "OUTDOOR" ? "Outdoor" : "Indoor" },
+    { label: "OEM", value: config.lbsBrand || "—" },
+  ];
   return (
     <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>
       {/* Orange left strip — same as the LV offer cover. */}
       <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
-      <div className="flex flex-1 flex-col px-16 py-14">
+      {/* Powerline "P" mark watermark, bleeding off the top-right corner, very faint. */}
+      <img src="/brand/mark-color.png" alt="" aria-hidden="true"
+        className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
+
+      <div className="relative flex flex-1 flex-col px-16 py-14">
         <div className="flex items-center justify-between">
-          <div className="text-[11px] font-bold uppercase tracking-[0.25em] text-muted">Medium Voltage · Ring Main Unit</div>
+          <div className="text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Medium Voltage · Ring Main Unit</div>
           {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">RMU {index + 1} of {total}</div>}
         </div>
-        <div className="flex min-h-0 flex-1 items-center justify-center py-10">
-          {/* The uploaded product photo (with its background), framed with rounded corners
-              and a soft box-shadow — box-shadow captures fast/reliably in the exported PDF. */}
-          <img src={meta.img} alt={meta.family} className="max-h-full w-auto max-w-full rounded-2xl object-contain"
-            style={{ boxShadow: "0 22px 50px rgba(0,0,0,0.22)" }} />
+
+        {/* Hero: family name + tagline, then the type code in a bordered chip. */}
+        <div className="flex min-h-0 flex-1 flex-col justify-center py-10">
+          <div className="text-7xl font-extrabold leading-none text-ink">{meta.family}</div>
+          <div className="mt-4 text-2xl font-semibold text-muted">{meta.tagline}</div>
+          <div className="mt-10">
+            <div className="mb-2 text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Type code</div>
+            <div className="font-mono text-2xl font-bold tracking-wide text-ink">{code || "…"}</div>
+          </div>
         </div>
+
+        {/* Spec strip pulled from the configuration, over the same orange rule as before. */}
         <div className="border-t-2 pt-6" style={{ borderColor: TRED }}>
-          <div className="text-5xl font-extrabold leading-none text-ink">{meta.family}</div>
-          <div className="mt-3 text-xl font-semibold text-muted">{meta.tagline}</div>
-          {project && <div className="mt-1.5 text-sm text-muted">{project}</div>}
+          <div className="grid grid-cols-4 gap-4">
+            {specs.map((sp) => (
+              <div key={sp.label}>
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{sp.label}</div>
+                <div className="mt-1 text-lg font-bold text-ink">{sp.value}</div>
+              </div>
+            ))}
+          </div>
+          {project && <div className="mt-5 text-sm text-muted">{project}</div>}
         </div>
       </div>
     </section>
@@ -4807,56 +4831,96 @@ function RmuCover({ config, index, total, project }: {
 }
 
 function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
-  const panels = mvRmuPanels(s);
-  const previews = useRmuPreviews(panels.map((p) => p.mvRmuConfig!));
+  const rmuPanels = mvRmuPanels(s);
+  const trPanels = mvTransformerPanels(s);
+  const previews = useRmuPreviews(rmuPanels.map((p) => p.mvRmuConfig!));
+  // Per-type running position, so each cover reads "RMU 1 of N" / "Transformer 1 of M".
+  const rmuPos: Record<string, number> = {};
+  rmuPanels.forEach((p, i) => { rmuPos[p.id] = i; });
+  const trPos: Record<string, number> = {};
+  trPanels.forEach((p, i) => { trPos[p.id] = i; });
+  const total = rmuPanels.length + trPanels.length;
+
   const printRef = useRef<HTMLDivElement>(null);
   const exportPdf = async () => {
     if (!printRef.current) return;
     // Same on-screen-DOM → A4 PDF path the LV/Commercial offers use (each .a4-sheet
-    // becomes a page). Captures exactly what's shown, so the RMU pages print as seen.
+    // becomes a page). Captures exactly what's shown, so the MV pages print as seen.
     const { exportSheetsPdf } = await import("../lv/technicalPdf");
     await exportSheetsPdf({ printArea: printRef.current, filename: offerTitle("TO", qtnNo, s.project.revisionNo) });
   };
+  const label = [
+    rmuPanels.length ? `${rmuPanels.length} RMU${rmuPanels.length === 1 ? "" : "s"}` : "",
+    trPanels.length ? `${trPanels.length} transformer${trPanels.length === 1 ? "" : "s"}` : "",
+  ].filter(Boolean).join(" · ") + " → A4 technical PDF.";
+
   return (
     <div className="animate-fade-up">
-      {panels.length > 0 ? (
-        <PrintBar
-          label={`${panels.length} RMU${panels.length === 1 ? "" : "s"} → A4 technical PDF.`}
-          docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)}
-          exportFn={exportPdf}
-        />
+      {total > 0 ? (
+        <PrintBar label={label} docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} exportFn={exportPdf} />
       ) : (
         <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted no-print">
-          <span className="h-2 w-2 rounded-full bg-green-500" /> Live technical offer · RMU
+          <span className="h-2 w-2 rounded-full bg-green-500" /> Live technical offer · MV
         </div>
       )}
-      {panels.length === 0 ? (
+      {total === 0 ? (
         <div className="card p-10 text-center text-sm text-muted no-print">
-          Add an RMU on the <b className="text-brand-dark">MV</b> tab to build its technical offer.
+          Add an RMU or Transformer on the <b className="text-brand-dark">MV</b> tab to build its technical offer.
         </div>
       ) : (
         <div ref={printRef} className="print-area space-y-5">
           <OfferCover s={s} qtnNo={qtnNo} kind="Technical" />
-          {panels.map((p, i) => {
-            const c = p.mvRmuConfig!;
-            const g = previews[JSON.stringify(c)];
-            return (
-              <Fragment key={p.id}>
-              {/* One product cover page per RMU, then its technical detail. */}
-              <RmuCover config={c} index={i} total={panels.length} project={s.project?.name || ""} />
-              <div className="a4-sheet px-12 py-10">
-                {g ? (
-                  <OfferView g={g} />
-                ) : (
-                  <div className="space-y-3">
-                    <div className="skeleton h-24" />
-                    <div className="skeleton h-32" />
-                    <div className="skeleton h-40" />
+          {/* One cover + technical page per MV item, in the MV panel-list order (RMU and
+              Transformer pages interleave just like the Commercial tab). */}
+          {s.panels.map((p) => {
+            if (p.mvType === "rmu" && p.mvRmuConfig) {
+              const c = p.mvRmuConfig;
+              const g = previews[JSON.stringify(c)];
+              return (
+                <Fragment key={p.id}>
+                  <RmuCover config={c} code={g?.panelCode || g?.configCode || rmuShortCode(c)} index={rmuPos[p.id]} total={rmuPanels.length} project={s.project?.name || ""} />
+                  <div className="a4-sheet px-12 py-10">
+                    {g ? (
+                      <OfferView g={g} />
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="skeleton h-24" />
+                        <div className="skeleton h-32" />
+                        <div className="skeleton h-40" />
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              </Fragment>
-            );
+                </Fragment>
+              );
+            }
+            if (p.mvType === "transformer" && p.mvTransformerConfig) {
+              const c = p.mvTransformerConfig;
+              const insideKiosk = !!c.insideKiosk;
+              // The published datasheets are Powerline cast-resin DRY units; match a row only
+              // for a dry transformer at a standard 11/22 kV rating.
+              const dry = (c.insulation || "").trim().toLowerCase() === "dry";
+              const tech = dry ? findTransformerTech(c.primaryKv, c.ratingKva) : null;
+              const code = tech ? trModel(tech, insideKiosk) : "";
+              const desc = [c.ratingKva ? `${c.ratingKva} kVA` : null, c.primaryKv ? `${c.primaryKv} kV` : null, c.insulation ? `${c.insulation} type` : null].filter(Boolean).join(" · ");
+              return (
+                <Fragment key={p.id}>
+                  <TransformerCover config={c} code={code} insideKiosk={insideKiosk} index={trPos[p.id]} total={trPanels.length} project={s.project?.name || ""} />
+                  {tech ? (
+                    <TransformerTechnicalSheet t={tech} insideKiosk={insideKiosk} />
+                  ) : (
+                    <div className="a4-sheet px-12 py-10 text-sm text-muted">
+                      <h2 className="mb-3 text-xl font-extrabold text-ink">Technical Datasheet</h2>
+                      <p className="leading-relaxed">
+                        A full type-tested datasheet is published for Powerline cast-resin <b className="text-ink">dry-type</b> transformers
+                        at <b className="text-ink">11 kV / 22 kV</b> in the standard ratings 500 · 1000 · 1500 · 1600 · 2000 · 2500 kVA.
+                        {desc ? <> This transformer (<b className="text-ink">{desc}</b>) will be supplied to its own type-test certificate.</> : null}
+                      </p>
+                    </div>
+                  )}
+                </Fragment>
+              );
+            }
+            return null;
           })}
         </div>
       )}

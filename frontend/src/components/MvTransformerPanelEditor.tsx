@@ -216,6 +216,27 @@ export default function MvTransformerPanelEditor({
             </div>
           )}
         </div>
+
+        {/* Standalone vs inside-kiosk — sets the technical datasheet's IP (IP23 vs IP00) and
+            the commercial "IP 23 / IP 00" wording. Default is a standalone transformer. */}
+        <div>
+          <div className="mb-1.5 text-xs font-bold uppercase tracking-wider text-brand-dark">Installation</div>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { on: false, label: "Standalone", sub: "IP23 enclosure" },
+              { on: true, label: "Inside kiosk", sub: "IP00 (kiosk protects)" },
+            ].map((opt) => {
+              const active = !!cfg.insideKiosk === opt.on;
+              return (
+                <button key={opt.label} type="button" onClick={() => set("insideKiosk", opt.on)}
+                  className={`rounded-lg border p-2.5 text-left transition-all duration-150 ${active ? "border-brand bg-brand-light ring-1 ring-brand/30" : "border-line bg-white hover:border-brand/40 dark:bg-neutral-900"}`}>
+                  <span className="block text-sm font-bold text-ink">{opt.label}</span>
+                  <span className="mt-0.5 block text-xs text-muted">{opt.sub}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );

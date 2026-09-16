@@ -52,6 +52,9 @@ export interface TransformerConfigInput {
   /** Flat transportation charge added to the selling price WITHOUT the factor. Default 300,
    *  editable per panel. selling = round(cost / factor) + transportation. */
   transportation?: number;
+  /** Standalone (false, default) → IP23; inside a kiosk (true) → IP00. Drives the technical
+   *  datasheet's enclosure IP + model suffix and the commercial "IP 23 / IP 00" wording. */
+  insideKiosk?: boolean;
 }
 
 export interface OfferInput {
