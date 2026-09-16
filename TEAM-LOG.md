@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-16 · Mohamed's side · Claude
 
+**MV RMU panel: a live Cost / Factor / Selling card.**
+
+When you open an RMU inside an MV quotation, the panel now shows a live **"Panel cost (live)"** card with three figures — **Cost**, **Factor** and **Selling** — matching the Transformer card. Selling is the RMU's list price (base + any add-ons, e.g. Smart/RTU or the outdoor enclosure); the factor (0.85) comes from the RMU price database; Cost = Selling × factor. It updates instantly as you change the RMU. Frontend, plus a small addition to the offer preview (it now also returns the RMU factor).
+
+## 2026-09-16 · Mohamed's side · Claude
+
 **RMU price database now works like the Transformer — a Cost column + Excel.**
 
 The RMU price list (Price list → RMU) is rebuilt to match the Transformer database. Every RMU price now has a **Cost**, and the **Selling price = Cost ÷ factor**, with the factor (**0.85**) editable at the top of the screen. Prices are edited through **Excel**: Download current → change the **Cost** column → Upload → preview the changes → Apply — the same round-trip as Transformer and LV.

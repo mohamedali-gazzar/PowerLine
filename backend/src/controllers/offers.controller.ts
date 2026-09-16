@@ -33,6 +33,7 @@ import {
 import { assembleOffer, type RmuConfigInput, type GeneratedOffer } from "../domain/assembly";
 import { priceForConfig } from "../domain/priceList";
 import { vatPct } from "../domain/pricing-data";
+import { getRmuFactor } from "../domain/rmuFactor";
 import { generateOfferPdf } from "../services/pdf.service";
 import { buildCommercial, buildCommercialMulti, type CommercialUnit } from "../services/commercial.service";
 import { generateCommercialPdf } from "../services/pdf-commercial.service";
@@ -58,13 +59,14 @@ export async function postOffer(req: Request, res: Response) {
 }
 
 /** Assemble a technical offer from a config without saving — for live preview. */
-export function postPreview(req: Request, res: Response) {
+export async function postPreview(req: Request, res: Response) {
   try {
     const cfg = previewSchema.parse(req.body) as RmuConfigInput;
     const generated = assembleOffer(cfg);
     const listPricing = priceForConfig(cfg);
-    // vatPct from the pricing master so the on-screen totals match the PDFs.
-    res.json({ ...generated, listPricing, vatPct: vatPct() });
+    // vatPct from the pricing master so the on-screen totals match the PDFs; rmuFactor so the
+    // live RMU card can show Cost = selling × factor.
+    res.json({ ...generated, listPricing, vatPct: vatPct(), rmuFactor: await getRmuFactor() });
   } catch (err) {
     handleError(err, res);
   }

@@ -7290,7 +7290,7 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
       <div ref={editorRef} className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
         {hideEditor ? (
           sel && sel.mvType === "rmu" ? (
-            <MvRmuPanelEditor key={sel.id} p={sel} upPanel={upPanel} />
+            <MvRmuPanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />
           ) : sel && sel.mvType === "transformer" ? (
             <MvTransformerPanelEditor key={sel.id} p={sel} upPanel={upPanel} />
           ) : (

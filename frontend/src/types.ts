@@ -155,6 +155,7 @@ export interface GeneratedOffer {
   titleFamily: string;
   listPricing?: ConfigPricing;
   vatPct?: number; // from the pricing master (preview endpoint)
+  rmuFactor?: number; // RMU selling factor (selling = cost / factor) — for the live card's Cost line
   generalData: Row[];
   electricalData: Row[];
   additionalData: Row[];
