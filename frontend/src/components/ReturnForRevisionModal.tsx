@@ -22,15 +22,22 @@ export default function ReturnForRevisionModal({
   title = "",
   panels = [],
   generalOption = true,
+  initialComments,
   onCancel,
   onReturn,
+  onSave,
 }: {
   open: boolean;
   title?: string;
   panels?: PanelOption[];
   generalOption?: boolean;
+  /** A previously-saved draft to reopen with, so the reviewer can continue where they left off. */
+  initialComments?: ReturnComment[];
   onCancel?: () => void;
   onReturn?: (comments: ReturnComment[]) => void;
+  /** Persist the current comments as a draft (without returning the quotation) so the reviewer
+   *  can come back later. When absent, the Save button is hidden. */
+  onSave?: (comments: ReturnComment[]) => void;
 }) {
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
@@ -41,6 +48,7 @@ export default function ReturnForRevisionModal({
   /** Collapsed to just its header. Everything typed is kept — only the body hides,
    *  so the panel underneath can be read without losing the comments so far. */
   const [minimised, setMinimised] = useState(false);
+  const [justSaved, setJustSaved] = useState(false); // brief "✓ Saved" feedback on the Save button
   const selectWrapRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ sx: number; sy: number; bx: number; by: number } | null>(null);
 
@@ -63,16 +71,19 @@ export default function ReturnForRevisionModal({
   const pendingCount = comments.length + (canAdd ? selectedKeys.length : 0);
   const canReturn = pendingCount > 0;
 
-  // Fresh state every time the modal opens.
+  // On open, start from any saved draft (so the reviewer resumes where they left off) and
+  // reset the transient editor bits.
   useEffect(() => {
     if (open) {
       setSelectedKeys([]);
       setEditingIdx(null);
       setDraft("");
-      setComments([]);
+      setComments(initialComments ?? []);
       setMenuOpen(false);
+      setJustSaved(false);
       setPos({ x: 0, y: 0 });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Drag the dialog around by its header.
@@ -122,11 +133,13 @@ export default function ReturnForRevisionModal({
     setDraft("");
     setSelectedKeys([]);
     setEditingIdx(null);
+    setJustSaved(false);
   };
 
   const removeComment = (idx: number) => {
     setComments((c) => c.filter((_, i) => i !== idx));
     setEditingIdx(null);
+    setJustSaved(false);
   };
 
   // Edit: pull a saved comment back into the editor (its panel + text) and drop it from the list, so
@@ -140,13 +153,30 @@ export default function ReturnForRevisionModal({
     setMenuOpen(false);
   };
 
-  const handleReturn = () => {
-    // A valid comment typed but not "+ Add"-ed is included automatically.
-    const all = canAdd
+  // The full comment list, folding in a valid comment typed but not "+ Add"-ed yet.
+  const collectAll = () =>
+    canAdd
       ? [...comments, ...selectedOptions.map((o) => ({ key: o.key, label: o.label, comment: draft.trim() }))]
       : comments;
+
+  const handleReturn = () => {
+    const all = collectAll();
     if (!all.length) return;
     onReturn?.(all);
+  };
+
+  const canSave = comments.length > 0 || canAdd;
+  // Save the comments as a draft WITHOUT returning the quotation, so the reviewer can close
+  // the dialog today and pick the revision back up another day with nothing lost.
+  const handleSave = () => {
+    const all = collectAll();
+    if (!all.length) return;
+    setComments(all);   // fold any pending comment into the visible list
+    setDraft("");
+    setSelectedKeys([]);
+    setEditingIdx(null);
+    onSave?.(all);
+    setJustSaved(true);
   };
 
   /**
@@ -231,7 +261,7 @@ export default function ReturnForRevisionModal({
         <textarea
           className="rfr-textarea"
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => { setDraft(e.target.value); setJustSaved(false); }}
           placeholder={
             selectedKeys.length === 1 && selectedKeys[0] === GENERAL_KEY
               ? "Write a note about the whole quotation…"
@@ -294,6 +324,14 @@ export default function ReturnForRevisionModal({
           </span>
           <div className="rfr-actions">
             <button type="button" className="rfr-cancel" onClick={onCancel}>Cancel</button>
+            {/* Save keeps the comments as a draft so the reviewer can continue another day. */}
+            {onSave && (
+              <button type="button" className={`rfr-save ${justSaved ? "is-saved" : ""}`}
+                onClick={handleSave} disabled={!canSave}
+                title="Save these comments and continue later — the quotation is NOT returned yet">
+                {justSaved ? "✓ Saved" : "Save"}
+              </button>
+            )}
             <button type="button" className="rfr-return" onClick={handleReturn} disabled={!canReturn}>
               Return for revision
             </button>
@@ -358,6 +396,10 @@ const styles = `
 .rfr-actions{display:flex;align-items:center;gap:14px;}
 .rfr-cancel{border:0;background:none;font-size:14.5px;font-family:inherit;color:rgb(var(--c-muted));cursor:pointer;}
 .rfr-cancel:hover{color:rgb(var(--c-ink));}
+.rfr-save{padding:12px 20px;font-size:14.5px;font-weight:600;font-family:inherit;color:rgb(var(--c-ink));background:var(--c-card);border:1.2px solid rgb(var(--c-line));border-radius:8px;cursor:pointer;}
+.rfr-save:hover:not(:disabled){border-color:#F16722;color:#F16722;}
+.rfr-save:disabled{opacity:.4;cursor:not-allowed;}
+.rfr-save.is-saved{border-color:#16a34a;color:#16a34a;background:rgba(22,163,74,.08);}
 .rfr-return{padding:12px 24px;font-size:14.5px;font-weight:600;font-family:inherit;color:#fff;background:#F16722;border:0;border-radius:8px;cursor:pointer;}
 .rfr-return:hover:not(:disabled){background:rgba(241,103,34,.88);}
 .rfr-return:disabled{opacity:.4;cursor:not-allowed;}

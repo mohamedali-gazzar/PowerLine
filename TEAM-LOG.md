@@ -21,6 +21,18 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-16 · Mohamed's side · Claude
+
+**Return for revision: a "Save" button to continue the review another day.**
+
+The reviewer can now write comments today, press **Save**, close the dialog, and come back another day with everything still there — nothing lost. Save does NOT return the quotation; when they're finished they press **Return for revision** as before (which sends it and clears the saved draft). The saved draft is kept on the reviewer's own computer/browser.
+
+## 2026-09-16 · Mohamed's side · Claude
+
+**Custom Commercial: the offer-line description box grows as you type.**
+
+In a Custom Commercial Offer, each line's description box now expands to fit the text instead of scrolling — long descriptions stay fully visible while typing, and it shrinks back if text is removed. Applies to the Main and Alternative offer lines.
+
 ## 2026-09-15 · Mohamed's side · Claude
 
 **MV: removed the tick-boxes and "Group" from the panel list.**

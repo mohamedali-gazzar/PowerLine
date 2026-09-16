@@ -287,6 +287,24 @@ const EDMS_IGNORE_KEYS = new Set<string>([
   "highlight", "draft", "edmsEdited",
 ]);
 
+// A reviewer's in-progress "Return for revision" comments, kept in this browser so they can
+// write some today and finish another day without losing them. Cleared once the quotation is
+// actually returned. Per quotation; try/catch guards private-mode / blocked storage.
+const RETURN_DRAFT_PREFIX = "pl-return-draft-";
+function loadReturnDraft(id: string): ReturnComment[] {
+  try {
+    const raw = localStorage.getItem(RETURN_DRAFT_PREFIX + id);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+function saveReturnDraft(id: string, comments: ReturnComment[]) {
+  try {
+    if (comments.length) localStorage.setItem(RETURN_DRAFT_PREFIX + id, JSON.stringify(comments));
+    else localStorage.removeItem(RETURN_DRAFT_PREFIX + id);
+  } catch { /* storage blocked — the draft just won't persist */ }
+}
+
 export default function LvConfiguratorPage() {
   const { id = "" } = useParams();
   const { hash } = useLocation();
@@ -344,6 +362,7 @@ export default function LvConfiguratorPage() {
   // of those comments (newest first), shown on the quotation.
   const [approvalEvents, setApprovalEvents] = useState<QtnEventDto[]>([]);
   const [returnOpen, setReturnOpen] = useState(false);
+  const [returnDraft, setReturnDraft] = useState<ReturnComment[]>([]); // saved return comments to reopen with
   const [reassignOpen, setReassignOpen] = useState(false);
   const [coWorkOpen, setCoWorkOpen] = useState(false);
   const { user } = useAuth();
@@ -735,7 +754,8 @@ export default function LvConfiguratorPage() {
   // self-approver split buttons so the wording and confirmations stay identical everywhere.
   const actReturn: WfAction = {
     key: "return", label: "↩ Return for revision", tone: "brand",
-    onClick: () => setReturnOpen(true),
+    // Reopen with any draft the reviewer saved earlier so they continue where they left off.
+    onClick: () => { setReturnDraft(loadReturnDraft(rec?.id ?? qtnNum)); setReturnOpen(true); },
   };
   const actApprove: WfAction = {
     key: "approve", label: "✓ Approve", tone: "approve",
@@ -792,6 +812,9 @@ export default function LvConfiguratorPage() {
   const submitReturn = (items: ReturnComment[]) => {
     setReturnOpen(false);
     if (!items.length) return;
+    // The quotation is going back now, so the saved draft has served its purpose — drop it.
+    saveReturnDraft(rec?.id ?? qtnNum, []);
+    setReturnDraft([]);
     // Each per-panel comment becomes its OWN chat message, so the estimator can reply to each one.
     // The combined text is still the RETURNED banner reason.
     const comments = items.map((c) => `• ${c.label}\n${c.comment}`);
@@ -1921,8 +1944,10 @@ export default function LvConfiguratorPage() {
         open={returnOpen}
         title={`${qtnNum}${s.project?.name ? ` · ${s.project.name}` : ""}`}
         panels={s.panels.map((p) => ({ id: p.id, name: p.name }))}
+        initialComments={returnDraft}
         onCancel={() => setReturnOpen(false)}
         onReturn={submitReturn}
+        onSave={(comments) => { const id = rec?.id ?? qtnNum; saveReturnDraft(id, comments); setReturnDraft(comments); }}
       />
       <EdmsStandardWarningModal
         open={!!edmsWarn}
@@ -4025,6 +4050,31 @@ function TermsEditor({ value, onSave, rtl }: { value: TermsSection[]; onSave: (v
  * VAT and the exchange rate are edited here because a custom quotation has no Pricing
  * Settings tab — without them the total on this one screen could not be made correct.
  */
+/** A textarea that grows with its content instead of scrolling — its height always matches
+ *  the text, so a long line is fully visible while the user types. */
+function AutoGrowTextarea({ value, onChange, className, placeholder }: {
+  value: string; onChange: (v: string) => void; className?: string; placeholder?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      className={className}
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ overflow: "hidden", resize: "none" }}
+    />
+  );
+}
+
 /** One editable offer-lines table (Order · Description · Qty · Unit · Total) with drag/arrow
  *  reordering — used for the Main offer and, when shown, the Alternative offer. */
 function OfferLinesTable({ items, onChange, cur, rate }: {
@@ -4121,12 +4171,11 @@ function OfferLinesTable({ items, onChange, cur, rate }: {
                   </div>
                 </td>
                 <td className="py-2 pr-2">
-                  <textarea
+                  <AutoGrowTextarea
                     className="input min-h-[38px] py-1.5 text-sm"
-                    rows={2}
                     placeholder="What are you quoting for this line?"
                     value={r.description}
-                    onChange={(e) => patch(r.id, { description: e.target.value })}
+                    onChange={(v) => patch(r.id, { description: v })}
                   />
                 </td>
                 <td className="py-2 pr-2">
