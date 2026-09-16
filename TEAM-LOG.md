@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-16 · Mohamed's side · Claude
 
+**Transformers now appear on the MV commercial offer.**
+
+Each transformer added to an MV quotation is now a priced line on the **Commercial** offer, in the standard wording — *"Supply of {KVA} KVA {Dry/Oil} Type Transformer, {22/11/10.5}/0.4KV, {brand}, IP 23 As per specification enclosed."* — at its selling price (cost ÷ factor from the transformer database, in the offer's currency). It sits with the RMU lines and is counted in the subtotal, VAT and total. IP is **23** for now; a transformer **inside a kiosk will be IP 00** once the Kiosk part is built. Frontend only.
+
+## 2026-09-16 · Mohamed's side · Claude
+
 **MV RMU panel: a live Cost / Factor / Selling card.**
 
 When you open an RMU inside an MV quotation, the panel now shows a live **"Panel cost (live)"** card with three figures — **Cost**, **Factor** and **Selling** — matching the Transformer card. Selling is the RMU's list price (base + any add-ons, e.g. Smart/RTU or the outdoor enclosure); the factor (0.85) comes from the RMU price database; Cost = Selling × factor. It updates instantly as you change the RMU. Frontend, plus a small addition to the offer preview (it now also returns the RMU factor).

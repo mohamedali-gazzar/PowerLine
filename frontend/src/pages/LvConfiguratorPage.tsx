@@ -56,14 +56,14 @@ import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
 import MvTransformerPanelEditor, { DEFAULT_TRANSFORMER_CONFIG } from "../components/MvTransformerPanelEditor";
 import { DEFAULT_RMU_CONFIG } from "../components/RmuConfigForm";
 import OfferView from "../components/OfferView";
-import type { GeneratedOffer, RmuConfigInput } from "../types";
+import type { GeneratedOffer, RmuConfigInput, TransformerConfigInput } from "../types";
 import rmuImgPral from "../assets/rmu/pral.webp";
 import rmuImgPsec from "../assets/rmu/psec.webp";
 import rmuImgLucy from "../assets/rmu/lucy.webp";
 import {
   api, getToken, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type QtnAttachmentDto, type QtnStatus,
-  type QtnEventDto,
+  type QtnEventDto, type TransformerRow,
 } from "../api";
 import ReturnForRevisionModal, { type ReturnComment } from "../components/ReturnForRevisionModal";
 import EdmsStandardWarningModal from "../components/EdmsStandardWarningModal";
@@ -4708,6 +4708,15 @@ function NumField({ label, value, pct, step, min, max, hint, onCommit }: {
 function mvRmuPanels(s: LvState): LvPanel[] {
   return s.panels.filter((p) => p.mvType === "rmu" && p.mvRmuConfig);
 }
+function mvTransformerPanels(s: LvState): LvPanel[] {
+  return s.panels.filter((p) => p.mvType === "transformer" && p.mvTransformerConfig);
+}
+
+// The MV commercial standard line for a transformer. IP 23 for a standalone transformer; a
+// transformer inside a kiosk will be IP 00 (added with the Kiosk part later).
+function transformerDesc(c: TransformerConfigInput): string {
+  return `Supply of ${c.ratingKva ?? ""} KVA ${c.insulation || ""} Type Transformer, ${c.primaryKv ?? ""}/0.4KV, ${c.brand || ""}, IP 23 As per specification enclosed.`;
+}
 
 /** Fetch backend previews for a set of RMU configs, cached by config signature. Identical
  *  configs fetch once; adding an RMU never re-fetches the unchanged ones. */
@@ -4853,6 +4862,19 @@ function formatRmuDesc(desc: string): string {
 function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const panels = mvRmuPanels(s);
   const previews = useRmuPreviews(panels.map((p) => p.mvRmuConfig!));
+  const trPanels = mvTransformerPanels(s);
+  // Transformer prices (cost + factor) fetched once; each transformer line is priced from its
+  // matched DB row (selling = round(cost / factor)). Same USD→display-currency rate as the RMUs.
+  const [trCatalog, setTrCatalog] = useState<{ rows: TransformerRow[]; factor: number } | null>(null);
+  useEffect(() => {
+    if (!trPanels.length) return;
+    let alive = true;
+    api.pricing.transformerList({ activeOnly: true, take: 1000 })
+      .then((r) => { if (alive) setTrCatalog({ rows: r.rows, factor: r.factor || 0.95 }); })
+      .catch(() => { /* leave the lines as POA */ });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trPanels.length]);
   const printRef = useRef<HTMLDivElement>(null);
   const cm = s.mvRmu ?? DEFAULT_MV_COMMERCIAL;
   const currency = cm.currency;
@@ -4872,7 +4894,16 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
     const unit = base ?? 0;
     return { p, preview: g, poa: base == null, unit, addUnit, addOns, qty, panelSub: unit * qty, addSub: addUnit * qty };
   });
-  const subtotal = lines.reduce((sum, l) => sum + l.panelSub + l.addSub, 0);
+  const trFactor = trCatalog?.factor ?? 0.95;
+  const trLines = trPanels.map((p) => {
+    const c = p.mvTransformerConfig!;
+    const match = trCatalog?.rows.find((r) => r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation);
+    const sellUsd = match ? (trFactor > 0 ? Math.round(match.costEgp / trFactor) : match.costEgp) : null;
+    const unit = sellUsd == null ? 0 : sellUsd * rate;
+    const qty = p.qty || 1;
+    return { desc: transformerDesc(c), qty, unit, total: unit * qty, poa: sellUsd == null };
+  });
+  const subtotal = lines.reduce((sum, l) => sum + l.panelSub + l.addSub, 0) + trLines.reduce((sum, l) => sum + l.total, 0);
   const discount = subtotal * (cm.discountPct / 100);
   const exVat = subtotal - discount;
   const vat = exVat * (vatPct / 100);
@@ -4886,9 +4917,9 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
 
   return (
     <div className="animate-fade-up">
-      {panels.length > 0 ? (
+      {panels.length > 0 || trPanels.length > 0 ? (
         <PrintBar
-          label="Priced RMU offer → A4 commercial PDF."
+          label="Priced MV commercial offer → A4 PDF."
           docTitle={offerTitle("CO", qtnNo, s.project.revisionNo)}
           exportFn={exportPdf}
         />
@@ -4897,9 +4928,9 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
           <span className="h-2 w-2 rounded-full bg-green-500" /> Live commercial offer · RMU
         </div>
       )}
-      {panels.length === 0 ? (
+      {panels.length === 0 && trPanels.length === 0 ? (
         <div className="card p-10 text-center text-sm text-muted no-print">
-          Add an RMU on the <b className="text-brand-dark">MV</b> tab to build its commercial offer.
+          Add an RMU or Transformer on the <b className="text-brand-dark">MV</b> tab to build its commercial offer.
         </div>
       ) : (
         <div ref={printRef} className="print-area space-y-5">
@@ -4920,7 +4951,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             // outdoor enclosure is dropped (the base already says "outdoor installation"), and
             // the RTU's redundant "Smart / RTU —" prefix is trimmed (its level already says
             // "…Smart…").
-            const items = lines.map((l) => {
+            const rmuItems = lines.map((l) => {
               const baseDesc = l.preview?.commercialDescription || `${l.preview?.panelCode || "RMU"} — Ring Main Unit`;
               const extras = l.addOns
                 .filter((a) => !/outdoor|enclosure/i.test(a.name))
@@ -4930,6 +4961,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
               const unit = l.unit + l.addUnit;
               return { desc, qty: l.qty, unit, total: unit * l.qty, poa: l.poa };
             });
+            const items = [...rmuItems, ...trLines];
             return items.map((it, i) => (
               <div key={i} className="grid grid-cols-[2rem_1fr_3rem_6.5rem_6.5rem] gap-x-3 border-b border-line py-3 text-sm">
                 <span className="text-muted">{i + 1}</span>
