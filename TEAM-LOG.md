@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-16 · Mohamed's side · Claude
 
+**RMU price database now works like the Transformer — a Cost column + Excel.**
+
+The RMU price list (Price list → RMU) is rebuilt to match the Transformer database. Every RMU price now has a **Cost**, and the **Selling price = Cost ÷ factor**, with the factor (**0.85**) editable at the top of the screen. Prices are edited through **Excel**: Download current → change the **Cost** column → Upload → preview the changes → Apply — the same round-trip as Transformer and LV.
+
+Existing prices are unchanged: each Cost was set to the current price × 0.85, so Cost ÷ 0.85 gives back the exact same selling price — **no RMU quotation moves**, and the offers/pricing engine is untouched. One new database column (the cost) is added; it is safe and defaulted.
+
+⚠️ HEADS-UP: RMU prices are now edited through **Excel only** (like Transformer/LV), not by typing into the grid. The first time the RMU price screen is opened after this is live, the app fills each Cost in automatically from the current price.
+
+## 2026-09-16 · Mohamed's side · Claude
+
 **Small MV / pricing tidy-ups.**
 
 Three small fixes: (1) on the MV **Transformer** panel, the Dry / Oil insulation tiles now line up with the bottom of the Selling-price box; (2) in the MV **Commercial settings**, "Warranty (months)" sits on one line instead of wrapping; (3) removed the "Applied to ABB products ONLY (RPT-01)" note under the ABB discount field. Frontend only — no database or server change.

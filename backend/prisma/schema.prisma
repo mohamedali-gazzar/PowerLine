@@ -460,7 +460,8 @@ model RmuPrice {
   id       String  @id @default(cuid())
   kind     String // "PANEL" | "LUCY" | "RTU" | "ADDON"
   key      String // "P-SEC24N2F1M1-With Fuse" | "2+1+M" | "PSEC:SMART1" | "outdoorEnclosure"
-  priceUsd Float
+  priceUsd Float // SELLING price the pricing engine reads = round(costUsd / factor)
+  costUsd  Float   @default(0) // COST from the Excel round-trip; selling = cost / factor (PriceSetting scope "RMU" key "factor", default 0.85)
   label    String  @default("") // ADDON: the text printed on the customer offer
   active   Boolean @default(true)
 
@@ -572,7 +573,7 @@ model TransformerPrice {
   @@index([brand])
 }
 
-/// Scalars. scope "RMU": vatPct, currency.
+/// Scalars. scope "RMU": vatPct, currency, factor (selling = cost / factor; default 0.85).
 /// scope "LV": factor, euro, usd, safetyFactor, copper, sheetMetal, operations,
 ///             abbDiscount, vat, forms.1 … forms.4b
 /// scope "TRANSFORMER": factor (selling = cost / factor; default 0.95)

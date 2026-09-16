@@ -61,6 +61,12 @@ import {
   postTransformerImportApply,
   postTransformerImportCancel,
 } from "./controllers/pricing-transformer-import.controller";
+import { postRmuFactor } from "./controllers/pricing-rmu.controller";
+import {
+  postRmuImportPreview,
+  postRmuImportApply,
+  postRmuImportCancel,
+} from "./controllers/pricing-rmu-import.controller";
 import {
   listCombos,
   putCombo,
@@ -189,6 +195,11 @@ export function createApp() {
   app.post("/api/pricing/rmu/:id/retire", requireAuth, requirePriceAdmin, retireRmuPrice);
   app.post("/api/pricing/rmu/derive-key", requireAuth, requirePriceAdmin, postDeriveKey);
   app.post("/api/pricing/rmu", requireAuth, requirePriceAdmin, createRmuPrice);
+  // RMU cost/factor + Excel round-trip (mirrors Transformer): factor sets selling = cost / factor.
+  app.post("/api/pricing/rmu/factor", requireAuth, requirePriceAdmin, postRmuFactor);
+  app.post("/api/pricing/rmu/import/preview", requireAuth, requirePriceAdmin, postRmuImportPreview);
+  app.post("/api/pricing/rmu/import/:id/apply", requireAuth, requirePriceAdmin, postRmuImportApply);
+  app.post("/api/pricing/rmu/import/:id/cancel", requireAuth, requirePriceAdmin, postRmuImportCancel);
   // LV catalogue (2,121 components + 253 enclosures)
   app.get("/api/catalog/lv", requireAuth, getLvCatalog);
   // What changed in the price list — readable by everyone, so an offer author can

@@ -10,6 +10,7 @@ import { fail } from "../lib/http";
 import { priceBookInfo, refreshPriceBook } from "../domain/pricing-data";
 import { roleOf, accessOf, canViewPrices } from "../middleware/roles";
 import { seedRmuFromBundle, buildRmuPayload, diffAgainstBundle } from "../services/price-seed.service";
+import { getRmuFactor, backfillRmuCost } from "../domain/rmuFactor";
 
 /** GET /api/pricing/version — tiny poll target so a screen can notice that
  *  someone else published, without refetching the whole catalogue. */
@@ -167,9 +168,13 @@ export async function postSeed(req: Request, res: Response) {
 /** GET /api/pricing/rmu — the editable draft rows for the price screen. */
 export async function listRmuPrices(_req: Request, res: Response) {
   try {
-    const rows = await prisma.rmuPrice.findMany({ orderBy: [{ kind: "asc" }, { key: "asc" }] });
-    const pending = await prisma.priceChange.count({ where: { version: null } });
-    res.json({ rows, pendingChanges: pending });
+    await backfillRmuCost(); // one-time: derive cost from the existing selling prices (idempotent)
+    const [rows, pending, factor] = await Promise.all([
+      prisma.rmuPrice.findMany({ orderBy: [{ kind: "asc" }, { key: "asc" }] }),
+      prisma.priceChange.count({ where: { version: null } }),
+      getRmuFactor(),
+    ]);
+    res.json({ rows, pendingChanges: pending, factor });
   } catch (e) {
     fail(res, e);
   }

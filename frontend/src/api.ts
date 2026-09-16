@@ -311,10 +311,29 @@ export interface RmuPriceRow {
   kind: "PANEL" | "LUCY" | "RTU" | "ADDON";
   key: string;
   priceUsd: number;
+  costUsd: number;
   label: string;
   active: boolean;
   updatedBy: string;
   updatedAt: string;
+}
+/** One RMU spreadsheet line, already parsed out of the workbook. Matched on (kind, key). */
+export interface RmuImportRow { kind: string; key: string; label: string; costUsd: number }
+export interface RmuImportDiff {
+  kind: "add" | "update" | "remove";
+  mk: string;
+  label: string;
+  changes?: { field: string; from: string; to: string }[];
+}
+export interface RmuImportPreview {
+  batchId: string;
+  summary: { rowsRead: number; additions: number; updates: number; removals: number; unchanged: number };
+  additions: RmuImportDiff[];
+  updates: RmuImportDiff[];
+  removals: RmuImportDiff[];
+  warnings: string[];
+  truncated: boolean;
+  expiresAt: string;
 }
 export interface LvRow {
   id: string;
@@ -802,7 +821,7 @@ export const api = {
       { method: "POST" }
     ),
     verify: () => request<{ identical: boolean; mismatches: string[]; counts: Record<string, number> }>("/pricing/verify"),
-    list: () => request<{ rows: RmuPriceRow[]; pendingChanges: number }>("/pricing/rmu"),
+    list: () => request<{ rows: RmuPriceRow[]; pendingChanges: number; factor: number }>("/pricing/rmu"),
     setPrice: (id: string, priceUsd: number) =>
       request<{ ok: true; row: RmuPriceRow }>(`/pricing/rmu/${id}`, {
         method: "PATCH",
@@ -823,6 +842,19 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ active }),
       }),
+    // RMU cost/factor + Excel round-trip (mirrors the transformer): selling = cost / factor.
+    rmuFactor: (factor: number) =>
+      request<{ ok: true; factor: number; repriced: number; published: boolean; version: number | null }>("/pricing/rmu/factor", {
+        method: "POST", body: JSON.stringify({ factor }),
+      }),
+    rmuImportPreview: (rows: RmuImportRow[]) =>
+      request<RmuImportPreview>("/pricing/rmu/import/preview", { method: "POST", body: JSON.stringify({ rows }) }),
+    rmuImportApply: (batchId: string, includeRemovals: boolean) =>
+      request<{ ok: true; added: number; updated: number; removed: number; published: boolean; version: number | null; blockers?: string[] }>(
+        `/pricing/rmu/import/${batchId}/apply`, { method: "POST", body: JSON.stringify({ includeRemovals }) },
+      ),
+    rmuImportCancel: (batchId: string) =>
+      request<{ ok: true }>(`/pricing/rmu/import/${batchId}/cancel`, { method: "POST" }),
     pending: () => request<{ changes: PriceChangeRow[] }>("/pricing/pending"),
     lvList: (p: {
       kind: "components" | "enclosures";

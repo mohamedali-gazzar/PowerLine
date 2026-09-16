@@ -14,6 +14,7 @@ import { COMPONENTS, ENCLOSURES, DEFAULT_FACTORS } from "../lv/catalog";
 import { refreshCatalog } from "../lv/catalogSource";
 import LvExcelImport from "../pricing/LvExcelImport";
 import TransformerExcelImport from "../pricing/TransformerExcelImport";
+import RmuExcelImport from "../pricing/RmuExcelImport";
 import LvCombosPanel from "../pricing/LvCombosPanel";
 import { useDialogs } from "../components/ConfirmModal";
 
@@ -56,6 +57,10 @@ export default function PricingAdminPage() {
   const [confirming, setConfirming] = useState(false);
   const [progress, setProgress] = useState("");
   const [section, setSection] = useState<"RMU" | "LV" | "TRANSFORMER">("LV");
+  const [rmuFactor, setRmuFactor] = useState(0.85);
+  const [rmuFactorDraft, setRmuFactorDraft] = useState("0.85");
+  const [savingRmuFactor, setSavingRmuFactor] = useState(false);
+  const [rmuFactorMsg, setRmuFactorMsg] = useState("");
   const autoImported = useRef(false); // guard: import the LV catalogue once per visit
 
   const loadAll = async () => {
@@ -66,6 +71,8 @@ export default function PricingAdminPage() {
       if (s.canEdit && s.seedState === "READY") {
         const [l, p] = await Promise.all([api.pricing.list(), api.pricing.pending()]);
         setRows(l.rows);
+        setRmuFactor(l.factor ?? 0.85);
+        setRmuFactorDraft(String(l.factor ?? 0.85));
         setPending(p.changes);
         // The LV catalogue is small and copying it changes no prices, so import
         // it automatically rather than making the owner press a button for it.
@@ -147,18 +154,24 @@ export default function PricingAdminPage() {
     }
   };
 
-  const savePrice = async (row: RmuPriceRow, value: string) => {
-    const n = Number(value);
-    if (!Number.isFinite(n) || n <= 0 || n === row.priceUsd) return;
-    setBusy(row.id);
+  // Selling shown per row = round(cost / factor). priceUsd already equals this (kept in sync on the
+  // server), but computing from the current factor draft is harmless and stays exact.
+  const rmuSelling = (cost: number) => (rmuFactor > 0 ? Math.round(cost / rmuFactor) : cost);
+
+  const saveRmuFactor = async () => {
+    const f = Number(rmuFactorDraft);
+    if (!(f > 0)) { setRmuFactorMsg("Enter a positive number."); return; }
+    setSavingRmuFactor(true);
+    setRmuFactorMsg("");
     try {
-      const r = await api.pricing.setPrice(row.id, n);
-      setRows((rs) => (rs ? rs.map((x) => (x.id === row.id ? r.row : x)) : rs));
-      setPending(await api.pricing.pending().then((p) => p.changes));
+      await api.pricing.rmuFactor(f);
+      setRmuFactor(f);
+      setRmuFactorMsg("✓ Saved");
+      await loadAll();
     } catch (e) {
-      setError((e as Error).message);
+      setRmuFactorMsg(e instanceof Error ? e.message : "Could not save the factor.");
     } finally {
-      setBusy("");
+      setSavingRmuFactor(false);
     }
   };
 
@@ -393,6 +406,23 @@ export default function PricingAdminPage() {
 
           {section === "RMU" && (
             <>
+              {/* Factor + Excel round-trip — managed exactly like the Transformer database. */}
+              <div className="card mb-4 flex flex-wrap items-end justify-between gap-4 p-4">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wide text-muted">Selling factor</label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input className="input w-28 text-right" type="number" step="0.01" min="0" value={rmuFactorDraft}
+                      onChange={(e) => { setRmuFactorDraft(e.target.value); setRmuFactorMsg(""); }} disabled={!status.canEdit} />
+                    <button className="btn-ghost" onClick={saveRmuFactor} disabled={!status.canEdit || savingRmuFactor || Number(rmuFactorDraft) === rmuFactor}>
+                      {savingRmuFactor ? "Saving…" : "Save factor"}
+                    </button>
+                    {rmuFactorMsg && <span className="text-xs text-muted">{rmuFactorMsg}</span>}
+                  </div>
+                  <p className="mt-1 text-xs text-muted">Selling price = cost ÷ factor (currently cost ÷ {rmuFactor}).</p>
+                </div>
+                {status.canEdit && <RmuExcelImport onApplied={loadAll} />}
+              </div>
+
               <input
                 className="input mb-3"
                 placeholder="Search a product or price code…"
@@ -411,6 +441,14 @@ export default function PricingAdminPage() {
                     <span className="text-xs text-muted">{g.hint}</span>
                   </div>
                   <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-t border-line text-left text-[11px] uppercase tracking-wide text-muted">
+                        <th className="px-5 py-2 font-bold">Product · Key</th>
+                        <th className="w-32 px-5 py-2 text-right font-bold">Cost (USD)</th>
+                        <th className="w-32 px-5 py-2 text-right font-bold">Selling (USD)</th>
+                        <th className="w-20 px-5 py-2"></th>
+                      </tr>
+                    </thead>
                     <tbody>
                       {list.map((r) => (
                         <tr key={r.id} className={`border-t border-line ${r.active ? "" : "bg-slate-50/70"}`}>
@@ -425,30 +463,18 @@ export default function PricingAdminPage() {
                               </span>
                             )}
                           </td>
-                          <td className="w-56 px-5 py-2 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <span className="text-xs text-muted">USD</span>
-                              <input
-                                type="number"
-                                min={1}
-                                defaultValue={r.priceUsd}
-                                disabled={busy === r.id || !r.active}
-                                onBlur={(e) => savePrice(r, e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                                }}
-                                className="input w-28 text-right"
-                              />
-                              <button
-                                type="button"
-                                title={r.active ? "Stop offering this product" : "Offer this product again"}
-                                onClick={() => toggleRetire(r)}
-                                disabled={busy === r.id}
-                                className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-muted transition hover:bg-surface hover:text-ink"
-                              >
-                                {r.active ? "Retire" : "Restore"}
-                              </button>
-                            </div>
+                          <td className="px-5 py-2 text-right tabular-nums text-muted">{Math.round(r.costUsd).toLocaleString()}</td>
+                          <td className="px-5 py-2 text-right font-semibold tabular-nums text-ink">{rmuSelling(r.costUsd).toLocaleString()}</td>
+                          <td className="px-5 py-2 text-right">
+                            <button
+                              type="button"
+                              title={r.active ? "Stop offering this product" : "Offer this product again"}
+                              onClick={() => toggleRetire(r)}
+                              disabled={busy === r.id}
+                              className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-muted transition hover:bg-surface hover:text-ink"
+                            >
+                              {r.active ? "Retire" : "Restore"}
+                            </button>
                           </td>
                         </tr>
                       ))}
