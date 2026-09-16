@@ -280,6 +280,8 @@ export interface TransformerRow {
   active?: boolean;
   updatedBy?: string;
   updatedAt?: string;
+  /** True when a technical sheet (PDF) has been uploaded for this transformer's code. */
+  hasSheet?: boolean;
 }
 /** One transformer spreadsheet line, already parsed out of the workbook. */
 export interface TransformerImportRow {
@@ -967,6 +969,24 @@ export const api = {
       ),
     transformerImportCancel: (batchId: string) =>
       request<{ ok: true }>(`/pricing/transformer/import/${batchId}/cancel`, { method: "POST" }),
+
+    // ── Per-transformer technical sheet (uploaded PDF), keyed by transformer code ──
+    transformerSheetUpload: (code: string, file: { name: string; mime: string; data: string }) =>
+      request<{ code: string; name: string; mime: string; size: number; updatedAt: string }>(
+        `/pricing/transformer/${encodeURIComponent(code)}/sheet`,
+        { method: "POST", body: JSON.stringify(file) },
+      ),
+    transformerSheetDelete: (code: string) =>
+      request<void>(`/pricing/transformer/${encodeURIComponent(code)}/sheet`, { method: "DELETE" }),
+    /** Authenticated URL to open (dl=false) or download (dl=true) the sheet PDF. */
+    transformerSheetLink: (code: string, dl?: boolean) =>
+      pdfLink(`/pricing/transformer/${encodeURIComponent(code)}/sheet`, dl),
+    /** The sheet's raw bytes — used to rasterise it into the technical offer. */
+    transformerSheetBytes: async (code: string): Promise<ArrayBuffer> => {
+      const res = await fetch(pdfLink(`/pricing/transformer/${encodeURIComponent(code)}/sheet`));
+      if (!res.ok) throw new Error("Could not load the technical sheet.");
+      return res.arrayBuffer();
+    },
 
     history: () => request<{ changes: PriceChangeRow[] }>("/pricing/history"),
     undo: (id: string) => request<{ ok: true }>(`/pricing/changes/${id}/undo`, { method: "POST" }),

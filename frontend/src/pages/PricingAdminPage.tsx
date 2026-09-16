@@ -952,6 +952,87 @@ function LvPrices() {
   );
 }
 
+/** A picked file as plain base64 — FileReader yields a data: URL, so drop its prefix. */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+    r.onerror = () => reject(r.error ?? new Error("Could not read the file."));
+    r.readAsDataURL(file);
+  });
+}
+
+/** The "Technical" cell for one transformer row: a download icon when a sheet is uploaded (plus
+ *  replace / remove for admins), otherwise a dash and — for admins — an Upload button. Sheets are
+ *  PDFs stored in the database, keyed by the transformer code. */
+function TransformerSheetCell({ code, hasSheet, canEdit, onChanged }: {
+  code: string; hasSheet: boolean; canEdit: boolean; onChanged: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const onFile = async (input: HTMLInputElement) => {
+    const file = input.files?.[0];
+    input.value = ""; // let the same file be re-picked after a failure
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setErr("Max 5 MB per sheet."); return; }
+    setBusy(true); setErr("");
+    try {
+      const data = await fileToBase64(file);
+      await api.pricing.transformerSheetUpload(code, { name: file.name, mime: file.type || "application/pdf", data });
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Upload failed.");
+    } finally { setBusy(false); }
+  };
+  const remove = async () => {
+    if (!window.confirm(`Remove the technical sheet for ${code}?`)) return;
+    setBusy(true); setErr("");
+    try { await api.pricing.transformerSheetDelete(code); onChanged(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Could not remove the sheet."); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      {err && <span className="text-[10px] font-bold text-red-600" title={err}>!</span>}
+      {hasSheet ? (
+        <>
+          <a href={api.pricing.transformerSheetLink(code, true)} title="Download the technical sheet (PDF)"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-brand-dark transition hover:bg-brand-light">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </a>
+          {canEdit && (
+            <>
+              <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
+                title="Replace the sheet" className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted transition hover:bg-surface hover:text-ink disabled:opacity-40">⟳</button>
+              <button type="button" onClick={remove} disabled={busy}
+                title="Remove the sheet" className="inline-flex h-7 w-7 items-center justify-center rounded-md text-red-500 transition hover:bg-red-50 disabled:opacity-40">✕</button>
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <span className="text-muted">–</span>
+          {canEdit && (
+            <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
+              title="Upload a technical sheet (PDF)"
+              className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] font-semibold text-muted transition hover:border-brand/40 hover:text-brand-dark disabled:opacity-40">
+              {busy ? "…" : "⬆ Upload"}
+            </button>
+          )}
+        </>
+      )}
+      <input ref={inputRef} type="file" accept="application/pdf" className="hidden" onChange={(e) => void onFile(e.currentTarget)} />
+    </div>
+  );
+}
+
 /** The Transformer price database tab: a factor (selling = cost / factor), the Excel round-trip
  *  (download / upload / preview / apply), and a READ-ONLY table. No inline add/edit — the Excel
  *  file is the source of truth. */
@@ -1036,6 +1117,7 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
                   <th className="px-4 py-2">Insulation</th>
                   <th className="px-4 py-2 text-right">Cost (USD)</th>
                   <th className="px-4 py-2 text-right">Selling (USD)</th>
+                  <th className="px-4 py-2 text-right">Technical</th>
                 </tr>
               </thead>
               <tbody>
@@ -1048,6 +1130,9 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
                     <td className="px-4 py-2">{r.insulation}</td>
                     <td className="px-4 py-2 text-right">{r.costEgp.toLocaleString()}</td>
                     <td className="px-4 py-2 text-right font-semibold text-brand-dark">{Math.round(selling(r.costEgp)).toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right">
+                      <TransformerSheetCell code={r.code} hasSheet={!!r.hasSheet} canEdit={canEdit} onChanged={load} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -573,6 +573,23 @@ model TransformerPrice {
   @@index([brand])
 }
 
+/// An uploaded technical datasheet (a PDF) for one transformer, keyed by TransformerPrice.code.
+/// Kept in its OWN table with no relation to TransformerPrice on purpose: the transformer price
+/// Excel round-trip deactivates rows it never deletes, so a sheet keyed by code survives every
+/// price edit. The file is base64 in `data`, mirroring LvAttachment. Nullable/defaulted columns
+/// only, so the deploy's `prisma db push` is safe.
+model TransformerSheet {
+  id        String   @id @default(cuid())
+  code      String   @unique // matches TransformerPrice.code, e.g. "TRD 500-11-00"
+  name      String // original filename as uploaded
+  mime      String   @default("application/pdf")
+  size      Int      @default(0) // decoded byte length (what the UI shows)
+  data      String // base64 (no data: prefix)
+  byEmail   String   @default("") // who uploaded it — plain text, survives user deletion
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 /// Scalars. scope "RMU": vatPct, currency, factor (selling = cost / factor; default 0.85).
 /// scope "LV": factor, euro, usd, safetyFactor, copper, sheetMetal, operations,
 ///             abbDiscount, vat, forms.1 … forms.4b

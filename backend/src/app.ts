@@ -61,6 +61,11 @@ import {
   postTransformerImportApply,
   postTransformerImportCancel,
 } from "./controllers/pricing-transformer-import.controller";
+import {
+  uploadTransformerSheet,
+  downloadTransformerSheet,
+  deleteTransformerSheet,
+} from "./controllers/pricing-transformer-sheet.controller";
 import { postRmuFactor } from "./controllers/pricing-rmu.controller";
 import {
   postRmuImportPreview,
@@ -240,6 +245,11 @@ export function createApp() {
   app.post("/api/pricing/transformer/import/preview", requireAuth, requirePriceAdmin, postTransformerImportPreview);
   app.post("/api/pricing/transformer/import/:id/apply", requireAuth, requirePriceAdmin, postTransformerImportApply);
   app.post("/api/pricing/transformer/import/:id/cancel", requireAuth, requirePriceAdmin, postTransformerImportCancel);
+  // Per-transformer technical sheet (uploaded PDF): download is any signed-in user (it also
+  // loads inside the offer); upload / delete need price-admin. `:code` is URL-encoded.
+  app.get("/api/pricing/transformer/:code/sheet", requireAuth, downloadTransformerSheet);
+  app.post("/api/pricing/transformer/:code/sheet", requireAuth, requirePriceAdmin, uploadTransformerSheet);
+  app.delete("/api/pricing/transformer/:code/sheet", requireAuth, requirePriceAdmin, deleteTransformerSheet);
 
   // Announcements: every signed-in user reads the ACTIVE ones for the dashboard;
   // managing them needs the "announcements.manage" permission (the Admin role holds

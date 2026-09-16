@@ -57,6 +57,7 @@ import MvTransformerPanelEditor, { DEFAULT_TRANSFORMER_CONFIG } from "../compone
 import { DEFAULT_RMU_CONFIG, rmuShortCode } from "../components/RmuConfigForm";
 import { TransformerCover, TransformerTechnicalSheet } from "../components/TransformerTechnicalSheet";
 import { findTransformerTech, trModel } from "../components/transformerTechData";
+import type { PdfPageImage } from "../lv/renderPdfPages";
 import OfferView from "../components/OfferView";
 import type { GeneratedOffer, RmuConfigInput, TransformerConfigInput } from "../types";
 import {
@@ -4830,10 +4831,89 @@ function RmuCover({ config, code, index, total, project }: {
   );
 }
 
+/** Render an UPLOADED transformer technical sheet (a PDF stored in the price database) as one
+ *  A4 page per PDF page. The offer exports by snapshotting each `.a4-sheet`, which can't see a
+ *  raw PDF — so we rasterise the PDF to images (pdfjs) and show those. Uploaded sheets take
+ *  precedence over the built-in datasheet for that transformer. */
+// Rendered sheet pages, cached by transformer code for the session — rasterising a multi-page
+// PDF takes a few seconds, so switching tabs and back (or re-opening the offer) shows it instantly.
+const sheetImgCache = new Map<string, PdfPageImage[]>();
+
+function UploadedTransformerSheet({ code }: { code: string }) {
+  const [pages, setPages] = useState<PdfPageImage[]>(() => sheetImgCache.get(code) ?? []);
+  const [status, setStatus] = useState<"loading" | "done" | "failed">(() => (sheetImgCache.has(code) ? "done" : "loading"));
+  useEffect(() => {
+    const cached = sheetImgCache.get(code);
+    if (cached) { setPages(cached); setStatus("done"); return; }
+    let alive = true;
+    let firstPage = false;
+    setPages([]);
+    setStatus("loading");
+    // Guard against a genuine worker hang: if not even the first page appears in time, fall back
+    // to a download link. Rendering is otherwise progressive — pages stream in as they finish.
+    const guard = setTimeout(() => { if (alive && !firstPage) setStatus("failed"); }, 45000);
+    (async () => {
+      try {
+        const buf = await api.pricing.transformerSheetBytes(code);
+        const { renderPdfToImages } = await import("../lv/renderPdfPages");
+        const acc: PdfPageImage[] = [];
+        await renderPdfToImages(new Uint8Array(buf), 2, (img) => {
+          firstPage = true;
+          acc.push(img);
+          if (alive) setPages((prev) => [...prev, img]);
+        });
+        sheetImgCache.set(code, acc);
+        if (alive) setStatus("done");
+      } catch {
+        if (alive) setStatus("failed");
+      }
+    })();
+    return () => { alive = false; clearTimeout(guard); };
+  }, [code]);
+
+  if (status === "failed" && pages.length === 0) {
+    return (
+      <div className="a4-sheet px-12 py-10 text-sm text-muted">
+        <h2 className="mb-3 text-xl font-extrabold text-ink">Technical Datasheet</h2>
+        <p className="leading-relaxed">
+          The uploaded technical sheet couldn't be shown here.{" "}
+          <a href={api.pricing.transformerSheetLink(code, true)} className="font-semibold text-brand-dark underline">Download the PDF</a>{" "}
+          instead, or re-upload it on the price list.
+        </p>
+      </div>
+    );
+  }
+  if (pages.length === 0) {
+    return <div className="a4-sheet p-6"><div className="skeleton h-[260mm] w-full rounded-lg" /></div>;
+  }
+  return (
+    <>
+      {pages.map((pg, i) => (
+        <section key={i} className="a4-sheet overflow-hidden bg-white" style={{ breakAfter: "page" }}>
+          <img src={pg.dataUrl} alt="Transformer technical sheet" className="block w-full" />
+        </section>
+      ))}
+    </>
+  );
+}
+
 function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const rmuPanels = mvRmuPanels(s);
   const trPanels = mvTransformerPanels(s);
   const previews = useRmuPreviews(rmuPanels.map((p) => p.mvRmuConfig!));
+  // Transformer catalogue — needed to map each transformer config to its real code and to learn
+  // whether a technical sheet has been uploaded for it. Fetched once when there are transformers;
+  // a failure falls back to an empty list (built-in datasheet / note still render).
+  const [trCatalog, setTrCatalog] = useState<{ rows: TransformerRow[] } | null>(null);
+  useEffect(() => {
+    if (!trPanels.length) return;
+    let alive = true;
+    api.pricing.transformerList({ activeOnly: true, take: 1000 })
+      .then((r) => { if (alive) setTrCatalog({ rows: r.rows }); })
+      .catch(() => { if (alive) setTrCatalog({ rows: [] }); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trPanels.length]);
   // Per-type running position, so each cover reads "RMU 1 of N" / "Transformer 1 of M".
   const rmuPos: Record<string, number> = {};
   rmuPanels.forEach((p, i) => { rmuPos[p.id] = i; });
@@ -4896,16 +4976,24 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             if (p.mvType === "transformer" && p.mvTransformerConfig) {
               const c = p.mvTransformerConfig;
               const insideKiosk = !!c.insideKiosk;
-              // The published datasheets are Powerline cast-resin DRY units; match a row only
-              // for a dry transformer at a standard 11/22 kV rating.
+              // The built-in datasheets are Powerline cast-resin DRY units; match a row only for a
+              // dry transformer at a standard 11/22 kV rating.
               const dry = (c.insulation || "").trim().toLowerCase() === "dry";
               const tech = dry ? findTransformerTech(c.primaryKv, c.ratingKva) : null;
-              const code = tech ? trModel(tech, insideKiosk) : "";
+              // Match this config to a catalogue row → its real code + whether a sheet is uploaded.
+              const row = trCatalog?.rows.find((r) =>
+                r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation);
+              const coverCode = row?.code || (tech ? trModel(tech, insideKiosk) : "");
               const desc = [c.ratingKva ? `${c.ratingKva} kVA` : null, c.primaryKv ? `${c.primaryKv} kV` : null, c.insulation ? `${c.insulation} type` : null].filter(Boolean).join(" · ");
               return (
                 <Fragment key={p.id}>
-                  <TransformerCover config={c} code={code} insideKiosk={insideKiosk} index={trPos[p.id]} total={trPanels.length} project={s.project?.name || ""} />
-                  {tech ? (
+                  <TransformerCover config={c} code={coverCode} insideKiosk={insideKiosk} index={trPos[p.id]} total={trPanels.length} project={s.project?.name || ""} />
+                  {trCatalog == null ? (
+                    <div className="a4-sheet p-6"><div className="skeleton h-[260mm] w-full rounded-lg" /></div>
+                  ) : row?.hasSheet ? (
+                    // An uploaded technical sheet takes precedence over the built-in datasheet.
+                    <UploadedTransformerSheet code={row.code} />
+                  ) : tech ? (
                     <TransformerTechnicalSheet t={tech} insideKiosk={insideKiosk} />
                   ) : (
                     <div className="a4-sheet px-12 py-10 text-sm text-muted">

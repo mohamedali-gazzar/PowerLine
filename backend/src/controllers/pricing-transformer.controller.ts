@@ -43,7 +43,17 @@ export async function listTransformerPrices(req: Request, res: Response) {
       prisma.transformerPrice.count({ where }),
       getTransformerFactor(),
     ]);
-    res.json({ rows, total, page, take, factor });
+    // Tag each row with whether an uploaded technical sheet exists (one query for the page).
+    const withSheet = new Set(
+      (
+        await prisma.transformerSheet.findMany({
+          where: { code: { in: rows.map((r) => r.code) } },
+          select: { code: true },
+        })
+      ).map((s) => s.code),
+    );
+    const tagged = rows.map((r) => ({ ...r, hasSheet: withSheet.has(r.code) }));
+    res.json({ rows: tagged, total, page, take, factor });
   } catch (e) {
     fail(res, e);
   }

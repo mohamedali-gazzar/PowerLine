@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-16 · Mohamed's side · Claude
 
+**Transformer technical sheets: upload once, download from the price list, shown in the offer.**
+
+The Transformers price list has a new **Technical** column:
+- Transformers **without** a sheet show a **–**, plus an **Upload** button (admins) to add a PDF.
+- Transformers **with** a sheet show a **download** icon (and Replace / Remove for admins).
+
+Uploaded sheets are stored in the **database, not in the code** — so from now on you add or change a transformer's technical sheet just by uploading, no developer needed. Whatever you upload for a transformer then **appears as that transformer's technical page in the MV Technical offer** (and in the exported PDF). Dry transformers at the standard 11 / 22 kV ratings still fall back to the built-in datasheet when nothing has been uploaded.
+
+⚠️ HEADS-UP (other machine): this adds a small tool for showing PDFs (**pdfjs-dist**), so after you pull, run **`npm install`** in the `frontend` folder once. It also adds one new database table for the uploaded sheets — safe and additive.
+
+## 2026-09-16 · Mohamed's side · Claude
+
 **Transformers get a full technical datasheet, and the MV cover pages are refreshed.**
 
 - **Transformer technical offer.** Every transformer on an MV quotation now has its own **A4 technical datasheet** on the Technical tab — the full Powerline PDTR cast-resin dry-type sheet (identification & ratings, service & mechanical, protection, design values, the HV tap-changer table, tests & insulation), rebuilt exactly from the official datasheets for **11 kV and 22 kV** in the six ratings **500 / 1000 / 1500 / 1600 / 2000 / 2500 kVA**. RMU and transformer pages come out in the same order as the MV panel list.
