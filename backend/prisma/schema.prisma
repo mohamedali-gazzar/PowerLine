@@ -549,9 +549,33 @@ model LvEnclosure {
   @@index([fam])
 }
 
+/// Distribution-transformer price database. Managed ONLY through the /pricing Excel round-trip
+/// (Download current → edit → Upload → preview → Apply); no inline add/edit. `code` is the match
+/// key. `costEgp` is the COST from the sheet; the SELLING price = cost / factor, where factor is a
+/// single default in PriceSetting (scope "TRANSFORMER", key "factor", default 0.95).
+model TransformerPrice {
+  id         String   @id @default(cuid())
+  sortIndex  Int      @unique
+  code       String   @unique // "TRD 500-11-00" — the match key
+  ratingKva  Float    @default(0) // Transformer rating (KVA)
+  primaryKv  Float    @default(0) // Primary voltage (kV)
+  costEgp    Float    @default(0) // "Price (EGP)" column = COST
+  brand      String   @default("") // Hitachi | Sewedy | EgyTravo
+  insulation String   @default("") // "Dry" | "Oil"
+  active     Boolean  @default(true)
+  search     String   @default("") // lowercased "code brand insulation" for the search box
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  updatedBy  String   @default("")
+
+  @@index([active, sortIndex])
+  @@index([brand])
+}
+
 /// Scalars. scope "RMU": vatPct, currency.
 /// scope "LV": factor, euro, usd, safetyFactor, copper, sheetMetal, operations,
 ///             abbDiscount, vat, forms.1 … forms.4b
+/// scope "TRANSFORMER": factor (selling = cost / factor; default 0.95)
 model PriceSetting {
   id        String   @id @default(cuid())
   scope     String

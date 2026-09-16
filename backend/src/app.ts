@@ -52,6 +52,16 @@ import {
   postLvImportCancel,
 } from "./controllers/pricing-lv-import.controller";
 import {
+  listTransformerPrices,
+  getTransformerFacets,
+  postTransformerFactor,
+} from "./controllers/pricing-transformer.controller";
+import {
+  postTransformerImportPreview,
+  postTransformerImportApply,
+  postTransformerImportCancel,
+} from "./controllers/pricing-transformer-import.controller";
+import {
   listCombos,
   putCombo,
   resetCombos,
@@ -211,6 +221,14 @@ export function createApp() {
   app.post("/api/pricing/lv/import/preview", requireAuth, requirePriceAdmin, postLvImportPreview);
   app.post("/api/pricing/lv/import/:id/apply", requireAuth, requirePriceAdmin, postLvImportApply);
   app.post("/api/pricing/lv/import/:id/cancel", requireAuth, requirePriceAdmin, postLvImportCancel);
+
+  // Transformer price database — same Excel round-trip as LV (no inline add/edit).
+  app.get("/api/pricing/transformer", requireAuth, requirePriceViewer, listTransformerPrices);
+  app.get("/api/pricing/transformer/facets", requireAuth, requirePriceViewer, getTransformerFacets);
+  app.post("/api/pricing/transformer/factor", requireAuth, requirePriceAdmin, postTransformerFactor);
+  app.post("/api/pricing/transformer/import/preview", requireAuth, requirePriceAdmin, postTransformerImportPreview);
+  app.post("/api/pricing/transformer/import/:id/apply", requireAuth, requirePriceAdmin, postTransformerImportApply);
+  app.post("/api/pricing/transformer/import/:id/cancel", requireAuth, requirePriceAdmin, postTransformerImportCancel);
 
   // Announcements: every signed-in user reads the ACTIVE ones for the dashboard;
   // managing them needs the "announcements.manage" permission (the Admin role holds

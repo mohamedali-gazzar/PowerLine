@@ -76,12 +76,13 @@ async function livePriceListIsBehind(): Promise<boolean> {
 export async function getStatus(req: Request, res: Response) {
   try {
     await refreshPriceBook();
-    const [book, rmuCount, settingCount, lvComponents, lvEnclosures, access, behind] = await Promise.all([
+    const [book, rmuCount, settingCount, lvComponents, lvEnclosures, transformerPrices, access, behind] = await Promise.all([
       prisma.priceBook.findUnique({ where: { id: "singleton" } }),
       prisma.rmuPrice.count(),
       prisma.priceSetting.count(),
       prisma.lvComponent.count(),
       prisma.lvEnclosure.count(),
+      prisma.transformerPrice.count({ where: { active: true } }),
       accessOf(req.userId),
       livePriceListIsBehind(),
     ]);
@@ -99,7 +100,7 @@ export async function getStatus(req: Request, res: Response) {
       seedState: book?.seedState ?? "EMPTY",
       /** Database prices are newer than the published list — publishing is needed. */
       behindLive: behind,
-      counts: { rmuPrices: rmuCount, settings: settingCount, lvComponents, lvEnclosures },
+      counts: { rmuPrices: rmuCount, settings: settingCount, lvComponents, lvEnclosures, transformerPrices },
     });
   } catch (e) {
     fail(res, e);
@@ -478,6 +479,8 @@ export async function postPublish(req: Request, res: Response) {
         },
       });
     }
+    // Publish the Transformer database at the SAME version too.
+    await (await import("./pricing-transformer.controller")).snapshotTransformer(version);
     await prisma.priceBook.update({
       where: { id: "singleton" },
       data: { version, publishedAt: new Date(), publishedBy: user?.email ?? "", note, source: "db" },
@@ -580,6 +583,8 @@ export async function publishCurrentPricesDetailed(
         },
       });
     }
+    // Publish the Transformer database at the SAME version too.
+    await (await import("./pricing-transformer.controller")).snapshotTransformer(version);
 
     await prisma.priceBook.update({
       where: { id: "singleton" },

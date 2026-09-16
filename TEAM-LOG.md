@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-16 · Mohamed's side · Claude
 
+**New Transformer price database in the Price list — managed by Excel, exactly like LV.**
+
+The Price list screen now has a **Transformer prices** tab, right after "RMU / MV prices". It works the same way as the LV database: **Download the current Excel**, edit it (change a price, add a transformer, adjust anything), **upload it back**, and the app shows a **preview** — what's new, what changed, what would be removed — before saving. The Excel file is the source of truth: existing transformers are never touched unless you change them in the sheet, and there is no manual add/edit screen.
+
+Prices work the way Mohamed asked: the sheet's **Cost Price** is what gets stored, and the **selling price = cost ÷ factor**, with the factor set to **0.95** by default. There's a box at the top of the tab to change that factor — change it once and every transformer's selling price updates. Loaded the current file to check: 51 transformers (Hitachi / Sewedy / EgyTravo, oil and dry types) and the selling prices match the sheet exactly (e.g. cost 17,263.4 → selling 18,172).
+
+⚠️ HEADS-UP: in the uploaded sheet the code **TRO 1000-11-Sewedy** is used on two different rows (the second one is really 1500 kVA). It was imported as-is because the Excel is the source of truth — worth giving the 1500 kVA one its own code on the next edit so they don't share a code.
+
+## 2026-09-16 · Mohamed's side · Claude
+
 **Return for revision: a "Save" button to continue the review another day.**
 
 The reviewer can now write comments today, press **Save**, close the dialog, and come back another day with everything still there — nothing lost. Save does NOT return the quotation; when they're finished they press **Return for revision** as before (which sends it and clears the saved draft). The saved draft is kept on the reviewer's own computer/browser.

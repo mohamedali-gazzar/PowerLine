@@ -8,10 +8,12 @@ import {
   type RateVersionRow,
   type LvRow,
   type LvDuplicateNames,
+  type TransformerRow,
 } from "../api";
 import { COMPONENTS, ENCLOSURES, DEFAULT_FACTORS } from "../lv/catalog";
 import { refreshCatalog } from "../lv/catalogSource";
 import LvExcelImport from "../pricing/LvExcelImport";
+import TransformerExcelImport from "../pricing/TransformerExcelImport";
 import LvCombosPanel from "../pricing/LvCombosPanel";
 import { useDialogs } from "../components/ConfirmModal";
 
@@ -53,7 +55,7 @@ export default function PricingAdminPage() {
   const [toast, setToast] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [progress, setProgress] = useState("");
-  const [section, setSection] = useState<"RMU" | "LV">("LV");
+  const [section, setSection] = useState<"RMU" | "LV" | "TRANSFORMER">("LV");
   const autoImported = useRef(false); // guard: import the LV catalogue once per visit
 
   const loadAll = async () => {
@@ -354,7 +356,7 @@ export default function PricingAdminPage() {
           {/* Which price list are you editing? */}
           <div className="mb-4 flex items-center justify-between gap-2 border-b border-line">
             <div className="flex gap-2">
-              {(["LV", "RMU"] as const).map((s) => (
+              {(["LV", "RMU", "TRANSFORMER"] as const).map((s) => (
                 <button
                   key={s}
                   onClick={() => setSection(s)}
@@ -364,9 +366,9 @@ export default function PricingAdminPage() {
                       : "border-transparent text-muted hover:text-brand-dark"
                   }`}
                 >
-                  {s === "RMU" ? "⚡ RMU / MV prices" : "🔌 LV prices"}
+                  {s === "RMU" ? "⚡ RMU / MV prices" : s === "TRANSFORMER" ? "🔵 Transformer prices" : "🔌 LV prices"}
                   <span className="ml-2 text-[11px] font-semibold text-muted">
-                    {s === "RMU" ? status.counts.rmuPrices : status.counts.lvComponents + status.counts.lvEnclosures}
+                    {s === "RMU" ? status.counts.rmuPrices : s === "TRANSFORMER" ? (status.counts.transformerPrices ?? 0) : status.counts.lvComponents + status.counts.lvEnclosures}
                   </span>
                 </button>
               ))}
@@ -386,6 +388,8 @@ export default function PricingAdminPage() {
             </div>
           )}
           {section === "LV" && status.counts.lvComponents > 0 && <LvPrices />}
+
+          {section === "TRANSFORMER" && <TransformerPrices canEdit={status.canEdit} onChanged={loadAll} />}
 
           {section === "RMU" && (
             <>
@@ -918,6 +922,113 @@ function LvPrices() {
           ? "Poles can be edited here — click the number, type, press Enter. It goes live straight away, because connection copper is costed as copper-per-pole × poles, so an item with no poles is quoted with no copper cost at all (those are tinted amber). Prices and copper weights are still read-only — set them through the Excel upload above (matched on Item Code), then re-upload. Use Remove to stop offering an item."
           : "Prices are read-only here — set them through the Excel upload above (matched on Item Code), then re-upload. Use Remove to stop offering an item."}
       </p>
+    </div>
+  );
+}
+
+/** The Transformer price database tab: a factor (selling = cost / factor), the Excel round-trip
+ *  (download / upload / preview / apply), and a READ-ONLY table. No inline add/edit — the Excel
+ *  file is the source of truth. */
+function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged: () => void }) {
+  const [rows, setRows] = useState<TransformerRow[] | null>(null);
+  const [factor, setFactor] = useState(0.95);
+  const [factorDraft, setFactorDraft] = useState("0.95");
+  const [q, setQ] = useState("");
+  const [savingFactor, setSavingFactor] = useState(false);
+  const [factorMsg, setFactorMsg] = useState("");
+
+  const load = async () => {
+    const r = await api.pricing.transformerList({ activeOnly: true, take: 1000, q: q.trim() });
+    setRows(r.rows);
+    setFactor(r.factor);
+    setFactorDraft(String(r.factor));
+  };
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
+
+  const saveFactor = async () => {
+    const f = Number(factorDraft);
+    if (!(f > 0)) { setFactorMsg("Enter a positive number."); return; }
+    setSavingFactor(true);
+    setFactorMsg("");
+    try {
+      await api.pricing.transformerFactor(f);
+      setFactor(f);
+      setFactorMsg("✓ Saved");
+      onChanged();
+    } catch (e) {
+      setFactorMsg(e instanceof Error ? e.message : "Could not save the factor.");
+    } finally {
+      setSavingFactor(false);
+    }
+  };
+
+  const selling = (cost: number) => (factor > 0 ? cost / factor : 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="card flex flex-wrap items-end justify-between gap-4 p-4">
+        <div>
+          <label className="block text-[11px] font-bold uppercase tracking-wide text-muted">Selling factor</label>
+          <div className="mt-1 flex items-center gap-2">
+            <input className="input w-28 text-right" type="number" step="0.01" min="0" value={factorDraft}
+              onChange={(e) => { setFactorDraft(e.target.value); setFactorMsg(""); }} disabled={!canEdit} />
+            <button className="btn-ghost" onClick={saveFactor} disabled={!canEdit || savingFactor || Number(factorDraft) === factor}>
+              {savingFactor ? "Saving…" : "Save factor"}
+            </button>
+            {factorMsg && <span className="text-xs text-muted">{factorMsg}</span>}
+          </div>
+          <p className="mt-1 text-xs text-muted">Selling price = cost ÷ factor (currently cost ÷ {factor}).</p>
+        </div>
+        {canEdit && <TransformerExcelImport onApplied={() => { void load(); onChanged(); }} />}
+      </div>
+
+      <input className="input" placeholder="Search a code, brand or insulation…" value={q} onChange={(e) => setQ(e.target.value)} />
+
+      <div className="card overflow-hidden p-0">
+        <div className="flex items-center justify-between border-b border-line px-4 py-3">
+          <h2 className="text-base font-extrabold text-ink">Transformers</h2>
+          <span className="text-xs text-muted">Managed by Excel only — download, edit, upload.</span>
+        </div>
+        {!rows ? (
+          <div className="skeleton m-4 h-64" />
+        ) : rows.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted">
+            No transformers yet — press <b>⬆ Update from Excel</b> to upload your Transformer Database.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-muted">
+                  <th className="px-4 py-2">Code</th>
+                  <th className="px-4 py-2 text-right">Rating (kVA)</th>
+                  <th className="px-4 py-2 text-right">Voltage (kV)</th>
+                  <th className="px-4 py-2">Brand</th>
+                  <th className="px-4 py-2">Insulation</th>
+                  <th className="px-4 py-2 text-right">Cost (EGP)</th>
+                  <th className="px-4 py-2 text-right">Selling (EGP)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b border-line/60">
+                    <td className="px-4 py-2 font-semibold text-ink">{r.code}</td>
+                    <td className="px-4 py-2 text-right">{r.ratingKva.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right">{r.primaryKv}</td>
+                    <td className="px-4 py-2">{r.brand}</td>
+                    <td className="px-4 py-2">{r.insulation}</td>
+                    <td className="px-4 py-2 text-right">{r.costEgp.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right font-semibold text-brand-dark">{Math.round(selling(r.costEgp)).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

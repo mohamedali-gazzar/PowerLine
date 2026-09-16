@@ -265,7 +265,46 @@ export interface PricingStatus {
   /** Database prices are newer than the published list — publishing is needed.
    *  Catches price changes that bypass the editor (imports, first-run seed). */
   behindLive?: boolean;
-  counts: { rmuPrices: number; settings: number; lvComponents: number; lvEnclosures: number };
+  counts: { rmuPrices: number; settings: number; lvComponents: number; lvEnclosures: number; transformerPrices?: number };
+}
+/** One transformer row in the price database (managed via the Excel round-trip). */
+export interface TransformerRow {
+  id: string;
+  sortIndex: number;
+  code: string;
+  ratingKva: number;
+  primaryKv: number;
+  costEgp: number;
+  brand: string;
+  insulation: string;
+  active?: boolean;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+/** One transformer spreadsheet line, already parsed out of the workbook. */
+export interface TransformerImportRow {
+  code: string;
+  ratingKva: number;
+  primaryKv: number;
+  costEgp: number;
+  brand: string;
+  insulation: string;
+}
+export interface TransformerImportDiff {
+  kind: "add" | "update" | "remove";
+  code: string;
+  label: string;
+  changes?: { field: string; from: string; to: string }[];
+}
+export interface TransformerImportPreview {
+  batchId: string;
+  summary: { rowsRead: number; additions: number; updates: number; removals: number; unchanged: number };
+  additions: TransformerImportDiff[];
+  updates: TransformerImportDiff[];
+  removals: TransformerImportDiff[];
+  warnings: string[];
+  truncated: boolean;
+  expiresAt: string;
 }
 export interface RmuPriceRow {
   id: string;
@@ -868,6 +907,35 @@ export const api = {
       ),
     lvImportCancel: (batchId: string) =>
       request<{ ok: true }>(`/pricing/lv/import/${batchId}/cancel`, { method: "POST" }),
+
+    // ── Transformer price database (same Excel round-trip as LV) ──
+    transformerList: (p: { q?: string; brand?: string; insulation?: string; activeOnly?: boolean; page?: number; take?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (p.q) qs.set("q", p.q);
+      if (p.brand) qs.set("brand", p.brand);
+      if (p.insulation) qs.set("insulation", p.insulation);
+      if (p.activeOnly) qs.set("active", "1");
+      if (p.page != null) qs.set("page", String(p.page));
+      if (p.take != null) qs.set("take", String(p.take));
+      return request<{ rows: TransformerRow[]; total: number; page: number; take: number; factor: number }>(`/pricing/transformer?${qs.toString()}`);
+    },
+    transformerFacets: () => request<{ brands: string[]; insulations: string[] }>("/pricing/transformer/facets"),
+    transformerFactor: (factor: number) =>
+      request<{ ok: true; factor: number; published: boolean; version: number | null }>("/pricing/transformer/factor", {
+        method: "POST", body: JSON.stringify({ factor }),
+      }),
+    transformerImportPreview: (rows: TransformerImportRow[]) =>
+      request<TransformerImportPreview>("/pricing/transformer/import/preview", {
+        method: "POST", body: JSON.stringify({ rows }),
+      }),
+    transformerImportApply: (batchId: string, includeRemovals = false) =>
+      request<{ ok: true; added: number; updated: number; removed: number; published: boolean; version: number | null; blockers?: string[] }>(
+        `/pricing/transformer/import/${batchId}/apply`,
+        { method: "POST", body: JSON.stringify({ includeRemovals }) },
+      ),
+    transformerImportCancel: (batchId: string) =>
+      request<{ ok: true }>(`/pricing/transformer/import/${batchId}/cancel`, { method: "POST" }),
+
     history: () => request<{ changes: PriceChangeRow[] }>("/pricing/history"),
     undo: (id: string) => request<{ ok: true }>(`/pricing/changes/${id}/undo`, { method: "POST" }),
     users: () => request<{ users: { id: string; email: string; name: string; role: string }[] }>("/pricing/users"),
