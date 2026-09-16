@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-16 · Mohamed's side · Claude
 
+**MV commercial: a separate Terms page, and items sorted like the MV tab.**
+
+Two changes to the MV commercial offer:
+- **Terms & Conditions on their own page.** The commercial's terms moved off the bottom of the offer onto their **own A4 page**, with a section per part — **Ring Main Unit (RMU)** and **Transformer** — each showing its own Validity / Delivery / Payment / Warranty (from its Commercial settings block).
+- **Items sorted like the MV tab.** The offer lines now follow the **same order as the MV panel list** (RMU and Transformer interleaved as they appear), instead of listing all RMUs then all transformers. Prices and totals are unchanged.
+
+Frontend only.
+
+## 2026-09-16 · Mohamed's side · Claude
+
 **Transformers now appear on the MV commercial offer.**
 
 Each transformer added to an MV quotation is now a priced line on the **Commercial** offer, in the standard wording — *"Supply of {KVA} KVA {Dry/Oil} Type Transformer, {22/11/10.5}/0.4KV, {brand}, IP 23 As per specification enclosed."* — at its selling price (cost ÷ factor from the transformer database, in the offer's currency). It sits with the RMU lines and is counted in the subtotal, VAT and total. IP is **23** for now; a transformer **inside a kiosk will be IP 00** once the Kiosk part is built. Frontend only.

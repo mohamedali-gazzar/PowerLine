@@ -4718,6 +4718,22 @@ function transformerDesc(c: TransformerConfigInput): string {
   return `Supply of ${c.ratingKva ?? ""} KVA ${c.insulation || ""} Type Transformer, ${c.primaryKv ?? ""}/0.4KV, ${c.brand || ""}, IP 23 As per specification enclosed.`;
 }
 
+// One terms section (Validity / Delivery / Payment / Warranty) on the MV commercial Terms page —
+// one per MV part (RMU / Transformer), each reading its own Commercial settings block.
+function MvTermsBlock({ title, cm }: { title: string; cm: MvCommercial }) {
+  return (
+    <div className="mb-8">
+      <h3 className="mb-3 text-xl font-extrabold" style={{ color: TRED }}>{title}</h3>
+      <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+        <div className="flex gap-2"><span className="w-20 font-bold text-muted">Validity:</span><span>{cm.validityDays} days</span></div>
+        <div className="flex gap-2"><span className="w-20 font-bold text-muted">Delivery:</span><span>{cm.deliveryWeeks ? `${cm.deliveryWeeks} weeks` : "To be confirmed"}</span></div>
+        <div className="flex gap-2"><span className="w-20 font-bold text-muted">Payment:</span><span>{cm.paymentTerms || "To be agreed"}</span></div>
+        <div className="flex gap-2"><span className="w-20 font-bold text-muted">Warranty:</span><span>{cm.warrantyMonths ? `${cm.warrantyMonths} months` : "Standard"}</span></div>
+      </div>
+    </div>
+  );
+}
+
 /** Fetch backend previews for a set of RMU configs, cached by config signature. Identical
  *  configs fetch once; adding an RMU never re-fetches the unchanged ones. */
 function useRmuPreviews(configs: RmuConfigInput[]): Record<string, GeneratedOffer> {
@@ -4884,26 +4900,37 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const vatPct = first?.vatPct ?? 14;
   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 
-  const lines = panels.map((p) => {
-    const g = previews[JSON.stringify(p.mvRmuConfig)];
-    const baseUsd = g?.listPricing?.basePrice ?? null;
-    const base = baseUsd == null ? null : baseUsd * rate;
-    const addOns = g?.listPricing?.addOns ?? [];
-    const addUnit = addOns.reduce((sum, a) => sum + a.price, 0) * rate;
-    const qty = p.qty || 1;
-    const unit = base ?? 0;
-    return { p, preview: g, poa: base == null, unit, addUnit, addOns, qty, panelSub: unit * qty, addSub: addUnit * qty };
-  });
   const trFactor = trCatalog?.factor ?? 0.95;
-  const trLines = trPanels.map((p) => {
-    const c = p.mvTransformerConfig!;
-    const match = trCatalog?.rows.find((r) => r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation);
-    const sellUsd = match ? (trFactor > 0 ? Math.round(match.costEgp / trFactor) : match.costEgp) : null;
-    const unit = sellUsd == null ? 0 : sellUsd * rate;
-    const qty = p.qty || 1;
-    return { desc: transformerDesc(c), qty, unit, total: unit * qty, poa: sellUsd == null };
+  // Commercial line items in the SAME order as the MV panel list (s.panels order), interleaving
+  // RMU and Transformer lines rather than grouping all RMUs then all transformers.
+  const mvItems = s.panels.flatMap((p) => {
+    if (p.mvType === "rmu" && p.mvRmuConfig) {
+      const g = previews[JSON.stringify(p.mvRmuConfig)];
+      const baseUsd = g?.listPricing?.basePrice ?? null;
+      const base = baseUsd == null ? 0 : baseUsd * rate;
+      const addOnsList = g?.listPricing?.addOns ?? [];
+      const addUnit = addOnsList.reduce((sum, a) => sum + a.price, 0) * rate;
+      const baseDesc = g?.commercialDescription || `${g?.panelCode || "RMU"} — Ring Main Unit`;
+      const extras = addOnsList
+        .filter((a) => !/outdoor|enclosure/i.test(a.name))
+        .map((a) => a.name.replace(/^\s*smart\s*\/\s*rtu\s*—\s*/i, "").trim())
+        .filter(Boolean);
+      const desc = extras.length ? `${baseDesc.replace(/\.\s*$/, "")}, including ${extras.join(" and ")}.` : baseDesc;
+      const unit = base + addUnit;
+      const qty = p.qty || 1;
+      return [{ desc, qty, unit, total: unit * qty, poa: baseUsd == null }];
+    }
+    if (p.mvType === "transformer" && p.mvTransformerConfig) {
+      const c = p.mvTransformerConfig;
+      const match = trCatalog?.rows.find((r) => r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation);
+      const sellUsd = match ? (trFactor > 0 ? Math.round(match.costEgp / trFactor) : match.costEgp) : null;
+      const unit = sellUsd == null ? 0 : sellUsd * rate;
+      const qty = p.qty || 1;
+      return [{ desc: transformerDesc(c), qty, unit, total: unit * qty, poa: sellUsd == null }];
+    }
+    return [];
   });
-  const subtotal = lines.reduce((sum, l) => sum + l.panelSub + l.addSub, 0) + trLines.reduce((sum, l) => sum + l.total, 0);
+  const subtotal = mvItems.reduce((sum, it) => sum + it.total, 0);
   const discount = subtotal * (cm.discountPct / 100);
   const exVat = subtotal - discount;
   const vat = exVat * (vatPct / 100);
@@ -4951,18 +4978,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             // outdoor enclosure is dropped (the base already says "outdoor installation"), and
             // the RTU's redundant "Smart / RTU —" prefix is trimmed (its level already says
             // "…Smart…").
-            const rmuItems = lines.map((l) => {
-              const baseDesc = l.preview?.commercialDescription || `${l.preview?.panelCode || "RMU"} — Ring Main Unit`;
-              const extras = l.addOns
-                .filter((a) => !/outdoor|enclosure/i.test(a.name))
-                .map((a) => a.name.replace(/^\s*smart\s*\/\s*rtu\s*—\s*/i, "").trim())
-                .filter(Boolean);
-              const desc = extras.length ? `${baseDesc.replace(/\.\s*$/, "")}, including ${extras.join(" and ")}.` : baseDesc;
-              const unit = l.unit + l.addUnit;
-              return { desc, qty: l.qty, unit, total: unit * l.qty, poa: l.poa };
-            });
-            const items = [...rmuItems, ...trLines];
-            return items.map((it, i) => (
+            return mvItems.map((it, i) => (
               <div key={i} className="grid grid-cols-[2rem_1fr_3rem_6.5rem_6.5rem] gap-x-3 border-b border-line py-3 text-sm">
                 <span className="text-muted">{i + 1}</span>
                 <span className="whitespace-pre-line font-bold">{formatRmuDesc(it.desc)}</span>
@@ -4995,14 +5011,13 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             </div>
           </div>
 
-          <h3 className="mb-3 mt-8 text-xl font-extrabold" style={{ color: TRED }}>Terms</h3>
-          <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-            <div className="flex gap-2"><span className="w-20 font-bold text-muted">Validity:</span><span>{cm.validityDays} days</span></div>
-            <div className="flex gap-2"><span className="w-20 font-bold text-muted">Delivery:</span><span>{cm.deliveryWeeks ? `${cm.deliveryWeeks} weeks` : "To be confirmed"}</span></div>
-            <div className="flex gap-2"><span className="w-20 font-bold text-muted">Payment:</span><span>{cm.paymentTerms || "To be agreed"}</span></div>
-            <div className="flex gap-2"><span className="w-20 font-bold text-muted">Warranty:</span><span>{cm.warrantyMonths ? `${cm.warrantyMonths} months` : "Standard"}</span></div>
-          </div>
         </div>
+        {/* Terms & Conditions — its own A4 page, with a section per MV part present. */}
+        <section className="a4-sheet px-12 py-10 text-ink" style={{ breakAfter: "page" }}>
+          <h2 className="mb-6 text-3xl font-extrabold" style={{ color: TRED }}>Terms &amp; Conditions</h2>
+          {panels.length > 0 && <MvTermsBlock title="Ring Main Unit (RMU)" cm={cm} />}
+          {trPanels.length > 0 && <MvTermsBlock title="Transformer" cm={s.mvTransformer ?? DEFAULT_MV_COMMERCIAL} />}
+        </section>
         </div>
       )}
     </div>
