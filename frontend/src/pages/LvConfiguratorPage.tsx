@@ -4998,17 +4998,17 @@ function MvCommercialCard({ title, value, onChange }: { title: string; value: Mv
       <div className="space-y-4">
         {/* min-h keeps every label the same height (2 lines) so all four inputs line up even when a
             label like "Warranty (months)" wraps in the narrow column. */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div><label className="label flex min-h-[2rem] items-start leading-tight">Discount (%)</label>
+        <div className="grid grid-cols-2 gap-4">
+          <div><label className="label">Discount (%)</label>
             <input type="number" step={0.5} className="input" value={value.discountPct}
               onChange={(e) => set({ discountPct: parseFloat(e.target.value) || 0 })} /></div>
-          <div><label className="label flex min-h-[2rem] items-start leading-tight">Validity (days)</label>
+          <div><label className="label">Validity (days)</label>
             <input type="number" className="input" value={value.validityDays}
               onChange={(e) => set({ validityDays: parseInt(e.target.value) || 0 })} /></div>
-          <div><label className="label flex min-h-[2rem] items-start leading-tight">Delivery (weeks)</label>
+          <div><label className="label">Delivery (weeks)</label>
             <input type="number" className="input" value={value.deliveryWeeks}
               onChange={(e) => set({ deliveryWeeks: parseInt(e.target.value) || 0 })} /></div>
-          <div><label className="label flex min-h-[2rem] items-start leading-tight">Warranty (months)</label>
+          <div><label className="label">Warranty (months)</label>
             <input type="number" className="input" value={value.warrantyMonths}
               onChange={(e) => set({ warrantyMonths: parseInt(e.target.value) || 0 })} /></div>
         </div>
@@ -5077,7 +5077,7 @@ function PricingTab({ s, up, hideProjectFactor, hidePanelPricing }: { s: LvState
           {num("usd", "USD → EGP", { min: liveUsd, hint: liveUsd ? `must be ≥ live ${liveUsd}` : undefined })}
           {num("safetyFactor", "Safety Factor (%)", { pct: true, min: 0, max: 10, hint: "0–10% only · 2% → ×1.02 · 0% = no change" })}
           {num("operations", "Operations (%)", { pct: true })}
-          {num("abbDiscount", "ABB discount (%)", { pct: true, hint: "Applied to ABB products ONLY (RPT-01)" })}
+          {num("abbDiscount", "ABB discount (%)", { pct: true })}
           {num("vat", "VAT (%)", { pct: true })}
         </div>
       </div>

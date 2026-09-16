@@ -163,7 +163,7 @@ export default function MvTransformerPanelEditor({
 
       {/* The four selections — three dropdowns plus the Dry/Oil insulation tiles, filled
           from the price database. Left column on desktop. */}
-      <div className="card space-y-4 px-4 py-4 lg:order-1">
+      <div className="card flex flex-col space-y-4 px-4 py-3 lg:order-1">
         <h2 className="sec-head mb-0">Transformer Details</h2>
         {error && (
           <p className="rounded-lg bg-red-50 p-2.5 text-xs font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>
@@ -193,17 +193,18 @@ export default function MvTransformerPanelEditor({
           </TrField>
         </div>
 
-        <TrField label="Insulation type">
+        <div className="flex flex-1 flex-col">
+          <div className="mb-1.5 text-xs font-bold uppercase tracking-wider text-brand-dark">Insulation type</div>
           {loading ? (
             <p className="text-xs text-muted">Loading…</p>
           ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid flex-1 auto-rows-fr gap-2 sm:grid-cols-2">
               {insulations.map((ins) => {
                 const meta = insulationMeta(ins);
                 const active = cfg.insulation === ins;
                 return (
                   <button key={ins} type="button" onClick={() => set("insulation", ins)}
-                    className={`flex items-start gap-3 rounded-lg border p-3 text-left transition-all duration-150 ${active ? "border-brand bg-brand-light ring-1 ring-brand/30" : "border-line bg-white hover:border-brand/40 hover:shadow-soft dark:bg-neutral-900"}`}>
+                    className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-all duration-150 ${active ? "border-brand bg-brand-light ring-1 ring-brand/30" : "border-line bg-white hover:border-brand/40 hover:shadow-soft dark:bg-neutral-900"}`}>
                     {meta.icon && <span className={`shrink-0 ${active ? "text-brand" : "text-muted"}`} dangerouslySetInnerHTML={{ __html: meta.icon }} />}
                     <span className="min-w-0">
                       <span className="block text-sm font-bold text-ink">{meta.label}</span>
@@ -214,7 +215,7 @@ export default function MvTransformerPanelEditor({
               })}
             </div>
           )}
-        </TrField>
+        </div>
       </div>
     </div>
   );

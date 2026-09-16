@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-16 · Mohamed's side · Claude
 
+**Small MV / pricing tidy-ups.**
+
+Three small fixes: (1) on the MV **Transformer** panel, the Dry / Oil insulation tiles now line up with the bottom of the Selling-price box; (2) in the MV **Commercial settings**, "Warranty (months)" sits on one line instead of wrapping; (3) removed the "Applied to ABB products ONLY (RPT-01)" note under the ABB discount field. Frontend only — no database or server change.
+
+## 2026-09-16 · Mohamed's side · Claude
+
 **LV Commercial: a "Download Excel" button for the offer lines.**
 
 On the LV **Commercial** offer there's now a **⬇ Download Excel** button (next to the currency switch). It downloads **only the offer lines** — no cover page, no terms & conditions — as a proper Excel (.xlsx) file, with the columns **Item, Description, Qty, Unit price, Total**, followed by **Subtotal, VAT, and Total**. It uses the same numbers and the same currency (USD or EGP) you see on screen. For a custom offer that also has an Alternative offer page, only the **main** offer is in the file for now.
