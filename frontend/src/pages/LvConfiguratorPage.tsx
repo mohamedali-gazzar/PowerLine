@@ -4323,6 +4323,33 @@ function CommercialTab({ s, qtnNo, up, readOnly }: { s: LvState; qtnNo: string; 
     const { exportCommercialPdf } = await import("../lv/technicalPdf");
     await exportCommercialPdf({ printArea, filename: offerTitle("CO", qtnNo, s.project.revisionNo) });
   };
+  // Download JUST the commercial line-item table (main offer) as an .xlsx — no cover, no
+  // terms. Same columns, currency and figures as the on-screen table; numbers go in as real
+  // numbers (rounded like the offer) so Excel can total them. xlsx is loaded on demand.
+  const val = (egp: number) => Math.round(egp / rate);
+  const downloadExcel = async () => {
+    const XLSX = await import("xlsx");
+    const body: (string | number)[][] = [["Item", "Description", "Qty", `Unit price (${cur})`, `Total (${cur})`]];
+    if (custom) {
+      items.forEach((r, i) => body.push([i + 1, r.description, r.qty, val(r.unitPrice), val(r.qty * r.unitPrice)]));
+    } else {
+      calcs.forEach(([p, c], i) => {
+        const g = p.groupId ? (s.groups ?? []).find((x) => x.id === p.groupId) : null;
+        const firstOfGroup = !!g && (i === 0 || calcs[i - 1]?.[0].groupId !== p.groupId);
+        if (firstOfGroup && g) body.push(["", g.name, "", "", ""]);
+        body.push([i + 1, p.name, p.qty, val(c.sellUnit), val(c.totalSell)]);
+      });
+    }
+    body.push([]);
+    body.push(["", "", "", "Subtotal (excl. VAT)", val(subtotal)]);
+    body.push(["", "", "", `VAT ${Math.round(s.factors.vat * 100)}%`, val(vat)]);
+    body.push(["", "", "", `Total (${cur})`, val(subtotal + vat)]);
+    const ws = XLSX.utils.aoa_to_sheet(body);
+    ws["!cols"] = [{ wch: 6 }, { wch: 52 }, { wch: 6 }, { wch: 16 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Commercial");
+    XLSX.writeFile(wb, `${offerTitle("CO", qtnNo, s.project.revisionNo)}.xlsx`);
+  };
   return (
     <div className="animate-fade-up">
       {dialogs}
@@ -4338,6 +4365,7 @@ function CommercialTab({ s, qtnNo, up, readOnly }: { s: LvState; qtnNo: string; 
               className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${cur === c ? "bg-brand text-white" : "text-muted hover:text-brand"}`}>{c}</button>
           ))}
         </div>
+        <button type="button" onClick={downloadExcel} className="btn-ghost ml-auto text-xs" title="Download the offer lines (Item, Description, Qty, Unit price, Total + subtotal, VAT, total) as an Excel file — no cover or terms.">⬇ Download Excel</button>
       </div>
       {custom && <CustomItemsEditor s={s} up={up} cur={cur} rate={rate} readOnly={readOnly} />}
       <div className="offer-workspace">

@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-16 · Mohamed's side · Claude
 
+**LV Commercial: a "Download Excel" button for the offer lines.**
+
+On the LV **Commercial** offer there's now a **⬇ Download Excel** button (next to the currency switch). It downloads **only the offer lines** — no cover page, no terms & conditions — as a proper Excel (.xlsx) file, with the columns **Item, Description, Qty, Unit price, Total**, followed by **Subtotal, VAT, and Total**. It uses the same numbers and the same currency (USD or EGP) you see on screen. For a custom offer that also has an Alternative offer page, only the **main** offer is in the file for now.
+
+Frontend only — no database or server change. (The parked "live price card for RMU" is still not included.)
+
+## 2026-09-16 · Mohamed's side · Claude
+
 **New: a Transformer selector in the MV package, priced in USD.**
 
 In an MV quotation, the **Transformer** panel is now built. You pick four things — **rating (kVA)**, **voltage (kV)**, **brand**, and **insulation (Dry / Oil, with picture tiles)** — and the app instantly shows that transformer's **code** and **price**, taken straight from the Transformer price database. The price is **cost ÷ factor + transportation**: transportation is a flat charge, **default 300, editable per transformer**, and the factor is not applied to it. There's a **Copy** button for the code, and a live "Panel cost (live)" card beside the selections.
