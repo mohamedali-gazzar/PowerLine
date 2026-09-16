@@ -4,7 +4,8 @@
 // batch; APPLY replays that stored batch. Nothing is written until the uploaded numbers are seen
 // and confirmed. Rows are matched on `code` — the only stable key the sheet and the database share.
 // Once matched, the sheet is the source of truth for the row's data (cost, rating, voltage, brand,
-// insulation). A blank/zero COST cell means "no new information" and never makes a price free.
+// insulation). The uploaded price wins outright: a blank/zero COST cell CLEARS the stored price, so
+// the database always mirrors the uploaded sheet exactly — no old price is kept behind a blank cell.
 // A row the file never mentions becomes a removal candidate (soft-retire), opt-in on apply.
 
 import type { Request, Response } from "express";
@@ -81,8 +82,9 @@ export async function postTransformerImportPreview(req: Request, res: Response) 
       }
 
       const changes: FieldChange[] = [];
-      // Cost: a blank/zero cell is "no new info", never "make it free".
-      if (r.costEgp > 0 && cur.costEgp !== r.costEgp) changes.push({ field: "costEgp", from: String(cur.costEgp), to: String(r.costEgp) });
+      // Cost: the uploaded sheet is the exact truth — a blank/zero cell overwrites (clears) the price,
+      // so an old price is never kept behind a blank cell. The preview shows the "17263 → 0" drop.
+      if (cur.costEgp !== r.costEgp) changes.push({ field: "costEgp", from: String(cur.costEgp), to: String(r.costEgp) });
       if (cur.ratingKva !== r.ratingKva) changes.push({ field: "ratingKva", from: String(cur.ratingKva), to: String(r.ratingKva) });
       if (cur.primaryKv !== r.primaryKv) changes.push({ field: "primaryKv", from: String(cur.primaryKv), to: String(r.primaryKv) });
       if (norm(r.brand) && norm(cur.brand) !== norm(r.brand)) changes.push({ field: "brand", from: cur.brand, to: norm(r.brand) });

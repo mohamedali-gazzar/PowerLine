@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-16 · Mohamed's side · Claude
 
+**Transformer prices: an uploaded sheet is now the exact truth — a blank price clears the old one.**
+
+A follow-up to the Transformer database below. Before, if a price cell was blank in the uploaded sheet, the app kept whatever price that transformer already had (it protected the old price). Now the uploaded sheet wins completely: a blank price **clears** the stored price, so after an upload the database always matches the sheet exactly — no old price left behind a blank cell. The preview still shows every change before you apply (e.g. "17,263 → 0"), and brand-new rows still come in with no price as before. Only the price behaves this way — brand and insulation text still keep their old value if a cell is left blank.
+
+Note: this changes how **future** uploads behave; it does not reach back and wipe prices already stored. To clear prices that are already in the database, upload the no-price sheet again once this is live.
+
+## 2026-09-16 · Mohamed's side · Claude
+
 **New Transformer price database in the Price list — managed by Excel, exactly like LV.**
 
 The Price list screen now has a **Transformer prices** tab, right after "RMU / MV prices". It works the same way as the LV database: **Download the current Excel**, edit it (change a price, add a transformer, adjust anything), **upload it back**, and the app shows a **preview** — what's new, what changed, what would be removed — before saving. The Excel file is the source of truth: existing transformers are never touched unless you change them in the sheet, and there is no manual add/edit screen.
