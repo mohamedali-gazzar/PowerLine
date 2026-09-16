@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-16 · Mohamed's side · Claude
 
+**New: a Transformer selector in the MV package, priced in USD.**
+
+In an MV quotation, the **Transformer** panel is now built. You pick four things — **rating (kVA)**, **voltage (kV)**, **brand**, and **insulation (Dry / Oil, with picture tiles)** — and the app instantly shows that transformer's **code** and **price**, taken straight from the Transformer price database. The price is **cost ÷ factor + transportation**: transportation is a flat charge, **default 300, editable per transformer**, and the factor is not applied to it. There's a **Copy** button for the code, and a live "Panel cost (live)" card beside the selections.
+
+All transformer prices now show in **USD** (the Price list screen, this panel, and the Excel columns all say USD instead of EGP). That's a label change only — the numbers are unchanged, and any Excel sheet you already have with "(EGP)" columns still uploads correctly.
+
+Frontend only — no database or server change. (A separate small "live price card for RMU" change is still parked and not included here.)
+
+## 2026-09-16 · Mohamed's side · Claude
+
 **Transformer prices: an uploaded sheet is now the exact truth — a blank price clears the old one.**
 
 A follow-up to the Transformer database below. Before, if a price cell was blank in the uploaded sheet, the app kept whatever price that transformer already had (it protected the old price). Now the uploaded sheet wins completely: a blank price **clears** the stored price, so after an upload the database always matches the sheet exactly — no old price left behind a blank cell. The preview still shows every change before you apply (e.g. "17,263 → 0"), and brand-new rows still come in with no price as before. Only the price behaves this way — brand and insulation text still keep their old value if a cell is left blank.

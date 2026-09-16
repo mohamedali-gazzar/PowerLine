@@ -117,6 +117,7 @@ export function normalize(state: LvState): LvState {
     if (!p) continue;
     if (p.mvType !== "kiosk" && p.mvType !== "rmu" && p.mvType !== "transformer") p.mvType = undefined;
     if (p.mvType !== "rmu") p.mvRmuConfig = undefined;
+    if (p.mvType !== "transformer") p.mvTransformerConfig = undefined;
   }
   // Keep the physical panel array in the SAME order the sidebar renders it (grouped by
   // group.order, ungrouped last). That order is the app's invariant everywhere — the 1..n

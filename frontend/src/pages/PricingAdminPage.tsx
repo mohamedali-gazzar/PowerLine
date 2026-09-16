@@ -1008,8 +1008,8 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
                   <th className="px-4 py-2 text-right">Voltage (kV)</th>
                   <th className="px-4 py-2">Brand</th>
                   <th className="px-4 py-2">Insulation</th>
-                  <th className="px-4 py-2 text-right">Cost (EGP)</th>
-                  <th className="px-4 py-2 text-right">Selling (EGP)</th>
+                  <th className="px-4 py-2 text-right">Cost (USD)</th>
+                  <th className="px-4 py-2 text-right">Selling (USD)</th>
                 </tr>
               </thead>
               <tbody>

@@ -1,6 +1,6 @@
 // Bulk transformer price update from a spreadsheet — the same browser-side Excel round-trip as
 // LvExcelImport: the workbook is read here and sent as plain rows, nothing is written until the
-// summary is confirmed. Rows are matched on "Code". "Price (EGP)" is the COST.
+// summary is confirmed. Rows are matched on "Code". "Cost Price (USD)" is the COST.
 
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -8,13 +8,13 @@ import * as XLSX from "xlsx";
 import { api, type TransformerImportPreview, type TransformerImportRow, type TransformerRow } from "../api";
 
 /** The download layout — the owner's own sheet columns, so a downloaded file looks like theirs.
- *  "Cost Price (EGP)" is what the database stores; "Selling Price (EGP)" is derived (cost / factor)
+ *  "Cost Price (USD)" is what the database stores; "Selling Price (USD)" is derived (cost / factor)
  *  and shown for reference only — it is ignored on upload. */
 const COLUMNS = [
   "Transformer rating (KVA)",
   "Primary voltage",
-  "Cost Price (EGP)",
-  "Selling Price (EGP)",
+  "Cost Price (USD)",
+  "Selling Price (USD)",
   "Code",
   "Transformer brand",
   "Insulation type",
@@ -35,12 +35,16 @@ const HEADER_ALIASES: Record<string, string> = {
   "primary voltage (kv)": "primaryKv",
   "voltage": "primaryKv",
   "kv": "primaryKv",
+  "cost price (usd)": "costEgp",
   "cost price (egp)": "costEgp",
   "cost price": "costEgp",
+  "cost (usd)": "costEgp",
   "cost (egp)": "costEgp",
   "cost": "costEgp",
+  "price (usd)": "costEgp",
   "price (egp)": "costEgp",
   "price egp": "costEgp",
+  "price usd": "costEgp",
   "transformer brand": "brand",
   "brand": "brand",
   "insulation type": "insulation",
@@ -80,7 +84,7 @@ export function parseWorkbook(buf: ArrayBuffer): { rows: TransformerImportRow[];
   }
   const missing: string[] = [];
   if (!seen.has("code")) missing.push("Code");
-  if (!seen.has("costEgp")) missing.push("Price (EGP)");
+  if (!seen.has("costEgp")) missing.push("Cost Price (USD)");
   return { rows, missing };
 }
 

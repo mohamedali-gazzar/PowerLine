@@ -41,6 +41,19 @@ export interface RmuConfigInput {
   meteringWithFuse?: boolean | null;
 }
 
+/** MV Transformer panels only: the four selections that pick exactly one row out of the
+ *  Transformer price database (rating × primary voltage × brand × insulation). That row
+ *  gives the transformer's code and price. Null / "" until the user chooses. */
+export interface TransformerConfigInput {
+  ratingKva: number | null;
+  primaryKv: number | null;
+  brand: string;
+  insulation: string;
+  /** Flat transportation charge added to the selling price WITHOUT the factor. Default 300,
+   *  editable per panel. selling = round(cost / factor) + transportation. */
+  transportation?: number;
+}
+
 export interface OfferInput {
   offerNumber?: string;
   category: ProductCategory;

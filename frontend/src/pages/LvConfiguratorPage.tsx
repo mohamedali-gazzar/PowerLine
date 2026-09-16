@@ -53,6 +53,7 @@ import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
 import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalogSource";
 import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
+import MvTransformerPanelEditor, { DEFAULT_TRANSFORMER_CONFIG } from "../components/MvTransformerPanelEditor";
 import { DEFAULT_RMU_CONFIG } from "../components/RmuConfigForm";
 import OfferView from "../components/OfferView";
 import type { GeneratedOffer, RmuConfigInput } from "../types";
@@ -1309,6 +1310,7 @@ export default function LvConfiguratorPage() {
     const p = withProjectSpecs(newPanel(s.panels.length + 1), s.projectSpecs);
     if (kind) p.mvType = kind; // MV: tag it Kiosk / RMU / Transformer
     if (kind === "rmu") p.mvRmuConfig = { ...DEFAULT_RMU_CONFIG }; // MV RMU: seed the RMU configurator
+    if (kind === "transformer") p.mvTransformerConfig = { ...DEFAULT_TRANSFORMER_CONFIG }; // MV Transformer: seed the selector
     if (coWork && user?.id) p.ownerId = user.id; // co-work: a new panel belongs to its creator
     // Contextual placement: join the open panel's group; or, with no panel open, the group made
     // active by clicking its header. Nothing active → appended ungrouped after the last group/panel.
@@ -7261,6 +7263,8 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
         {hideEditor ? (
           sel && sel.mvType === "rmu" ? (
             <MvRmuPanelEditor key={sel.id} p={sel} upPanel={upPanel} />
+          ) : sel && sel.mvType === "transformer" ? (
+            <MvTransformerPanelEditor key={sel.id} p={sel} upPanel={upPanel} />
           ) : (
             <div className="flex min-h-[45vh] flex-col items-center justify-center rounded-xl2 border border-dashed border-line bg-white/60 p-10 text-center no-print animate-fade-up">
               <div className="text-sm font-bold uppercase tracking-wide text-muted">MV panel</div>

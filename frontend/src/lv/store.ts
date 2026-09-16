@@ -25,7 +25,7 @@ import {
 } from "./catalog";
 import { defaultCellConfig, type CellConfig } from "./cells";
 import { type CopperTool } from "./copper";
-import type { RmuConfigInput } from "../types";
+import type { RmuConfigInput, TransformerConfigInput } from "../types";
 
 let uidCtr = 0;
 export const uid = () => `u${++uidCtr}_${Math.random().toString(36).slice(2, 7)}`;
@@ -93,6 +93,10 @@ export interface LvPanel {
    *  RMU form + backend pricing as a standalone RMU offer. Absent until an RMU panel is
    *  added; other panel kinds never set it. */
   mvRmuConfig?: RmuConfigInput;
+  /** MV Transformer panels only: the four selections (rating / primary voltage / brand /
+   *  insulation) that resolve to one transformer in the price database — its code and price.
+   *  Absent until a Transformer panel is added; other panel kinds never set it. */
+  mvTransformerConfig?: TransformerConfigInput;
   name: string;
   code: string;
   fedFrom: string;   // RPT-01: next to panel name

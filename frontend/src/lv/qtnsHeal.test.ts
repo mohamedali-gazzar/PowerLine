@@ -38,6 +38,15 @@ describe("normalize heals a bad MV panel type", () => {
     expect(out.panels[0].mvRmuConfig).toBeUndefined();
   });
 
+  it("keeps a Transformer panel's config but drops it on a non-transformer panel", () => {
+    const cfg = { ratingKva: 1000, primaryKv: 11, brand: "Hitachi", insulation: "Dry" };
+    const kept = normalize(stateWith(panel("p1", { mvType: "transformer", mvTransformerConfig: cfg as never })));
+    expect(kept.panels[0].mvType).toBe("transformer");
+    expect(kept.panels[0].mvTransformerConfig).toBe(cfg);
+    const dropped = normalize(stateWith(panel("p2", { mvType: "rmu", mvTransformerConfig: cfg as never })));
+    expect(dropped.panels[0].mvTransformerConfig).toBeUndefined();
+  });
+
   it("leaves an ordinary LV panel (no mvType) alone", () => {
     const out = normalize(stateWith(panel("p1", {})));
     expect(out.panels[0].mvType).toBeUndefined();
