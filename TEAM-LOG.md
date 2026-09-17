@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**Insert a component BETWEEN two existing rows in a panel's component list.**
+
+In a panel's component list, the little **⊕** that appears when you hover between two rows now does two things:
+- **One click** → drops a **blank row** (exactly as before).
+- **Double-click** → opens a **search box right there in the gap**; type a component, pick it (↑/↓ + Enter, or click), and it's inserted at that exact spot instead of at the end of the section. After you choose one, the box closes.
+
+It works **inside a combination** too (the ⊕ is indented there, and the component joins the combination). The top search bar, the "+ Add" buttons and drag-to-reorder are all unchanged. Frontend only.
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **MV package panels get default, editable names — and the type tag is gone.**
 
 On the MV (RMU · Transformer · Kiosk) panel list, panels used to read "(unnamed panel)" with a little type tag in front. Now each panel shows a **default name numbered within its own type** — **RMU-01, RMU-02, Transformer-01, RMU-03, …** — and the type tag is removed (the name already says the type). The names are still **fully editable**: click the pencil and the field is pre-filled with the default so you can adjust it or type your own. Frontend only.

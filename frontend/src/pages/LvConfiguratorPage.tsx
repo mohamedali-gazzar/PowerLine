@@ -8187,10 +8187,95 @@ function StandardAtsView({ p, u, panels }: {
   );
 }
 
+// ── Inline "insert between rows" search ──────────────────────────────────────
+// A one-off search input rendered inside a BOM gap (opened by clicking a divider). It reuses the
+// SAME component search as the top bar (searchComponents) and inserts the picked component in that
+// exact slot. One instance at a time — keyed off the open inserter by the caller so it remounts
+// (fresh, empty, auto-focused) when the slot moves. The results dropdown is portaled to the body.
+function InlineComponentSearch({ indent, factors, onPick, onClose }: {
+  indent: boolean; factors: LvState["factors"]; onPick: (c: DbComponent) => void; onClose: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const [active, setActive] = useState(0);
+  const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+  const hits = useMemo(() => searchComponents(q, 40), [q]);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => { setActive(0); }, [q]);
+  // Position the portaled dropdown against the input's left edge; flip above when it would run off
+  // the bottom of the viewport. Recomputed on query change and while scrolling / resizing.
+  useLayoutEffect(() => {
+    if (!q || hits.length === 0) { setPos(null); return; }
+    const place = () => {
+      const el = inputRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const dropH = Math.min(hits.length, 6) * 34 + 8;
+      const above = r.bottom + dropH > window.innerHeight - 8 && r.top - dropH > 8;
+      setPos({ left: r.left, top: above ? Math.max(8, r.top - dropH - 4) : r.bottom + 4, width: Math.min(560, Math.max(320, window.innerWidth - r.left - 16)) });
+    };
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => { window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place); };
+  }, [q, hits.length]);
+  // Click outside the input or the dropdown closes the inserter.
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (inputRef.current?.closest("tr")?.contains(t)) return;
+      if (dropRef.current?.contains(t)) return;
+      onClose();
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [onClose]);
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => Math.min(i + 1, hits.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); const c = hits[active]; if (c) onPick(c); }
+    else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+  };
+  return (
+    <tr>
+      <td colSpan={9} className="p-0">
+        <div className="relative flex items-center" style={{ height: 40, paddingLeft: indent ? 28 : 4, paddingRight: 4 }}>
+          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey}
+            placeholder="Search a component to insert here…"
+            className="h-8 w-full text-[13px] outline-none"
+            style={{ background: "#FFFDFC", border: "2px solid #E8622C", borderRadius: 6, padding: "0 118px 0 8px" }} />
+          <span className="pointer-events-none absolute" style={{ right: 14, color: "#C09070", fontSize: 10.5 }}>⏎ insert · Esc cancel</span>
+          {pos && hits.length > 0 && createPortal(
+            <div ref={dropRef} style={{ position: "fixed", left: pos.left, top: pos.top, width: pos.width, zIndex: 70,
+              background: "#fff", border: "1px solid #E5E7EB", borderRadius: 6, boxShadow: "0 8px 24px rgba(20,20,28,.14)", maxHeight: 6 * 34, overflowY: "auto" }}>
+              {hits.map((c, i) => (
+                <div key={c.ref + c.n + i} onMouseEnter={() => setActive(i)} onMouseDown={(e) => { e.preventDefault(); onPick(c); }}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 10px", cursor: "pointer", fontSize: 13,
+                    background: i === active ? "#FFF4EC" : "#fff", borderLeft: i === active ? "3px solid #E8622C" : "3px solid transparent",
+                    color: i === active ? "#C2410C" : "#111827" }}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {c.n}<span style={{ color: "#9CA3AF", marginLeft: 6, fontSize: 11 }}>{c.ref}</span>
+                  </span>
+                  <span style={{ width: 96, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>EGP {fmtEgp(componentPriceEgp(c, factors))}</span>
+                </div>
+              ))}
+            </div>, document.body)}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 // ── Components card ──────────────────────────────────────────────────────────
 function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void; replaceComponent: (matchRef: string, matchName: string, nc: DbComponent, panelIds: Set<string>) => void; comboKind: ComboKind | null; setComboKind: (k: ComboKind | null) => void }) {
   const { confirm, notify, dialogs } = useDialogs();
   const [q, setQ] = useState("");
+  // Inline "insert between rows": clicking a divider opens a one-off search input in that exact gap.
+  // afterId is the row the new component goes BELOW (null = top of that section / combination);
+  // group is null for a plain section gap, or the combination name for a gap inside a combination.
+  const [inserter, setInserter] = useState<{ sec: string; group: string | null; afterId: string | null } | null>(null);
+  const [justInsertedId, setJustInsertedId] = useState<string | null>(null); // one-shot pulse on the new row
   const [pasteMsg, setPasteMsg] = useState(""); // summary after a multi-item paste
   const [pastePreview, setPastePreview] = useState<null | { rows: { name: string; qty: number; match: DbComponent | null }[] }>(null);
   const [pfcTab, setPfcTab] = useState<"known" | "calc">("known"); // P.F.C window: known-data entry vs calculation
@@ -8341,8 +8426,9 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   // Row-2 circuit combinations (smaller sub-row under the section pills). P.F.C is NOT here —
   // it's triggered from the sections row (beside Outgoings) since it builds its own section.
   const COMBOS = [["lamps", "Indication Lamps"], ["pushbtn", "Push Buttons"], ["fire", "Fire"], ["ats", "ATS"], ["sync", "Synchronization"], ["photocell", "Photocell"], ["mcc", "MCC starter"], ["motorized", "Motorized C.B"], ["wd", "WD kit"], ["custom", "New Combination"]] as const;
-  // Word-style row inserter: drop an empty row (spacer) after a given component, or at
-  // the top of the section when afterId is null.
+  // Word-style row inserter: a single click drops a blank spacer row (as before); a double-click
+  // opens the inline component search in that exact gap. `afterId` is the row to go below (null =
+  // top of the section / combination).
   const insertSpacerAfter = (sec: string, afterId: string | null) => {
     const next = [...p.components];
     const spacer = spacerComponent(sec);
@@ -8355,18 +8441,38 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     }
     u({ components: next });
   };
-  // A zero-height row whose thin hit area reveals a centered "+" on hover (Word-style).
-  const insertZone = (sec: string, afterId: string | null, key: string) => (
-    <tr key={key} aria-hidden="true">
-      <td colSpan={9} className="relative h-0 border-0 p-0">
-        <div className="group/ins absolute inset-x-0 -top-1 z-10 flex h-2 items-center justify-start pl-1">
-          <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-muted/30 opacity-0 transition-opacity duration-150 group-hover/ins:opacity-100" />
-          <button type="button" title="Insert an empty row here" onClick={() => insertSpacerAfter(sec, afterId)}
-            className="relative grid h-4 w-4 place-items-center rounded-full border border-line bg-white text-[12px] font-bold leading-none text-muted opacity-0 shadow-sm transition-opacity duration-150 hover:border-muted hover:bg-surface hover:text-ink group-hover/ins:opacity-100">+</button>
-        </div>
-      </td>
-    </tr>
-  );
+  // Single vs double click on a divider is disambiguated with a short timer: the spacer only lands
+  // if no second click arrives within the window; a second click cancels it and opens the search.
+  const insertClickTimer = useRef<number | null>(null);
+  // A zero-height row whose thin hit area reveals a centered "+" on hover (Word-style). `group` is
+  // the combination the gap sits inside (indented, slightly smaller ⊕), or null for a section gap.
+  const insertZone = (sec: string, afterId: string | null, key: string, group: string | null = null) => {
+    const open = !!inserter && inserter.sec === sec && inserter.group === group && inserter.afterId === afterId;
+    if (open) return (
+      <InlineComponentSearch key={`inl-${key}`} indent={group != null} factors={s.factors}
+        onPick={(c) => insertPicked({ sec, group, afterId }, c)} onClose={() => setInserter(null)} />
+    );
+    const inCombo = group != null;
+    return (
+      <tr key={key} aria-hidden="true">
+        <td colSpan={9} className="relative h-0 border-0 p-0">
+          <div className={`group/ins absolute inset-x-0 -top-1 z-10 flex h-2 items-center ${inCombo ? "pl-7" : "pl-1"}`}>
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-muted/30 opacity-0 transition-opacity duration-150 group-hover/ins:opacity-100" />
+            <button type="button" title="Click: insert a blank row · Double-click: search a component to insert here"
+              onClick={() => {
+                if (insertClickTimer.current != null) window.clearTimeout(insertClickTimer.current);
+                insertClickTimer.current = window.setTimeout(() => { insertClickTimer.current = null; insertSpacerAfter(sec, afterId); }, 250);
+              }}
+              onDoubleClick={() => {
+                if (insertClickTimer.current != null) { window.clearTimeout(insertClickTimer.current); insertClickTimer.current = null; }
+                setInserter({ sec, group, afterId });
+              }}
+              className={`relative grid ${inCombo ? "h-[18px] w-[18px] text-[11px]" : "h-5 w-5 text-[12px]"} place-items-center rounded-full border border-line bg-white font-bold leading-none text-muted opacity-0 shadow-sm transition-opacity duration-150 hover:border-brand hover:bg-surface hover:text-brand group-hover/ins:opacity-100`}>+</button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
   const [editingSec, setEditingSec] = useState<string | null>(null); // custom-section rename
   const [editVal, setEditVal] = useState("");
   const [secDrag, setSecDrag] = useState<string | null>(null); // the section tab being dragged (for the dimmed look)
@@ -8382,6 +8488,15 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     const eg = effectiveGroups(p.components);
     if (!p.components.some((c) => c.section === addTarget.sec && !isSpacer(c) && (eg.get(c.id) || "") === addTarget.group)) setAddTarget(null);
   }, [p.components, addTarget]);
+  // Close the inline inserter when its anchor goes away: the panel or section changes …
+  useEffect(() => { setInserter(null); }, [p.id, p.activeSection]);
+  // … or the row it sits below is deleted, or its combination is deleted / ungrouped.
+  useEffect(() => {
+    if (!inserter) return;
+    const okAfter = inserter.afterId == null || p.components.some((c) => c.id === inserter.afterId);
+    const okGroup = inserter.group == null || p.components.some((c) => c.section === inserter.sec && !isSpacer(c) && (effGroup.get(c.id) || "") === inserter.group);
+    if (!okAfter || !okGroup) setInserter(null);
+  }, [p.components, inserter]);
   const [editComp, setEditComp] = useState<string | null>(null); // row being re-selected
   // Picking a search result opens a small qty popup before the component is added.
   const [pending, setPending] = useState<DbComponent | null>(null);
@@ -9003,6 +9118,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     // Arm the actual drag: lift the row, suppress text selection, and switch from the pre-drag
     // threshold watchers to the live drag handlers.
     const beginDrag = () => {
+      setInserter(null); // an open inline inserter would fight the drag — close it as the lift starts
       setDragId(id); // the row lifts and floats; the empty slot it leaves is the live drop preview
       grabbed.style.position = "relative";
       grabbed.style.zIndex = "30";
@@ -9123,6 +9239,38 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     // Return focus to the search box so the next component can be typed without the mouse.
     refocusSearch();
     revealRow(nc.id);
+  };
+  // Insert a picked component into the exact gap the inline searcher is open at, then close the box
+  // (one insert per open). A gap inside a combination (group set) goes through the SAME path as the
+  // combination's own "+ Add": per-unit qty 1, scaled to the group's current ×N, joining its
+  // combination instance.
+  const insertPicked = (ins: { sec: string; group: string | null; afterId: string | null }, c: DbComponent) => {
+    const { sec, group, afterId } = ins;
+    let nc: PanelComponent;
+    if (group) {
+      const secComps = p.components.filter((x) => x.section === sec);
+      const scalable = /\(Type \d+\)/.test(group) || secComps.some((x) => !isSpacer(x) && (effGroup.get(x.id) || "") === group && x.comboScalable);
+      const cq = scalable ? comboQtyOf(secComps, group) : 1;
+      const cid = groupComboId(sec, group);
+      nc = { ...toPanelComponent(c, sec, cq, group), baseQty: 1, ...(scalable ? { comboScalable: true } : {}), ...(cid ? { comboId: cid } : {}) };
+    } else {
+      nc = toPanelComponent(c, sec, 1);
+    }
+    const next = [...p.components];
+    if (afterId == null) {
+      const idx = group
+        ? next.findIndex((x) => x.section === sec && !isSpacer(x) && (effGroup.get(x.id) || "") === group)
+        : next.findIndex((x) => x.section === sec);
+      next.splice(idx < 0 ? next.length : idx, 0, nc);
+    } else {
+      const idx = next.findIndex((x) => x.id === afterId);
+      next.splice(idx < 0 ? next.length : idx + 1, 0, nc);
+    }
+    u({ components: next });
+    setJustInsertedId(nc.id);
+    window.setTimeout(() => setJustInsertedId((id) => (id === nc.id ? null : id)), 6000);
+    revealRow(nc.id);
+    setInserter(null); // one insert per open — close the box after choosing (do not reopen below)
   };
   // Bulk paste: one component per line, "<name/reference> <qty>" — tab- or comma-separated,
   // qty as the first or last field (no qty ⇒ 1). Excel two-column paste works directly.
@@ -9662,7 +9810,7 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                       }}
                       className={`cursor-grab border-t align-middle transition-colors hover:bg-brand-tint/50 hover:font-bold ${
                         selected.has(c.id) ? "bg-[#FFF0E8]" : "border-line/70"
-                      } ${dragId === c.id ? "opacity-90" : ""}`}>
+                      } ${dragId === c.id ? "opacity-90" : ""} ${justInsertedId === c.id ? "animate-flash-new" : ""}`}>
                       <td
                         data-grip
                         onPointerDown={(e) => startCompDrag(e, c.id)}
@@ -9871,10 +10019,14 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
                               </td>
                             </tr>
                           );
+                          // Divider above the FIRST child of the combination (insert at its top).
+                          rows.push(insertZone(sec, null, `ins-gtop-${sec}-${g}`, g));
                         }
                       }
                       rows.push(renderRow(c));
-                      rows.push(insertZone(sec, c.id, `ins-${c.id}`));
+                      // Gap after this row: inside a combination when the row is a combo child
+                      // (indented), else a plain section gap.
+                      rows.push(insertZone(sec, c.id, `ins-${c.id}`, g || null));
                     });
                     return rows;
                   })()}
