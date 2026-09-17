@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**Transformer ratings on the price list now show plain numbers (no comma).**
+
+On the Transformer price list the **Rating (kVA)** column now reads `1600` instead of `1,600` (and `1000`, `3000`, …). Cost and selling prices keep their thousands separators. Display only — nothing about the stored value or the offers changed. Frontend only.
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **Oil transformers now show IP00 everywhere (they were blank "—" before).**
 
 An oil transformer has no enclosure, so it is always **IP00** — there is no IP23 oil transformer. Previously oil rows showed a blank dash in the IP column. Now every oil row reads **IP00**, in the price list, in the downloaded Excel, and in the offer (both the datasheet cover and the commercial "IP 00" wording). The rule is now simple and applies to every brand and code: **IP23 only for a standalone dry transformer** (whose code carries the standalone marker, `…-23` / `…2300`); **everything else is IP00** — a dry transformer inside a kiosk, and every oil transformer. In the transformer editor, when you pick **Oil** the Standalone/Inside-kiosk switch is replaced by a fixed "IP00 — no enclosure" note, because the switch only matters for dry transformers. Frontend only.

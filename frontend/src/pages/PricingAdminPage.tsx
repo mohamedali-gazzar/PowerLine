@@ -1257,7 +1257,7 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
                 ) : filtered.map((r) => (
                   <tr key={r.id} className="border-b border-line/60">
                     <td className="px-4 py-2 font-semibold text-ink">{r.code}</td>
-                    <td className="px-4 py-2 text-right">{r.ratingKva.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right">{r.ratingKva}</td>
                     <td className="px-4 py-2 text-right">{r.primaryKv}</td>
                     <td className="px-4 py-2">{r.brand}</td>
                     <td className="px-4 py-2">{r.insulation}</td>
