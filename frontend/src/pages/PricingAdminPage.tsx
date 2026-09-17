@@ -1059,6 +1059,62 @@ function TransformerSheetCell({ code, sheetSet, canEdit, onChanged }: {
   );
 }
 
+/** Bulk datasheet upload: pick many PDFs at once and match each to a transformer by its FILENAME
+ *  (e.g. "PDTR1110012300.pdf" → code PDTR1110012300), so all the sheets load in one step instead of
+ *  clicking Upload on every slot. Uploads sequentially and reports how many landed / were skipped. */
+function TransformerSheetBulkUpload({ onDone }: { onDone: () => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [result, setResult] = useState<{ ok: number; failed: { name: string; reason: string }[] } | null>(null);
+
+  const onFiles = async (input: HTMLInputElement) => {
+    const files = Array.from(input.files ?? []);
+    input.value = "";
+    if (!files.length) return;
+    setResult(null);
+    setProgress({ done: 0, total: files.length });
+    let ok = 0;
+    const failed: { name: string; reason: string }[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const code = file.name.replace(/\.pdf$/i, "").trim();
+      try {
+        if (!code) throw new Error("no code in the filename");
+        if (file.size > 5 * 1024 * 1024) throw new Error("over 5 MB");
+        const data = await fileToBase64(file);
+        await api.pricing.transformerSheetUpload(code, { name: file.name, mime: file.type || "application/pdf", data });
+        ok++;
+      } catch (e) {
+        failed.push({ name: file.name, reason: e instanceof Error ? e.message : "failed" });
+      }
+      setProgress({ done: i + 1, total: files.length });
+    }
+    setProgress(null);
+    setResult({ ok, failed });
+    onDone();
+  };
+
+  const busy = progress != null;
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}
+        className="btn-ghost whitespace-nowrap disabled:opacity-50"
+        title="Pick many PDF datasheets at once — each is matched to its transformer by its filename (the code)">
+        {busy ? `Uploading ${progress!.done}/${progress!.total}…` : "⬆ Upload datasheets (bulk)"}
+      </button>
+      {result && (
+        <span className="text-xs text-muted">
+          <b className="text-brand-dark">✓ {result.ok} uploaded</b>
+          {result.failed.length > 0 && (
+            <> · <span className="font-semibold text-amber-600" title={result.failed.map((f) => `${f.name}: ${f.reason}`).join("\n")}>{result.failed.length} skipped (hover)</span></>
+          )}
+        </span>
+      )}
+      <input ref={inputRef} type="file" accept="application/pdf" multiple className="hidden" onChange={(e) => void onFiles(e.currentTarget)} />
+    </div>
+  );
+}
+
 /** The Transformer price database tab: a factor (selling = cost / factor), the Excel round-trip
  *  (download / upload / preview / apply), and a READ-ONLY table. No inline add/edit — the Excel
  *  file is the source of truth. */
@@ -1117,7 +1173,12 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
           </div>
           <p className="mt-1 text-xs text-muted">Selling price = cost ÷ factor (currently cost ÷ {factor}).</p>
         </div>
-        {canEdit && <TransformerExcelImport onApplied={() => { void load(); onChanged(); }} />}
+        {canEdit && (
+          <div className="flex flex-col items-end gap-2">
+            <TransformerExcelImport onApplied={() => { void load(); onChanged(); }} />
+            <TransformerSheetBulkUpload onDone={() => { void load(); }} />
+          </div>
+        )}
       </div>
 
       <input className="input" placeholder="Search a code, brand or insulation…" value={q} onChange={(e) => setQ(e.target.value)} />

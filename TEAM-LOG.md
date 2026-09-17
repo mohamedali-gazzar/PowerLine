@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**Bulk-upload transformer datasheets in one step.**
+
+The Transformers price list has a new **⬆ Upload datasheets (bulk)** button: pick many PDFs at once and each is matched to its transformer by its **filename** (the code — e.g. `PDTR1110012300.pdf`). It uploads them all and reports how many landed / were skipped (a wrong filename is skipped on its own, it doesn't fail the whole batch). Saves uploading each sheet by hand. Frontend only.
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **Transformer datasheets now handle both IP versions (standalone IP23 + inside-kiosk IP00).**
 
 Each Powerline transformer has two datasheets — one for **standalone** (IP23, code ending `2300`) and one for **inside a kiosk** (IP00, code ending `0000`). The Transformers price list now shows **both per transformer**, each with its own Download / Upload — an **"IP23"** slot and an **"IP00"** slot. In the technical offer the transformer automatically shows the matching one: standalone → the IP23 sheet, inside-kiosk → the IP00 sheet. Non-Powerline transformers (e.g. Hitachi) keep a single slot. Frontend + a small backend change (the upload now accepts either IP code); no database change.
