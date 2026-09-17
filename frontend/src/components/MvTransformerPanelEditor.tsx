@@ -86,13 +86,56 @@ export default function MvTransformerPanelEditor({
     return () => { alive = false; };
   }, []);
 
-  const ratings = useMemo(() => uniqNums((rows ?? []).map((r) => r.ratingKva)), [rows]);
-  const voltages = useMemo(() => uniqNums((rows ?? []).map((r) => r.primaryKv)), [rows]);
+  // Cascading options — the price database IS the reference. Each dropdown lists only what the DB
+  // actually has for the OTHER current selections, so Powerline shows only its 6 ratings and only
+  // Dry; add an oil transformer or a new rating to the database and it appears here automatically.
   const brands = useMemo(() => uniqStrs((rows ?? []).map((r) => r.brand)), [rows]);
-  const insulations = useMemo(() => uniqStrs((rows ?? []).map((r) => r.insulation)), [rows]);
+  const ratings = useMemo(
+    () => uniqNums((rows ?? []).filter((r) =>
+      (!cfg.brand || r.brand === cfg.brand) &&
+      (cfg.primaryKv == null || r.primaryKv === cfg.primaryKv) &&
+      (!cfg.insulation || r.insulation === cfg.insulation)).map((r) => r.ratingKva)),
+    [rows, cfg.brand, cfg.primaryKv, cfg.insulation],
+  );
+  const voltages = useMemo(
+    () => uniqNums((rows ?? []).filter((r) =>
+      (!cfg.brand || r.brand === cfg.brand) &&
+      (cfg.ratingKva == null || r.ratingKva === cfg.ratingKva) &&
+      (!cfg.insulation || r.insulation === cfg.insulation)).map((r) => r.primaryKv)),
+    [rows, cfg.brand, cfg.ratingKva, cfg.insulation],
+  );
+  // Every insulation in the DB (so we can still SHOW Oil, but LOCKED, when the brand has no oil),
+  // and the set the current brand/rating/voltage actually offers.
+  const allInsulations = useMemo(() => uniqStrs((rows ?? []).map((r) => r.insulation)), [rows]);
+  const availInsulations = useMemo(
+    () => new Set((rows ?? []).filter((r) =>
+      (!cfg.brand || r.brand === cfg.brand) &&
+      (cfg.primaryKv == null || r.primaryKv === cfg.primaryKv) &&
+      (cfg.ratingKva == null || r.ratingKva === cfg.ratingKva)).map((r) => r.insulation)),
+    [rows, cfg.brand, cfg.primaryKv, cfg.ratingKva],
+  );
+
+  // Choosing a brand clears any rating / voltage / insulation the new brand doesn't offer, so a
+  // QTN never keeps a combination the database can't price.
+  const setBrand = (brand: string) => {
+    if (!brand) { set("brand", ""); return; }
+    const forB = (rows ?? []).filter((r) => r.brand === brand);
+    const rs = new Set(forB.map((r) => r.ratingKva));
+    const vs = new Set(forB.map((r) => r.primaryKv));
+    const is = new Set(forB.map((r) => r.insulation));
+    upPanel(p.id, {
+      mvTransformerConfig: {
+        ...cfg, brand,
+        ratingKva: cfg.ratingKva != null && rs.has(cfg.ratingKva) ? cfg.ratingKva : null,
+        primaryKv: cfg.primaryKv != null && vs.has(cfg.primaryKv) ? cfg.primaryKv : null,
+        insulation: cfg.insulation && is.has(cfg.insulation) ? cfg.insulation : "",
+      },
+    });
+  };
 
   const chosen = cfg.ratingKva != null && cfg.primaryKv != null && !!cfg.brand && !!cfg.insulation;
-  const match = useMemo(
+  // Base row for the four selections (a transformer may have TWO rows — one per IP code).
+  const base = useMemo(
     () =>
       !rows || !chosen
         ? null
@@ -105,15 +148,17 @@ export default function MvTransformerPanelEditor({
           ) ?? null,
     [rows, chosen, cfg.ratingKva, cfg.primaryKv, cfg.brand, cfg.insulation],
   );
+  // The code for the chosen IP context: standalone → "…2300", inside a kiosk → "…0000".
+  const displayCode = base ? trDisplayCode(base.code, !!cfg.insideKiosk) : "";
+  // Prefer the exact IP-variant row so its OWN price is used (IP23-with-enclosure and IP00-in-kiosk
+  // can be priced separately); fall back to the base row when only one IP code exists.
+  const match = base ? ((rows ?? []).find((r) => r.code === displayCode) ?? base) : null;
   const cost = match?.costEgp ?? 0;
   const transportation = cfg.transportation ?? 300;
   // selling = cost ÷ factor (the price screen's factor) PLUS a flat transportation charge that the
   // factor is deliberately NOT applied to.
   const sellingBase = factor > 0 ? Math.round(cost / factor) : cost;
   const selling = sellingBase + transportation;
-  // The code carries the IP suffix, which follows the Standalone (…2300) / Inside-kiosk (…0000)
-  // choice — not whatever suffix the price list happened to store.
-  const displayCode = match ? trDisplayCode(match.code, !!cfg.insideKiosk) : "";
   const loading = rows == null && !error;
 
   return (
@@ -190,7 +235,7 @@ export default function MvTransformerPanelEditor({
           </TrField>
           <TrField label="TR. brand">
             <select className="input cursor-pointer" disabled={loading} value={cfg.brand}
-              onChange={(e) => set("brand", e.target.value)}>
+              onChange={(e) => setBrand(e.target.value)}>
               <option value="">{loading ? "Loading…" : "Select brand…"}</option>
               {brands.map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
@@ -203,16 +248,17 @@ export default function MvTransformerPanelEditor({
             <p className="text-xs text-muted">Loading…</p>
           ) : (
             <div className="grid flex-1 auto-rows-fr gap-2 sm:grid-cols-2">
-              {insulations.map((ins) => {
+              {allInsulations.map((ins) => {
                 const meta = insulationMeta(ins);
                 const active = cfg.insulation === ins;
+                const locked = !availInsulations.has(ins); // this brand doesn't offer it → lock it
                 return (
-                  <button key={ins} type="button" onClick={() => set("insulation", ins)}
-                    className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-all duration-150 ${active ? "border-brand bg-brand-light ring-1 ring-brand/30" : "border-line bg-white hover:border-brand/40 hover:shadow-soft dark:bg-neutral-900"}`}>
+                  <button key={ins} type="button" disabled={locked} onClick={() => set("insulation", ins)}
+                    className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-all duration-150 ${locked ? "cursor-not-allowed border-line bg-surface opacity-60" : active ? "border-brand bg-brand-light ring-1 ring-brand/30" : "border-line bg-white hover:border-brand/40 hover:shadow-soft dark:bg-neutral-900"}`}>
                     {meta.icon && <span className={`shrink-0 ${active ? "text-brand" : "text-muted"}`} dangerouslySetInnerHTML={{ __html: meta.icon }} />}
                     <span className="min-w-0">
-                      <span className="block text-sm font-bold text-ink">{meta.label}</span>
-                      {meta.sub && <span className="mt-0.5 block text-xs text-muted">{meta.sub}</span>}
+                      <span className="block text-sm font-bold text-ink">{locked ? "🔒 " : ""}{meta.label}</span>
+                      <span className="mt-0.5 block text-xs text-muted">{locked ? `Not available${cfg.brand ? ` for ${cfg.brand}` : ""}` : meta.sub}</span>
                     </span>
                   </button>
                 );

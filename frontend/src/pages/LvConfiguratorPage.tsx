@@ -5076,7 +5076,10 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
     }
     if (p.mvType === "transformer" && p.mvTransformerConfig) {
       const c = p.mvTransformerConfig;
-      const match = trCatalog?.rows.find((r) => r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation);
+      const base = trCatalog?.rows.find((r) => r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation);
+      // Price from the exact IP-variant row (standalone …2300 / inside-kiosk …0000) when it exists.
+      const wantCode = base ? trDisplayCode(base.code, !!c.insideKiosk) : "";
+      const match = base ? (trCatalog?.rows.find((r) => r.code === wantCode) ?? base) : undefined;
       const sellUsd = match ? (trFactor > 0 ? Math.round(match.costEgp / trFactor) : match.costEgp) : null;
       const unit = sellUsd == null ? 0 : sellUsd * rate;
       const qty = p.qty || 1;

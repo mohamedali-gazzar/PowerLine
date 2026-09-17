@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**Transformer choices follow the database, and each code is its own item.**
+
+- **Dropdowns show only what exists.** Pick a brand and the Rating / Voltage lists show only that brand's real options — Powerline shows just its 6 ratings, and Oil is shown but **locked** ("Not available for Powerline"). Add an oil transformer or a new rating to the transformer database and it appears automatically. Works for every brand (the database is the source of truth).
+- **Each code is its own item.** The IP23 (`…2300`) and IP00 (`…0000`) versions are separate items — each has its own datasheet slot on the price list and can carry its **own price** (standalone vs inside-kiosk priced separately). The offer and price still follow the Standalone / Inside-kiosk switch. (This replaces the earlier "one row, two slots" approach.)
+
+Frontend only.
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **Bulk-upload transformer datasheets in one step.**
 
 The Transformers price list has a new **⬆ Upload datasheets (bulk)** button: pick many PDFs at once and each is matched to its transformer by its **filename** (the code — e.g. `PDTR1110012300.pdf`). It uploads them all and reports how many landed / were skipped (a wrong filename is skipped on its own, it doesn't fail the whole batch). Saves uploading each sheet by hand. Frontend only.

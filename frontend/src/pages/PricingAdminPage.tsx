@@ -962,14 +962,6 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-/** The two IP-variant codes for a PDTR transformer — IP23 (standalone, "…2300") and IP00 (inside a
- *  kiosk, "…0000") — or null for a code without an IP suffix (e.g. Hitachi "TRD 500-11-00"). */
-function ipVariants(code: string): { ip23: string; ip00: string } | null {
-  if (/2300$/.test(code)) return { ip23: code, ip00: code.replace(/2300$/, "0000") };
-  if (/0000$/.test(code)) return { ip23: code.replace(/0000$/, "2300"), ip00: code };
-  return null;
-}
-
 /** One technical-sheet slot for a single transformer code: a labelled Download when a sheet is
  *  uploaded (plus replace / remove for admins), otherwise a dash and — for admins — an Upload
  *  button. `label` (e.g. "IP23") prefixes the slot when a row has more than one. */
@@ -1043,20 +1035,13 @@ function SheetSlot({ code, label, present, canEdit, onChanged }: {
   );
 }
 
-/** The "Technical" cell for one transformer row. A PDTR transformer has two datasheets — one per
- *  IP context — so it shows two slots (IP23 standalone / IP00 inside-kiosk), keyed by the two IP
- *  codes; any other transformer (e.g. Hitachi) shows a single slot keyed by its own code. */
+/** The "Technical" cell for one transformer row. Each transformer code is its own row (the IP23
+ *  "…2300" and IP00 "…0000" variants are separate rows), so each shows a single datasheet slot
+ *  keyed by that row's own code. */
 function TransformerSheetCell({ code, sheetSet, canEdit, onChanged }: {
   code: string; sheetSet: Set<string>; canEdit: boolean; onChanged: () => void;
 }) {
-  const v = ipVariants(code);
-  if (!v) return <SheetSlot code={code} present={sheetSet.has(code)} canEdit={canEdit} onChanged={onChanged} />;
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <SheetSlot label="IP23" code={v.ip23} present={sheetSet.has(v.ip23)} canEdit={canEdit} onChanged={onChanged} />
-      <SheetSlot label="IP00" code={v.ip00} present={sheetSet.has(v.ip00)} canEdit={canEdit} onChanged={onChanged} />
-    </div>
-  );
+  return <SheetSlot code={code} present={sheetSet.has(code)} canEdit={canEdit} onChanged={onChanged} />;
 }
 
 /** Bulk datasheet upload: pick many PDFs at once and match each to a transformer by its FILENAME
