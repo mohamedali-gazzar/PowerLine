@@ -951,7 +951,7 @@ export const api = {
       if (p.activeOnly) qs.set("active", "1");
       if (p.page != null) qs.set("page", String(p.page));
       if (p.take != null) qs.set("take", String(p.take));
-      return request<{ rows: TransformerRow[]; total: number; page: number; take: number; factor: number }>(`/pricing/transformer?${qs.toString()}`);
+      return request<{ rows: TransformerRow[]; total: number; page: number; take: number; factor: number; sheetCodes?: string[] }>(`/pricing/transformer?${qs.toString()}`);
     },
     transformerFacets: () => request<{ brands: string[]; insulations: string[] }>("/pricing/transformer/facets"),
     transformerFactor: (factor: number) =>

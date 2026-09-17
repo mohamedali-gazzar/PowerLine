@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**Transformer datasheets now handle both IP versions (standalone IP23 + inside-kiosk IP00).**
+
+Each Powerline transformer has two datasheets — one for **standalone** (IP23, code ending `2300`) and one for **inside a kiosk** (IP00, code ending `0000`). The Transformers price list now shows **both per transformer**, each with its own Download / Upload — an **"IP23"** slot and an **"IP00"** slot. In the technical offer the transformer automatically shows the matching one: standalone → the IP23 sheet, inside-kiosk → the IP00 sheet. Non-Powerline transformers (e.g. Hitachi) keep a single slot. Frontend + a small backend change (the upload now accepts either IP code); no database change.
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **Fixed: a standalone transformer showed the wrong (inside-kiosk) code.**
 
 A **standalone** transformer was showing the **inside-kiosk** code (ending `0000`) instead of its own **IP23** code (ending `2300`). The code now follows the **Standalone / Inside-kiosk** switch: standalone → `…2300`, inside a kiosk → `…0000`. Example: a standalone 11 kV 1000 kVA Powerline now reads **PDTR1110012300** (was PDTR1110010000). This is fixed everywhere the code shows — the live panel card, the Copy button, and the technical-offer cover. Frontend only.

@@ -25,12 +25,27 @@ const INLINE_OK = new Set([
   "application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp",
 ]);
 
+/** A PDTR code's IP twin: "…2300" (IP23, standalone) ↔ "…0000" (IP00, inside a kiosk). One
+ *  transformer is a single price-list row (stored as the "…0000" code), but it has two datasheets
+ *  — one per IP context — so both codes are valid sheet keys for it. Returns null for a code with
+ *  no IP suffix (e.g. Hitachi "TRD 500-11-00"). */
+export function ipTwin(code: string): string | null {
+  if (/2300$/.test(code)) return code.replace(/2300$/, "0000");
+  if (/0000$/.test(code)) return code.replace(/0000$/, "2300");
+  return null;
+}
+
 /** POST /api/pricing/transformer/:code/sheet  { name, mime, data } — upload or replace the sheet. */
 export async function uploadTransformerSheet(req: Request, res: Response) {
   try {
     const code = String(req.params.code || "").trim();
     if (!code) return res.status(400).json({ error: "Missing transformer code." });
-    const tr = await prisma.transformerPrice.findUnique({ where: { code }, select: { id: true } });
+    // Accept the code itself OR its IP twin — a transformer's price row stores one of the two IP
+    // codes, but a sheet may be uploaded for either the IP23 (…2300) or IP00 (…0000) variant.
+    const twin = ipTwin(code);
+    const tr = await prisma.transformerPrice.findFirst({
+      where: { code: { in: twin ? [code, twin] : [code] } }, select: { id: true },
+    });
     if (!tr) return res.status(404).json({ error: "No transformer with that code." });
 
     const { name, mime, data } = sheetSchema.parse(req.body);

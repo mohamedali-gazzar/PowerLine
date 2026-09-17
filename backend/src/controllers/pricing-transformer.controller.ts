@@ -10,6 +10,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { fail } from "../lib/http";
 import { publishCurrentPricesDetailed } from "./pricing.controller";
+import { ipTwin } from "./pricing-transformer-sheet.controller";
 
 export const TRANSFORMER_DEFAULT_FACTOR = 0.95;
 
@@ -43,17 +44,25 @@ export async function listTransformerPrices(req: Request, res: Response) {
       prisma.transformerPrice.count({ where }),
       getTransformerFactor(),
     ]);
-    // Tag each row with whether an uploaded technical sheet exists (one query for the page).
+    // Which technical sheets are uploaded — for each row's own code AND its IP twin, since one
+    // transformer can carry both an IP23 (…2300) and an IP00 (…0000) datasheet. `sheetCodes` lets
+    // the UI/offer show the right variant; `hasSheet` stays the row's own-code flag.
+    const wanted = new Set<string>();
+    for (const r of rows) {
+      wanted.add(r.code);
+      const twin = ipTwin(r.code);
+      if (twin) wanted.add(twin);
+    }
     const withSheet = new Set(
       (
         await prisma.transformerSheet.findMany({
-          where: { code: { in: rows.map((r) => r.code) } },
+          where: { code: { in: [...wanted] } },
           select: { code: true },
         })
       ).map((s) => s.code),
     );
     const tagged = rows.map((r) => ({ ...r, hasSheet: withSheet.has(r.code) }));
-    res.json({ rows: tagged, total, page, take, factor });
+    res.json({ rows: tagged, total, page, take, factor, sheetCodes: [...withSheet] });
   } catch (e) {
     fail(res, e);
   }

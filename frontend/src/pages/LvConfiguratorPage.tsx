@@ -4904,13 +4904,13 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   // Transformer catalogue — needed to map each transformer config to its real code and to learn
   // whether a technical sheet has been uploaded for it. Fetched once when there are transformers;
   // a failure falls back to an empty list (built-in datasheet / note still render).
-  const [trCatalog, setTrCatalog] = useState<{ rows: TransformerRow[] } | null>(null);
+  const [trCatalog, setTrCatalog] = useState<{ rows: TransformerRow[]; sheetCodes: string[] } | null>(null);
   useEffect(() => {
     if (!trPanels.length) return;
     let alive = true;
     api.pricing.transformerList({ activeOnly: true, take: 1000 })
-      .then((r) => { if (alive) setTrCatalog({ rows: r.rows }); })
-      .catch(() => { if (alive) setTrCatalog({ rows: [] }); });
+      .then((r) => { if (alive) setTrCatalog({ rows: r.rows, sheetCodes: r.sheetCodes ?? [] }); })
+      .catch(() => { if (alive) setTrCatalog({ rows: [], sheetCodes: [] }); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trPanels.length]);
@@ -4980,19 +4980,21 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
               // dry transformer at a standard 11/22 kV rating.
               const dry = (c.insulation || "").trim().toLowerCase() === "dry";
               const tech = dry ? findTransformerTech(c.primaryKv, c.ratingKva) : null;
-              // Match this config to a catalogue row → its real code + whether a sheet is uploaded.
+              // Match this config to a catalogue row → its code. The code + the uploaded sheet both
+              // follow the IP toggle: standalone uses the "…2300" code, inside-kiosk the "…0000".
               const row = trCatalog?.rows.find((r) =>
                 r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation);
               const coverCode = row?.code ? trDisplayCode(row.code, insideKiosk) : (tech ? trModel(tech, insideKiosk) : "");
+              const hasUploaded = !!coverCode && (trCatalog?.sheetCodes.includes(coverCode) ?? false) && !!row;
               const desc = [c.ratingKva ? `${c.ratingKva} kVA` : null, c.primaryKv ? `${c.primaryKv} kV` : null, c.insulation ? `${c.insulation} type` : null].filter(Boolean).join(" · ");
               return (
                 <Fragment key={p.id}>
                   <TransformerCover config={c} code={coverCode} insideKiosk={insideKiosk} index={trPos[p.id]} total={trPanels.length} project={s.project?.name || ""} />
                   {trCatalog == null ? (
                     <div className="a4-sheet p-6"><div className="skeleton h-[260mm] w-full rounded-lg" /></div>
-                  ) : row?.hasSheet ? (
-                    // An uploaded technical sheet takes precedence over the built-in datasheet.
-                    <UploadedTransformerSheet code={row.code} />
+                  ) : hasUploaded ? (
+                    // An uploaded technical sheet (for this IP variant) takes precedence over the built-in datasheet.
+                    <UploadedTransformerSheet code={coverCode} />
                   ) : tech ? (
                     <TransformerTechnicalSheet t={tech} insideKiosk={insideKiosk} />
                   ) : (

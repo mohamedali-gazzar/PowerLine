@@ -962,11 +962,19 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-/** The "Technical" cell for one transformer row: a download icon when a sheet is uploaded (plus
- *  replace / remove for admins), otherwise a dash and — for admins — an Upload button. Sheets are
- *  PDFs stored in the database, keyed by the transformer code. */
-function TransformerSheetCell({ code, hasSheet, canEdit, onChanged }: {
-  code: string; hasSheet: boolean; canEdit: boolean; onChanged: () => void;
+/** The two IP-variant codes for a PDTR transformer — IP23 (standalone, "…2300") and IP00 (inside a
+ *  kiosk, "…0000") — or null for a code without an IP suffix (e.g. Hitachi "TRD 500-11-00"). */
+function ipVariants(code: string): { ip23: string; ip00: string } | null {
+  if (/2300$/.test(code)) return { ip23: code, ip00: code.replace(/2300$/, "0000") };
+  if (/0000$/.test(code)) return { ip23: code.replace(/0000$/, "2300"), ip00: code };
+  return null;
+}
+
+/** One technical-sheet slot for a single transformer code: a labelled Download when a sheet is
+ *  uploaded (plus replace / remove for admins), otherwise a dash and — for admins — an Upload
+ *  button. `label` (e.g. "IP23") prefixes the slot when a row has more than one. */
+function SheetSlot({ code, label, present, canEdit, onChanged }: {
+  code: string; label?: string; present: boolean; canEdit: boolean; onChanged: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -996,10 +1004,11 @@ function TransformerSheetCell({ code, hasSheet, canEdit, onChanged }: {
 
   return (
     <div className="flex items-center justify-end gap-1.5">
+      {label && <span className="w-9 shrink-0 text-right text-[10px] font-bold uppercase tracking-wide text-muted">{label}</span>}
       {err && <span className="text-[10px] font-bold text-red-600" title={err}>!</span>}
-      {hasSheet ? (
+      {present ? (
         <>
-          <a href={api.pricing.transformerSheetLink(code, true)} title="Download the technical sheet (PDF)"
+          <a href={api.pricing.transformerSheetLink(code, true)} title={`Download the ${code} datasheet (PDF)`}
             className="inline-flex items-center gap-1 rounded-md border border-brand/40 bg-brand-light px-2 py-1 text-[11px] font-bold text-brand-dark transition hover:bg-brand hover:text-white">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -1034,11 +1043,28 @@ function TransformerSheetCell({ code, hasSheet, canEdit, onChanged }: {
   );
 }
 
+/** The "Technical" cell for one transformer row. A PDTR transformer has two datasheets — one per
+ *  IP context — so it shows two slots (IP23 standalone / IP00 inside-kiosk), keyed by the two IP
+ *  codes; any other transformer (e.g. Hitachi) shows a single slot keyed by its own code. */
+function TransformerSheetCell({ code, sheetSet, canEdit, onChanged }: {
+  code: string; sheetSet: Set<string>; canEdit: boolean; onChanged: () => void;
+}) {
+  const v = ipVariants(code);
+  if (!v) return <SheetSlot code={code} present={sheetSet.has(code)} canEdit={canEdit} onChanged={onChanged} />;
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <SheetSlot label="IP23" code={v.ip23} present={sheetSet.has(v.ip23)} canEdit={canEdit} onChanged={onChanged} />
+      <SheetSlot label="IP00" code={v.ip00} present={sheetSet.has(v.ip00)} canEdit={canEdit} onChanged={onChanged} />
+    </div>
+  );
+}
+
 /** The Transformer price database tab: a factor (selling = cost / factor), the Excel round-trip
  *  (download / upload / preview / apply), and a READ-ONLY table. No inline add/edit — the Excel
  *  file is the source of truth. */
 function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged: () => void }) {
   const [rows, setRows] = useState<TransformerRow[] | null>(null);
+  const [sheetSet, setSheetSet] = useState<Set<string>>(new Set());
   const [factor, setFactor] = useState(0.95);
   const [factorDraft, setFactorDraft] = useState("0.95");
   const [q, setQ] = useState("");
@@ -1048,6 +1074,7 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
   const load = async () => {
     const r = await api.pricing.transformerList({ activeOnly: true, take: 1000, q: q.trim() });
     setRows(r.rows);
+    setSheetSet(new Set(r.sheetCodes ?? []));
     setFactor(r.factor);
     setFactorDraft(String(r.factor));
   };
@@ -1132,7 +1159,7 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
                     <td className="px-4 py-2 text-right">{r.costEgp.toLocaleString()}</td>
                     <td className="px-4 py-2 text-right font-semibold text-brand-dark">{Math.round(selling(r.costEgp)).toLocaleString()}</td>
                     <td className="px-4 py-2 text-right">
-                      <TransformerSheetCell code={r.code} hasSheet={!!r.hasSheet} canEdit={canEdit} onChanged={load} />
+                      <TransformerSheetCell code={r.code} sheetSet={sheetSet} canEdit={canEdit} onChanged={load} />
                     </td>
                   </tr>
                 ))}
