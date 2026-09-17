@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**Fixed: a standalone transformer showed the wrong (inside-kiosk) code.**
+
+A **standalone** transformer was showing the **inside-kiosk** code (ending `0000`) instead of its own **IP23** code (ending `2300`). The code now follows the **Standalone / Inside-kiosk** switch: standalone → `…2300`, inside a kiosk → `…0000`. Example: a standalone 11 kV 1000 kVA Powerline now reads **PDTR1110012300** (was PDTR1110010000). This is fixed everywhere the code shows — the live panel card, the Copy button, and the technical-offer cover. Frontend only.
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **Clearer "Download" on the Transformers price list.**
 
 The download for an uploaded transformer datasheet is now a clearly-labelled **⬇ Download** button on the row (it was a small unlabelled icon before), so every transformer that has a sheet shows an obvious way to download it. No change to how it works — just easier to see.

@@ -148,3 +148,13 @@ export function trModel(t: TransformerTech, insideKiosk: boolean): string {
 export function trEnclosureIp(insideKiosk: boolean): string {
   return insideKiosk ? "IP00" : "IP23";
 }
+
+/** A PDTR transformer code as it should read for the chosen IP context. PDTR codes end in an IP
+ *  suffix — "…2300" (IP23, standalone) or "…0000" (IP00, inside a kiosk) — so swap it to match
+ *  the Standalone / Inside-kiosk choice regardless of which one the price list stored. Non-PDTR
+ *  codes (e.g. Hitachi "TRD 500-11-00") don't carry the suffix and are returned unchanged. */
+export function trDisplayCode(code: string, insideKiosk: boolean): string {
+  return /(?:2300|0000)$/.test(code)
+    ? code.replace(/(?:2300|0000)$/, insideKiosk ? "0000" : "2300")
+    : code;
+}

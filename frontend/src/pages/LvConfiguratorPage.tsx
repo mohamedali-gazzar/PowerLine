@@ -56,7 +56,7 @@ import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
 import MvTransformerPanelEditor, { DEFAULT_TRANSFORMER_CONFIG } from "../components/MvTransformerPanelEditor";
 import { DEFAULT_RMU_CONFIG, rmuShortCode } from "../components/RmuConfigForm";
 import { TransformerCover, TransformerTechnicalSheet } from "../components/TransformerTechnicalSheet";
-import { findTransformerTech, trModel } from "../components/transformerTechData";
+import { findTransformerTech, trModel, trDisplayCode } from "../components/transformerTechData";
 import type { PdfPageImage } from "../lv/renderPdfPages";
 import OfferView from "../components/OfferView";
 import type { GeneratedOffer, RmuConfigInput, TransformerConfigInput } from "../types";
@@ -4983,7 +4983,7 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
               // Match this config to a catalogue row → its real code + whether a sheet is uploaded.
               const row = trCatalog?.rows.find((r) =>
                 r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation);
-              const coverCode = row?.code || (tech ? trModel(tech, insideKiosk) : "");
+              const coverCode = row?.code ? trDisplayCode(row.code, insideKiosk) : (tech ? trModel(tech, insideKiosk) : "");
               const desc = [c.ratingKva ? `${c.ratingKva} kVA` : null, c.primaryKv ? `${c.primaryKv} kV` : null, c.insulation ? `${c.insulation} type` : null].filter(Boolean).join(" · ");
               return (
                 <Fragment key={p.id}>

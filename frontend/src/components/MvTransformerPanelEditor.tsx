@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, type TransformerRow } from "../api";
 import { TR_ICON_DRY, TR_ICON_OIL } from "../pcss/data";
+import { trDisplayCode } from "./transformerTechData";
 import type { TransformerConfigInput } from "../types";
 import type { LvPanel } from "../lv/store";
 
@@ -110,6 +111,9 @@ export default function MvTransformerPanelEditor({
   // factor is deliberately NOT applied to.
   const sellingBase = factor > 0 ? Math.round(cost / factor) : cost;
   const selling = sellingBase + transportation;
+  // The code carries the IP suffix, which follows the Standalone (…2300) / Inside-kiosk (…0000)
+  // choice — not whatever suffix the price list happened to store.
+  const displayCode = match ? trDisplayCode(match.code, !!cfg.insideKiosk) : "";
   const loading = rows == null && !error;
 
   return (
@@ -131,8 +135,8 @@ export default function MvTransformerPanelEditor({
         {match ? (
           <div className="mt-3 grid auto-rows-fr grid-cols-3 gap-2 text-sm [&_b]:text-base">
             <div className="col-span-3 flex items-center justify-between gap-2 rounded-lg bg-brand-light p-2.5 text-brand-dark">
-              <div className="min-w-0"><span className="text-sm">Transformer code</span><br /><b className="break-all text-base">{match.code}</b></div>
-              <button type="button" onClick={() => copyCode(match.code)} title="Copy the transformer code"
+              <div className="min-w-0"><span className="text-sm">Transformer code</span><br /><b className="break-all text-base">{displayCode}</b></div>
+              <button type="button" onClick={() => copyCode(displayCode)} title="Copy the transformer code"
                 className="shrink-0 rounded-md border border-brand/30 bg-white/70 px-2.5 py-1 text-xs font-bold text-brand-dark transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/20">
                 {copied ? "✓ Copied" : "⧉ Copy"}
               </button>
