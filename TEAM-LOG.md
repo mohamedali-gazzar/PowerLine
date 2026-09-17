@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**Filters on the Transformer price list.**
+
+The Transformers table now has quick **filter dropdowns** — **Brand, Insulation, IP, Voltage** — beside the search box, so you can narrow the (now long) list instantly, e.g. show only Powerline, only IP23, or only 22 kV. The heading shows "X of Y", a **Clear filters** button resets them, and each dropdown only lists what's actually in the database. Frontend only.
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **Transformer IP also works for codes that put the IP in the middle (Sewedy).**
 
 Some brands write the IP in the **middle** of the code, before a brand suffix — e.g. Sewedy `TRD 1000-22-23-Sewedy` (the `-23` is the IP, then `-Sewedy`). The app now reads the IP correctly for those too, so the code, the IP column and the technical-offer datasheet follow the Standalone / Inside-kiosk switch for **every** brand and code style. (Also built a corrected Transformer Database Excel with a proper IP column — sent to Mohamed separately.)

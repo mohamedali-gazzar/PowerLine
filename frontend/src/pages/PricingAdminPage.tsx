@@ -1118,6 +1118,10 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
   const [factor, setFactor] = useState(0.95);
   const [factorDraft, setFactorDraft] = useState("0.95");
   const [q, setQ] = useState("");
+  const [fBrand, setFBrand] = useState("");
+  const [fIns, setFIns] = useState("");
+  const [fIp, setFIp] = useState("");
+  const [fV, setFV] = useState("");
   const [savingFactor, setSavingFactor] = useState(false);
   const [factorMsg, setFactorMsg] = useState("");
 
@@ -1152,6 +1156,27 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
 
   const selling = (cost: number) => (factor > 0 ? cost / factor : 0);
 
+  // Filter dropdown options (from the loaded rows) and the rows that pass the active filters —
+  // all client-side, so filtering is instant.
+  const filterOpts = useMemo(() => {
+    const rs = rows ?? [];
+    return {
+      brands: [...new Set(rs.map((r) => r.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+      insulations: [...new Set(rs.map((r) => r.insulation).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+      ips: [...new Set(rs.map((r) => ipLabel(r.code)))].sort((a, b) => a.localeCompare(b)),
+      voltages: [...new Set(rs.map((r) => r.primaryKv))].sort((a, b) => a - b),
+    };
+  }, [rows]);
+  const filtered = useMemo(
+    () => (rows ?? []).filter((r) =>
+      (!fBrand || r.brand === fBrand) &&
+      (!fIns || r.insulation === fIns) &&
+      (!fIp || ipLabel(r.code) === fIp) &&
+      (fV === "" || r.primaryKv === Number(fV))),
+    [rows, fBrand, fIns, fIp, fV],
+  );
+  const anyFilter = !!(fBrand || fIns || fIp || fV);
+
   return (
     <div className="space-y-4">
       <div className="card flex flex-wrap items-end justify-between gap-4 p-4">
@@ -1175,11 +1200,36 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
         )}
       </div>
 
-      <input className="input" placeholder="Search a code, brand or insulation…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="flex flex-wrap items-center gap-2">
+        <input className="input min-w-[180px] flex-1" placeholder="Search a code, brand or insulation…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select className="input w-auto cursor-pointer" value={fBrand} onChange={(e) => setFBrand(e.target.value)}>
+          <option value="">All brands</option>
+          {filterOpts.brands.map((b) => <option key={b} value={b}>{b}</option>)}
+        </select>
+        <select className="input w-auto cursor-pointer" value={fIns} onChange={(e) => setFIns(e.target.value)}>
+          <option value="">All insulation</option>
+          {filterOpts.insulations.map((i) => <option key={i} value={i}>{i}</option>)}
+        </select>
+        <select className="input w-auto cursor-pointer" value={fIp} onChange={(e) => setFIp(e.target.value)}>
+          <option value="">All IP</option>
+          {filterOpts.ips.map((i) => <option key={i} value={i}>{i}</option>)}
+        </select>
+        <select className="input w-auto cursor-pointer" value={fV} onChange={(e) => setFV(e.target.value)}>
+          <option value="">All voltages</option>
+          {filterOpts.voltages.map((v) => <option key={v} value={String(v)}>{v} kV</option>)}
+        </select>
+        {anyFilter && (
+          <button type="button" className="btn-ghost whitespace-nowrap" onClick={() => { setFBrand(""); setFIns(""); setFIp(""); setFV(""); }}>
+            Clear filters
+          </button>
+        )}
+      </div>
 
       <div className="card overflow-hidden p-0">
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
-          <h2 className="text-base font-extrabold text-ink">Transformers</h2>
+          <h2 className="text-base font-extrabold text-ink">
+            Transformers{rows ? <span className="ml-2 text-xs font-semibold text-muted">{anyFilter ? `${filtered.length} of ${rows.length}` : rows.length}</span> : null}
+          </h2>
           <span className="text-xs text-muted">Managed by Excel only — download, edit, upload.</span>
         </div>
         {!rows ? (
@@ -1205,7 +1255,9 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={9} className="p-8 text-center text-sm text-muted">No transformers match these filters.</td></tr>
+                ) : filtered.map((r) => (
                   <tr key={r.id} className="border-b border-line/60">
                     <td className="px-4 py-2 font-semibold text-ink">{r.code}</td>
                     <td className="px-4 py-2 text-right">{r.ratingKva.toLocaleString()}</td>
