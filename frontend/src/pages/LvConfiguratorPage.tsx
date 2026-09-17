@@ -4715,7 +4715,9 @@ function mvTransformerPanels(s: LvState): LvPanel[] {
 // The MV commercial standard line for a transformer. IP 23 for a standalone transformer; IP 00
 // when it sits inside a kiosk (the "Inside kiosk" toggle on the Transformer panel).
 function transformerDesc(c: TransformerConfigInput): string {
-  const ip = c.insideKiosk ? "00" : "23";
+  // Oil transformers have no enclosure, so they are always IP00 (never IP23), whatever the toggle says.
+  const isOil = (c.insulation || "").trim().toLowerCase() === "oil";
+  const ip = isOil ? "00" : c.insideKiosk ? "00" : "23";
   return `Supply of ${c.ratingKva ?? ""} KVA ${c.insulation || ""} Type Transformer, ${c.primaryKv ?? ""}/0.4KV, ${c.brand || ""}, IP ${ip} As per specification enclosed.`;
 }
 

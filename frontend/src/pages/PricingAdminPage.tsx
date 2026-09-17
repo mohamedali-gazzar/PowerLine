@@ -1101,9 +1101,9 @@ function TransformerSheetBulkUpload({ onDone }: { onDone: () => void }) {
   );
 }
 
-/** IP rating shown for a transformer code (IP23 / IP00), or a dash when the code has no IP. */
+/** IP rating shown for a transformer code — always IP23 (standalone dry) or IP00 (in-kiosk dry, or oil). */
 function ipLabel(code: string): string {
-  return ipOfCode(code) || "—";
+  return ipOfCode(code);
 }
 
 /** The Transformer price database tab: a factor (selling = cost / factor), the Excel round-trip
@@ -1262,9 +1262,7 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
                     <td className="px-4 py-2">{r.brand}</td>
                     <td className="px-4 py-2">{r.insulation}</td>
                     <td className="px-4 py-2">
-                      {ipLabel(r.code) === "—"
-                        ? <span className="text-muted">—</span>
-                        : <span className="inline-flex rounded-md bg-surface px-2 py-0.5 text-[11px] font-bold text-ink">{ipLabel(r.code)}</span>}
+                      <span className="inline-flex rounded-md bg-surface px-2 py-0.5 text-[11px] font-bold text-ink">{ipLabel(r.code)}</span>
                     </td>
                     <td className="px-4 py-2 text-right">{r.costEgp.toLocaleString()}</td>
                     <td className="px-4 py-2 text-right font-semibold text-brand-dark">{Math.round(selling(r.costEgp)).toLocaleString()}</td>

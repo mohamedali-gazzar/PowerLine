@@ -213,11 +213,14 @@ export function TransformerCover({ config, code, insideKiosk, index, total, proj
   config: TransformerConfigInput; code: string; insideKiosk: boolean; index: number; total: number; project: string;
 }) {
   const fam = trFamily(config.insulation);
+  // Oil transformers have no enclosure, so they are always IP00 (never IP23), whatever the toggle says.
+  const isOil = (config.insulation || "").trim().toLowerCase() === "oil";
+  const protectionIp = isOil ? "IP00" : trEnclosureIp(insideKiosk);
   const specs: { label: string; value: string }[] = [
     { label: "Rated power", value: config.ratingKva ? `${config.ratingKva} kVA` : "—" },
     { label: "Primary voltage", value: config.primaryKv ? `${config.primaryKv} / 0.4 kV` : "—" },
     { label: "Insulation", value: config.insulation ? `${config.insulation} type` : "—" },
-    { label: "Protection", value: trEnclosureIp(insideKiosk) },
+    { label: "Protection", value: protectionIp },
   ];
   return (
     <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>

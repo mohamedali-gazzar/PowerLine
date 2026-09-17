@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**Oil transformers now show IP00 everywhere (they were blank "—" before).**
+
+An oil transformer has no enclosure, so it is always **IP00** — there is no IP23 oil transformer. Previously oil rows showed a blank dash in the IP column. Now every oil row reads **IP00**, in the price list, in the downloaded Excel, and in the offer (both the datasheet cover and the commercial "IP 00" wording). The rule is now simple and applies to every brand and code: **IP23 only for a standalone dry transformer** (whose code carries the standalone marker, `…-23` / `…2300`); **everything else is IP00** — a dry transformer inside a kiosk, and every oil transformer. In the transformer editor, when you pick **Oil** the Standalone/Inside-kiosk switch is replaced by a fixed "IP00 — no enclosure" note, because the switch only matters for dry transformers. Frontend only.
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **"Download current" transformer Excel now includes the IP column.**
 
 The file you get from **Download Current Excel** now has an **IP** column (IP23 / IP00 read from each code; blank for oil), so the sheet you edit already carries the IP. Uploading a file that has an IP column is accepted and reads fine — the IP always comes from the code, so the column is just for your reference (changing it does nothing; change the code to change the IP). Frontend only.

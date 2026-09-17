@@ -4,7 +4,7 @@
 // must still read "PDTR1110012300". These tests pin that rule (regression: it used to show …0000 for
 // standalone) and the sibling model/IP helpers.
 import { describe, it, expect } from "vitest";
-import { trDisplayCode, trModel, trEnclosureIp, findTransformerTech } from "./transformerTechData";
+import { trDisplayCode, trModel, trEnclosureIp, findTransformerTech, ipOfCode } from "./transformerTechData";
 
 describe("trDisplayCode", () => {
   it("standalone reads …2300 even when the price list stored …0000", () => {
@@ -32,6 +32,24 @@ describe("trDisplayCode", () => {
   it("leaves a code with no IP suffix untouched", () => {
     expect(trDisplayCode("TRO 50-11-7", false)).toBe("TRO 50-11-7");
     expect(trDisplayCode("TRO 50-11-7", true)).toBe("TRO 50-11-7");
+  });
+});
+
+describe("ipOfCode", () => {
+  it("IP23 only for a standalone dry code (the …2300 / …-23 suffix)", () => {
+    expect(ipOfCode("PDTR1110012300")).toBe("IP23");
+    expect(ipOfCode("TRD 1000-22-23")).toBe("IP23");
+    expect(ipOfCode("TRD 1000-22-23-Sewedy")).toBe("IP23");
+  });
+  it("IP00 for a dry code inside a kiosk (the …0000 / …-00 suffix)", () => {
+    expect(ipOfCode("PDTR1110010000")).toBe("IP00");
+    expect(ipOfCode("TRD 1000-22-00")).toBe("IP00");
+    expect(ipOfCode("TRD 1000-22-00-Sewedy")).toBe("IP00");
+  });
+  it("IP00 for every oil code (oil has no enclosure — never IP23)", () => {
+    expect(ipOfCode("TRO 50-11-7")).toBe("IP00");
+    expect(ipOfCode("TRO 300-11-Sewedy")).toBe("IP00");
+    expect(ipOfCode("TRO 1250-11")).toBe("IP00");
   });
 });
 

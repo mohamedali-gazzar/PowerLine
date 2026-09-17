@@ -148,6 +148,9 @@ export default function MvTransformerPanelEditor({
           ) ?? null,
     [rows, chosen, cfg.ratingKva, cfg.primaryKv, cfg.brand, cfg.insulation],
   );
+  // Oil transformers have no enclosure, so they are always IP00 — the Standalone/Inside-kiosk
+  // choice (which only swaps a dry transformer between IP23 and IP00) does not apply to them.
+  const isOil = (cfg.insulation || "").trim().toLowerCase() === "oil";
   // The code for the chosen IP context: standalone → "…2300", inside a kiosk → "…0000".
   const displayCode = base ? trDisplayCode(base.code, !!cfg.insideKiosk) : "";
   // Prefer the exact IP-variant row so its OWN price is used (IP23-with-enclosure and IP00-in-kiosk
@@ -268,24 +271,32 @@ export default function MvTransformerPanelEditor({
         </div>
 
         {/* Standalone vs inside-kiosk — sets the technical datasheet's IP (IP23 vs IP00) and
-            the commercial "IP 23 / IP 00" wording. Default is a standalone transformer. */}
+            the commercial "IP 23 / IP 00" wording. Default is a standalone transformer.
+            Oil transformers have no enclosure, so they are locked to IP00 (no toggle). */}
         <div>
           <div className="mb-1.5 text-xs font-bold uppercase tracking-wider text-brand-dark">Installation</div>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { on: false, label: "Standalone", sub: "IP23 enclosure" },
-              { on: true, label: "Inside kiosk", sub: "IP00 (kiosk protects)" },
-            ].map((opt) => {
-              const active = !!cfg.insideKiosk === opt.on;
-              return (
-                <button key={opt.label} type="button" onClick={() => set("insideKiosk", opt.on)}
-                  className={`rounded-lg border p-2.5 text-left transition-all duration-150 ${active ? "border-brand bg-brand-light ring-1 ring-brand/30" : "border-line bg-white hover:border-brand/40 dark:bg-neutral-900"}`}>
-                  <span className="block text-sm font-bold text-ink">{opt.label}</span>
-                  <span className="mt-0.5 block text-xs text-muted">{opt.sub}</span>
-                </button>
-              );
-            })}
-          </div>
+          {isOil ? (
+            <div className="rounded-lg border border-line bg-surface p-2.5">
+              <span className="block text-sm font-bold text-ink">IP00 — no enclosure</span>
+              <span className="mt-0.5 block text-xs text-muted">Oil transformers have no enclosure, so they are always IP00.</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { on: false, label: "Standalone", sub: "IP23 enclosure" },
+                { on: true, label: "Inside kiosk", sub: "IP00 (kiosk protects)" },
+              ].map((opt) => {
+                const active = !!cfg.insideKiosk === opt.on;
+                return (
+                  <button key={opt.label} type="button" onClick={() => set("insideKiosk", opt.on)}
+                    className={`rounded-lg border p-2.5 text-left transition-all duration-150 ${active ? "border-brand bg-brand-light ring-1 ring-brand/30" : "border-line bg-white hover:border-brand/40 dark:bg-neutral-900"}`}>
+                    <span className="block text-sm font-bold text-ink">{opt.label}</span>
+                    <span className="mt-0.5 block text-xs text-muted">{opt.sub}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
