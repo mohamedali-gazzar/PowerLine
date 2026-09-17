@@ -25,6 +25,10 @@ describe("trDisplayCode", () => {
     expect(trDisplayCode("TRD 1000-22-23", true)).toBe("TRD 1000-22-00");
     expect(trDisplayCode("TRD 1000-22-23", false)).toBe("TRD 1000-22-23");
   });
+  it("handles the IP mid-code, before a brand suffix (e.g. Sewedy)", () => {
+    expect(trDisplayCode("TRD 1000-22-00-Sewedy", false)).toBe("TRD 1000-22-23-Sewedy");
+    expect(trDisplayCode("TRD 1000-22-23-Sewedy", true)).toBe("TRD 1000-22-00-Sewedy");
+  });
   it("leaves a code with no IP suffix untouched", () => {
     expect(trDisplayCode("TRO 50-11-7", false)).toBe("TRO 50-11-7");
     expect(trDisplayCode("TRO 50-11-7", true)).toBe("TRO 50-11-7");

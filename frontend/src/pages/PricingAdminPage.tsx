@@ -1104,8 +1104,8 @@ function TransformerSheetBulkUpload({ onDone }: { onDone: () => void }) {
  *  (e.g. Hitachi "TRD 1000-22-23"): IP23 (standalone) / IP00 (inside a kiosk). Codes without an IP
  *  suffix show a dash. */
 function ipLabel(code: string): string {
-  if (/2300$/.test(code) || /-23$/.test(code)) return "IP23";
-  if (/0000$/.test(code) || /-00$/.test(code)) return "IP00";
+  if (/2300$/.test(code) || /-23(?=-|$)/.test(code)) return "IP23";
+  if (/0000$/.test(code) || /-00(?=-|$)/.test(code)) return "IP00";
   return "—";
 }
 

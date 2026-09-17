@@ -156,7 +156,8 @@ export function trEnclosureIp(insideKiosk: boolean): string {
 export function trDisplayCode(code: string, insideKiosk: boolean): string {
   // Powerline form: the last four digits are the IP suffix.
   if (/(?:2300|0000)$/.test(code)) return code.replace(/(?:2300|0000)$/, insideKiosk ? "0000" : "2300");
-  // Dash form: the trailing "-23" / "-00" is the IP suffix.
-  if (/-(?:00|23)$/.test(code)) return code.replace(/-(?:00|23)$/, insideKiosk ? "-00" : "-23");
+  // Dash form: a "-23" / "-00" segment, at the end (Hitachi "TRD 1000-22-23") or before a brand
+  // suffix (Sewedy "TRD 1000-22-23-Sewedy").
+  if (/-(?:00|23)(?=-|$)/.test(code)) return code.replace(/-(?:00|23)(?=-|$)/, insideKiosk ? "-00" : "-23");
   return code;
 }

@@ -32,8 +32,8 @@ const INLINE_OK = new Set([
 export function ipTwin(code: string): string | null {
   if (/2300$/.test(code)) return code.replace(/2300$/, "0000");
   if (/0000$/.test(code)) return code.replace(/0000$/, "2300");
-  if (/-23$/.test(code)) return code.replace(/-23$/, "-00");
-  if (/-00$/.test(code)) return code.replace(/-00$/, "-23");
+  if (/-23(?=-|$)/.test(code)) return code.replace(/-23(?=-|$)/, "-00");
+  if (/-00(?=-|$)/.test(code)) return code.replace(/-00(?=-|$)/, "-23");
   return null;
 }
 
