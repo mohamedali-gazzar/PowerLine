@@ -149,12 +149,14 @@ export function trEnclosureIp(insideKiosk: boolean): string {
   return insideKiosk ? "IP00" : "IP23";
 }
 
-/** A PDTR transformer code as it should read for the chosen IP context. PDTR codes end in an IP
- *  suffix — "…2300" (IP23, standalone) or "…0000" (IP00, inside a kiosk) — so swap it to match
- *  the Standalone / Inside-kiosk choice regardless of which one the price list stored. Non-PDTR
- *  codes (e.g. Hitachi "TRD 500-11-00") don't carry the suffix and are returned unchanged. */
+/** A transformer code as it should read for the chosen IP context. Codes carry an IP suffix in one
+ *  of two shapes: Powerline "…2300" (IP23) / "…0000" (IP00), or the dash form used by e.g. Hitachi
+ *  "TRD 1000-22-23" (IP23) / "TRD 1000-22-00" (IP00). Swap it to match the Standalone / Inside-kiosk
+ *  choice, whichever variant the price list stored. A code with no IP suffix is returned unchanged. */
 export function trDisplayCode(code: string, insideKiosk: boolean): string {
-  return /(?:2300|0000)$/.test(code)
-    ? code.replace(/(?:2300|0000)$/, insideKiosk ? "0000" : "2300")
-    : code;
+  // Powerline form: the last four digits are the IP suffix.
+  if (/(?:2300|0000)$/.test(code)) return code.replace(/(?:2300|0000)$/, insideKiosk ? "0000" : "2300");
+  // Dash form: the trailing "-23" / "-00" is the IP suffix.
+  if (/-(?:00|23)$/.test(code)) return code.replace(/-(?:00|23)$/, insideKiosk ? "-00" : "-23");
+  return code;
 }

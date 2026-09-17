@@ -25,13 +25,15 @@ const INLINE_OK = new Set([
   "application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp",
 ]);
 
-/** A PDTR code's IP twin: "…2300" (IP23, standalone) ↔ "…0000" (IP00, inside a kiosk). One
- *  transformer is a single price-list row (stored as the "…0000" code), but it has two datasheets
- *  — one per IP context — so both codes are valid sheet keys for it. Returns null for a code with
- *  no IP suffix (e.g. Hitachi "TRD 500-11-00"). */
+/** A code's IP twin — the same transformer's other IP variant. Two suffix shapes: Powerline
+ *  "…2300" (IP23) ↔ "…0000" (IP00); dash form (e.g. Hitachi) "…-23" ↔ "…-00". A transformer may be
+ *  stored under just one variant, so its twin is still a valid sheet key. Null when there's no IP
+ *  suffix. */
 export function ipTwin(code: string): string | null {
   if (/2300$/.test(code)) return code.replace(/2300$/, "0000");
   if (/0000$/.test(code)) return code.replace(/0000$/, "2300");
+  if (/-23$/.test(code)) return code.replace(/-23$/, "-00");
+  if (/-00$/.test(code)) return code.replace(/-00$/, "-23");
   return null;
 }
 

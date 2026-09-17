@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**Fixed the transformer code for brands that write IP a different way (e.g. Hitachi).**
+
+A **standalone (IP23)** Hitachi transformer was showing its **inside-kiosk (IP00)** code — e.g. `TRD 1000-22-00` instead of `TRD 1000-22-23`. Hitachi codes end in **`-23`** (IP23) / **`-00`** (IP00), a different shape from Powerline's (`…2300` / `…0000`); the app now understands **both**. So the transformer code, the IP column, and the **datasheet shown in the technical offer** all follow the Standalone / Inside-kiosk switch for every brand — upload a datasheet for `TRD 1000-22-23` and it appears in the offer for the standalone version. Frontend + a one-line backend tweak (the upload accepts either IP code).
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **Transformer price list: an IP column.**
 
 The Transformers table has a new **IP** column — **IP23** for the standalone version (code ending `2300`) and **IP00** for the inside-kiosk version (code ending `0000`), so the two versions of a transformer are easy to tell apart. Other transformers (e.g. Hitachi) show a dash. Frontend only.

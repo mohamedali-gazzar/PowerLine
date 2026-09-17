@@ -18,9 +18,16 @@ describe("trDisplayCode", () => {
   it("standalone keeps a …2300 code as-is", () => {
     expect(trDisplayCode("PDTR1110012300", false)).toBe("PDTR1110012300");
   });
-  it("leaves a non-PDTR code (no IP suffix) untouched", () => {
-    expect(trDisplayCode("TRD 500-11-00", false)).toBe("TRD 500-11-00");
-    expect(trDisplayCode("TRD 500-11-00", true)).toBe("TRD 500-11-00");
+  it("handles the dash form (e.g. Hitachi TRD …-00 / …-23)", () => {
+    // A "…-00" (IP00) code reads as "…-23" for a standalone transformer.
+    expect(trDisplayCode("TRD 1000-22-00", false)).toBe("TRD 1000-22-23");
+    expect(trDisplayCode("TRD 1000-22-00", true)).toBe("TRD 1000-22-00");
+    expect(trDisplayCode("TRD 1000-22-23", true)).toBe("TRD 1000-22-00");
+    expect(trDisplayCode("TRD 1000-22-23", false)).toBe("TRD 1000-22-23");
+  });
+  it("leaves a code with no IP suffix untouched", () => {
+    expect(trDisplayCode("TRO 50-11-7", false)).toBe("TRO 50-11-7");
+    expect(trDisplayCode("TRO 50-11-7", true)).toBe("TRO 50-11-7");
   });
 });
 
