@@ -16,6 +16,7 @@ import LvExcelImport from "../pricing/LvExcelImport";
 import TransformerExcelImport from "../pricing/TransformerExcelImport";
 import RmuExcelImport from "../pricing/RmuExcelImport";
 import LvCombosPanel from "../pricing/LvCombosPanel";
+import { ipOfCode } from "../components/transformerTechData";
 import { useDialogs } from "../components/ConfirmModal";
 
 // Price list — the owner-facing screen.
@@ -1100,13 +1101,9 @@ function TransformerSheetBulkUpload({ onDone }: { onDone: () => void }) {
   );
 }
 
-/** IP rating read from a code's suffix — Powerline "…2300"/"…0000" or the dash form "…-23"/"…-00"
- *  (e.g. Hitachi "TRD 1000-22-23"): IP23 (standalone) / IP00 (inside a kiosk). Codes without an IP
- *  suffix show a dash. */
+/** IP rating shown for a transformer code (IP23 / IP00), or a dash when the code has no IP. */
 function ipLabel(code: string): string {
-  if (/2300$/.test(code) || /-23(?=-|$)/.test(code)) return "IP23";
-  if (/0000$/.test(code) || /-00(?=-|$)/.test(code)) return "IP00";
-  return "—";
+  return ipOfCode(code) || "—";
 }
 
 /** The Transformer price database tab: a factor (selling = cost / factor), the Excel round-trip

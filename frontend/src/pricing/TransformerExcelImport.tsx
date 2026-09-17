@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { api, type TransformerImportPreview, type TransformerImportRow, type TransformerRow } from "../api";
+import { ipOfCode } from "../components/transformerTechData";
 
 /** The download layout — the owner's own sheet columns, so a downloaded file looks like theirs.
  *  "Cost Price (USD)" is what the database stores; "Selling Price (USD)" is derived (cost / factor)
@@ -18,6 +19,7 @@ const COLUMNS = [
   "Code",
   "Transformer brand",
   "Insulation type",
+  "IP",
 ] as const;
 
 const flat = (s: string) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -117,7 +119,7 @@ export default function TransformerExcelImport({ onApplied }: { onApplied: () =>
       }
       const header = COLUMNS as unknown as string[];
       // Cost is what we store; Selling = cost / factor, for the reader's reference only.
-      const body = out.map((r) => [r.ratingKva, r.primaryKv, r.costEgp, factor > 0 ? Math.round(r.costEgp / factor) : 0, r.code, r.brand, r.insulation]);
+      const body = out.map((r) => [r.ratingKva, r.primaryKv, r.costEgp, factor > 0 ? Math.round(r.costEgp / factor) : 0, r.code, r.brand, r.insulation, ipOfCode(r.code)]);
       const ws = XLSX.utils.aoa_to_sheet([header, ...body]);
       ws["!cols"] = header.map((c, i) => ({
         wch: Math.max(12, Math.min(40, body.reduce((m, row) => Math.max(m, String(row[i] ?? "").length), c.length) + 2)),

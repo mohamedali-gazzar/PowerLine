@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**"Download current" transformer Excel now includes the IP column.**
+
+The file you get from **Download Current Excel** now has an **IP** column (IP23 / IP00 read from each code; blank for oil), so the sheet you edit already carries the IP. Uploading a file that has an IP column is accepted and reads fine — the IP always comes from the code, so the column is just for your reference (changing it does nothing; change the code to change the IP). Frontend only.
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **Filters on the Transformer price list.**
 
 The Transformers table now has quick **filter dropdowns** — **Brand, Insulation, IP, Voltage** — beside the search box, so you can narrow the (now long) list instantly, e.g. show only Powerline, only IP23, or only 22 kV. The heading shows "X of Y", a **Clear filters** button resets them, and each dropdown only lists what's actually in the database. Frontend only.

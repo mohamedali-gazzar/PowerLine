@@ -161,3 +161,11 @@ export function trDisplayCode(code: string, insideKiosk: boolean): string {
   if (/-(?:00|23)(?=-|$)/.test(code)) return code.replace(/-(?:00|23)(?=-|$)/, insideKiosk ? "-00" : "-23");
   return code;
 }
+
+/** The IP rating carried by a transformer code — "IP23" (standalone) / "IP00" (inside a kiosk), or
+ *  "" when the code has no IP suffix (e.g. oil transformers). Handles both suffix shapes. */
+export function ipOfCode(code: string): "IP23" | "IP00" | "" {
+  if (/2300$/.test(code) || /-23(?=-|$)/.test(code)) return "IP23";
+  if (/0000$/.test(code) || /-00(?=-|$)/.test(code)) return "IP00";
+  return "";
+}
