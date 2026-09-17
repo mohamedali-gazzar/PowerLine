@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**Transformer price list: an IP column.**
+
+The Transformers table has a new **IP** column — **IP23** for the standalone version (code ending `2300`) and **IP00** for the inside-kiosk version (code ending `0000`), so the two versions of a transformer are easy to tell apart. Other transformers (e.g. Hitachi) show a dash. Frontend only.
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **Transformer choices follow the database, and each code is its own item.**
 
 - **Dropdowns show only what exists.** Pick a brand and the Rating / Voltage lists show only that brand's real options — Powerline shows just its 6 ratings, and Oil is shown but **locked** ("Not available for Powerline"). Add an oil transformer or a new rating to the transformer database and it appears automatically. Works for every brand (the database is the source of truth).

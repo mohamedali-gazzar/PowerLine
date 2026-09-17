@@ -1100,6 +1100,14 @@ function TransformerSheetBulkUpload({ onDone }: { onDone: () => void }) {
   );
 }
 
+/** IP rating read from a PDTR code's suffix: "…2300" → IP23 (standalone), "…0000" → IP00 (inside a
+ *  kiosk). Codes without an IP suffix (e.g. Hitachi "TRD 500-11-00") show a dash. */
+function ipLabel(code: string): string {
+  if (/2300$/.test(code)) return "IP23";
+  if (/0000$/.test(code)) return "IP00";
+  return "—";
+}
+
 /** The Transformer price database tab: a factor (selling = cost / factor), the Excel round-trip
  *  (download / upload / preview / apply), and a READ-ONLY table. No inline add/edit — the Excel
  *  file is the source of truth. */
@@ -1189,6 +1197,7 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
                   <th className="px-4 py-2 text-right">Voltage (kV)</th>
                   <th className="px-4 py-2">Brand</th>
                   <th className="px-4 py-2">Insulation</th>
+                  <th className="px-4 py-2">IP</th>
                   <th className="px-4 py-2 text-right">Cost (USD)</th>
                   <th className="px-4 py-2 text-right">Selling (USD)</th>
                   <th className="px-4 py-2 text-right">Technical</th>
@@ -1202,6 +1211,11 @@ function TransformerPrices({ canEdit, onChanged }: { canEdit: boolean; onChanged
                     <td className="px-4 py-2 text-right">{r.primaryKv}</td>
                     <td className="px-4 py-2">{r.brand}</td>
                     <td className="px-4 py-2">{r.insulation}</td>
+                    <td className="px-4 py-2">
+                      {ipLabel(r.code) === "—"
+                        ? <span className="text-muted">—</span>
+                        : <span className="inline-flex rounded-md bg-surface px-2 py-0.5 text-[11px] font-bold text-ink">{ipLabel(r.code)}</span>}
+                    </td>
                     <td className="px-4 py-2 text-right">{r.costEgp.toLocaleString()}</td>
                     <td className="px-4 py-2 text-right font-semibold text-brand-dark">{Math.round(selling(r.costEgp)).toLocaleString()}</td>
                     <td className="px-4 py-2 text-right">
