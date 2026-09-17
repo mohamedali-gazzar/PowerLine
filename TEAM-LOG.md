@@ -21,6 +21,12 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-17 · Mohamed's side · Claude
+
+**Clearer "Download" on the Transformers price list.**
+
+The download for an uploaded transformer datasheet is now a clearly-labelled **⬇ Download** button on the row (it was a small unlabelled icon before), so every transformer that has a sheet shows an obvious way to download it. No change to how it works — just easier to see.
+
 ## 2026-09-16 · Mohamed's side · Claude
 
 **Transformer technical sheets: upload once, download from the price list, shown in the offer.**

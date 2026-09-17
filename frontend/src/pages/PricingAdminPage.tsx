@@ -1000,12 +1000,13 @@ function TransformerSheetCell({ code, hasSheet, canEdit, onChanged }: {
       {hasSheet ? (
         <>
           <a href={api.pricing.transformerSheetLink(code, true)} title="Download the technical sheet (PDF)"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-brand-dark transition hover:bg-brand-light">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            className="inline-flex items-center gap-1 rounded-md border border-brand/40 bg-brand-light px-2 py-1 text-[11px] font-bold text-brand-dark transition hover:bg-brand hover:text-white">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
+            Download
           </a>
           {canEdit && (
             <>
