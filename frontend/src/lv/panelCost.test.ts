@@ -224,6 +224,59 @@ describe("the assembly kit percentage", () => {
   });
 });
 
+describe("the Stone-paint enclosure finish adds a fixed USD surcharge (Panels only)", () => {
+  // A clean SR-Basic panel with a 1000 EGP box (kit base 100 = 10%). F.usd = 50, so the
+  // $200 finish = 200 × 50 = 10000 EGP per panel unit.
+  const stonePanel = (over: Partial<LvPanel> = {}) => panel({
+    sizingMode: "panels",
+    panelsSizing: { layout: "Single", family: "SR-Basic", sizing1: "", sizing2: "" },
+    panelItems: [encItem({ egp: 1000 })],
+    ...over,
+  });
+
+  it("is its OWN cost line — the enclosure stays the box price, the finish is separate", () => {
+    const off = calcPanel(stonePanel(), F);
+    expect(off.enclCost).toBe(1000);
+    expect(off.stonePaintCost).toBe(0);
+    const on = calcPanel(stonePanel({ stonePainting: true }), F);
+    expect(on.enclCost).toBe(1000);               // enclosure box unchanged — NOT folded in
+    expect(on.stonePaintCost).toBe(200 * F.usd);  // 10000, shown as its own price
+  });
+
+  it("counts a Double layout as two panels — $400, not $200", () => {
+    const single = calcPanel(stonePanel({ stonePainting: true }), F);
+    expect(single.stonePaintCost).toBe(200 * F.usd); // $200 × 1 panel
+    const dbl = calcPanel(stonePanel({
+      stonePainting: true,
+      panelsSizing: { layout: "Double", family: "SR-Basic", sizing1: "", sizing2: "" },
+    }), F);
+    expect(dbl.stonePaintCost).toBe(200 * 2 * F.usd); // $200 × 2 panels = $400
+  });
+
+  it("keeps the surcharge OUT of the assembly-kit base", () => {
+    const on = calcPanel(stonePanel({ stonePainting: true }), F);
+    expect(on.kitsBase).toBe(100); // 10% of the 1000 box only — never of the +10000 finish
+    expect(on.kits).toBe(100);
+  });
+
+  it("flows through to the selling price per unit, so a qty-2 panel carries it twice", () => {
+    // operations 0, factor 0.5, safety 0 → sellUnit = unitCost × 2.
+    const off = calcPanel(stonePanel({ qty: 2 }), F);
+    const on = calcPanel(stonePanel({ qty: 2, stonePainting: true }), F);
+    expect(on.unitCost - off.unitCost).toBe(200 * F.usd);              // +10000 cost
+    expect(on.sellUnit - off.sellUnit).toBeCloseTo(200 * F.usd * 2, 6); // ÷ 0.5
+    expect(on.totalSell - off.totalSell).toBeCloseTo(200 * F.usd * 2 * 2, 6); // × 2 units → $800 worth
+  });
+
+  it("never applies in Cells mode, even if the flag is somehow set", () => {
+    const off = calcPanel(panel({ sizingMode: "cells" }), F);
+    const on = calcPanel(panel({ sizingMode: "cells", stonePainting: true }), F);
+    expect(on.stonePaintCost).toBe(0);
+    expect(on.enclCost).toBe(off.enclCost);
+    expect(on.unitCost).toBe(off.unitCost);
+  });
+});
+
 describe("the Form of separation adds a surcharge to the enclosure kit only", () => {
   // A panel whose enclosure kit BASE is a clean 100 (10% of a 1000 EGP SR-Basic box).
   const withKit = (over: Partial<LvPanel> = {}) => panel({

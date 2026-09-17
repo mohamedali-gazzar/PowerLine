@@ -29,7 +29,7 @@ import {
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpEnclosureRecord, lcpSizes, lcpRealBox,
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog, pickRates, ratesEqual,
+  initialState, calcPanel, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, STONE_PAINT_USD, stonePaintUnits, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog, pickRates, ratesEqual,
   panelLayout, panelNumbers, commonNamePrefix, resortByGroup, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS, DEFAULT_MV_COMMERCIAL,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote, type MvCommercial, type MvPanelType,
@@ -3799,7 +3799,7 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel, onScratch, readOnly }: { s:
                   : [
                       ["Panel Type", sp.panelType, "IP", sp.ip],
                       ["Mounting", sp.mount, "Rating", p.ratingA ? `${p.ratingA} A` : ""],
-                      ["RAL", sp.ral, "Amb. Temp.", p.ambTemp],
+                      ["RAL", p.sizingMode === "panels" && p.stonePainting ? "Stone Painting" : sp.ral, "Amb. Temp.", p.ambTemp],
                       ["Copper", p.copperType, "Neutral", p.neutral],
                       ["Incoming Cables", p.incomingCables, "Earth", p.earth],
                       ["Outgoing Cables", p.outgoingCables, "Form", p.form],
@@ -7754,6 +7754,22 @@ function PanelEditor({ s, p, up, upPanel }: {
         <div className="mt-3 grid flex-1 auto-rows-fr grid-cols-2 gap-2 text-sm [&_b]:text-base sm:grid-cols-3">
           <div className="rounded-lg bg-surface p-2.5">Components<br /><b>{fmtEgp(calc.compCost)} EGP</b></div>
           <div className="rounded-lg bg-surface p-2.5">Enclosure<br /><b>{fmtEgp(calc.enclCost)} EGP</b></div>
+          {/* Stone-paint enclosure finish — PANELS only (not cells / spare). Adds a fixed $200
+              per panel to the enclosure price and prints "Stone Painting" as the RAL in the offer. */}
+          {p.sizingMode === "panels" && !p.spare && (
+            <button type="button" onClick={() => u({ stonePainting: !p.stonePainting })}
+              title={`Stone-paint enclosure finish — adds $${STONE_PAINT_USD} to the enclosure price per panel, and prints "Stone Painting" as the RAL in the Technical offer`}
+              className={`rounded-lg p-2.5 text-left transition ${p.stonePainting ? "bg-brand text-white ring-1 ring-brand" : "bg-surface text-ink hover:bg-brand-tint/60 hover:ring-1 hover:ring-brand/30"}`}>
+              <span className="flex items-center gap-1.5">
+                <span className={`inline-block h-3.5 w-6 rounded-full p-0.5 transition ${p.stonePainting ? "bg-white/85" : "bg-neutral-300"}`}>
+                  <span className={`block h-2.5 w-2.5 rounded-full transition ${p.stonePainting ? "translate-x-2.5 bg-brand" : "bg-white"}`} />
+                </span>
+                Stone Painting
+              </span>
+              <b className="mt-0.5 block">{p.stonePainting ? `${fmtEgp(calc.stonePaintCost)} EGP` : "Off"}</b>
+              {p.stonePainting && <div className="text-[10px] font-normal opacity-80">{stonePaintUnits(p) > 1 ? `$${STONE_PAINT_USD} × ${stonePaintUnits(p)} panels` : `+$${STONE_PAINT_USD} / panel`}</div>}
+            </button>
+          )}
           {/* Enclosure Kit — plus the Form-of-separation surcharge (a % on the kit only). When a form
               above Form 1 adds cost, the cell shows the breakdown: base + form portion. */}
           {calc.kitsForm > 0 ? (

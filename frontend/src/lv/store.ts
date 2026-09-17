@@ -119,6 +119,9 @@ export interface LvPanel {
   copperTool: CopperTool; // RPT-1: per-rating copper lengths (Cells → Copper Tool)
   draft: string;          // RPT-1: per-panel scratchpad — never included in outputs
   highlight?: boolean;    // yellow highlighter toggle in the panel list (UI marker only)
+  stonePainting?: boolean; // Panels mode only: a stone-paint enclosure finish. Adds a fixed
+                           // USD surcharge to the enclosure cost and prints "Stone Painting" in
+                           // the Technical offer's RAL field. Absent/false = off.
   /** Optional grouping in the quotation sidebar — one flat level, one group per panel.
    *  References LvGroup.id in LvState.groups; absent/null = ungrouped. Organisational
    *  only: never affects pricing, sizing or the continuous panel numbering. */
@@ -1346,6 +1349,7 @@ export function mainBusbarAuto(p: LvPanel): number | null {
 export interface PanelCalc {
   compCost: number;
   enclCost: number;
+  stonePaintCost: number; // stone-paint enclosure-finish surcharge (Panels only; 0 otherwise)
   cuConnCost: number;
   busbarCost: number;
   busbarKg: number;
@@ -1392,6 +1396,21 @@ export const BUSWAY_COPPER_FACTOR = 2;
 export const buswayCopperMult = (note?: string): number =>
   /busway/i.test(note ?? "") ? BUSWAY_COPPER_FACTOR : 1;
 
+// Stone-paint enclosure finish: a fixed surcharge in USD added to the enclosure cost, per panel
+// unit (so a qty-2 panel carries it twice). Panels mode only. Editable here without touching the
+// formula. Converted to EGP at the quotation's USD rate before it enters the cost.
+export const STONE_PAINT_USD = 200;
+/** How many physical panels a Panels-mode panel counts as for the stone-paint finish: a Double
+ *  layout is two enclosures side by side, so it counts as 2 (→ $400); a Single counts as 1. */
+export function stonePaintUnits(p: LvPanel): number {
+  return p.panelsSizing?.layout === "Double" ? 2 : 1;
+}
+/** The stone-paint surcharge in EGP for one panel unit — $200 per physical panel (so a Double
+ *  layout is $400), at the quotation's USD rate. Panels mode with the finish switched on only. */
+export function stonePaintEgpOf(p: LvPanel, f: Factors): number {
+  return p.sizingMode === "panels" && p.stonePainting ? STONE_PAINT_USD * stonePaintUnits(p) * f.usd : 0;
+}
+
 export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, number>): PanelCalc {
   // Spare-parts cell: components/enclosures (as rows) + manual copper weight only —
   // no enclosure sizing, kits, connection copper or operations markup.
@@ -1419,7 +1438,7 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
       const unitCostOps = unitCost * (1 + f.operations);   // operations overhead, like a panel
       const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
       const sellUnit = (factor > 0 ? unitCostOps / factor : unitCostOps) * (1 + (f.safetyFactor || 0));
-      return { compCost, enclCost, cuConnCost, busbarCost: 0, busbarKg: 0, kits, kitsBase, kitsForm, cablesCost, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
+      return { compCost, enclCost, stonePaintCost: 0, cuConnCost, busbarCost: 0, busbarKg: 0, kits, kitsBase, kitsForm, cablesCost, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
     }
     let compCost = 0;
     for (const c of p.components) {
@@ -1432,7 +1451,7 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
     const unitCost = compCost + busbarCost;
     const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
     const sellUnit = (factor > 0 ? unitCost / factor : unitCost) * (1 + (f.safetyFactor || 0));
-    return { compCost, enclCost: 0, cuConnCost: 0, busbarCost, busbarKg, kits: 0, kitsBase: 0, kitsForm: 0, cuWeight: 0, unitCost, unitCostOps: unitCost, sellUnit, totalSell: sellUnit * p.qty };
+    return { compCost, enclCost: 0, stonePaintCost: 0, cuConnCost: 0, busbarCost, busbarKg, kits: 0, kitsBase: 0, kitsForm: 0, cuWeight: 0, unitCost, unitCostOps: unitCost, sellUnit, totalSell: sellUnit * p.qty };
   }
   let compCost = 0;
   let cuWeight = 0;
@@ -1478,6 +1497,10 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
       if (r.locked) sideCost += rowCost; // the "Sides" row — kept out of the kit base
     }
   }
+  // Stone-paint enclosure finish (Panels mode only): a fixed USD surcharge that is its OWN cost
+  // line — shown separately from the enclosure box, and NOT part of the assembly-kit base. It is
+  // added straight to the panel unit cost below, so the panel price carries it just the same.
+  const stonePaintCost = stonePaintEgpOf(p, f);
   const cuConnCost = cuWeight * f.copper;
   // Main busbar: auto rule for sheet-metal panels, else the manual entry. Priced by weight ×
   // copper rate × the plating factor (Bare 1 · Raychem 1.02 · Tin-plated 1.05 · Silver 1.15).
@@ -1485,18 +1508,19 @@ export function calcPanel(p: LvPanel, f: Factors, abbDiscounts?: Record<string, 
   // multiplies the busbar copper WEIGHT — so both the KG shown and the cost carry it.
   const busbarKg = (mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) * copperTypeFactor(p.copperType);
   const busbarCost = busbarKg * f.copper;
-  // Kit = a % of the enclosure cost minus the cell Sides, per system (see kitRate).
+  // Kit = a % of the enclosure cost minus the cell Sides, per system (see kitRate). The stone-paint
+  // surcharge is its own line and never part of the enclosure cost, so it stays out of the kit.
   const kitsBase = Math.max(0, enclCost - sideCost) * kitRate(p);
   // Form-of-separation surcharge — a % on the kit only (Form 1 → 0 %, 2a/2b → 5 %, 3a/3b → 10 %,
   // 4a/4b → 15 %). It never touches components, the enclosure box or copper.
   const kitsForm = kitsBase * formKitFactor(p.form, f);
   const kits = kitsBase + kitsForm;
-  const unitCost = compCost + enclCost + cuConnCost + busbarCost + kits;
+  const unitCost = compCost + enclCost + cuConnCost + busbarCost + kits + stonePaintCost;
   const unitCostOps = unitCost * (1 + f.operations);
   // Per-panel selling factor overrides the global (Pricing Settings) when set (> 0).
   const factor = p.sellFactor > 0 ? p.sellFactor : f.factor;
   const sellUnit = (factor > 0 ? unitCostOps / factor : unitCostOps) * (1 + (f.safetyFactor || 0));
-  return { compCost, enclCost, cuConnCost, busbarCost, busbarKg, kits, kitsBase, kitsForm, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
+  return { compCost, enclCost, stonePaintCost, cuConnCost, busbarCost, busbarKg, kits, kitsBase, kitsForm, cuWeight, unitCost, unitCostOps, sellUnit, totalSell: sellUnit * p.qty };
 }
 /**
  * The hand-written Commercial Offer lines, in EGP.

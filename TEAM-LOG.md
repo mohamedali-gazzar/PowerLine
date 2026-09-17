@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**New "Stone Painting" option on LV panels — a $200-per-panel enclosure finish.**
+
+On the LV **Panel cost (live)** card, panels now have an on/off **Stone Painting** button (next to Enclosure). It shows for **panels only** — never cells. Turn it on and:
+
+- It adds **$200 per panel** as its **own separate price line** — the Enclosure box price and the Stone Painting price are shown side by side, not lumped together.
+- A **Double-layout** panel is two enclosures side by side, so it counts as **2 panels → $400** (shown as "$200 × 2 panels"). It also multiplies by the panel quantity, like every other cost.
+- In the **Technical offer**, that panel's **RAL** line prints **"Stone Painting"** instead of the paint colour.
+
+The $200 is added to the panel cost (converted from USD at the quotation's rate) and then flows through the normal markup, exactly like the Form-of-separation surcharge. Frontend only — nothing in the database changed.
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **Transformer cover shows the right brand's series name, and the uploaded datasheet is centred with margins.**
 
 On the transformer technical offer cover, the big series name used to always say **"PDTR Series"** (Powerline's name) no matter the brand. It now follows the brand: Powerline → **PDTR Series**, Sewedy → **ELSEWEDY Series**, Hitachi → **Hitachi Series** (tell me if Hitachi's line has a specific name to show). Two more things came with it:
