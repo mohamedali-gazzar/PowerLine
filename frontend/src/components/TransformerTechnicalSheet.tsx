@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { TransformerConfigInput } from "../types";
 import {
-  type TransformerTech, TR_TECH_BY_KV, TR_TAP_LABELS, trModel, trEnclosureIp,
+  type TransformerTech, TR_TECH_BY_KV, TR_TAP_LABELS, trModel, trEnclosureIp, trSeriesName,
 } from "./transformerTechData";
 
 // Brand orange — same value the LV/RMU offers use for their accents.
@@ -196,11 +196,14 @@ export function TransformerTechnicalSheet({ t, insideKiosk }: { t: TransformerTe
   );
 }
 
-// Family name + tagline for the transformer cover, chosen by insulation type.
-function trFamily(insulation: string): { family: string; tagline: string } {
-  const k = (insulation || "").trim().toLowerCase();
-  if (k === "oil") return { family: "PDTR · Oil", tagline: "Oil-Immersed Distribution Transformer" };
-  return { family: "PDTR Series", tagline: "Cast-Resin Dry-Type Distribution Transformer" };
+// Family name + tagline for the transformer cover: the series name follows the brand, the tagline
+// follows the insulation (cast-resin dry vs oil-immersed).
+function trFamily(brand: string, insulation: string): { family: string; tagline: string } {
+  const oil = (insulation || "").trim().toLowerCase() === "oil";
+  return {
+    family: trSeriesName(brand),
+    tagline: oil ? "Oil-Immersed Distribution Transformer" : "Cast-Resin Dry-Type Distribution Transformer",
+  };
 }
 
 /**
@@ -212,7 +215,7 @@ function trFamily(insulation: string): { family: string; tagline: string } {
 export function TransformerCover({ config, code, insideKiosk, index, total, project }: {
   config: TransformerConfigInput; code: string; insideKiosk: boolean; index: number; total: number; project: string;
 }) {
-  const fam = trFamily(config.insulation);
+  const fam = trFamily(config.brand, config.insulation);
   // Oil transformers have no enclosure, so they are always IP00 (never IP23), whatever the toggle says.
   const isOil = (config.insulation || "").trim().toLowerCase() === "oil";
   const protectionIp = isOil ? "IP00" : trEnclosureIp(insideKiosk);

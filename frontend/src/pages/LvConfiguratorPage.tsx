@@ -4891,7 +4891,9 @@ function UploadedTransformerSheet({ code }: { code: string }) {
   return (
     <>
       {pages.map((pg, i) => (
-        <section key={i} className="a4-sheet overflow-hidden bg-white" style={{ breakAfter: "page" }}>
+        // Inset the datasheet on the page — room at the top and bottom, centred — instead of
+        // bleeding edge-to-edge, so it reads like a framed document.
+        <section key={i} className="a4-sheet flex items-center justify-center overflow-hidden bg-white px-10 py-12" style={{ breakAfter: "page" }}>
           <img src={pg.dataUrl} alt="Transformer technical sheet" className="block w-full" />
         </section>
       ))}
@@ -4978,10 +4980,12 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             if (p.mvType === "transformer" && p.mvTransformerConfig) {
               const c = p.mvTransformerConfig;
               const insideKiosk = !!c.insideKiosk;
-              // The built-in datasheets are Powerline cast-resin DRY units; match a row only for a
-              // dry transformer at a standard 11/22 kV rating.
+              // The built-in datasheet holds POWERLINE's cast-resin dry-type values, so only ever show
+              // it for a Powerline dry transformer at a standard 11/22 kV rating. Other brands (Sewedy,
+              // Hitachi, …) use their own uploaded datasheet, never Powerline's numbers under their name.
               const dry = (c.insulation || "").trim().toLowerCase() === "dry";
-              const tech = dry ? findTransformerTech(c.primaryKv, c.ratingKva) : null;
+              const isPowerline = (c.brand || "").trim().toLowerCase() === "powerline";
+              const tech = dry && isPowerline ? findTransformerTech(c.primaryKv, c.ratingKva) : null;
               // Match this config to a catalogue row → its code. The code + the uploaded sheet both
               // follow the IP toggle: standalone uses the "…2300" code, inside-kiosk the "…0000".
               const row = trCatalog?.rows.find((r) =>

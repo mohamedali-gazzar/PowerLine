@@ -4,7 +4,7 @@
 // must still read "PDTR1110012300". These tests pin that rule (regression: it used to show …0000 for
 // standalone) and the sibling model/IP helpers.
 import { describe, it, expect } from "vitest";
-import { trDisplayCode, trModel, trEnclosureIp, findTransformerTech, ipOfCode } from "./transformerTechData";
+import { trDisplayCode, trModel, trEnclosureIp, findTransformerTech, ipOfCode, trSeriesName } from "./transformerTechData";
 
 describe("trDisplayCode", () => {
   it("standalone reads …2300 even when the price list stored …0000", () => {
@@ -50,6 +50,20 @@ describe("ipOfCode", () => {
     expect(ipOfCode("TRO 50-11-7")).toBe("IP00");
     expect(ipOfCode("TRO 300-11-Sewedy")).toBe("IP00");
     expect(ipOfCode("TRO 1250-11")).toBe("IP00");
+  });
+});
+
+describe("trSeriesName", () => {
+  it("names the cover series after the brand, not always PDTR", () => {
+    expect(trSeriesName("Powerline")).toBe("PDTR Series");
+    expect(trSeriesName("Sewedy")).toBe("ELSEWEDY Series");
+    expect(trSeriesName("Hitachi")).toBe("Hitachi Series");
+    expect(trSeriesName("EgyTravo")).toBe("EgyTravo Series");
+  });
+  it("is case-insensitive and falls back to '<brand> Series' for an unknown brand", () => {
+    expect(trSeriesName("  sewedy ")).toBe("ELSEWEDY Series");
+    expect(trSeriesName("Acme")).toBe("Acme Series");
+    expect(trSeriesName("")).toBe("Cast-Resin Series");
   });
 });
 

@@ -168,3 +168,15 @@ export function trDisplayCode(code: string, insideKiosk: boolean): string {
 export function ipOfCode(code: string): "IP23" | "IP00" {
   return /2300$/.test(code) || /-23(?=-|$)/.test(code) ? "IP23" : "IP00";
 }
+
+/** The product-series name shown on a transformer's cover, chosen by BRAND: Powerline's dry
+ *  cast-resin line is "PDTR", Elsewedy's is "ELSEWEDY", Hitachi's its own, etc. An unknown brand
+ *  falls back to "<brand> Series". Each brand keeps its own capitalisation (ELSEWEDY, Hitachi). */
+export function trSeriesName(brand: string): string {
+  const b = (brand || "").trim().toLowerCase();
+  if (b === "powerline") return "PDTR Series";
+  if (b === "sewedy" || b === "elsewedy") return "ELSEWEDY Series";
+  if (b === "hitachi") return "Hitachi Series";
+  if (b === "egytravo") return "EgyTravo Series";
+  return brand.trim() ? `${brand.trim()} Series` : "Cast-Resin Series";
+}

@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**Transformer cover shows the right brand's series name, and the uploaded datasheet is centred with margins.**
+
+On the transformer technical offer cover, the big series name used to always say **"PDTR Series"** (Powerline's name) no matter the brand. It now follows the brand: Powerline → **PDTR Series**, Sewedy → **ELSEWEDY Series**, Hitachi → **Hitachi Series** (tell me if Hitachi's line has a specific name to show). Two more things came with it:
+
+- **Powerline's built-in datasheet no longer appears under another brand.** Its numbers are Powerline's, so a Sewedy/Hitachi transformer now uses its own uploaded datasheet (or a short note), never Powerline's figures under an Elsewedy name.
+- **An uploaded datasheet now sits inset on the page** — room at the top and bottom, centred — instead of bleeding edge-to-edge, so it reads like a framed document. Frontend only.
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **Transformer ratings on the price list now show plain numbers (no comma).**
 
 On the Transformer price list the **Rating (kVA)** column now reads `1600` instead of `1,600` (and `1000`, `3000`, …). Cost and selling prices keep their thousands separators. Display only — nothing about the stored value or the offers changed. Frontend only.
