@@ -29,7 +29,7 @@ import {
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpEnclosureRecord, lcpSizes, lcpRealBox,
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, STONE_PAINT_USD, stonePaintUnits, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog, pickRates, ratesEqual,
+  initialState, calcPanel, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, STONE_PAINT_USD, stonePaintUnits, mvDefaultName, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog, pickRates, ratesEqual,
   panelLayout, panelNumbers, commonNamePrefix, resortByGroup, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS, DEFAULT_MV_COMMERCIAL,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote, type MvCommercial, type MvPanelType,
@@ -7307,6 +7307,9 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
             const active = p.id === s.selectedId;
             const num = numbers.get(p.id) ?? i + 1;
             const checked = selPanels.has(p.id);
+            // MV panels get a default, still-editable name (RMU-01, Transformer-01, …) instead of
+            // "(unnamed panel)"; plain LV panels have none (mvName === "").
+            const mvName = p.mvType ? mvDefaultName(p, s.panels) : "";
             return (
               <div key={p.id} ref={setRowRef(i)} data-panelrow data-panelid={p.id}
                 {...(canReorder ? rowDragProps(i) : {})}
@@ -7341,20 +7344,20 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
                       </span>
                     ); })()}
                     {renamingId === p.id ? (
-                      <input autoFocus value={p.name} placeholder="(unnamed)" onChange={(e) => upPanel(p.id, { name: e.target.value })}
+                      <input autoFocus value={p.name} placeholder={mvName || "(unnamed)"} onChange={(e) => upPanel(p.id, { name: e.target.value })}
                         onFocus={(e) => e.target.select()}
                         onBlur={() => setRenamingId(null)}
                         onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setRenamingId(null); } }}
                         className="min-w-0 flex-1 rounded border border-brand px-1.5 py-0.5 text-sm font-bold text-ink outline-none" />
                     ) : (
-                      <button onClick={() => up({ selectedId: p.id, activeGroupId: null })} title={p.name.trim() || "(unnamed panel)"} className="min-w-0 text-left">
-                        <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{typeof p.mvType === "string" && <span className="mr-1 rounded bg-brand-light px-1 py-0.5 align-middle text-[9px] font-bold uppercase tracking-wide text-brand-dark">{p.mvType}</span>}{p.name.trim() || "(unnamed panel)"}</div>
+                      <button onClick={() => up({ selectedId: p.id, activeGroupId: null })} title={p.name.trim() || mvName || "(unnamed panel)"} className="min-w-0 text-left">
+                        <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() && !mvName ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{p.name.trim() || mvName || "(unnamed panel)"}</div>
                       </button>
                     )}
                   </div>
                   <div data-nodrag className="ml-auto flex shrink-0 items-center gap-0.5">
                     {hideEditor && (
-                      <button onClick={() => setRenamingId(p.id)} title="Edit name"
+                      <button onClick={() => { if (mvName && !p.name.trim()) upPanel(p.id, { name: mvName }); setRenamingId(p.id); }} title="Edit name"
                         className="shrink-0 rounded p-0.5 text-sm leading-none text-muted transition-colors hover:bg-white hover:text-brand-dark">✎</button>
                     )}
                     {!!p.groupId && groups.some((g) => g.id === p.groupId) && (

@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-17 · Mohamed's side · Claude
 
+**MV package panels get default, editable names — and the type tag is gone.**
+
+On the MV (RMU · Transformer · Kiosk) panel list, panels used to read "(unnamed panel)" with a little type tag in front. Now each panel shows a **default name numbered within its own type** — **RMU-01, RMU-02, Transformer-01, RMU-03, …** — and the type tag is removed (the name already says the type). The names are still **fully editable**: click the pencil and the field is pre-filled with the default so you can adjust it or type your own. Frontend only.
+
+## 2026-09-17 · Mohamed's side · Claude
+
 **New "Stone Painting" option on LV panels — a $200-per-panel enclosure finish.**
 
 On the LV **Panel cost (live)** card, panels now have an on/off **Stone Painting** button (next to Enclosure). It shows for **panels only** — never cells. Turn it on and:

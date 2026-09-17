@@ -235,6 +235,18 @@ export const DEFAULT_MV_COMMERCIAL: MvCommercial = {
  *  Panels tab; ordinary LV panels have none. */
 export type MvPanelType = "kiosk" | "rmu" | "transformer";
 
+/** Human label for an MV panel type. */
+export function mvTypeLabel(t: MvPanelType): string {
+  return t === "rmu" ? "RMU" : t === "transformer" ? "Transformer" : "Kiosk";
+}
+/** The default (still editable) name for an MV panel: "<Type>-NN", numbered within its own type
+ *  in panel order — RMU-01, RMU-02, Transformer-01, RMU-03, …. A plain LV panel returns "". */
+export function mvDefaultName(p: LvPanel, panels: LvPanel[]): string {
+  if (!p.mvType) return "";
+  const nth = panels.filter((x) => x.mvType === p.mvType).findIndex((x) => x.id === p.id);
+  return `${mvTypeLabel(p.mvType)}-${String(nth + 1).padStart(2, "0")}`;
+}
+
 export interface LvState {
   project: LvProject;
   factors: Factors;
