@@ -1169,6 +1169,38 @@ export async function unsubmit(req: Request, res: Response) {
   return transition(req, res);
 }
 
+/**
+ * POST /api/qtns/:id/restore-cancelled — bring a CANCELLED quotation back to DRAFT.
+ *
+ * CANCELLED is otherwise terminal (a superseded revision). This is the one deliberate override,
+ * gated by the admin-only `qtn.restoreCancelled` permission on the route — so only admins reach
+ * here. Distinct from `restore` above, which un-hides a *deleted* quotation.
+ */
+export async function restoreCancelled(req: Request, res: Response) {
+  try {
+    const q = await visibleQtn(req); // admins hold qtn.viewAll, so they can see any cancelled QTN
+    if (!q) return res.status(404).json({ error: "Quotation not found." });
+    const from = qtnStatus(q);
+    if (from !== "CANCELLED") {
+      return res.status(409).json({ error: "Only a cancelled quotation can be restored.", status: from });
+    }
+    const to: QtnStatus = "DRAFT";
+    const actorEmail = req.userEmail ?? "";
+    const common = {
+      qtnId: q.id, qtnNumber: q.number, ownerId: q.ownerId,
+      ownerEmail: q.owner?.email ?? "", actorId: req.userId ?? null, actorEmail,
+    };
+    // Status and audit row move together or not at all.
+    await prisma.$transaction([
+      prisma.lvQtn.update({ where: { id: q.id }, data: statusWrite(to, q.submittedAt) }),
+      prisma.qtnEvent.create({ data: { ...common, action: "RESTORE_CANCELLED", fromStatus: from, toStatus: to, note: "" } }),
+    ]);
+    res.json({ ok: true, status: to, statusLabel: QTN_STATUS_LABEL[to] });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
 /** GET /api/qtns/queue — quotations waiting for approval (needs qtn.approve). */
 export async function queue(req: Request, res: Response) {
   try {

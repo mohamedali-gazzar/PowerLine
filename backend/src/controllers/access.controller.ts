@@ -8,8 +8,10 @@ import { prisma } from "../lib/prisma";
 import { isProtectedOwner } from "../config";
 import { fail } from "../lib/http";
 import {
-  accessOf, PERMS, PERM_LABEL, TIERS, ROLE_PRESETS, inferRole, type Perm, type Tier,
+  accessOf, PERMS, PERM_LABEL, ADMIN_ONLY_PERMS, TIERS, ROLE_PRESETS, inferRole, type Perm, type Tier,
 } from "../middleware/roles";
+
+const isAdminOnlyPerm = (p: Perm) => (ADMIN_ONLY_PERMS as readonly Perm[]).includes(p);
 
 /** GET /api/access/me — what the signed-in user may do. Drives UI gating.
  *  Deliberately server-computed: the JWT lives for 30 days, so the client must
@@ -27,7 +29,7 @@ export async function myAccess(req: Request, res: Response) {
 export async function permCatalogue(_req: Request, res: Response) {
   res.json({
     tiers: TIERS,
-    perms: PERMS.map((key) => ({ key, label: PERM_LABEL[key] })),
+    perms: PERMS.map((key) => ({ key, label: PERM_LABEL[key], adminOnly: isAdminOnlyPerm(key) })),
     roles: ROLE_PRESETS.map((r) => ({ name: r.name, tier: r.tier, perms: r.perms })),
   });
 }
@@ -101,10 +103,11 @@ export async function setAccess(req: Request, res: Response) {
       nextPerms = preset.perms;
       nextRole = preset.name;
     } else if (roleName !== undefined || nextPermsRaw !== undefined) {
-      // Custom (hand-picked) — always an engineer.
+      // Custom (hand-picked) — always an engineer. Admin-only permissions can never be granted
+      // to an engineer, so strip them here even if a crafted request slips them in.
       nextTier = "ENGINEER";
       nextPerms = Array.isArray(nextPermsRaw)
-        ? nextPermsRaw.filter((p): p is Perm => (PERMS as readonly string[]).includes(p))
+        ? nextPermsRaw.filter((p): p is Perm => (PERMS as readonly string[]).includes(p) && !isAdminOnlyPerm(p as Perm))
         : [];
       nextRole = "";
     }

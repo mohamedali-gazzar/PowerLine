@@ -31,7 +31,7 @@ export default function AccessCenterPage() {
   const [gateError, setGateError] = useState("");
   const [users, setUsers] = useState<AccessUser[] | null>(null);
   const [usersError, setUsersError] = useState("");
-  const [permList, setPermList] = useState<{ key: string; label: string }[]>([]);
+  const [permList, setPermList] = useState<{ key: string; label: string; adminOnly?: boolean }[]>([]);
   const [roles, setRoles] = useState<RolePreset[]>(DEFAULT_ROLES);
   const [history, setHistory] = useState<PriceChangeRow[] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
@@ -282,7 +282,7 @@ function UserCard({
 }: {
   user: AccessUser;
   draft: Draft;
-  perms: { key: string; label: string }[];
+  perms: { key: string; label: string; adminOnly?: boolean }[];
   roles: RolePreset[];
   dirty: boolean;
   busy: boolean;
@@ -413,7 +413,9 @@ function UserCard({
           </p>
         ) : (
           <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
-            {perms.map((p) => {
+            {/* Admin-only permissions (e.g. Restore cancelled QTNs) show only for admin roles —
+                they are never grantable to an engineer, so there is nothing to tick there. */}
+            {perms.filter((p) => isAdminRole || !p.adminOnly).map((p) => {
               const t = tick(p.key);
               return (
                 <label

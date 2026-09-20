@@ -388,6 +388,21 @@ export default function LvQtnListPage() {
       setActionErr((e2 as Error).message || `Could not amend ${number}.`);
     }
   };
+  // Un-cancel: bring a CANCELLED quotation back to Draft. Admin-only (qtn.restoreCancelled).
+  const canRestoreCancelledLv = (x: UniRow) =>
+    x.kind === "LV" && x.cancelled && myPerms.includes("qtn.restoreCancelled");
+  const onRestoreCancelledLv = async (e: React.MouseEvent, id: string, number: string) => {
+    e.stopPropagation();
+    if (!(await confirm({
+      title: `Restore ${number}`,
+      message: `${number} is cancelled. Restoring brings it back as a Draft you can edit again — ` +
+        `the newer revision that replaced it (if any) is left as it is.`,
+      confirmLabel: "Restore",
+    }))) return;
+    setActionErr("");
+    try { await api.qtns.restoreCancelled(id); await reload(); }
+    catch (e2) { setActionErr((e2 as Error).message || `Could not restore ${number}.`); }
+  };
 
   // ── RMU actions ───────────────────────────────────────────────────────────────
   // Amend = open the offer to work on it. Duplicate = an independent copy (prices stay
@@ -591,6 +606,10 @@ export default function LvQtnListPage() {
                           <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                             {x.kind === "LV" ? (
                               <>
+                                {canRestoreCancelledLv(x) && (
+                                  <Act title="Restore — bring this cancelled quotation back to Draft"
+                                    onClick={(e) => onRestoreCancelledLv(e, x.id, x.number)}>{RestoreIcon}</Act>
+                                )}
                                 <Act title={canAmendLv(x) ? "Amend — open a new revision (cancels this one)" : "You can't amend this one"}
                                   disabled={!canAmendLv(x)} onClick={(e) => onAmendLv(e, x.id, x.number)}>{AmendIcon}</Act>
                                 <Act title="Duplicate — an independent copy" onClick={(e) => onDuplicateLv(e, x.id)}>{DuplicateIcon}</Act>

@@ -14,6 +14,7 @@ import {
   rename,
   remove,
   restore,
+  restoreCancelled,
   duplicate,
   amend,
   rateDecision,
@@ -49,6 +50,8 @@ router.patch("/:id/number", rename);
 router.delete("/:id", remove); // hides it — never erases; see the controller
 // Undo that. Owner only: the person who can hide one from everybody brings it back.
 router.post("/:id/restore", requirePerm("access.manage"), restore);
+// Un-cancel: bring a CANCELLED quotation back to Draft. Admin-only via qtn.restoreCancelled.
+router.post("/:id/restore-cancelled", requirePerm("qtn.restoreCancelled"), restoreCancelled);
 router.post("/:id/duplicate", duplicate);
 router.post("/:id/amend", amend); // cancels this revision, opens the next one
 router.post("/:id/activity", activity); // accrue active working time (owner/co-owner)

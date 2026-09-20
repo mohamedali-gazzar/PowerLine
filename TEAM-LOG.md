@@ -21,6 +21,17 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-20 · Mohamed's side · Claude
+
+**New admin-only capability: restore a cancelled quotation.**
+
+Cancelled quotations (superseded revisions) used to be permanent — there was no way back. Now:
+
+- In the **Access Center** there's a new permission, **"Restore cancelled QTNs"**. It's **admins only** — it shows for Admin and Section Head, and it's hidden for the engineer roles (Team Leader, Tendering, Powerline); the server refuses to grant it to a non-admin.
+- In the **Offer History**, a **cancelled** quotation now shows a **Restore** button (for admins). Clicking it (after a confirmation) brings that quotation back as a **Draft** to edit again. The newer revision that replaced it, if any, is left untouched.
+
+No database change — the permission rides in the existing access field, and the restore reuses the existing status machine. Full-stack (backend + frontend).
+
 ## 2026-09-17 · Mohamed's side · Claude
 
 **Insert a component BETWEEN two existing rows in a panel's component list.**

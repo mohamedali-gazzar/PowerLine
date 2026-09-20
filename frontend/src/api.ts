@@ -751,6 +751,9 @@ export const api = {
     remove: (id: string) => request<void>(`/qtns/${id}`, { method: "DELETE" }),
     /** Un-hide one. Owner only (access.manage). */
     restore: (id: string) => request<{ ok: true }>(`/qtns/${id}/restore`, { method: "POST" }),
+    /** Un-cancel: bring a CANCELLED quotation back to Draft. Admin-only (qtn.restoreCancelled). */
+    restoreCancelled: (id: string) =>
+      request<{ ok: true; status: QtnStatus; statusLabel: string }>(`/qtns/${id}/restore-cancelled`, { method: "POST" }),
     duplicate: (id: string) =>
       request<QtnRecordDto>(`/qtns/${id}/duplicate`, { method: "POST" }),
     /** Cancel this revision and open the next one, same number. One server call —
@@ -1030,7 +1033,7 @@ export const api = {
     /** What the signed-in user may do. Every gate in the UI reads this. */
     me: () => request<MyAccess>("/access/me"),
     catalogue: () =>
-      request<{ tiers: string[]; perms: { key: string; label: string }[]; roles: RolePreset[] }>("/access/catalogue"),
+      request<{ tiers: string[]; perms: { key: string; label: string; adminOnly?: boolean }[]; roles: RolePreset[] }>("/access/catalogue"),
     users: () => request<{ users: AccessUser[] }>("/access/users"),
     setAccess: (id: string, data: { role?: string; perms?: string[]; notifyByEmail?: boolean }) =>
       request<{ ok: true }>(`/access/users/${id}`, { method: "POST", body: JSON.stringify(data) }),
