@@ -8344,8 +8344,16 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
     if (nm === group) return true; // unchanged — allow the box to close
     const clash = p.components.some((c) => c.section === sec && !isSpacer(c) && (effGroup.get(c.id) || "") === nm);
     if (clash) return false; // a combination named nm already exists in this section → reject
+    // Keep the combination-qty (×N) control across the rename. Some combinations are scalable ONLY
+    // because their name matches "(Type N)"; renaming to a plain name would otherwise drop the ×N
+    // control (and its quantity). Pin comboScalable on the rows so scalability follows the
+    // combination itself, not its name.
+    const wasScalable = /\(Type \d+\)/.test(group)
+      || p.components.some((c) => c.section === sec && !isSpacer(c) && (effGroup.get(c.id) || "") === group && c.comboScalable);
     u({ components: p.components.map((c) =>
-      c.section === sec && !isSpacer(c) && (effGroup.get(c.id) || "") === group ? { ...c, group: nm } : c) });
+      c.section === sec && !isSpacer(c) && (effGroup.get(c.id) || "") === group
+        ? { ...c, group: nm, ...(wasScalable ? { comboScalable: true } : {}) }
+        : c) });
     return true;
   };
   // Duplicate a whole combination — clone every member (fresh ids) under a new unique

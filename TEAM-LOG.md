@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-20 · Mohamed's side · Claude
 
+**LV bug fix: a combination's quantity no longer disappears when you rename it.**
+
+In an LV panel, a combination (for example an MCC motor starter) shows a "combination quantity (×N)" box that scales the whole group at once. That box only stayed while the combination kept its automatic "(Type N)" tag in its name — so the moment you renamed the combination to your own wording, the quantity box **and its number vanished**. Now the quantity stays with the combination whatever you rename it to. Frontend only; verified by renaming a ×3 motor-starter combination and watching the ×3 stay put.
+
+## 2026-09-20 · Mohamed's side · Claude
+
 **Offer History remembers your filters when you leave and come back.**
 
 Before, opening a quotation (or any other tab) and returning to Offer History reset it to "everything". Now the filters you set — search, type, status, owner, approver, date range, and "show removed" — are remembered, so you land back on exactly the same filtered view. It's kept per browser, so it also survives a refresh. Frontend only.
