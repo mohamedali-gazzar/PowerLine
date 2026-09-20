@@ -108,10 +108,20 @@ function Act({ title, onClick, disabled, danger, children }: {
 
 /** Offer History — every LV quotation and RMU offer in one list. Creating a new QTN
  *  lives on the Home dashboard only ("+ New QTN"); this page just lists + opens them. */
+/** The filter/view state is remembered across visits, so leaving Offer History and coming back
+ *  (from another tab or page) restores exactly what was filtered. Kept per-browser in localStorage;
+ *  `scopeAll` and `showRemoved` are re-derived from permissions on load, so only the plain filters
+ *  are stored here. A blank/corrupt value falls back to "no filter". */
+const FILTERS_KEY = "lv-offerhistory-filters";
+function loadSavedFilters(): { q?: string; type?: string; status?: string; owner?: string; approver?: string; from?: string; to?: string; showRemoved?: boolean } {
+  try { return JSON.parse(localStorage.getItem(FILTERS_KEY) || "{}") || {}; } catch { return {}; }
+}
+
 export default function LvQtnListPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { confirm, dialogs } = useDialogs();
+  const saved = useMemo(loadSavedFilters, []);
   const [qtns, setQtns] = useState<QtnListItem[] | null>(null); // null = first load in flight
   const [offers, setOffers] = useState<Offer[] | null>(null);
   /** True when the LV list holds every user's quotations, not just the signed-in one's. */
@@ -119,16 +129,20 @@ export default function LvQtnListPage() {
   const [myPerms, setMyPerms] = useState<string[]>([]);
   /** Owner-only: also list the LV quotations that have been removed, so they can be
    *  reviewed and restored. Off by default — removed means out of the way. */
-  const [showRemoved, setShowRemoved] = useState(false);
+  const [showRemoved, setShowRemoved] = useState(!!saved.showRemoved);
   const [loadErr, setLoadErr] = useState("");
   const [actionErr, setActionErr] = useState("");
-  const [q, setQ] = useState("");
-  const [type, setType] = useState<"" | RowType>("");
-  const [status, setStatus] = useState<string>("");
-  const [owner, setOwner] = useState("");
-  const [approver, setApprover] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [q, setQ] = useState<string>(saved.q ?? "");
+  const [type, setType] = useState<"" | RowType>((saved.type as "" | RowType) ?? "");
+  const [status, setStatus] = useState<string>(saved.status ?? "");
+  const [owner, setOwner] = useState<string>(saved.owner ?? "");
+  const [approver, setApprover] = useState<string>(saved.approver ?? "");
+  const [from, setFrom] = useState<string>(saved.from ?? "");
+  const [to, setTo] = useState<string>(saved.to ?? "");
+  // Remember the filters so returning to Offer History restores them.
+  useEffect(() => {
+    try { localStorage.setItem(FILTERS_KEY, JSON.stringify({ q, type, status, owner, approver, from, to, showRemoved })); } catch { /* storage off — filters just won't persist */ }
+  }, [q, type, status, owner, approver, from, to, showRemoved]);
 
   const reload = async () => {
     // Which LV list this page may show is the server's call, so ask before fetching:

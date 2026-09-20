@@ -23,6 +23,12 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-20 · Mohamed's side · Claude
 
+**Offer History remembers your filters when you leave and come back.**
+
+Before, opening a quotation (or any other tab) and returning to Offer History reset it to "everything". Now the filters you set — search, type, status, owner, approver, date range, and "show removed" — are remembered, so you land back on exactly the same filtered view. It's kept per browser, so it also survives a refresh. Frontend only.
+
+## 2026-09-20 · Mohamed's side · Claude
+
 **New admin-only capability: restore a cancelled quotation.**
 
 Cancelled quotations (superseded revisions) used to be permanent — there was no way back. Now:
