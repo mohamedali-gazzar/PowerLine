@@ -21,6 +21,12 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-21 · Mohamed's side · Claude
+
+**Panels bug fix: you can now drag panels to reorder them even when another group is collapsed.**
+
+On the Panels tab, panels can be grouped into parts (PART 1, PART 2, …) and each part can be collapsed. If you collapsed one part and then tried to drag a panel in another part to sort it, nothing happened — the drag was secretly acting on the hidden (collapsed) part instead of the one on screen, because the app was still counting the hidden panels as if they were visible. Now dragging counts only the panels you can actually see: reordering a visible part works with another part collapsed, the collapsed part's panels stay exactly where they were, and a panel dropped at the top of a visible part stays in that part (it can't fall into the hidden one). Multi-select drag (moving several ticked panels at once) got the same fix. Frontend only; added automated tests for the collapsed-group case and confirmed a real drag reorders correctly.
+
 ## 2026-09-20 · Mohamed's side · Claude
 
 **LV bug fix: a combination's quantity no longer disappears when you rename it.**

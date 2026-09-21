@@ -30,7 +30,7 @@ import {
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, STONE_PAINT_USD, stonePaintUnits, mvDefaultName, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog, pickRates, ratesEqual,
-  panelLayout, panelNumbers, commonNamePrefix, resortByGroup, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
+  panelLayout, panelNumbers, commonNamePrefix, resortByGroup, reorderVisiblePanels, reorderVisiblePanelsMany, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS, DEFAULT_MV_COMMERCIAL,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote, type MvCommercial, type MvPanelType,
   type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow, type CustomOfferItem, type ScratchPad,
@@ -1282,22 +1282,15 @@ export default function LvConfiguratorPage() {
   // up() blocks non-primary co-workers from shared changes, but the server's co-work merge keeps
   // whatever panel order the saver sends and protects everyone else's panel content, so reordering
   // is safe for any collaborator. Still frozen for a read-only (submitted / cancelled) quotation.
-  const reorderPanels = (from: number, to: number) => {
+  // Commit a panel drag-reorder. The caller (PanelsTab) hands the whole, already-reordered display
+  // order — it alone knows which groups are collapsed (their panels aren't on screen), so it does
+  // the splice and the group-adoption in VISIBLE space and passes the merged full order here.
+  const reorderPanels = (newPanels: LvPanel[]) => {
     // The primary owner arranges the panel order. It is blocked while frozen by status, and for a
     // Co-Work co-worker (sharedReadOnly) — their order isn't saved (the owner owns the arrangement),
     // so letting them drag would only snap back. Kept out of up()'s path so history/guards stay simple.
     if (sharedReadOnly) return;
-    // `from`/`to` index the RENDERED rows, which follow the grouped LAYOUT order. Splice on that
-    // exact flattened order — never s.panels, whose physical order can differ (a quotation that
-    // was once co-worked can have its stored panels out of group order). Splicing s.panels by a
-    // layout index would then move the WRONG panel, which is why a drag could seem to do nothing.
-    const arr = panelLayout(s).flatMap((sec) => sec.panels);
-    const [moved] = arr.splice(from, 1);
-    if (!moved) return;
-    arr.splice(to, 0, moved);
-    const neighbour = to > 0 ? arr[to - 1] : arr[to + 1];
-    moved.groupId = neighbour?.groupId;
-    apply((old) => ({ ...old, panels: resortByGroup(arr, s.groups ?? []) }));
+    apply((old) => ({ ...old, panels: resortByGroup(newPanels, s.groups ?? []) }));
   };
   const addPanel = (mvType?: MvPanelType) => {
     if (readOnly) return;
@@ -6993,8 +6986,8 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
   s: LvState; sel: LvPanel | null;
   up: (p: Partial<LvState>) => void;
   upPanel: (id: string, p: Partial<LvPanel>) => void;
-  /** Commit a panel drag-reorder (from → to). Lives in the parent. */
-  reorderPanels: (from: number, to: number) => void;
+  /** Commit a panel drag-reorder: the parent saves this already-reordered full panel order. */
+  reorderPanels: (newPanels: LvPanel[]) => void;
   /** Whether this user may reorder. The PRIMARY owner arranges the panel order; a Co-Work
    *  co-worker cannot (their order isn't saved), so the drag handle is hidden for them. */
   canReorder?: boolean;
@@ -7025,7 +7018,6 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
   // not keep the order anyway). Dragging a TICKED panel moves the whole ticked set together
   // (handleReorderRef, set below once the selection state exists).
   const handleReorderRef = useRef<(from: number, to: number) => void>(() => {});
-  const { setRowRef, rowDragProps } = usePointerReorder(s.panels.length, (from, to) => handleReorderRef.current(from, to));
   // Themed confirm (PowerLine dialog) instead of the browser's window.confirm.
   const { confirm, dialogs } = useDialogs();
   // ── Panel grouping (organisational only — no pricing effect) ────────────────
@@ -7050,6 +7042,12 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
     try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...next])); } catch { /* storage blocked — non-fatal */ }
     return next;
   });
+  // The panels actually ON SCREEN, in display order — a collapsed group contributes none. Drag
+  // indices count against THIS list (the only rows the user can see and grab), so a collapsed group
+  // above the one being dragged no longer throws the indices off. Defined before the drag hook,
+  // which needs its length as the row count.
+  const visibleOrder = () => panelLayout(s).flatMap((sec) => (sec.group && collapsed.has(sec.group.id) ? [] : sec.panels));
+  const { setRowRef, rowDragProps } = usePointerReorder(visibleOrder().length, (from, to) => handleReorderRef.current(from, to));
   const clearPanelSel = () => { setSelPanels(new Set()); setLastPanelPick(null); setNaming(null); };
   // Inline rename from the list (used on MV, where the list has no editor to edit the name in).
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -7071,29 +7069,19 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
     setSelPanels((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
     setLastPanelPick(id);
   };
-  // Move EVERY ticked panel together, keeping their order, to where the dragged one is dropped.
-  // Mirrors reorderPanels' group handling: the moved block adopts the group it is dropped into.
-  const reorderPanelsMany = (flat: LvPanel[], to: number) => {
-    if (!canReorder) return;
-    const selSet = new Set(flat.map((p, i) => (selPanels.has(p.id) ? i : -1)).filter((i) => i >= 0));
-    const movedPanels = flat.filter((_, i) => selSet.has(i)); // ascending → keeps their relative order
-    if (movedPanels.length < 2) return;
-    const remaining = flat.filter((_, i) => !selSet.has(i));
-    // Land the block right before the first NON-ticked panel at/after the drop slot (else at the end).
-    let refId: string | null = null;
-    for (let i = to; i < flat.length; i++) { if (!selSet.has(i)) { refId = flat[i].id; break; } }
-    const insertAt = refId != null ? Math.max(0, remaining.findIndex((p) => p.id === refId)) : remaining.length;
-    remaining.splice(insertAt, 0, ...movedPanels);
-    const neighbour = insertAt > 0 ? remaining[insertAt - 1] : remaining[insertAt + movedPanels.length];
-    for (const mp of movedPanels) mp.groupId = neighbour?.groupId;
-    up({ panels: resortByGroup(remaining, s.groups ?? []) });
-  };
   // Drag commit: a ticked panel drags the whole ticked set; otherwise it's a plain single move.
+  // Both reorder only the on-screen panels (reorderVisiblePanels*), so a collapsed group above the
+  // dragged one can't throw the indices off; the parent then re-clusters by group and saves.
   handleReorderRef.current = (from, to) => {
-    const flat = flatOrder();
-    const draggedId = flat[from]?.id;
-    if (draggedId && selPanels.size >= 2 && selPanels.has(draggedId)) reorderPanelsMany(flat, to);
-    else reorderPanels(from, to);
+    if (!canReorder) return;
+    const full = flatOrder();
+    const visibleIds = new Set(visibleOrder().map((p) => p.id));
+    const draggedId = visibleOrder()[from]?.id;
+    if (draggedId && selPanels.size >= 2 && selPanels.has(draggedId)) {
+      reorderPanels(reorderVisiblePanelsMany(full, visibleIds, new Set(selPanels), to));
+    } else {
+      reorderPanels(reorderVisiblePanels(full, visibleIds, from, to));
+    }
   };
   // Click anywhere outside the panel list (while panels are ticked) to drop the selection.
   // Skipped while the group-name popup is open — that portal handles its own close.

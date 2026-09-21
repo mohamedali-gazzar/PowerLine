@@ -1170,6 +1170,44 @@ export function resortByGroup(panels: LvPanel[], groups: LvGroup[]): LvPanel[] {
     .map(([p]) => p);
 }
 
+/** Drag-reorder a SINGLE panel within the on-screen (visible) list, returning the new full order.
+ *  `full` is every panel in display order; `visibleIds` are the ones actually rendered (a collapsed
+ *  group contributes none). `from`/`to` index the VISIBLE list. Panels in collapsed groups keep
+ *  their exact slots, so dragging the group that is showing never disturbs a hidden one — the bug
+ *  where a collapsed group above threw the drag indices off. The moved panel adopts the group of
+ *  its new visible neighbour (so it can't silently fall into a hidden group). Immutable. */
+export function reorderVisiblePanels(full: LvPanel[], visibleIds: Set<string>, from: number, to: number): LvPanel[] {
+  const vis = full.filter((p) => visibleIds.has(p.id));
+  const moved = vis[from];
+  if (!moved || to < 0 || to >= vis.length) return full;
+  const rest = vis.slice();
+  rest.splice(from, 1);
+  rest.splice(to, 0, moved);
+  const ni = rest.indexOf(moved);
+  const neighbour = ni > 0 ? rest[ni - 1] : rest[ni + 1];
+  rest[ni] = { ...moved, groupId: neighbour?.groupId };
+  let k = 0;
+  return full.map((p) => (visibleIds.has(p.id) ? rest[k++] : p));
+}
+
+/** Drag-reorder EVERY ticked panel together (visible space), returning the new full order. The
+ *  ticked block keeps its relative order and lands before the first non-ticked visible panel
+ *  at/after `to`; it adopts the group of its new visible neighbour. Collapsed panels stay put. */
+export function reorderVisiblePanelsMany(full: LvPanel[], visibleIds: Set<string>, movedIds: Set<string>, to: number): LvPanel[] {
+  const vis = full.filter((p) => visibleIds.has(p.id));
+  const movedPanels = vis.filter((p) => movedIds.has(p.id));
+  if (movedPanels.length < 2) return full;
+  const remaining = vis.filter((p) => !movedIds.has(p.id));
+  let refId: string | null = null;
+  for (let i = to; i < vis.length; i++) { if (!movedIds.has(vis[i].id)) { refId = vis[i].id; break; } }
+  const insertAt = refId != null ? Math.max(0, remaining.findIndex((p) => p.id === refId)) : remaining.length;
+  const neighbour = insertAt > 0 ? remaining[insertAt - 1] : remaining[insertAt] ?? remaining[insertAt - 1];
+  const gid = neighbour?.groupId;
+  remaining.splice(insertAt, 0, ...movedPanels.map((p) => ({ ...p, groupId: gid })));
+  let k = 0;
+  return full.map((p) => (visibleIds.has(p.id) ? remaining[k++] : p));
+}
+
 /** The sidebar / export layout: one section per group (in order), then the ungrouped one.
  *  Empty groups keep their header; the ungrouped section shows only when it has panels, or
  *  when there are no groups at all (legacy quotation = a plain flat list, unchanged). */
