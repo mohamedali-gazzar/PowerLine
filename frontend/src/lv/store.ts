@@ -25,7 +25,7 @@ import {
 } from "./catalog";
 import { defaultCellConfig, type CellConfig } from "./cells";
 import { type CopperTool } from "./copper";
-import type { RmuConfigInput, TransformerConfigInput } from "../types";
+import type { RmuConfigInput, TransformerConfigInput, KioskLvConfigInput } from "../types";
 
 let uidCtr = 0;
 export const uid = () => `u${++uidCtr}_${Math.random().toString(36).slice(2, 7)}`;
@@ -97,6 +97,24 @@ export interface LvPanel {
    *  insulation) that resolve to one transformer in the price database — its code and price.
    *  Absent until a Transformer panel is added; other panel kinds never set it. */
   mvTransformerConfig?: TransformerConfigInput;
+  /** MV Kiosk panels only: the "Low" (LV) accordion section. A kiosk panel holds an RMU
+   *  (mvRmuConfig) + a transformer (mvTransformerConfig) + this LV config in one unit, and the
+   *  kiosk editor reuses the RMU and Transformer editors for those two sections. */
+  mvLvConfig?: KioskLvConfigInput;
+  /** MV Kiosk panels only: the "Kiosk price (live)" table — one row per part (rmu / transformer /
+   *  lv / size / accessories), each with a code, cost and factor; selling is derived (cost ÷ factor).
+   *  The size code is the chosen enclosure; cost cells that are computed (size, accessories) ignore
+   *  the stored cost. */
+  mvKioskCost?: Record<string, { code?: string; cost?: number; factor?: number }>;
+  /** MV Kiosk panels only: the Accessories accordion's item list (extra items supplied with the
+   *  kiosk). Undefined means the default checklist is shown; the first edit materialises it. */
+  mvKioskAccessories?: { id: string; name: string; code?: string; qty: number; cost: number }[];
+  /** MV Kiosk panels only: EXTRA tick-boxes (Capacitor Box / Stone Paint), keyed by id. */
+  mvKioskAccChecks?: Record<string, boolean>;
+  /** MV Kiosk panels only: EXTRA quantity items (Shunt / Aux), keyed by id. */
+  mvKioskExtraQty?: Record<string, number>;
+  /** MV Kiosk panels only: the display currency for the "Kiosk price (live)" table (default EGP). */
+  mvKioskCurrency?: "EGP" | "USD";
   name: string;
   code: string;
   fedFrom: string;   // RPT-01: next to panel name
@@ -231,6 +249,9 @@ export const DEFAULT_MV_COMMERCIAL: MvCommercial = {
   warrantyMonths: 12, paymentTerms: "50% advance, 50% before delivery",
 };
 
+/** Default MV cable rate (EGP per metre) on the MV Pricing Settings tab. */
+export const DEFAULT_MV_CABLE_EGP_PER_M = 1200;
+
 /** Which MV package part a panel is (Kiosk / RMU / Transformer). Tags an LvPanel on the MV
  *  Panels tab; ordinary LV panels have none. */
 export type MvPanelType = "kiosk" | "rmu" | "transformer";
@@ -288,6 +309,8 @@ export interface LvState {
   /** MV Pricing Settings — RMU-style commercial blocks (the LV block reuses `factors`). */
   mvRmu?: MvCommercial;
   mvTransformer?: MvCommercial;
+  /** MV Pricing Settings: the MV cable rate in EGP per metre (default {@link DEFAULT_MV_CABLE_EGP_PER_M}). */
+  mvCableEgpPerM?: number;
   /** Commercial Offer lines typed by hand. Only a "custom" quotation uses these — it
    *  has no panels, so the offer table is written rather than generated from them. */
   customItems?: CustomOfferItem[];

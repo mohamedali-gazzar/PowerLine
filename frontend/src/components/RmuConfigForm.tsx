@@ -91,7 +91,7 @@ export default function RmuConfigForm({
       {/* Tighter vertical rhythm than the other cards (py-3 + 5px row gaps) so
           this half-width column finishes level with Metering + Smart/RTU on the
           right instead of running past them. */}
-      <section className="card px-5 py-3 animate-fade-up">
+      <section className="card px-5 py-3 min-w-0 animate-fade-up">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="sec-head !mb-0 !pb-0 after:hidden">RMU Code</h2>
           <div className="text-right">
@@ -203,7 +203,7 @@ export default function RmuConfigForm({
         </div>
       </section>
 
-      <div className="flex flex-col gap-5">
+      <div className="flex min-w-0 flex-col gap-5">
         {/* Metering — a toggle for every type; CT/VT options for PRAL/PSEC only.
             Cards keep their natural height and pack from the top, so Smart/RTU
             sits directly under Metering instead of a card being stretched into

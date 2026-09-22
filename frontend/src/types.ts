@@ -57,6 +57,27 @@ export interface TransformerConfigInput {
   insideKiosk?: boolean;
 }
 
+/** MV Kiosk panels only: the "Low" (LV) accordion section — the P-CSS LV selections. Stored as
+ *  plain strings (the P-CSS option ids) so the shared state stays decoupled from the pcss types;
+ *  they are cast back when a P-CSS Selection is built for the fit "limitations". */
+export interface KioskLvConfigInput {
+  iec: string;               // LV / EEHC standard: "eehc" | "noeehc"
+  lvConfig: string;          // "incoming" (incoming only) | "inout" (incoming & outgoing)
+  lvMode: string;            // "sizing" | "technical"
+  includePf: boolean;        // include power-factor correction
+  pfBrand: string;           // capacitor-bank brand
+  includeSwitchFuse: boolean;
+  /** Kiosk LV build mode: "standard" = house-standard EDMS panel picker (default),
+   *  "private" = build from the component search. */
+  lvSource?: "standard" | "private";
+  /** Sizing-mode outgoing-breaker quantities, keyed by P-CSS breaker id (xt1…xt7). */
+  qtys?: Record<string, number>;
+  /** Custom-width components the engineer added by hand. */
+  customs?: { id: string; label: string; widthMm: number; qty: number }[];
+  /** Switch-fuse units chosen (ampere → quantity), when switch fuses are included. */
+  switchFuseItems?: { amp: number; qty: number }[];
+}
+
 export interface OfferInput {
   offerNumber?: string;
   category: ProductCategory;

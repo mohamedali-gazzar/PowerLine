@@ -23,6 +23,22 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-22 · Mohamed's side · Claude
 
+**New: the MV Kiosk (packaged substation) — RMU + Transformer + LV in one unit, with a live combined price sheet.**
+
+On the MV tab, a Kiosk panel is one packaged unit built from an accordion of sections — **RMU**, **Transformer**, **Low (LV panel)**, **Accessories** and **Extra** — with a **"Kiosk price (live)"** table across the top that prices the whole unit as you build it. The table has Code · Kiosk · Cost · Factor · Selling for each part (RMU, Transformer, LV, Kiosk Size, Accessories, Extra), a Total with a blended factor, and an **EGP / USD** switch.
+
+Everything is worked out automatically from the price databases and the QTN's Pricing Settings, so nothing is typed by hand:
+- **RMU** and **Transformer** costs come from their own price lists (USD → EGP by the quotation's rate); the transformer inside a kiosk is always IP00.
+- **LV** shows the house-standard EDMS panel for the transformer's rating (or a Private-Sector build you make yourself); its code is `MDB-<rating>KVA`.
+- **Kiosk Size** is a dropdown of the enclosure codes; its cost = steel weight × the sheet-metal rate.
+- **Accessories** = the MV-cable connection + the LV-copper connection + the standard items (fire extinguisher, fan, thermostat, earthing).
+- **Extra** = Shunt / Aux (you type the quantity) and Capacitor Box / Stone Paint (tick-boxes).
+- Selling = cost ÷ factor throughout (defaults: RMU 0.85, Transformer 0.95, the rest 0.70), and the P-CSS limitations are respected (e.g. an Air RMU has no 3+1+M inside a kiosk).
+
+There's also a new **"MV cables (EGP/m)"** rate on the Pricing Settings tab. This is frontend-only — no database change; the kiosk's figures live inside the quotation like all its other content. (The priced Technical/Commercial offer for a kiosk is the next step.)
+
+## 2026-09-22 · Mohamed's side · Claude
+
 **New: an Admin can edit any quotation, and any user can ask an Admin for permission to edit one that isn't theirs.**
 
 Two related things, both enforced on the server (the screen only reflects them), and prices stay frozen per quotation as before:

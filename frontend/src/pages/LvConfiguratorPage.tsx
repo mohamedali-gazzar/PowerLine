@@ -31,7 +31,7 @@ import {
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanel, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, STONE_PAINT_USD, stonePaintUnits, mvDefaultName, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog, pickRates, ratesEqual,
   panelLayout, panelNumbers, commonNamePrefix, resortByGroup, reorderVisiblePanels, reorderVisiblePanelsMany, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
-  withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS, DEFAULT_MV_COMMERCIAL,
+  withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS, DEFAULT_MV_COMMERCIAL, DEFAULT_MV_CABLE_EGP_PER_M,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote, type MvCommercial, type MvPanelType,
   type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow, type CustomOfferItem, type ScratchPad,
 } from "../lv/store";
@@ -54,6 +54,7 @@ import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalog
 import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
 import MvTransformerPanelEditor, { DEFAULT_TRANSFORMER_CONFIG } from "../components/MvTransformerPanelEditor";
+import MvKioskPanelEditor from "../components/MvKioskPanelEditor";
 import { DEFAULT_RMU_CONFIG, rmuShortCode } from "../components/RmuConfigForm";
 import { TransformerCover, TransformerTechnicalSheet } from "../components/TransformerTechnicalSheet";
 import { findTransformerTech, trModel, trDisplayCode } from "../components/transformerTechData";
@@ -5352,6 +5353,16 @@ function PricingTab({ s, up, hideProjectFactor, hidePanelPricing }: { s: LvState
           {num("operations", "Operations (%)", { pct: true })}
           {num("abbDiscount", "ABB discount (%)", { pct: true })}
           {num("vat", "VAT (%)", { pct: true })}
+          {/* MV cable rate — MV quotations only; a plain field beside the other rates. */}
+          {s.kind === "mv" && (
+            <div key="mvCable">
+              <L>MV cables (EGP/m)</L>
+              <input type="number" min={0} step={50} className="input"
+                value={s.mvCableEgpPerM ?? DEFAULT_MV_CABLE_EGP_PER_M}
+                onChange={(e) => up({ mvCableEgpPerM: e.target.value === "" ? 0 : parseFloat(e.target.value) || 0 })} />
+              <p className="mt-1 text-[11px] text-muted">Medium-voltage cable, per metre</p>
+            </div>
+          )}
         </div>
       </div>
       <LiveFxCard s={s} fx={fx} onApply={upF} />
@@ -7090,6 +7101,18 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
   const handleReorderRef = useRef<(from: number, to: number) => void>(() => {});
   // Themed confirm (PowerLine dialog) instead of the browser's window.confirm.
   const { confirm, dialogs } = useDialogs();
+  // The MV Kiosk's "Low" section reuses the real LV ComponentsCard, which needs a component-replace
+  // helper and its own combination-builder handle — PanelEditor (which the kiosk doesn't render)
+  // normally provides these, so this tab supplies them from its own `up`.
+  const [kioskComboKind, setKioskComboKind] = useState<ComboKind | null>(null);
+  const kioskReplaceComponent = (matchRef: string, matchName: string, nc: DbComponent, panelIds: Set<string>) => {
+    const swap = (x: PanelComponent): PanelComponent =>
+      (!isSpacer(x) && x.ref === matchRef && x.name === matchName)
+        ? { ...x, name: nc.n, desc: nc.d, ref: nc.ref, type: nc.t, brand: nc.brand, rating: nc.r,
+            eur: nc.eur, egp: nc.egp, poles: nc.poles, cuP: nc.cuP, cuC: nc.cuC, stock: nc.stock }
+        : x;
+    up({ panels: s.panels.map((pp) => (panelIds.has(pp.id) ? { ...pp, components: pp.components.map(swap) } : pp)) });
+  };
   // ── Panel grouping (organisational only — no pricing effect) ────────────────
   const groups = s.groups ?? [];
   const numbers = panelNumbers(s);
@@ -7564,6 +7587,17 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
             <MvRmuPanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />
           ) : sel && sel.mvType === "transformer" ? (
             <MvTransformerPanelEditor key={sel.id} p={sel} upPanel={upPanel} />
+          ) : sel && sel.mvType === "kiosk" ? (
+            <MvKioskPanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel}
+              lvEditor={
+                <div className="space-y-4">
+                  <ComponentsCard s={s} p={sel} u={(patch) => upPanel(sel.id, patch)}
+                    replaceComponent={kioskReplaceComponent} comboKind={kioskComboKind} setComboKind={setKioskComboKind}
+                    kioskStandard={(sel.mvLvConfig?.lvSource ?? "standard") === "standard"}
+                    kioskStdKva={sel.mvTransformerConfig?.ratingKva ? String(sel.mvTransformerConfig.ratingKva) : undefined} />
+                  <SizingCard p={sel} u={(patch) => upPanel(sel.id, patch)} factors={s.factors} />
+                </div>
+              } />
           ) : (
             <div className="flex min-h-[45vh] flex-col items-center justify-center rounded-xl2 border border-dashed border-line bg-white/60 p-10 text-center no-print animate-fade-up">
               <div className="text-sm font-bold uppercase tracking-wide text-muted">MV panel</div>
@@ -8100,14 +8134,22 @@ function copperEnterNav(e: { key: string; preventDefault: () => void; currentTar
 // ── Standard Panels view (inside the Components card) ───────────────────────
 // Pick TR kVA + P.F.C + Outgoings and the whole panel is built from the house
 // standard: name, components, PLP cells and main-busbar copper.
-function StandardPanelsView({ p, u, panels }: {
+function StandardPanelsView({ p, u, panels, componentsOnly = false, defaultKva }: {
   p: LvPanel; u: (patch: Partial<LvPanel>) => void; panels: LvPanel[];
+  /** MV kiosk: build the standard COMPONENTS only, leaving the enclosure sizing for the user. */
+  componentsOnly?: boolean;
+  /** MV kiosk: seed TR: KVA from the transformer's rating until the engineer changes it. */
+  defaultKva?: string;
 }) {
   const { confirm, dialogs } = useDialogs();
-  const kva = p.stdTrKva ?? STD_TR_KVA_DEFAULT;
+  const kva = p.stdTrKva ?? defaultKva ?? STD_TR_KVA_DEFAULT;
   const pfc = p.stdPfc ?? "No";
   const out = p.stdOutgoings ?? STD_OUTGOINGS[0];
   const std = stdPanel(kva, pfc, out);
+  // The dropdown offers the EDMS standard sizes; in the kiosk it defaults to the transformer's own
+  // kVA, which may not be a standard size (e.g. 1500) — include it so the box shows the real value
+  // instead of silently falling back to the first option.
+  const kvaOptions = STD_TR_KVA_EDMS.includes(kva) ? STD_TR_KVA_EDMS : [kva, ...STD_TR_KVA_EDMS];
   // Building writes the standard's OWN name ("MDB 1000A+5*250A+25kVAR"), so building the
   // same standard on two panels used to name both identically — the app choosing the
   // name, not the user, so the app resolves it. The suffix is announced in the
@@ -8120,7 +8162,7 @@ function StandardPanelsView({ p, u, panels }: {
       (p.components.length || renamed) &&
       !(await confirm({
         title: `Build "${std.name}" from the standard`,
-        message: (p.components.length ? "This panel's components, cells and copper are all replaced by the standard ones." : "")
+        message: (p.components.length ? (componentsOnly ? "This panel's components are replaced by the standard ones (its sizing is left for you to set)." : "This panel's components, cells and copper are all replaced by the standard ones.") : "")
           + (renamed ? `${p.components.length ? "\n\n" : ""}Another panel is already called “${std.name}”, so this one will be named “${stdName}”.` : ""),
         confirmLabel: "Build it",
         // Danger is for the replacement of existing work; a rename notice on an empty
@@ -8131,7 +8173,7 @@ function StandardPanelsView({ p, u, panels }: {
       return;
     // Building from the standard resets the panel to pristine, so it is no longer
     // "changed from standard" — clear the recheck mark.
-    u({ ...applyStdPanel(p, std), name: stdName, edmsEdited: false });
+    u({ ...applyStdPanel(p, std, !componentsOnly), name: stdName, edmsEdited: false });
   };
   return (
     <div className="space-y-2">
@@ -8140,7 +8182,7 @@ function StandardPanelsView({ p, u, panels }: {
         <div>
           <L>TR: KVA</L>
           {/* This view is EDMS-only, so it always offers the EDMS sizes (incl. 300). */}
-          <Sel value={kva} options={STD_TR_KVA_EDMS}
+          <Sel value={kva} options={kvaOptions}
             onChange={(v) => u({ stdTrKva: v })} />
         </div>
         <div>
@@ -8326,7 +8368,12 @@ function InlineComponentSearch({ indent, factors, onPick, onClose }: {
 }
 
 // ── Components card ──────────────────────────────────────────────────────────
-function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void; replaceComponent: (matchRef: string, matchName: string, nc: DbComponent, panelIds: Set<string>) => void; comboKind: ComboKind | null; setComboKind: (k: ComboKind | null) => void }) {
+export function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind, kioskStandard = false, kioskStdKva }: { s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void; replaceComponent: (matchRef: string, matchName: string, nc: DbComponent, panelIds: Set<string>) => void; comboKind: ComboKind | null; setComboKind: (k: ComboKind | null) => void;
+  /** MV kiosk "Standard EDMS" mode: show the house-standard panel picker (components-only build). */
+  kioskStandard?: boolean;
+  /** MV kiosk: seed the standard picker's TR: KVA from the transformer rating. */
+  kioskStdKva?: string;
+}) {
   const { confirm, notify, dialogs } = useDialogs();
   const [q, setQ] = useState("");
   // Inline "insert between rows": clicking a divider opens a one-off search input in that exact gap.
@@ -8338,8 +8385,10 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
   const [pastePreview, setPastePreview] = useState<null | { rows: { name: string; qty: number; match: DbComponent | null }[] }>(null);
   const [pfcTab, setPfcTab] = useState<"known" | "calc">("known"); // P.F.C window: known-data entry vs calculation
   const [pfcCalcKvar, setPfcCalcKvar] = useState<number | null>(null); // required kVAR from the calc tab → known tab
-  // The Standard Panels picker is a Standard EDMS feature only.
+  // The Standard Panels picker is a Standard EDMS feature — and, in the MV kiosk, its "Standard
+  // EDMS" mode (kioskStandard). The panel/ATS toggle stays EDMS-only; the kiosk shows just the panel.
   const isEdmsPanel = s.kind === "edms";
+  const showStandard = isEdmsPanel || kioskStandard;
   // Standard EDMS builds either a standard Panel or a standard ATS (toggle above the picker).
   const [edmsMode, setEdmsMode] = useState<"panel" | "ats">("panel");
   const hits = useMemo(() => searchComponents(q, 40), [q]);
@@ -9412,29 +9461,31 @@ function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboKind }: 
       {dialogs}
       {/* "Replace component" moved to the top toolbar (beside Undo/Redo). */}
       <div className="-mx-5 -mt-5 mb-0 flex flex-wrap items-center justify-between gap-3 rounded-t-xl2 bg-brand-tint px-5 pb-3 pt-5">
-        <h2 className="sec-head !mb-0">{isEdmsPanel ? "Standard Panels" : "Components"}</h2>
+        <h2 className="sec-head !mb-0">{showStandard ? "Standard Panels" : "Components"}</h2>
       </div>
       {neutralPrompt && <NeutralPromptModal breaker={neutralPrompt.breaker} sensor={neutralPrompt.sensor} onAdd={confirmNeutral} onClose={() => setNeutralPrompt(null)} />}
 
-      {/* Standard EDMS only. The picker sits ABOVE the component body — the sections,
-          search and editable list stay put, so a built panel can be adjusted straight away.
-          Full-bleed tint so it joins the title row above and the tabs band below into one
-          continuous orange header rather than a white gap between them. */}
-      {isEdmsPanel && (
+      {/* Standard picker (Standard EDMS, and the kiosk's Standard mode). Sits ABOVE the component
+          body — the sections, search and editable list stay put, so a built panel can be adjusted
+          straight away. The panel/ATS toggle is EDMS-only; the kiosk shows just the standard panel,
+          seeded to the transformer's kVA and built components-only (the engineer sizes it). */}
+      {showStandard && (
         <div className="-mx-5 bg-brand-tint px-5 py-3">
-          <div className="mb-3 inline-flex rounded-lg border border-line bg-white p-0.5">
-            {([["panel", "Standard Panel"], ["ats", "Standard ATS"]] as const).map(([m, label]) => (
-              <button key={m} type="button" onClick={() => setEdmsMode(m)}
-                className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${
-                  edmsMode === m ? "bg-brand text-white" : "text-muted hover:text-brand"
-                }`}>
-                {label}
-              </button>
-            ))}
-          </div>
-          {edmsMode === "panel"
-            ? <StandardPanelsView p={p} u={u} panels={s.panels} />
-            : <StandardAtsView p={p} u={u} panels={s.panels} />}
+          {isEdmsPanel && (
+            <div className="mb-3 inline-flex rounded-lg border border-line bg-white p-0.5">
+              {([["panel", "Standard Panel"], ["ats", "Standard ATS"]] as const).map(([m, label]) => (
+                <button key={m} type="button" onClick={() => setEdmsMode(m)}
+                  className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${
+                    edmsMode === m ? "bg-brand text-white" : "text-muted hover:text-brand"
+                  }`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {isEdmsPanel && edmsMode === "ats"
+            ? <StandardAtsView p={p} u={u} panels={s.panels} />
+            : <StandardPanelsView p={p} u={u} panels={s.panels} componentsOnly={kioskStandard} defaultKva={kioskStdKva} />}
         </div>
       )}
 

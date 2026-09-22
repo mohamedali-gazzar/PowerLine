@@ -112,12 +112,16 @@ export function normalize(state: LvState): LvState {
   // Heal a bad MV panel type. A brief regression let the "+ Add panel" click event land
   // on p.mvType (an object) — rendering it as the row's badge crashes the whole page, and
   // a saved copy would re-crash on every load. Only a real MV kind string is valid; anything
-  // else is cleared. mvRmuConfig is meaningful only on an RMU panel.
+  // else is cleared. The per-part configs are then cleared where they don't belong: a kiosk
+  // is one packaged unit that carries ALL THREE (its own RMU + transformer + LV panel), while
+  // a standalone RMU or Transformer panel carries only its own — so a kiosk keeps mvRmuConfig
+  // and mvTransformerConfig too, and mvLvConfig lives on a kiosk alone.
   for (const p of state.panels) {
     if (!p) continue;
     if (p.mvType !== "kiosk" && p.mvType !== "rmu" && p.mvType !== "transformer") p.mvType = undefined;
-    if (p.mvType !== "rmu") p.mvRmuConfig = undefined;
-    if (p.mvType !== "transformer") p.mvTransformerConfig = undefined;
+    if (p.mvType !== "rmu" && p.mvType !== "kiosk") p.mvRmuConfig = undefined;
+    if (p.mvType !== "transformer" && p.mvType !== "kiosk") p.mvTransformerConfig = undefined;
+    if (p.mvType !== "kiosk") p.mvLvConfig = undefined;
   }
   // Keep the physical panel array in the SAME order the sidebar renders it (grouped by
   // group.order, ungrouped last). That order is the app's invariant everywhere — the 1..n

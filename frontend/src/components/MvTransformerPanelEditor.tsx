@@ -42,9 +42,23 @@ function insulationMeta(v: string): { label: string; sub: string; icon?: string 
 export default function MvTransformerPanelEditor({
   p,
   upPanel,
+  insideKioskOnly = false,
+  onCode,
+  onCost,
+  usdRate = 1,
 }: {
   p: LvPanel;
   upPanel: (id: string, patch: Partial<LvPanel>) => void;
+  /** Set when this transformer sits inside a kiosk: the kiosk is its enclosure, so it is always
+   *  IP00. The Standalone/IP23 choice is then removed and IP00 is forced on the code and price. */
+  insideKioskOnly?: boolean;
+  /** Reports the transformer code up to the host (the kiosk shows it in the Transformer header);
+   *  empty until all four selections are made. */
+  onCode?: (code: string) => void;
+  /** Reports the transformer cost (EGP) up to the kiosk price table. Null until a row matches. */
+  onCost?: (egp: number | null) => void;
+  /** USD→EGP rate — transformer prices are USD, so the kiosk (EGP) multiplies by this. */
+  usdRate?: number;
 }) {
   const cfg = p.mvTransformerConfig ?? DEFAULT_TRANSFORMER_CONFIG;
   // Writes route through upPanel, which already drops edits on a read-only / teammate
@@ -85,6 +99,14 @@ export default function MvTransformerPanelEditor({
       .catch(() => { if (alive) setError("Could not load the transformer price list. Check your connection and reopen this panel."); });
     return () => { alive = false; };
   }, []);
+
+  // In a kiosk the transformer is always IP00. Once its config exists, pin insideKiosk=true so the
+  // SAVED value is right too (the display/price already force IP00 below). Runs only in a kiosk.
+  useEffect(() => {
+    if (insideKioskOnly && p.mvTransformerConfig && p.mvTransformerConfig.insideKiosk !== true) {
+      upPanel(p.id, { mvTransformerConfig: { ...p.mvTransformerConfig, insideKiosk: true } });
+    }
+  }, [insideKioskOnly, p.id, p.mvTransformerConfig, upPanel]);
 
   // Cascading options — the price database IS the reference. Each dropdown lists only what the DB
   // actually has for the OTHER current selections, so Powerline shows only its 6 ratings and only
@@ -151,12 +173,20 @@ export default function MvTransformerPanelEditor({
   // Oil transformers have no enclosure, so they are always IP00 — the Standalone/Inside-kiosk
   // choice (which only swaps a dry transformer between IP23 and IP00) does not apply to them.
   const isOil = (cfg.insulation || "").trim().toLowerCase() === "oil";
+  // Inside a kiosk the transformer is always IP00, whatever the stored flag says.
+  const effInsideKiosk = insideKioskOnly || !!cfg.insideKiosk;
   // The code for the chosen IP context: standalone → "…2300", inside a kiosk → "…0000".
-  const displayCode = base ? trDisplayCode(base.code, !!cfg.insideKiosk) : "";
+  const displayCode = base ? trDisplayCode(base.code, effInsideKiosk) : "";
+  // Report the code up to the host (kiosk header); empty until all four selections are made.
+  useEffect(() => { onCode?.(displayCode); }, [displayCode, onCode]);
   // Prefer the exact IP-variant row so its OWN price is used (IP23-with-enclosure and IP00-in-kiosk
   // can be priced separately); fall back to the base row when only one IP code exists.
   const match = base ? ((rows ?? []).find((r) => r.code === displayCode) ?? base) : null;
   const cost = match?.costEgp ?? 0;
+  // Report the transformer cost in EGP to the kiosk price table (prices are USD → × the rate).
+  // A zero cost means this exact combination isn't in the price list — report null, not 0.
+  const costEgp = match && cost > 0 ? Math.round(cost * usdRate) : null;
+  useEffect(() => { onCost?.(costEgp); }, [costEgp, onCost]);
   const transportation = cfg.transportation ?? 300;
   // selling = cost ÷ factor (the price screen's factor) PLUS a flat transportation charge that the
   // factor is deliberately NOT applied to.
@@ -165,9 +195,11 @@ export default function MvTransformerPanelEditor({
   const loading = rows == null && !error;
 
   return (
-    <div className="animate-fade-up grid items-stretch gap-4 lg:grid-cols-2">
+    <div className={`animate-fade-up grid items-stretch gap-4 ${insideKioskOnly ? "grid-cols-1" : "lg:grid-cols-2"}`}>
       {/* Live price + code — the transformer mirror of the RMU "Panel cost (live)" card.
-          On desktop it sits to the RIGHT of the selections; on mobile it stays on top. */}
+          On desktop it sits to the RIGHT of the selections; on mobile it stays on top.
+          Hidden in the kiosk, which gets one combined cost card for the whole packaged unit. */}
+      {!insideKioskOnly && (
       <div className="card px-4 py-3 lg:order-2">
         <div className="flex w-full items-center justify-between gap-3">
           <h2 className="sec-head mb-0">Panel cost (live)</h2>
@@ -212,6 +244,7 @@ export default function MvTransformerPanelEditor({
           <p className="mt-3 text-xs text-muted">Pick a rating, primary voltage, brand and insulation below to see the transformer's code and price.</p>
         )}
       </div>
+      )}
 
       {/* The four selections — three dropdowns plus the Dry/Oil insulation tiles, filled
           from the price database. Left column on desktop. */}
@@ -272,7 +305,10 @@ export default function MvTransformerPanelEditor({
 
         {/* Standalone vs inside-kiosk — sets the technical datasheet's IP (IP23 vs IP00) and
             the commercial "IP 23 / IP 00" wording. Default is a standalone transformer.
-            Oil transformers have no enclosure, so they are locked to IP00 (no toggle). */}
+            Oil transformers have no enclosure, so they are locked to IP00 (no toggle).
+            Hidden entirely inside a kiosk: it is always IP00 there (forced above), so the
+            fixed note added nothing. */}
+        {!insideKioskOnly && (
         <div>
           <div className="mb-1.5 text-xs font-bold uppercase tracking-wider text-brand-dark">Installation</div>
           {isOil ? (
@@ -298,6 +334,7 @@ export default function MvTransformerPanelEditor({
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );

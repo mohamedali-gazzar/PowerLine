@@ -236,7 +236,7 @@ function stdCellConfig(std: StdPanel): CellConfig {
  *  copper. REPLACES the panel's components, cells and copper — everything the
  *  standard defines — while leaving the panel's own identity fields (fed from,
  *  quantity, project specs like ambient temp and copper type) untouched. */
-export function applyStdPanel(p: LvPanel, std: StdPanel): LvPanel {
+export function applyStdPanel(p: LvPanel, std: StdPanel, keepSizing = true): LvPanel {
   const sections = [...DEFAULT_SECTIONS];
   if (std.pfcSection) {
     // P.F.C is its own cubicle beside Outgoings — the same position normalize()
@@ -249,13 +249,13 @@ export function applyStdPanel(p: LvPanel, std: StdPanel): LvPanel {
     ...(std.pfcSection ? std.pfc.map((x) => partToComponent(x, std.pfcSection as string)) : []),
     ...std.out.map((x) => partToComponent(x, "Outgoings")),
   ];
+  // The standard's name, rating, sections and components — always applied.
+  const base: LvPanel = { ...p, name: std.name, ratingA: std.ratingA, sections, activeSection: "Main Incoming", components };
+  // The MV kiosk builds the standard COMPONENTS only and lets the engineer size the panel
+  // (keepSizing=false), so the enclosure / PLP cells / copper are left as they were.
+  if (!keepSizing) return base;
   return {
-    ...p,
-    name: std.name,
-    ratingA: std.ratingA,
-    sections,
-    activeSection: "Main Incoming",
-    components,
+    ...base,
     sizingMode: "cells",
     cellConfig: stdCellConfig(std),
     // The standard's copper is the whole main busbar, so the manual override and

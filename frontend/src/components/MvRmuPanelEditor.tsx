@@ -23,10 +23,20 @@ export default function MvRmuPanelEditor({
   s,
   p,
   upPanel,
+  insideKiosk = false,
+  onPanelCode,
+  onCost,
 }: {
   s: LvState;
   p: LvPanel;
   upPanel: (id: string, patch: Partial<LvPanel>) => void;
+  /** Rendered inside the MV kiosk accordion: the RMU form is identical to a standalone RMU, but the
+   *  per-panel "Panel cost (live)" card is dropped (a single kiosk-wide cost card replaces it). */
+  insideKiosk?: boolean;
+  /** Reports the official RMU code up to the host (the kiosk shows it in the RMU section header). */
+  onPanelCode?: (code: string) => void;
+  /** Reports the RMU cost (EGP) up to the kiosk price table. Null until the config is priced. */
+  onCost?: (egp: number | null) => void;
 }) {
   const rmu = p.mvRmuConfig ?? DEFAULT_RMU_CONFIG;
   // Writes route through upPanel, which already drops edits on a read-only /
@@ -56,6 +66,8 @@ export default function MvRmuPanelEditor({
   }, [sig]);
 
   const panelCode = preview?.panelCode || preview?.configCode || "…";
+  // Report the resolved code up to the host (kiosk header). Skip the "…" placeholder while loading.
+  useEffect(() => { if (onPanelCode && panelCode && panelCode !== "…") onPanelCode(panelCode); }, [panelCode, onPanelCode]);
 
   // --- Live price (the "Panel cost (live)" card) — Cost / Factor / Selling, like the
   // Transformer card. Selling = the RMU's list price (base + add-ons); Cost = selling × factor;
@@ -71,10 +83,16 @@ export default function MvRmuPanelEditor({
   const selling = baseUnit + addUnit;               // base + add-ons = list price = SELLING
   const factor = preview?.rmuFactor ?? 0.85;
   const cost = Math.round(selling * factor);        // cost = selling × factor
+  // Report the RMU cost in EGP to the kiosk price table. `cost` is already EGP for an EGP offer;
+  // a USD offer keeps USD floor prices, so multiply by the quotation's USD→EGP rate.
+  const costEgp = !priced ? null : currency === "EGP" ? cost : Math.round(cost * (s.factors?.usd || 1));
+  useEffect(() => { onCost?.(costEgp); }, [costEgp, onCost]);
 
   return (
     <div className="animate-fade-up space-y-4">
-      {/* Live price — Cost / Factor / Selling (mirrors the Transformer card). */}
+      {/* Live price — Cost / Factor / Selling (mirrors the Transformer card). Hidden in the
+          kiosk, which gets one combined cost card for the whole packaged unit. */}
+      {!insideKiosk && (
       <div className="card px-4 py-3">
         <div className="flex w-full items-center justify-between gap-3">
           <h2 className="sec-head mb-0">Panel cost (live)</h2>
@@ -105,6 +123,7 @@ export default function MvRmuPanelEditor({
           </p>
         )}
       </div>
+      )}
 
       <RmuConfigForm value={rmu} onChange={setR} code={code} panelCode={panelCode} />
     </div>

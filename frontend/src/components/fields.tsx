@@ -81,12 +81,15 @@ export function Select<T extends string>({
   onChange,
   options,
   disabledOptions,
+  renderLabel,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: readonly T[];
   /** Options shown but not selectable (e.g. brands with no data yet). */
   disabledOptions?: readonly T[];
+  /** Friendly option text (e.g. "PRAL · Air", "12 kV"); defaults to a title-cased value. */
+  renderLabel?: (v: T) => string;
 }) {
   return (
     <select className="input cursor-pointer" value={value} onChange={(e) => onChange(e.target.value as T)}>
@@ -94,8 +97,8 @@ export function Select<T extends string>({
         const locked = disabledOptions?.includes(o);
         return (
           <option key={o} value={o} disabled={locked}>
-            {toLabel(o)}
-            {locked ? " — no data yet 🔒" : ""}
+            {renderLabel ? renderLabel(o) : toLabel(o)}
+            {locked ? " 🔒" : ""}
           </option>
         );
       })}
@@ -185,9 +188,9 @@ export function Toggle({
       onClick={() => onChange(!checked)}
       className="flex w-full items-center justify-between gap-3"
     >
-      <span className="text-sm font-semibold text-ink">{label}</span>
+      <span className="min-w-0 text-sm font-semibold text-ink">{label}</span>
       <span
-        className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${
+        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${
           checked ? "bg-brand" : "bg-line"
         }`}
       >

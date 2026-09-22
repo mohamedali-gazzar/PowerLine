@@ -11,7 +11,7 @@ import { describe, it, expect } from "vitest";
 import { normalize } from "./qtns";
 import type { LvState, LvPanel } from "./store";
 
-// Minimal panel — normalize only reads id / groupId / mvType / mvRmuConfig here.
+// Minimal panel — normalize only reads id / groupId / mvType and the three MV part-configs here.
 const panel = (id: string, extra: Partial<LvPanel>): LvPanel =>
   ({ id, groupId: undefined, ...extra } as unknown as LvPanel);
 
@@ -32,19 +32,42 @@ describe("normalize heals a bad MV panel type", () => {
     expect(out.panels[0].mvRmuConfig).toBe(cfg);
   });
 
-  it("drops a stray mvRmuConfig on a non-RMU panel", () => {
-    const out = normalize(stateWith(panel("p1", { mvType: "kiosk", mvRmuConfig: { x: 1 } as never })));
-    expect(out.panels[0].mvType).toBe("kiosk");
+  it("drops a stray mvRmuConfig on a panel that is neither an RMU nor a kiosk", () => {
+    // A Transformer panel carrying an RMU config is stale data and is cleared. (A kiosk is
+    // the deliberate exception — it holds an RMU config of its own; see the next test.)
+    const out = normalize(stateWith(panel("p1", { mvType: "transformer", mvRmuConfig: { x: 1 } as never })));
+    expect(out.panels[0].mvType).toBe("transformer");
     expect(out.panels[0].mvRmuConfig).toBeUndefined();
   });
 
-  it("keeps a Transformer panel's config but drops it on a non-transformer panel", () => {
+  it("keeps all three part-configs on a kiosk (one packaged RMU + transformer + LV unit)", () => {
+    const rmu = { productType: "PRAL" };
+    const tr = { ratingKva: 1000 };
+    const lv = { iec: "eehc", includePf: true };
+    const out = normalize(stateWith(panel("p1", {
+      mvType: "kiosk",
+      mvRmuConfig: rmu as never,
+      mvTransformerConfig: tr as never,
+      mvLvConfig: lv as never,
+    })));
+    expect(out.panels[0].mvType).toBe("kiosk");
+    expect(out.panels[0].mvRmuConfig).toBe(rmu);
+    expect(out.panels[0].mvTransformerConfig).toBe(tr);
+    expect(out.panels[0].mvLvConfig).toBe(lv);
+  });
+
+  it("keeps a Transformer panel's config but drops it on a non-transformer, non-kiosk panel", () => {
     const cfg = { ratingKva: 1000, primaryKv: 11, brand: "Hitachi", insulation: "Dry" };
     const kept = normalize(stateWith(panel("p1", { mvType: "transformer", mvTransformerConfig: cfg as never })));
     expect(kept.panels[0].mvType).toBe("transformer");
     expect(kept.panels[0].mvTransformerConfig).toBe(cfg);
     const dropped = normalize(stateWith(panel("p2", { mvType: "rmu", mvTransformerConfig: cfg as never })));
     expect(dropped.panels[0].mvTransformerConfig).toBeUndefined();
+  });
+
+  it("drops an mvLvConfig that strayed onto a non-kiosk panel", () => {
+    const out = normalize(stateWith(panel("p1", { mvType: "rmu", mvLvConfig: { iec: "eehc" } as never })));
+    expect(out.panels[0].mvLvConfig).toBeUndefined();
   });
 
   it("leaves an ordinary LV panel (no mvType) alone", () => {
