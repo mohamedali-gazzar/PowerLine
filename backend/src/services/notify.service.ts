@@ -123,6 +123,25 @@ export async function approverIds(): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
+/**
+ * Admins only — the people who may approve an "edit someone else's QTN" request. Narrower than
+ * approverIds(): a Team Leader can hold qtn.approve (so they approve quotations) but is NOT an
+ * admin, and only admins decide edit-access requests. Matches accessOf's admin rule: tier ADMIN,
+ * or a legacy OWNER not yet migrated.
+ */
+export async function adminIds(): Promise<string[]> {
+  const rows = await prisma.user.findMany({
+    where: {
+      OR: [
+        { tier: "ADMIN" },
+        { AND: [{ tier: null }, { role: "OWNER" }] },
+      ],
+    },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}
+
 function escapeHtml(s: string): string {
   return String(s).replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)

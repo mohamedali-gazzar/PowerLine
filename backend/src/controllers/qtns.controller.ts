@@ -9,6 +9,8 @@ import {
   numberSchema,
   reassignSchema,
   coworkSchema,
+  editRequestSchema,
+  editDecisionSchema,
   attachmentSchema,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_QTN,
@@ -22,7 +24,7 @@ import {
 import {
   revisionOf, nextRevision, revisionTaken, sequenceOf, baseOf, formatQtnNumber,
 } from "../domain/qtnRevision";
-import { notify, notifyAll, approverIds } from "../services/notify.service";
+import { notify, notifyAll, approverIds, adminIds } from "../services/notify.service";
 import { originOf } from "../services/email.service";
 
 type Summary = {
@@ -229,14 +231,28 @@ async function visibleQtn(req: Request) {
   return prisma.lvQtn.findFirst({ where, include: ownerSelect });
 }
 
-/** The QTN if the caller may WRITE it — its owner OR its co-owner. What a co-owner can
- *  actually change is enforced by the per-panel merge in update(), not here. */
+/** The QTN if the caller may WRITE it — its owner, its co-owner, a `qtn.editAll` holder (an Admin
+ *  editing any quotation in place), or a user holding an Admin-approved edit grant for THIS exact
+ *  quotation. What a co-owner can actually change is enforced by the per-panel merge in update(),
+ *  not here. A status-locked quotation is still frozen for everyone by the isLocked check at each
+ *  write site — neither qtn.editAll nor an edit grant bypasses that. */
 async function writableQtn(req: Request) {
+  const acc = await accessOf(req.userId);
   const uid = req.userId as string;
-  return prisma.lvQtn.findFirst({
-    where: { id: req.params.id, OR: sharedWith(uid) },
-    include: ownerSelect,
+  // Admin: may write any quotation.
+  if (acc.perms.has("qtn.editAll")) {
+    return prisma.lvQtn.findFirst({ where: { id: req.params.id }, include: ownerSelect });
+  }
+  // Owner / co-owner: the usual path.
+  const owned = await prisma.lvQtn.findFirst({ where: { id: req.params.id, OR: sharedWith(uid) }, include: ownerSelect });
+  if (owned) return owned;
+  // Otherwise: an Admin-approved, not-yet-revoked edit grant for this exact quotation.
+  const grant = await prisma.qtnEditRequest.findFirst({
+    where: { qtnId: req.params.id, userId: uid, status: "APPROVED" },
+    select: { id: true },
   });
+  if (grant) return prisma.lvQtn.findFirst({ where: { id: req.params.id }, include: ownerSelect });
+  return null;
 }
 
 /** 409 when the quotation's content is frozen by its status. */
@@ -598,6 +614,23 @@ export async function update(req: Request, res: Response) {
       data.revisionNo = q.revisionNo;
     }
     await prisma.lvQtn.update({ where: { id: q.id }, data });
+    // Attribution: an Admin or a granted editor changing a quotation that isn't theirs (owners and
+    // co-owners are already attributed — the owner via ownership, a co-worker via mergeCoWork's
+    // per-panel stamp). Recorded in the audit trail, throttled to one row per ~10 min so the
+    // debounced autosave can't spam it. Guarded so a logging hiccup can never fail the save.
+    const uid = req.userId as string;
+    if (q.ownerId !== uid && !coOwnersOf(q).some((c) => c.id === uid)) {
+      try {
+        const recent = await prisma.qtnEvent.findFirst({
+          where: { qtnId: q.id, actorId: uid, action: "EDIT", createdAt: { gt: new Date(Date.now() - 10 * 60_000) } },
+          select: { id: true },
+        });
+        if (!recent) {
+          const st = qtnStatus(q);
+          await logEvent({ qtn: q, action: "EDIT", from: st, to: st, note: `${req.userEmail || "A user"} edited this quotation`, actorId: uid, actorEmail: req.userEmail });
+        }
+      } catch { /* audit is best-effort — never fail the save */ }
+    }
     res.json({ ok: true });
   } catch (e) {
     fail(res, e);
@@ -1426,6 +1459,140 @@ export async function cowork(req: Request, res: Response) {
       });
     }
     res.json({ ok: true, coOwners: targets.map((t) => ({ id: t.id, email: t.email, name: t.name })) });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+// ── Edit-access requests: amend a quotation you don't own, with an Admin's approval ──────────
+// A user who can SEE a quotation but not write it (not owner, co-owner, or Admin) asks to edit it.
+// The request lands in the Admins' "Waiting for your approval" area; an Admin approves it, which
+// grants that user in-place edit rights to THAT quotation (writableQtn honours the APPROVED grant)
+// until an Admin revokes it. Admins never need this — qtn.editAll already lets them edit any QTN.
+// Only Admins (tier ADMIN) may approve / decline / revoke, per the agreed rule.
+
+/** POST /api/qtns/:id/edit-request { note? } — ask an Admin for edit access to a QTN that isn't yours. */
+export async function requestEditAccess(req: Request, res: Response) {
+  try {
+    const { note } = editRequestSchema.parse(req.body);
+    const q = await visibleQtn(req);
+    if (!q) return res.status(404).json({ error: "Quotation not found." });
+    const uid = req.userId as string;
+    const acc = await accessOf(uid);
+    // People who can already edit it never need to ask.
+    if (acc.perms.has("qtn.editAll") || q.ownerId === uid || coOwnersOf(q).some((c) => c.id === uid)) {
+      return res.status(400).json({ error: "You can already edit this quotation." });
+    }
+    const trimmed = note?.trim() || "";
+    const me = await prisma.user.findUnique({ where: { id: uid }, select: { name: true } });
+    const gr = await prisma.qtnEditRequest.upsert({
+      where: { qtnId_userId: { qtnId: q.id, userId: uid } },
+      create: {
+        qtnId: q.id, qtnNumber: q.number, userId: uid,
+        userEmail: req.userEmail ?? "", userName: me?.name ?? "", status: "PENDING", note: trimmed,
+      },
+      update: { status: "PENDING", note: trimmed, decidedAt: null, decidedById: null, decidedByEmail: "" },
+    });
+    const status = qtnStatus(q);
+    await logEvent({
+      qtn: q, action: "REQUEST_EDIT", from: status, to: status,
+      note: `${req.userEmail || "A user"} requested edit access${trimmed ? ` · ${trimmed}` : ""}`,
+      actorId: uid, actorEmail: req.userEmail,
+    });
+    // Only Admins may decide, so only Admins are notified (never all approvers).
+    const admins = (await adminIds()).filter((id) => id !== uid);
+    await notifyAll(admins, {
+      kind: "QTN_EDIT_REQUEST",
+      title: `Edit request — QTN ${q.number}`,
+      body: `${req.userEmail || "A user"} is asking to edit quotation ${q.number} (owner: ${q.owner?.email || "—"}). Approve or decline it in "Waiting for your approval".`,
+      link: `/lv/qtn/${q.id}`, qtnId: q.id, note: trimmed || undefined, origin: originOf(req),
+    });
+    res.json({ ok: true, status: gr.status });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+/** GET /api/qtns/:id/edit-request — the caller's own edit-request status for this quotation. */
+export async function myEditRequest(req: Request, res: Response) {
+  try {
+    const gr = await prisma.qtnEditRequest.findUnique({
+      where: { qtnId_userId: { qtnId: req.params.id, userId: req.userId as string } },
+      select: { status: true },
+    });
+    res.json({ status: gr?.status ?? null });
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+/** GET /api/qtns/edit-requests — Admins only: pending requests + live grants, for the approval area. */
+export async function listEditRequests(req: Request, res: Response) {
+  try {
+    const acc = await accessOf(req.userId);
+    if (acc.tier !== "ADMIN") return res.status(403).json({ error: "Admin access required." });
+    const rows = await prisma.qtnEditRequest.findMany({
+      where: { status: { in: ["PENDING", "APPROVED"] } },
+      orderBy: [{ status: "asc" }, { requestedAt: "asc" }],
+    });
+    const qtns = await prisma.lvQtn.findMany({
+      where: { id: { in: [...new Set(rows.map((r) => r.qtnId))] } },
+      select: { id: true, number: true, projectName: true, owner: { select: { email: true, name: true } } },
+    });
+    const byId = new Map(qtns.map((q) => [q.id, q]));
+    res.json(rows.map((r) => ({
+      id: r.id, qtnId: r.qtnId,
+      qtnNumber: byId.get(r.qtnId)?.number || r.qtnNumber || "",
+      projectName: byId.get(r.qtnId)?.projectName || "",
+      ownerEmail: byId.get(r.qtnId)?.owner?.email || "",
+      ownerName: byId.get(r.qtnId)?.owner?.name || "",
+      userEmail: r.userEmail, userName: r.userName,
+      status: r.status, note: r.note, requestedAt: r.requestedAt,
+    })));
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
+/** POST /api/qtns/edit-requests/:reqId/decide { action: approve|decline|revoke } — Admins only. */
+export async function decideEditRequest(req: Request, res: Response) {
+  try {
+    const acc = await accessOf(req.userId);
+    if (acc.tier !== "ADMIN") return res.status(403).json({ error: "Admin access required." });
+    const { action } = editDecisionSchema.parse(req.body);
+    const gr = await prisma.qtnEditRequest.findUnique({ where: { id: req.params.reqId } });
+    if (!gr) return res.status(404).json({ error: "Request not found." });
+    const next = action === "approve" ? "APPROVED" : action === "decline" ? "DECLINED" : "REVOKED";
+    await prisma.qtnEditRequest.update({
+      where: { id: gr.id },
+      data: { status: next, decidedAt: new Date(), decidedById: req.userId ?? null, decidedByEmail: req.userEmail ?? "" },
+    });
+    const q = await prisma.lvQtn.findUnique({
+      where: { id: gr.qtnId },
+      select: { id: true, number: true, ownerId: true, submitted: true, status: true, owner: { select: { email: true } } },
+    });
+    if (q) {
+      const status = qtnStatus(q);
+      const auditAction = action === "approve" ? "GRANT_EDIT" : action === "decline" ? "DECLINE_EDIT" : "REVOKE_EDIT";
+      await logEvent({
+        qtn: q, action: auditAction, from: status, to: status,
+        note: `${req.userEmail || "An admin"} ${action}d edit access for ${gr.userEmail}`,
+        actorId: req.userId, actorEmail: req.userEmail,
+      });
+    }
+    const title: Record<string, string> = {
+      approve: `You can now edit QTN ${gr.qtnNumber}`,
+      decline: `Edit request declined — QTN ${gr.qtnNumber}`,
+      revoke: `Edit access removed — QTN ${gr.qtnNumber}`,
+    };
+    const body: Record<string, string> = {
+      approve: `An admin approved your request to edit quotation ${gr.qtnNumber}. Open it to make your changes.`,
+      decline: `An admin declined your request to edit quotation ${gr.qtnNumber}.`,
+      revoke: `An admin removed your edit access to quotation ${gr.qtnNumber}.`,
+    };
+    const kind: Record<string, string> = { approve: "QTN_EDIT_GRANTED", decline: "QTN_EDIT_DECLINED", revoke: "QTN_EDIT_REVOKED" };
+    await notify({ userId: gr.userId, kind: kind[action], title: title[action], body: body[action], link: `/lv/qtn/${gr.qtnId}`, qtnId: gr.qtnId, origin: originOf(req) });
+    res.json({ ok: true, status: next });
   } catch (e) {
     fail(res, e);
   }

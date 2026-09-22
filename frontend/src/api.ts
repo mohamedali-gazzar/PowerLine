@@ -177,6 +177,21 @@ export interface QtnEventDto {
   actorEmail: string;
   createdAt: string;
 }
+/** One "amend a QTN you don't own" request, as the Admin approval area sees it. */
+export interface EditRequestDto {
+  id: string;
+  qtnId: string;
+  qtnNumber: string;
+  projectName: string;
+  ownerEmail: string;
+  ownerName: string;
+  userEmail: string;
+  userName: string;
+  /** PENDING | APPROVED | DECLINED | REVOKED. */
+  status: string;
+  note: string;
+  requestedAt: string;
+}
 /** A Section Head / Team Leader a quotation can be sent to for approval. */
 export interface Approver {
   id: string;
@@ -801,6 +816,18 @@ export const api = {
       }),
     submit: (id: string) => request<{ ok: true }>(`/qtns/${id}/submit`, { method: "POST" }),
     unsubmit: (id: string) => request<{ ok: true }>(`/qtns/${id}/unsubmit`, { method: "POST" }),
+
+    // ── "Amend a quotation you don't own, with an Admin's approval" ──────────────
+    /** Ask an Admin for edit access to a quotation that isn't yours. */
+    editRequestAsk: (id: string, note?: string) =>
+      request<{ ok: true; status: string }>(`/qtns/${id}/edit-request`, { method: "POST", body: JSON.stringify(note ? { note } : {}) }),
+    /** The caller's own edit-request status for this quotation (null when none). */
+    editRequestMine: (id: string) => request<{ status: string | null }>(`/qtns/${id}/edit-request`),
+    /** Admins only: pending edit requests + live grants, for the "Waiting for your approval" area. */
+    editRequests: () => request<EditRequestDto[]>("/qtns/edit-requests"),
+    /** Admins only: approve / decline / revoke one edit request. */
+    editRequestDecide: (reqId: string, action: "approve" | "decline" | "revoke") =>
+      request<{ ok: true; status: string }>(`/qtns/edit-requests/${reqId}/decide`, { method: "POST", body: JSON.stringify({ action }) }),
 
     // Specs-tab attachments. `data` is plain base64 (no "data:…;base64," prefix).
     attachments: {

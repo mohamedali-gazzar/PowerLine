@@ -26,3 +26,23 @@ describe("qtn.restoreCancelled", () => {
     for (const p of ADMIN_ONLY_PERMS) expect(PERMS).toContain(p);
   });
 });
+
+// "Edit any QTN in place" — the Admin power to open and SAVE a quotation they do not own
+// (distinct from qtn.amendAll, which is the make-a-new-revision operation). It must be a real,
+// labelled permission and admin-only, so no engineer role can ever be granted it.
+describe("qtn.editAll", () => {
+  it("is a real, labelled permission", () => {
+    expect(PERMS).toContain("qtn.editAll");
+    expect(PERM_LABEL["qtn.editAll"]).toBe("Edit any QTN in place");
+  });
+
+  it("is admin-only", () => {
+    expect(ADMIN_ONLY_PERMS).toContain("qtn.editAll");
+  });
+
+  it("is granted by NO engineer role preset (engineers can never hold it)", () => {
+    for (const r of ROLE_PRESETS) {
+      if (r.tier === "ENGINEER") expect(r.perms).not.toContain("qtn.editAll");
+    }
+  });
+});

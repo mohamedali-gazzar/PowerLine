@@ -52,6 +52,11 @@ export const sizingReviewSchema = z.object({
   notes: z.string().max(10000).default(""),
 });
 
+// "Amend a quotation you don't own, with an Admin's approval." The requester's optional message,
+// and the Admin's decision on a request.
+export const editRequestSchema = z.object({ note: z.string().max(2000).optional() });
+export const editDecisionSchema = z.object({ action: z.enum(["approve", "decline", "revoke"]) });
+
 // Hand a quotation over to another user (transfer ownership).
 export const reassignSchema = z.object({
   toUserId: z.string().trim().min(1, "Pick a user to hand it to."),

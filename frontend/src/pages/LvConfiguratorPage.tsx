@@ -354,6 +354,10 @@ export default function LvConfiguratorPage() {
     { approverEmail: "", returnReason: "", ownerId: "", ownerEmail: "" }
   );
   const [myPerms, setMyPerms] = useState<string[]>([]);
+  // The caller's own "amend a QTN I don't own" request status for THIS quotation:
+  // null | "PENDING" | "APPROVED" | "DECLINED" | "REVOKED". Drives the Request-to-edit control.
+  const [myEditReq, setMyEditReq] = useState<string | null>(null);
+  const [requestingEdit, setRequestingEdit] = useState(false);
   const [wfError, setWfError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   // The missing-copper / empty-panel / no-cells etc. warnings, surfaced when sending for
@@ -438,6 +442,15 @@ export default function LvConfiguratorPage() {
       .catch(() => {});
     return () => { alive = false; };
   }, []);
+  // My own "amend a QTN I don't own" request status for this quotation — drives the
+  // Request-to-edit control / pending pill in the toolbar. Server-computed.
+  useEffect(() => {
+    const id = rec?.id;
+    if (!id) return;
+    let alive = true;
+    api.qtns.editRequestMine(id).then((r) => { if (alive) setMyEditReq(r.status); }).catch(() => {});
+    return () => { alive = false; };
+  }, [rec?.id]);
 
   // Content is frozen while the quotation is under review, approved or submitted —
   // and separately when this revision has been superseded.
@@ -462,7 +475,35 @@ export default function LvConfiguratorPage() {
   // `status === "CANCELLED"` is checked directly (not just via the superseded-number heuristic in
   // `cancelled`): a cancelled quotation is terminal and must be read-only from the first render —
   // otherwise the active-time badge keeps ticking on it while the heuristic loads (or never flags it).
-  const readOnly = (lockedByStatus && !reviewSandbox) || cancelled || status === "CANCELLED";
+  // May the caller actually SAVE this quotation? Owner, co-owner, an Admin (qtn.editAll), or a user
+  // holding an Admin-approved edit grant for this exact QTN. The server enforces the same rule; this
+  // only decides what the screen offers — and it is what makes the read-only view HONEST (a viewer
+  // with no edit rights now sees a genuine read-only page instead of editable boxes whose saves
+  // silently fail).
+  const iAmGrantedEditor = !iAmOwner && !iAmCoOwner && myEditReq === "APPROVED";
+  const canWrite = iAmOwner || iAmCoOwner || myPerms.includes("qtn.editAll") || iAmGrantedEditor;
+  const readOnly =
+    cancelled || status === "CANCELLED" ||
+    (lockedByStatus && !reviewSandbox) ||
+    (!canWrite && !reviewSandbox);
+  // An Admin editing a quotation that isn't theirs, in place; or a user editing one they were
+  // granted access to. Both save under the editor's name and drive a banner so it's never unclear
+  // whose quotation this is. (A locked QTN stays locked for everyone — hence `!readOnly`.)
+  const adminEditing = myPerms.includes("qtn.editAll") && !iAmOwner && !iAmCoOwner && !readOnly;
+  const grantedEditing = iAmGrantedEditor && !readOnly;
+  // A viewer who can't currently edit an UNLOCKED quotation that isn't theirs may ask an Admin for
+  // access (no point once it's locked — a grant can't edit a locked QTN either).
+  const canRequestEdit = !canWrite && !reviewSandbox && !lockedByStatus && !cancelled && status !== "CANCELLED";
+  // Ask an Admin for edit access to this quotation.
+  const requestEditAccess = async () => {
+    if (!rec?.id || requestingEdit) return;
+    setRequestingEdit(true);
+    try {
+      const r = await api.qtns.editRequestAsk(rec.id);
+      setMyEditReq(r.status || "PENDING");
+    } catch { /* leave the button so they can retry */ }
+    finally { setRequestingEdit(false); }
+  };
 
   // Renames the QTN on the backend (unique, non-empty). Edited from the Project tab.
   const renameQtnNumber = async (n: string): Promise<{ ok: boolean; error?: string }> => {
@@ -1710,6 +1751,20 @@ export default function LvConfiguratorPage() {
             </span>
             {/* Live active-working-time — real hands-on time, recorded on the quotation. */}
             <ActiveTimeBadge qtnId={rec?.id} initialSeconds={rec?.activeSeconds ?? 0} enabled={!sharedReadOnly && !reviewSandbox} />
+            {/* Admin editing someone else's quotation in place — makes whose QTN this is unmistakable. */}
+            {adminEditing && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2.5 py-1 text-sm font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
+                title="You have admin rights to edit any quotation. This one isn't yours — your changes save under your name.">
+                🛡 Editing as Admin — not your quotation
+              </span>
+            )}
+            {/* A user editing a quotation an Admin granted them access to — same "whose is this" cue. */}
+            {grantedEditing && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-100 px-2.5 py-1 text-sm font-bold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
+                title="An admin granted you edit access to this quotation. It isn't yours — your changes save under your name.">
+                ✎ Editing with granted access — not your quotation
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -1718,6 +1773,21 @@ export default function LvConfiguratorPage() {
             {/* Re-price this quotation to the current price list — offered only while it's an
                 editable draft/returned QTN (the estimator's own work), never once it's locked. */}
             {!readOnly && !reviewSandbox && <CatalogUpdateCheck onApply={applyCatalogPrices} autoOpen />}
+            {/* Not yours and you can't edit it yet → ask an Admin for edit access (or show it's pending). */}
+            {canRequestEdit && (
+              myEditReq === "PENDING" ? (
+                <span className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+                  title="An admin has been notified. You'll get a notification when they approve or decline.">
+                  ⏳ Edit request sent
+                </span>
+              ) : (
+                <button type="button" onClick={requestEditAccess} disabled={requestingEdit}
+                  className="btn-ghost cursor-pointer disabled:opacity-50"
+                  title="Ask an admin for permission to edit this quotation (it isn't yours).">
+                  {requestingEdit ? "Requesting…" : myEditReq === "DECLINED" ? "✎ Request to edit again" : "✎ Request to edit"}
+                </button>
+              )
+            )}
             {/* Share — Hand over / Co-Work. Stays on its placeholder; picking an entry opens that
                 dialog rather than setting a value. A compact fixed width so the dropdown doesn't
                 stretch to fit its longest option. */}

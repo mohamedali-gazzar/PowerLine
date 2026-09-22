@@ -26,6 +26,10 @@ import {
   approvers,
   reassign,
   cowork,
+  requestEditAccess,
+  myEditRequest,
+  listEditRequests,
+  decideEditRequest,
   listAttachments,
   uploadAttachment,
   downloadAttachment,
@@ -42,6 +46,8 @@ router.get("/queue", requirePerm("qtn.approve"), queue); // waiting for approval
 router.get("/next-number", getNextNumber);
 router.get("/assignees", assignees); // users a quotation can be handed to
 router.get("/approvers", approvers); // Section Heads & Team Leaders to send for approval
+router.get("/edit-requests", listEditRequests); // Admins only (checked inside) — the approval area
+router.post("/edit-requests/:reqId/decide", decideEditRequest); // Admins only — approve/decline/revoke
 
 router.post("/", create);
 router.get("/:id", getOne);
@@ -63,6 +69,8 @@ router.post("/:id/rate-decision", rateDecision); // apply / keep the latest publ
 router.post("/:id/transition", transition);
 router.post("/:id/reassign", reassign);
 router.post("/:id/cowork", cowork);
+router.post("/:id/edit-request", requestEditAccess); // ask an Admin for edit access to a QTN not yours
+router.get("/:id/edit-request", myEditRequest); // the caller's own request status for this QTN
 router.post("/:id/submit", submit);
 router.post("/:id/unsubmit", unsubmit);
 router.get("/:id/events", events);

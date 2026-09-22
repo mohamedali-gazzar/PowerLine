@@ -27,6 +27,7 @@ export const PERMS = [
   "qtn.reassign",
   "qtn.amendOwn",
   "qtn.amendAll",
+  "qtn.editAll",
   "qtn.audit",
   "qtn.approveOwn",
   "announcements.manage",
@@ -47,6 +48,7 @@ export const PERM_LABEL: Record<Perm, string> = {
   "qtn.reassign": "Hand over / reassign QTNs to another user",
   "qtn.amendOwn": "Amend own QTNs",
   "qtn.amendAll": "Amend all QTNs",
+  "qtn.editAll": "Edit any QTN in place",
   "qtn.audit": "View audit trail",
   "qtn.approveOwn": "Approve their own QTNs",
   "announcements.manage": "Manage announcements",
@@ -60,7 +62,7 @@ const ADMIN_PERMS: Perm[] = [...PERMS];
 /** Permissions ONLY an admin may hold. Admins get them automatically (ADMIN_PERMS above);
  *  they are never offered in the engineer tick list and are stripped from any hand-picked
  *  engineer permission set, so an engineer can never be granted one. */
-export const ADMIN_ONLY_PERMS: Perm[] = ["qtn.restoreCancelled"];
+export const ADMIN_ONLY_PERMS: Perm[] = ["qtn.restoreCancelled", "qtn.editAll"];
 
 /** What a not-yet-migrated user gets, derived from their legacy role. Chosen so the
  *  deploy that adds `tier`/`perms` changes nobody's access. */

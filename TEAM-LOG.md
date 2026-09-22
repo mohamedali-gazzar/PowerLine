@@ -21,6 +21,18 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-22 · Mohamed's side · Claude
+
+**New: an Admin can edit any quotation, and any user can ask an Admin for permission to edit one that isn't theirs.**
+
+Two related things, both enforced on the server (the screen only reflects them), and prices stay frozen per quotation as before:
+
+1. **Admins can edit any quotation in place.** An Admin (set in the Access Center) opens anyone's QTN and can save changes to it directly — with a clear "🛡 Editing as Admin — not your quotation" banner. A quotation that's already submitted/approved stays locked even for an Admin (withdraw or reopen it first). This power is Admins-only; ordinary roles can never be given it.
+
+2. **Anyone can request to edit a quotation they don't own; an Admin approves it.** On a quotation that isn't yours you get a **"Request to edit"** button. The request appears in the **existing "Waiting for your approval"** area (a new "Edit-access requests" list) for an **Admin** to Approve or Decline — only Admins can. Once approved, that person can edit **that one quotation** in place; their changes are recorded under their name. The access stays until an Admin **Revokes** it (there's a Revoke button beside each granted request). Declined/revoked users are back to read-only and can ask again.
+
+Under the hood: a new, additive `QtnEditRequest` table (safe for the live DB — all columns optional), the write-gate now also allows an Admin or an approved grantee, new request/approve/decline/revoke endpoints, and audit-trail + notification entries reusing the existing machinery. Backend + frontend build clean; backend 356 tests and frontend 151 tests pass, and the whole flow was verified end-to-end (request blocked before approval, allowed after, blocked again after revoke; non-admins can't approve).
+
 ## 2026-09-21 · Mohamed's side · Claude
 
 **Panels bug fix: you can now drag panels to reorder them even when another group is collapsed.**

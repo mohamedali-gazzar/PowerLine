@@ -333,6 +333,37 @@ model LvAttachment {
   @@index([qtnId])
 }
 
+/// Feature "amend a quotation you don't own, with an Admin's approval". One row per
+/// (quotation, requesting user): PENDING until an Admin decides; APPROVED grants that user
+/// in-place edit rights to THAT quotation until an Admin sets it to REVOKED. Standalone with
+/// plain ids (no foreign keys) — the approverId / QtnEvent precedent — so deleting a user or
+/// quotation never breaks a row; names are denormalised for the approval-queue UI. An Admin
+/// never needs a row here: qtn.editAll already lets them edit any quotation directly.
+model QtnEditRequest {
+  id             String    @id @default(cuid())
+  qtnId          String
+  qtnNumber      String    @default("")
+  /// The requester.
+  userId         String
+  userEmail      String    @default("")
+  userName       String    @default("")
+  /// PENDING | APPROVED | DECLINED | REVOKED. Only APPROVED grants edit rights.
+  status         String    @default("PENDING")
+  /// Optional message the requester adds.
+  note           String    @default("")
+  requestedAt    DateTime  @default(now())
+  /// Who approved / declined / revoked, and when.
+  decidedAt      DateTime?
+  decidedById    String?
+  decidedByEmail String    @default("")
+  updatedAt      DateTime  @updatedAt
+
+  /// One live row per (quotation, user); a re-request reuses it (set back to PENDING).
+  @@unique([qtnId, userId])
+  @@index([userId, status])
+  @@index([status, requestedAt])
+}
+
 /// Append-only history of everything that happens to a quotation.
 ///
 /// Deliberately has NO relation to LvQtn: a cascade delete (as on LvAttachment)

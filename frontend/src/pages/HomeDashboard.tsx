@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type HistoryItem, type QtnStatus, type QtnListItemDto, type MyAccess, type StalePricedQtns,
-  type Announcement,
+  type Announcement, type EditRequestDto,
 } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useAutoRefresh, useChangedKeys } from "../hooks/useAutoRefresh";
@@ -120,7 +120,7 @@ export default function HomeDashboard() {
       {/* Owner-posted announcements — below the welcome; renders only when something is active */}
       <Announcements items={announcements} />
 
-      {can("qtn.approve") && <ApprovalInbox />}
+      {can("qtn.approve") && <ApprovalInbox isAdmin={access?.tier === "ADMIN"} />}
 
       {/* Estimator performance — you vs team median (collapsible). Card-styled to
           match the Approval and History panels. */}
@@ -297,61 +297,134 @@ function waitedFor(iso: string): string {
   return days === 1 ? "1 day" : `${days} days`;
 }
 
-/** Only rendered for users holding qtn.approve — /qtns/queue 403s for anyone else. */
-function ApprovalInbox() {
+/** Only rendered for users holding qtn.approve — /qtns/queue 403s for anyone else. The
+ *  edit-access requests below are Admins-only (the endpoint 403s otherwise), so they are
+ *  fetched and shown only when `isAdmin`. */
+function ApprovalInbox({ isAdmin }: { isAdmin: boolean }) {
   const navigate = useNavigate();
   const [queue, setQueue] = useState<QtnListItemDto[] | null>(null);
+  const [edits, setEdits] = useState<EditRequestDto[] | null>(isAdmin ? null : []);
+  const [busy, setBusy] = useState<string | null>(null);
 
+  const loadEdits = () => { if (isAdmin) api.qtns.editRequests().then(setEdits).catch(() => setEdits([])); };
   useEffect(() => {
     api.qtns.queue().then(setQueue).catch(() => setQueue([]));
-  }, []);
-  // New approval requests show up on their own — this is the list people wait on.
-  useAutoRefresh(() => api.qtns.queue().then(setQueue).catch(() => {}), 30_000);
+    loadEdits();
+  }, [isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
+  // New requests show up on their own — this is the list people wait on.
+  useAutoRefresh(() => { api.qtns.queue().then(setQueue).catch(() => {}); loadEdits(); }, 30_000);
   const queueChanged = useChangedKeys(queue, (q) => q.id, (q) => q.updatedAt);
 
+  const decide = async (reqId: string, action: "approve" | "decline" | "revoke") => {
+    setBusy(reqId);
+    try { await api.qtns.editRequestDecide(reqId, action); } catch { /* refresh reflects the truth */ }
+    finally { setBusy(null); loadEdits(); }
+  };
+  const pending = (edits ?? []).filter((e) => e.status === "PENDING");
+  const granted = (edits ?? []).filter((e) => e.status === "APPROVED");
+
   return (
-    <div className="card mb-5 overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-3">
-        <h2 className="sec-head mb-0">Waiting for your approval</h2>
-        {queue && queue.length > 0 && (
-          <span className="chip bg-amber-100 text-amber-700">{queue.length} waiting</span>
+    <>
+      <div className="card mb-5 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3">
+          <h2 className="sec-head mb-0">Waiting for your approval</h2>
+          {queue && queue.length > 0 && (
+            <span className="chip bg-amber-100 text-amber-700">{queue.length} waiting</span>
+          )}
+        </div>
+        {queue === null ? (
+          <div className="space-y-2 px-5 pb-5">{[0, 1].map((i) => <div key={i} className="skeleton h-10" />)}</div>
+        ) : queue.length === 0 ? (
+          <p className="px-5 pb-5 text-sm text-muted">Nothing waiting — the queue is clear.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-brand-tint text-left text-[11px] uppercase tracking-wide text-brand-dark">
+              <tr>
+                <th className="px-5 py-2.5">QTN No</th>
+                <th className="px-5 py-2.5">Project</th>
+                <th className="px-5 py-2.5">Created by</th>
+                <th className="px-5 py-2.5">Waiting</th>
+              </tr>
+            </thead>
+            <tbody>
+              {queue.map((q) => (
+                <tr key={q.id}
+                  className={`cursor-pointer border-t border-line transition-colors hover:bg-brand-tint ${
+                    queueChanged.has(q.id) ? "animate-flash-new" : ""
+                  }`}
+                  onClick={() => navigate(`/lv/qtn/${q.id}`)}>
+                  <td className="px-5 py-2.5 font-bold">
+                    <span className="rounded-md bg-brand-light px-2 py-0.5 font-mono text-xs text-brand-dark">{q.number}</span>
+                  </td>
+                  <td className="px-5 py-2.5">{q.projectName || <span className="text-muted">—</span>}</td>
+                  <td className="px-5 py-2.5 text-muted">{q.ownerName || q.ownerEmail || "—"}</td>
+                  <td className="px-5 py-2.5 text-xs text-muted">
+                    {waitedFor(q.submittedForApprovalAt || q.updatedAt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
-      {queue === null ? (
-        <div className="space-y-2 px-5 pb-5">{[0, 1].map((i) => <div key={i} className="skeleton h-10" />)}</div>
-      ) : queue.length === 0 ? (
-        <p className="px-5 pb-5 text-sm text-muted">Nothing waiting — the queue is clear.</p>
-      ) : (
-        <table className="w-full text-sm">
-          <thead className="bg-brand-tint text-left text-[11px] uppercase tracking-wide text-brand-dark">
-            <tr>
-              <th className="px-5 py-2.5">QTN No</th>
-              <th className="px-5 py-2.5">Project</th>
-              <th className="px-5 py-2.5">Created by</th>
-              <th className="px-5 py-2.5">Waiting</th>
-            </tr>
-          </thead>
-          <tbody>
-            {queue.map((q) => (
-              <tr key={q.id}
-                className={`cursor-pointer border-t border-line transition-colors hover:bg-brand-tint ${
-                  queueChanged.has(q.id) ? "animate-flash-new" : ""
-                }`}
-                onClick={() => navigate(`/lv/qtn/${q.id}`)}>
-                <td className="px-5 py-2.5 font-bold">
-                  <span className="rounded-md bg-brand-light px-2 py-0.5 font-mono text-xs text-brand-dark">{q.number}</span>
-                </td>
-                <td className="px-5 py-2.5">{q.projectName || <span className="text-muted">—</span>}</td>
-                <td className="px-5 py-2.5 text-muted">{q.ownerName || q.ownerEmail || "—"}</td>
-                <td className="px-5 py-2.5 text-xs text-muted">
-                  {waitedFor(q.submittedForApprovalAt || q.updatedAt)}
-                </td>
+
+      {/* Admins only: requests from users to edit a quotation that isn't theirs. */}
+      {isAdmin && (pending.length > 0 || granted.length > 0) && (
+        <div className="card mb-5 overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3">
+            <h2 className="sec-head mb-0">Edit-access requests</h2>
+            {pending.length > 0 && <span className="chip bg-amber-100 text-amber-700">{pending.length} to review</span>}
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-brand-tint text-left text-[11px] uppercase tracking-wide text-brand-dark">
+              <tr>
+                <th className="px-5 py-2.5">QTN No</th>
+                <th className="px-5 py-2.5">Requested by</th>
+                <th className="px-5 py-2.5">Owner</th>
+                <th className="px-5 py-2.5 text-right">Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {pending.map((e) => (
+                <tr key={e.id} className="border-t border-line">
+                  <td className="px-5 py-2.5">
+                    <button onClick={() => navigate(`/lv/qtn/${e.qtnId}`)} className="rounded-md bg-brand-light px-2 py-0.5 font-mono text-xs font-bold text-brand-dark hover:underline">{e.qtnNumber}</button>
+                    {e.projectName && <span className="ml-2 text-xs text-muted">{e.projectName}</span>}
+                    {e.note && <div className="mt-0.5 text-[11px] italic text-muted">“{e.note}”</div>}
+                  </td>
+                  <td className="px-5 py-2.5">{e.userName || e.userEmail}</td>
+                  <td className="px-5 py-2.5 text-muted">{e.ownerName || e.ownerEmail || "—"}</td>
+                  <td className="px-5 py-2.5">
+                    <div className="flex items-center justify-end gap-2">
+                      <button type="button" disabled={busy === e.id} onClick={() => decide(e.id, "approve")}
+                        className="rounded-md bg-brand px-2.5 py-1 text-xs font-bold text-white hover:bg-brand-dark disabled:opacity-50">Approve</button>
+                      <button type="button" disabled={busy === e.id} onClick={() => decide(e.id, "decline")}
+                        className="rounded-md border border-line px-2.5 py-1 text-xs font-semibold text-muted hover:border-red-300 hover:text-red-600 disabled:opacity-50">Decline</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {granted.map((e) => (
+                <tr key={e.id} className="border-t border-line bg-brand-tint/30">
+                  <td className="px-5 py-2.5">
+                    <button onClick={() => navigate(`/lv/qtn/${e.qtnId}`)} className="rounded-md bg-white px-2 py-0.5 font-mono text-xs font-bold text-brand-dark hover:underline">{e.qtnNumber}</button>
+                    <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">GRANTED</span>
+                  </td>
+                  <td className="px-5 py-2.5">{e.userName || e.userEmail}</td>
+                  <td className="px-5 py-2.5 text-muted">{e.ownerName || e.ownerEmail || "—"}</td>
+                  <td className="px-5 py-2.5">
+                    <div className="flex items-center justify-end">
+                      <button type="button" disabled={busy === e.id} onClick={() => decide(e.id, "revoke")}
+                        className="rounded-md border border-line px-2.5 py-1 text-xs font-semibold text-muted hover:border-red-300 hover:text-red-600 disabled:opacity-50">Revoke</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
-    </div>
+    </>
   );
 }
 
