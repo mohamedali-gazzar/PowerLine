@@ -786,7 +786,15 @@ export default function LvConfiguratorPage() {
   // get Return/Approve (and the undo afterwards). Whoever builds it (owner / co-worker)
   // gets Send-for-approval and the withdraw afterwards. An owner never reviews their own,
   // which matches the server (self-approval is off), so the two never collide.
-  const amBuilder = iAmOwner || iAmCoOwner;
+  // An Admin (qtn.editAll) who opens a quotation that isn't theirs acts as its stand-in
+  // owner: having amended it, they drive the builder side — Send for approval, and then
+  // (because Admins also self-approve) Approve and Submit — so an amended quotation can be
+  // pushed all the way through. The server already allows an Admin every one of these moves;
+  // before this an Admin counted only as a reviewer and had no way to send or submit one.
+  // Kept independent of the read-only/lock state so the role survives once it locks
+  // (Waiting → Approved), which is exactly where Approve and Submit live.
+  const amAdminSteward = myPerms.includes("qtn.editAll") && !iAmOwner && !iAmCoOwner;
+  const amBuilder = iAmOwner || iAmCoOwner || amAdminSteward;
   const amReviewer = (canApprove || canReturn) && !amBuilder;
   // A self-approver builds the quotation AND is allowed to approve their own work (the server
   // gates self-approval on qtn.approveOwn; admins carry it). For them the one primary button

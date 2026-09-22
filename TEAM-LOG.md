@@ -23,6 +23,21 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-22 · Mohamed's side · Claude
 
+**Fix: an Admin who amends someone else's quotation can now push it all the way through.**
+
+When an Admin opened a quotation that wasn't theirs to amend it, the screen treated
+them only as a *reviewer* — so on a Draft there was no **"Send for approval"** button,
+and after approval there was no **"Submit"** button. They could change it but never move
+it forward. Now an Admin editing a quotation that isn't theirs acts as its stand-in
+owner and gets the whole workflow in one button at each stage: **Send for approval** on
+a Draft, **Approve** (with Return / Withdraw) while it's waiting, and **Submit** once
+it's approved. Nothing changed for the normal reviewers (Section Heads / Team Leaders,
+who approve but don't edit), and a submitted or approved quotation still can't be edited
+by anyone without reopening it first. This was only the *screen* catching up — the
+server already allowed an Admin every one of these moves.
+
+## 2026-09-22 · Mohamed's side · Claude
+
 **New: the MV Kiosk (packaged substation) — RMU + Transformer + LV in one unit, with a live combined price sheet.**
 
 On the MV tab, a Kiosk panel is one packaged unit built from an accordion of sections — **RMU**, **Transformer**, **Low (LV panel)**, **Accessories** and **Extra** — with a **"Kiosk price (live)"** table across the top that prices the whole unit as you build it. The table has Code · Kiosk · Cost · Factor · Selling for each part (RMU, Transformer, LV, Kiosk Size, Accessories, Extra), a Total with a blended factor, and an **EGP / USD** switch.
