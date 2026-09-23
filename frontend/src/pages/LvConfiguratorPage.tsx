@@ -4876,7 +4876,7 @@ function kioskDesc(p: LvPanel): string {
     : "";
   const lvLine = "Low voltage compartment : ABB Circuit breakers";
   return [
-    "Supply of compact substation Powerline Type Consists of :",
+    "Supply of Compact Substation Powerline Type Consists of :",
     mvLine, trLine, lvLine,
     "As per specifications enclosed.",
   ].filter(Boolean).join("\n");
@@ -5196,6 +5196,18 @@ function formatRmuDesc(desc: string): string {
     .replace(/enclosed, including/, "enclosed,\nincluding");                  // before the "including …" extras
 }
 
+// Colour a line's product-type phrase(s) in the PowerLine orange so a client can scan the commercial
+// offer by type ("Ring Main Unit" / "compact substation" / "Transformer"). Matches are case-insensitive.
+function highlightTerms(text: string, terms: string[]): React.ReactNode {
+  if (!terms.length) return text;
+  const re = new RegExp(`(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  return text.split(re).map((part, i) =>
+    terms.some((t) => t.toLowerCase() === part.toLowerCase())
+      ? <span key={i} style={{ color: TRED, fontWeight: 800 }}>{part}</span>
+      : <Fragment key={i}>{part}</Fragment>
+  );
+}
+
 function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const panels = mvRmuPanels(s);
   const trPanels = mvTransformerPanels(s);
@@ -5249,7 +5261,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
       // to the RMU's selling (in the offer currency).
       const unit = base + addUnit + Math.round(rmuAuxShuntUsd(p.mvRmuConfig) * rate);
       const qty = p.qty || 1;
-      return [{ desc, qty, unit, total: unit * qty, poa: baseUsd == null }];
+      return [{ desc, qty, unit, total: unit * qty, poa: baseUsd == null, hl: ["Ring Main Unit"] }];
     }
     if (p.mvType === "transformer" && p.mvTransformerConfig) {
       const c = p.mvTransformerConfig;
@@ -5260,7 +5272,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
       const sellUsd = match ? (trFactor > 0 ? Math.round(match.costEgp / trFactor) : match.costEgp) : null;
       const unit = sellUsd == null ? 0 : sellUsd * rate;
       const qty = p.qty || 1;
-      return [{ desc: transformerDesc(c), qty, unit, total: unit * qty, poa: sellUsd == null }];
+      return [{ desc: transformerDesc(c), qty, unit, total: unit * qty, poa: sellUsd == null, hl: ["Transformer"] }];
     }
     if (p.mvType === "kiosk") {
       const usdRate = s.factors?.usd || 1;
@@ -5283,7 +5295,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
       const sellEgp = kioskTotalSellingEgp(costs, p);
       const unit = currency === "EGP" ? sellEgp : Math.round(sellEgp / usdRate);
       const qty = p.qty || 1;
-      return [{ desc: kioskDesc(p), qty, unit, total: unit * qty, poa: sellEgp <= 0 }];
+      return [{ desc: kioskDesc(p), qty, unit, total: unit * qty, poa: sellEgp <= 0, hl: ["compact substation"] }];
     }
     return [];
   });
@@ -5338,7 +5350,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             return mvItems.map((it, i) => (
               <div key={i} className="grid grid-cols-[2rem_1fr_3rem_6.5rem_6.5rem] gap-x-3 border-b border-line py-3 text-sm">
                 <span className="text-muted">{i + 1}</span>
-                <span className="whitespace-pre-line font-bold">{formatRmuDesc(it.desc)}</span>
+                <span className="whitespace-pre-line font-bold">{highlightTerms(formatRmuDesc(it.desc), it.hl)}</span>
                 <span className="text-center">{it.qty}</span>
                 <span className="text-right">{it.poa ? <span className="font-bold text-amber-600">POA</span> : fmt(it.unit)}</span>
                 <span className="text-right font-bold">{it.poa ? "POA" : fmt(it.total)}</span>

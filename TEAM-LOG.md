@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**MV commercial offer: product types printed in the PowerLine orange.**
+
+On the MV commercial offer, the three product-type phrases now print in the brand orange so a
+client can scan the offer by type: **Ring Main Unit** (RMU lines), **Compact Substation** (kiosk
+lines) and **Transformer** (transformer lines). It's precise per line — a kiosk highlights only
+"Compact Substation", its inner "Transformer compartment" stays black. "Compact Substation" is now
+capitalised. Offer wording/colour only.
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **Follow-ups to the RMU / kiosk pricing.**
 
 Three refinements:
