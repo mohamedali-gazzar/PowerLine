@@ -23,6 +23,27 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**New: a milestone celebration popup when an engineer completes 10 panels.**
+
+When someone has completed **10 panels**, a full-screen celebration now pops up: the "⚡ Achievement
+Unlocked!" banner, a little PowerLine hard-hat engineer who walks in, takes a tumble and strikes a
+proud pose, finishing on a card that reads **"Baby Engineer Mode: ON"** with a message, a progress bar
+toward the next milestone, and a **"Let's do Panel 11 ⚡"** button.
+
+- It counts **each person's own** panels — the ones in their quotations that have moved **past Draft**.
+- It shows **once** and is remembered on the server, so it never appears again — not after a refresh,
+  a sign-out, or on another computer. Deleting or reopening a quotation won't re-trigger it.
+- Safe, additive change: it adds one small field to each user's record; nothing about prices or
+  quotations is touched. (Developers: new `User.achievementsSeen` + `/api/achievements` endpoints.)
+
+Only the **10-panel** celebration is switched on today. The next ones (50 / 100 / 200 / 300 / 400) are
+already wired as a list, waiting on their words.
+
+❓ QUESTION FOR MOHAMED: send the **title + message** for milestones **50, 100, 200, 300, 400** (same
+playful style as the 10-panel one) and I'll switch each on.
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **MV commercial offer: product types printed in the PowerLine orange.**
 
 On the MV commercial offer, the three product-type phrases now print in the brand orange so a

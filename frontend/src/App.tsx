@@ -5,6 +5,7 @@ import { api, QTN_STATUS_STYLE, QTN_STATUS_LABEL, type QtnStatus, type Notificat
 import { useAuth } from "./auth/AuthContext";
 import { useTheme } from "./theme";
 import AssistantPanel from "./assistant/AssistantPanel";
+import AchievementMount from "./components/achievements/AchievementMount";
 
 const homeIcon = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -268,6 +269,9 @@ export default function App() {
           so its thread survives navigation between the QTN's sections and tabs and never shares
           state with the QTN. It stays idle until a QTN feeds it. */}
       <AssistantPanel />
+
+      {/* Milestone achievement popup — mounted once so it overlays any screen. */}
+      <AchievementMount />
     </div>
   );
 }

@@ -191,6 +191,11 @@ model User {
   accessRole    String   @default("")
   /// Opt out of workflow e-mail; in-app notifications still fire.
   notifyByEmail Boolean  @default(true)
+  /// Milestone achievements this user has already been shown, as a JSON array of the
+  /// thresholds seen, e.g. "[10]". Same string-holds-JSON precedent as `perms`. Defaulted
+  /// (never null) so the deploy's `prisma db push` is safe and reads never hit null; written
+  /// only by POST /api/achievements/seen, so a celebration is never shown twice on any device.
+  achievementsSeen String @default("[]")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

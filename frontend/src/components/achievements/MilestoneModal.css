@@ -1,0 +1,119 @@
+/* Milestone achievement modal — ported verbatim from milestone-10-baby-engineer.html.
+   ALL rules are scoped under .pl-ach-backdrop and keyframes are prefixed `plach-` so nothing
+   leaks into the app. Generic classes (.face/.pt/.dizzy) were renamed .pl-ach-*. Do not restyle. */
+
+/* ---------- modal ---------- */
+.pl-ach-backdrop{
+  --navy:#14213D; --navy-2:#1E3160; --orange:#F7931E; --orange-d:#E0770A;
+  --lime:#C8F03C; --ink:#1b1b2f; --muted:#5b6478;
+  position:fixed;inset:0;background:rgba(10,16,32,.62);backdrop-filter:blur(3px);
+  display:grid;place-items:center;padding:16px;z-index:1000;opacity:0;transition:opacity .25s;
+  font-family:Poppins,system-ui,sans-serif;color:var(--ink)}
+.pl-ach-backdrop.show{opacity:1}
+.pl-ach-backdrop *{box-sizing:border-box}
+.pl-ach-backdrop .pl-ach-card{width:min(580px,100%);background:#fff;border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.35);transform:scale(.9);transition:transform .35s cubic-bezier(.2,1.4,.4,1)}
+.pl-ach-backdrop.show .pl-ach-card{transform:scale(1)}
+.pl-ach-backdrop .pl-ach-card.shake{animation:plach-shake .42s linear}
+@keyframes plach-shake{
+  0%,100%{translate:0 0}15%{translate:-7px 3px}30%{translate:6px -4px}45%{translate:-5px -2px}
+  60%{translate:5px 3px}75%{translate:-3px 1px}90%{translate:2px -1px}}
+
+.pl-ach-backdrop .pl-ach-stage{position:relative;aspect-ratio:600/380;overflow:hidden;
+  background:
+    linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px) 0 0/24px 24px,
+    linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px) 0 0/24px 24px,
+    radial-gradient(ellipse at 50% 30%,#4467B3 0%,#2F4E93 45%,#223C77 100%);}
+.pl-ach-backdrop .pl-ach-stage svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+
+.pl-ach-backdrop .pl-ach-banner{position:absolute;top:6%;left:50%;translate:-50% 0;white-space:nowrap;
+  font:800 clamp(15px,3.6vw,22px)/1 Poppins;letter-spacing:.02em;color:#fff;
+  background:linear-gradient(180deg,#FFB14A,var(--orange) 55%,var(--orange-d));
+  padding:12px 22px;border-radius:999px;box-shadow:0 5px 0 #b95d05,0 12px 24px rgba(0,0,0,.3);
+  transform:scale(0) rotate(-8deg);z-index:3}
+.pl-ach-backdrop .pl-ach-banner.pop{animation:plach-pop .6s cubic-bezier(.2,1.6,.4,1) forwards}
+@keyframes plach-pop{0%{transform:scale(0) rotate(-8deg)}70%{transform:scale(1.12) rotate(2deg)}100%{transform:scale(1) rotate(-2deg)}}
+
+/* ---------- particles ---------- */
+.pl-ach-backdrop .pl-ach-pt{position:absolute;pointer-events:none;will-change:transform,opacity;z-index:2}
+.pl-ach-backdrop .pl-ach-pt.conf{width:9px;height:14px;border-radius:2px}
+.pl-ach-backdrop .pl-ach-pt.dust{width:26px;height:26px;border-radius:50%;background:rgba(220,228,245,.55)}
+
+/* ---------- SVG rig ---------- */
+.pl-ach-backdrop #troupe{transform:translateX(-420px)}
+.pl-ach-backdrop .walking #troupe{animation:plach-walkin 1.9s cubic-bezier(.35,.1,.45,1) forwards}
+.pl-ach-backdrop .after-walk #troupe{transform:none}
+@keyframes plach-walkin{from{transform:translateX(-420px)}to{transform:translateX(0)}}
+
+.pl-ach-backdrop .eng-waddle,.pl-ach-backdrop .eng-jump{transform-origin:0 0}
+.pl-ach-backdrop .eng-fall{transform-origin:-16px 0}
+.pl-ach-backdrop .legL{transform-origin:-8px -26px}.pl-ach-backdrop .legR{transform-origin:8px -26px}
+.pl-ach-backdrop .walking .eng-waddle{animation:plach-waddle .32s ease-in-out infinite alternate}
+.pl-ach-backdrop .walking .legL{animation:plach-step .32s ease-in-out infinite alternate}
+.pl-ach-backdrop .walking .legR{animation:plach-step .32s ease-in-out infinite alternate-reverse}
+@keyframes plach-waddle{from{transform:rotate(-7deg)}to{transform:rotate(7deg) translateY(-3px)}}
+@keyframes plach-step{from{transform:rotate(-20deg)}to{transform:rotate(20deg)}}
+
+.pl-ach-backdrop .wobble .eng-waddle{animation:plach-wobble .55s ease-in-out forwards}
+@keyframes plach-wobble{0%{transform:rotate(0)}25%{transform:rotate(12deg)}50%{transform:rotate(-9deg)}75%{transform:rotate(15deg)}100%{transform:rotate(4deg)}}
+
+.pl-ach-backdrop .fallen .eng-fall{animation:plach-fall .55s cubic-bezier(.5,0,.7,1) forwards}
+@keyframes plach-fall{0%{transform:rotate(0)}18%{transform:rotate(9deg)}72%{transform:rotate(-84deg)}86%{transform:rotate(-73deg)}100%{transform:rotate(-78deg)}}
+.pl-ach-backdrop .posed .eng-fall{animation:plach-getup .32s cubic-bezier(.3,1.4,.5,1) forwards}
+@keyframes plach-getup{from{transform:rotate(-78deg)}to{transform:rotate(0)}}
+.pl-ach-backdrop .posed .eng-jump{animation:plach-jump .7s cubic-bezier(.3,.9,.4,1) .2s both}
+@keyframes plach-jump{0%{transform:translateY(0) scale(1,1)}20%{transform:translateY(0) scale(1.1,.88)}
+  55%{transform:translateY(-54px) scale(.94,1.08)}82%{transform:translateY(0) scale(1.12,.86)}100%{transform:translateY(0) scale(1,1)}}
+
+.pl-ach-backdrop .bk-tilt{transform-origin:0 0;transform:rotate(-6deg)}
+.pl-ach-backdrop .bk-fall{transform-origin:118px 0}
+.pl-ach-backdrop .walking .bk-tilt{animation:plach-drag .32s ease-in-out infinite alternate}
+@keyframes plach-drag{from{transform:rotate(-4deg)}to{transform:rotate(-9deg)}}
+.pl-ach-backdrop .wobble .bk-tilt{animation:plach-bkwob .55s ease-in-out forwards}
+@keyframes plach-bkwob{0%{transform:rotate(-6deg)}40%{transform:rotate(-16deg)}100%{transform:rotate(3deg)}}
+.pl-ach-backdrop .dropped .bk-tilt{transform:rotate(0)}
+.pl-ach-backdrop .bk-shadow{transition:transform .35s ease-in .3s;transform-origin:62px 3px}
+.pl-ach-backdrop .dropped .bk-shadow{transform:translateX(118px) scaleX(1.2)}
+.pl-ach-backdrop .dropped .bk-fall{animation:plach-bkfall .5s cubic-bezier(.55,0,.9,.6) forwards}
+@keyframes plach-bkfall{0%{transform:rotate(0)}78%{transform:rotate(92deg)}90%{transform:rotate(85deg)}100%{transform:rotate(90deg)}}
+
+/* arms + faces */
+.pl-ach-backdrop .arms-pose{opacity:0}
+.pl-ach-backdrop .posed .arms-carry{opacity:0}.pl-ach-backdrop .posed .arms-pose{opacity:1}
+.pl-ach-backdrop .pl-ach-face{opacity:0}
+.pl-ach-backdrop [data-face=strain] .f-strain,.pl-ach-backdrop [data-face=oh] .f-oh,.pl-ach-backdrop [data-face=happy] .f-happy{opacity:1}
+.pl-ach-backdrop .sweat{opacity:0}
+.pl-ach-backdrop .walking .sweat,.pl-ach-backdrop .wobble .sweat{opacity:1;animation:plach-drip .64s ease-in infinite}
+@keyframes plach-drip{from{transform:translateY(0);opacity:1}to{transform:translateY(10px);opacity:0}}
+
+.pl-ach-backdrop .pl-ach-dizzy{opacity:0;transform-origin:91px 262px}
+.pl-ach-backdrop .pl-ach-dizzy.on{opacity:1;animation:plach-spin 0.9s linear infinite}
+@keyframes plach-spin{from{transform:rotate(0) scaleY(.45)}to{transform:rotate(360deg) scaleY(.45)}}
+.pl-ach-backdrop .pl-ach-dizzy-wrap{transform-origin:91px 262px}
+
+/* ---------- final block ---------- */
+.pl-ach-backdrop .pl-ach-final{display:grid;grid-template-rows:0fr;transition:grid-template-rows .55s cubic-bezier(.2,.9,.3,1)}
+.pl-ach-backdrop .pl-ach-final.open{grid-template-rows:1fr}
+.pl-ach-backdrop .pl-ach-final>div{overflow:hidden}
+.pl-ach-backdrop .pl-ach-body{padding:22px 28px 26px;text-align:center}
+.pl-ach-backdrop .pl-ach-body>*{opacity:0;transform:translateY(10px);transition:opacity .4s,transform .4s}
+.pl-ach-backdrop .open .pl-ach-body>*{opacity:1;transform:none}
+.pl-ach-backdrop .open .pl-ach-body>*:nth-child(2){transition-delay:.08s}.pl-ach-backdrop .open .pl-ach-body>*:nth-child(3){transition-delay:.16s}
+.pl-ach-backdrop .open .pl-ach-body>*:nth-child(4){transition-delay:.24s}.pl-ach-backdrop .open .pl-ach-body>*:nth-child(5){transition-delay:.32s}
+.pl-ach-backdrop .open .pl-ach-body>*:nth-child(6){transition-delay:.4s}
+.pl-ach-backdrop .ach-over{font:700 12px Poppins;letter-spacing:.16em;color:var(--orange-d)}
+.pl-ach-backdrop .ach-title{font:800 clamp(22px,5vw,30px)/1.15 Poppins;color:var(--navy);margin-top:6px}
+.pl-ach-backdrop .ach-title b{color:var(--orange)}
+.pl-ach-backdrop .ach-quote{font:500 14.5px/1.6 Poppins;color:var(--muted);margin:12px auto 0;max-width:420px}
+.pl-ach-backdrop .ach-next{margin:18px auto 0;max-width:380px;text-align:left}
+.pl-ach-backdrop .ach-next-row{display:flex;justify-content:space-between;font:600 12px Poppins;color:var(--navy)}
+.pl-ach-backdrop .ach-next-row span:last-child{color:var(--muted);font-weight:500}
+.pl-ach-backdrop .ach-bar{height:10px;border-radius:99px;background:#e7ebf2;margin-top:6px;overflow:hidden}
+.pl-ach-backdrop .ach-bar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--orange),#FFB14A);transition:width 1s .6s cubic-bezier(.2,.9,.3,1)}
+.pl-ach-backdrop .ach-btn{margin-top:20px;width:100%;max-width:380px;font:700 16px Poppins;color:#fff;border:0;cursor:pointer;
+  padding:14px 20px;border-radius:14px;background:linear-gradient(180deg,#FFA43A,var(--orange));
+  box-shadow:0 4px 0 #b95d05;transition:transform .12s,box-shadow .12s}
+.pl-ach-backdrop .ach-btn:hover{transform:translateY(-1px);box-shadow:0 5px 0 #b95d05}
+.pl-ach-backdrop .ach-btn:focus,.pl-ach-backdrop .ach-btn:focus-visible{outline:3px solid rgba(247,147,30,.35);outline-offset:3px}
+.pl-ach-backdrop .ach-btn:active{transform:translateY(3px);box-shadow:0 1px 0 #b95d05}
+
+@media (prefers-reduced-motion:reduce){.pl-ach-backdrop *{animation-duration:1ms!important;transition-duration:1ms!important}}

@@ -1067,6 +1067,17 @@ export const api = {
     history: () => request<{ items: PriceChangeRow[] }>("/access/history"),
   },
 
+  // ── Milestone achievements (per signed-in user) ─────────────────────────────
+  achievements: {
+    /** The milestone panel-counts this user has already been shown. */
+    seen: () => request<{ seen: number[] }>("/achievements/seen"),
+    /** Record a milestone as seen so it never shows again (any device). */
+    markSeen: (count: number) =>
+      request<{ ok: true; seen: number[] }>("/achievements/seen", { method: "POST", body: JSON.stringify({ count }) }),
+    /** How many of this user's own panels have left Draft, across all their quotations. */
+    completedCount: () => request<{ count: number }>("/achievements/completed-count"),
+  },
+
   // ── Review locks (one approver at a time) ───────────────────────────────────
   locks: {
     /** Acquire / refresh the "someone is reviewing this" lock. `force` takes over (admin). */
