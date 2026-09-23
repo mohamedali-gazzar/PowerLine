@@ -337,7 +337,9 @@ function KioskExtraEditor({ extras, onExtraQty, onExtraCheck }: {
     <div className="space-y-2">
       <KioskAccHeader />
       {extras.map((e) => (
-        <div key={e.key} className={KIOSK_ACC_COLS}>
+        // A fixed row height so the tick-box rows (Capacitor Box / Stone Paint) line up
+        // with the taller number-input rows (Shunt / Aux) instead of sitting shorter.
+        <div key={e.key} className={`${KIOSK_ACC_COLS} min-h-[2.25rem]`}>
           <span className="min-w-0 truncate text-sm font-semibold text-ink">{e.name}</span>
           {e.kind === "qty" ? (
             <input type="number" inputMode="numeric" value={e.qty || ""} onChange={(ev) => onExtraQty(e.key, ev.target.value === "" ? 0 : Number(ev.target.value))}

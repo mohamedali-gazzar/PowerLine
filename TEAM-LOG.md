@@ -21,6 +21,15 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-23 · Mohamed's side · Claude
+
+**Tidy-up: the MV Kiosk "Extra" rows now line up evenly.**
+
+In the Kiosk's **Extra** section the two rows you type a quantity into (Shunt, Aux) were
+a little taller than the two tick-box rows (Capacitor Box, Stone Paint), so the list
+looked uneven. All four rows are now the same height and sit neatly aligned. Display
+only — no price, total or behaviour changed.
+
 ## 2026-09-22 · Mohamed's side · Claude
 
 **Fix: an Admin who amends someone else's quotation can now push it all the way through.**
