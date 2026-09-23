@@ -38,3 +38,12 @@ export const LIVE_MILESTONES: Milestone[] = MILESTONES.filter((m) => m.title !==
 export function milestoneByCount(count: number): Milestone | undefined {
   return LIVE_MILESTONES.find((m) => m.count === count);
 }
+
+/**
+ * The milestone to celebrate when the open quotation's panel count reaches `count` — i.e. the live
+ * milestone whose threshold equals `count` (10, 25, …) and isn't already in `seen`. Exact match: it
+ * fires the moment the 10th (then 25th) panel is added, by any means, and never for a seen milestone.
+ */
+export function milestoneForCount(count: number, seen: number[]): Milestone | undefined {
+  return LIVE_MILESTONES.find((m) => m.count === count && !seen.includes(m.count));
+}

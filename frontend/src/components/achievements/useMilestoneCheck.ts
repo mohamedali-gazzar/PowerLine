@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api";
 import { useAuth } from "../../auth/AuthContext";
-import { LIVE_MILESTONES, type Milestone } from "./milestones";
+import { milestoneForCount, type Milestone } from "./milestones";
+import { onPanelCount } from "./milestoneBus";
 
 /**
- * Watches the signed-in user's completed-panel count and surfaces the highest milestone they have
- * reached but not yet seen. "Seen" milestones are stored per user on the server (falling back to a
- * per-user localStorage key when the server field isn't available), so a milestone never shows twice
- * — not after a refresh, a logout, or on another device.
+ * Surfaces the milestone to celebrate the moment the open quotation's panel count reaches a threshold.
+ * The configurator calls notePanelCount(count) whenever the panel count goes up — by "+ Add panel", by
+ * duplicating, however; if that new total is exactly a milestone (10, 25, …) the user hasn't seen yet,
+ * we celebrate it. "Seen" milestones are stored per user on the server (falling back to a per-user
+ * localStorage key), so a milestone never shows twice — not after a refresh, a logout, or on another
+ * device.
  *
  * Returns the milestone to celebrate plus markSeen() to record it, or null when there's nothing new.
  */
@@ -32,23 +35,13 @@ export function useMilestoneCheck(): { milestone: Milestone; markSeen: () => voi
     return () => { alive = false; };
   }, [userId, readLocalSeen]);
 
-  // Poll the completed-panel count; when it reaches an unseen milestone, queue the highest one.
+  // When the open quotation's panel count reaches a milestone (by any means), celebrate it if unseen.
   useEffect(() => {
     if (!userId || seen === null) return;
-    let alive = true;
-    const check = async () => {
-      let count = 0;
-      try { count = (await api.achievements.completedCount()).count; } catch { return; }
-      if (!alive) return;
-      // Highest live milestone whose threshold is reached and not yet seen.
-      const hit = [...LIVE_MILESTONES]
-        .filter((m) => count >= m.count && !seen.includes(m.count))
-        .sort((a, b) => b.count - a.count)[0];
+    return onPanelCount((count) => {
+      const hit = milestoneForCount(count, seen);
       if (hit) setPending(hit);
-    };
-    void check();
-    const t = setInterval(() => void check(), 60_000);
-    return () => { alive = false; clearInterval(t); };
+    });
   }, [userId, seen]);
 
   const markSeen = useCallback(() => {

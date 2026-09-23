@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**Milestone popup now fires the moment you reach 10 / 25 panels — by any means.**
+
+The celebration now appears as soon as a quotation reaches a milestone (10, then 25, …), whether that
+panel came from **"+ Add panel"** or from **duplicating** one. It does NOT pop up just for opening a
+quotation that already has 10+ panels, nor when you delete a panel — only when the count genuinely
+climbs to the milestone. Still shown once and remembered, so it never repeats. Look-and-feel only; no
+database change.
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **New milestone: the "Breaker Juggler" celebration at 25 completed panels.**
 
 A second celebration now plays at **25 panels**: the engineer walks to a distribution board, its door

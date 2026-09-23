@@ -16,6 +16,7 @@ import { usePointerReorder } from "../hooks/usePointerReorder";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { useStaff, SALES_MANAGER } from "../staff";
 import PanelsBulkImport, { type ImportedPanel } from "../components/PanelsBulkImport";
+import { notePanelCount } from "../components/achievements/milestoneBus";
 import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
   formFamilyConflict, formKitFactor,
@@ -334,6 +335,21 @@ export default function LvConfiguratorPage() {
     () => ({ past: [], present: initialState(), future: [] })
   );
   const s = hist.present;
+  // Milestone celebration: fire when the open quotation's panel count REACHES a milestone (10, 25, …)
+  // by ANY means — "+ Add panel", duplicating, importing. Watching the count (not one button) covers
+  // every add path. A per-quotation baseline, set only once the QTN has finished loading, stops it from
+  // firing when a quotation that already has 10+ panels is merely opened or switched to; it fires only
+  // on a genuine increase within the open quotation. (React 18 batches the load's updates, so the
+  // loaded count arrives together with loading:false and is taken as the baseline, not an increase.)
+  const panelCountBaseline = useRef<{ id: string; count: number } | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    const count = s.panels.length;
+    const prev = panelCountBaseline.current;
+    panelCountBaseline.current = { id, count };
+    if (!prev || prev.id !== id) return;           // first settled read for this QTN → baseline only
+    if (count > prev.count) notePanelCount(count);  // a real increase within this QTN → maybe a milestone
+  }, [loading, id, s.panels.length]);
   // Restore the last tab this QTN was on (per-QTN), else the default view.
   const tabKey = `lv-tab-${id}`;
   const [tab, setTab] = useState<Tab>(() => {
