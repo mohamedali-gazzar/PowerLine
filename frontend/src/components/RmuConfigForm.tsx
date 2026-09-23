@@ -38,6 +38,84 @@ export function rmuShortCode(c: RmuConfigInput): string {
   return `${c.productType}${c.voltageKv}(${c.nalCount}+${c.nalfCount}${c.hasMetering ? "+M" : ""})`;
 }
 
+// The RMU feeder make-up options (ring "R" + transformer "T"), chosen from a dropdown instead of two
+// separate counts. Each is [nalCount, nalfCount]. All satisfy the price engine's limits (R0–5, T0–2).
+export const RMU_FEEDER_OPTIONS: [number, number][] = [
+  [2, 1], [3, 1], [0, 1], [1, 0], [1, 1], [2, 2], [4, 0],
+];
+export const rmuFeederLabel = (nal: number, nalf: number): string => `${nal}+${nalf}`;
+
+// Per-feeder accessories, priced in USD and converted like every other RMU price (aux/shunt used to
+// live in the kiosk "Extra" list; they are now ticked per feeder instead).
+export const RMU_AUX_USD = 301;   // Auxiliary contact — per feeder
+export const RMU_SHUNT_USD = 220; // Shunt trip — per feeder
+
+/** The feeder ids for an RMU, in order: ring feeders R1…Rn then transformer feeders T1…Tm. Each
+ *  side always has at least one row, so a "0" count still gets a feeder (0+1 → R1, T1; 4+0 → R1…R4, T1). */
+export function rmuFeederIds(c: RmuConfigInput): string[] {
+  const rings = Array.from({ length: Math.max(1, c.nalCount || 0) }, (_, i) => `R${i + 1}`);
+  const trafos = Array.from({ length: Math.max(1, c.nalfCount || 0) }, (_, i) => `T${i + 1}`);
+  return [...rings, ...trafos];
+}
+/** Total Aux + Shunt-trip add-on for an RMU, in USD. Zero when RTU is on (the option is hidden). */
+export function rmuAuxShuntUsd(c: RmuConfigInput): number {
+  if (c.rtuType && c.rtuType !== "NONE") return 0;
+  const ids = rmuFeederIds(c);
+  const aux = ids.filter((id) => c.feederAux?.[id]).length;
+  const shunt = ids.filter((id) => c.feederShunt?.[id]).length;
+  return aux * RMU_AUX_USD + shunt * RMU_SHUNT_USD;
+}
+/** The per-feeder Aux / Shunt-trip ticks as named add-on lines (USD), for the RMU offer's add-on list. */
+export function rmuAuxShuntAddOns(c: RmuConfigInput): { name: string; price: number }[] {
+  if (c.rtuType && c.rtuType !== "NONE") return [];
+  const out: { name: string; price: number }[] = [];
+  for (const id of rmuFeederIds(c)) {
+    if (c.feederAux?.[id]) out.push({ name: `Aux — ${id}`, price: RMU_AUX_USD });
+    if (c.feederShunt?.[id]) out.push({ name: `Shunt trip — ${id}`, price: RMU_SHUNT_USD });
+  }
+  return out;
+}
+
+/** One row per feeder (R1…Rn, T1…Tm), each with an Aux and a Shunt-trip tick-box. Shown only when
+ *  RTU is off; each ticked box adds its price (RMU_AUX_USD / RMU_SHUNT_USD) to the RMU. */
+function FeederAccessories({
+  rmu,
+  onChange,
+}: {
+  rmu: RmuConfigInput;
+  onChange: <K extends keyof RmuConfigInput>(k: K, v: RmuConfigInput[K]) => void;
+}) {
+  const ids = rmuFeederIds(rmu);
+  if (!ids.length) return null;
+  const aux = rmu.feederAux ?? {};
+  const shunt = rmu.feederShunt ?? {};
+  const cols = "grid grid-cols-[1fr_5rem_5rem] items-center gap-2";
+  return (
+    <div className="rounded-lg border border-line p-3 animate-fade-up">
+      <div className={`${cols} pb-1 text-[11px] font-bold uppercase tracking-wide text-muted`}>
+        <span>Feeder</span>
+        <span className="text-center">Aux.</span>
+        <span className="text-center">Shunt trip</span>
+      </div>
+      {ids.map((id) => (
+        <div key={id} className={`${cols} border-t border-line/60 py-1.5`}>
+          <span className="text-sm font-semibold text-ink">{id}</span>
+          <span className="flex justify-center">
+            <input type="checkbox" checked={!!aux[id]} aria-label={`${id} Aux`}
+              onChange={(e) => onChange("feederAux", { ...aux, [id]: e.target.checked })}
+              className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
+          </span>
+          <span className="flex justify-center">
+            <input type="checkbox" checked={!!shunt[id]} aria-label={`${id} Shunt trip`}
+              onChange={(e) => onChange("feederShunt", { ...shunt, [id]: e.target.checked })}
+              className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * The RMU configurator form — Product/RMU-code card + Metering + Smart/RTU.
  *
@@ -50,11 +128,14 @@ export function rmuShortCode(c: RmuConfigInput): string {
 export default function RmuConfigForm({
   value,
   onChange,
+  onChangeMany,
   code,
   panelCode,
 }: {
   value: RmuConfigInput;
   onChange: <K extends keyof RmuConfigInput>(key: K, v: RmuConfigInput[K]) => void;
+  /** Set several config keys at once (the RMU-feeder dropdown sets nalCount + nalfCount together). */
+  onChangeMany: (patch: Partial<RmuConfigInput>) => void;
   code: string;
   panelCode: string;
 }) {
@@ -159,30 +240,26 @@ export default function RmuConfigForm({
                 renderLabel={(v) => `${v} kV`}
               />
             </Field>
-            <Field label="Installation" hint="Outdoor adds an enclosure (priced in the commercial offer)">
-              <Segmented
-                value={rmu.installation}
-                onChange={(v) => setR("installation", v)}
-                options={["INDOOR", "OUTDOOR"] as const}
-                renderLabel={(v) => (v === "INDOOR" ? "Indoor" : "Outdoor")}
-              />
+            <Field label="RMU feeder" hint={isLucy ? "Feeders (R) + circuit breakers (T)" : "Ring feeders (R) + transformer feeders (T)"}>
+              <select
+                value={rmuFeederLabel(rmu.nalCount, rmu.nalfCount)}
+                onChange={(e) => { const [n, m] = e.target.value.split("+").map(Number); onChangeMany({ nalCount: n, nalfCount: m }); }}
+                className="input cursor-pointer"
+              >
+                {(RMU_FEEDER_OPTIONS.some(([a, b]) => a === rmu.nalCount && b === rmu.nalfCount)
+                  ? RMU_FEEDER_OPTIONS
+                  : [[rmu.nalCount, rmu.nalfCount] as [number, number], ...RMU_FEEDER_OPTIONS]
+                ).map(([a, b]) => {
+                  const lbl = rmuFeederLabel(a, b);
+                  return <option key={lbl} value={lbl}>{lbl}</option>;
+                })}
+              </select>
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              label={isLucy ? "Feeders (R)" : "Ring feeders (R)"}
-              hint={isLucy ? "Load-break switches (L)" : "NAL — R0 to R5"}
-            >
-              <NumberInput value={rmu.nalCount} min={0} onChange={(v) => setR("nalCount", v)} />
-            </Field>
-            <Field
-              label={isLucy ? "Transformer feeders (T)" : "Transformer feeders (T)"}
-              hint={isLucy ? "Circuit breakers (V)" : "NALF — T0 to T2"}
-            >
-              <NumberInput value={rmu.nalfCount} min={0} onChange={(v) => setR("nalfCount", v)} />
-            </Field>
-          </div>
+          {/* Per-feeder Aux / Shunt-trip — one row per ring + transformer feeder, each with two
+              tick-boxes. Only offered when RTU is OFF (an RTU covers these functions itself). */}
+          {rmu.rtuType === "NONE" && <FeederAccessories rmu={rmu} onChange={setR} />}
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Busbar current">

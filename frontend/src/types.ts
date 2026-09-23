@@ -39,6 +39,11 @@ export interface RmuConfigInput {
   vtBurdenVa?: string | null;
   vtClass?: string | null;
   meteringWithFuse?: boolean | null;
+  /** Per-feeder Auxiliary-contact tick, keyed by feeder id ("R1","R2","T1"…). Only used when RTU
+   *  is off; each ticked feeder adds the Aux price to the RMU. */
+  feederAux?: Record<string, boolean>;
+  /** Per-feeder Shunt-trip tick, keyed by feeder id. Only used when RTU is off. */
+  feederShunt?: Record<string, boolean>;
 }
 
 /** MV Transformer panels only: the four selections that pick exactly one row out of the

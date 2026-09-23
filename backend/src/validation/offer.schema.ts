@@ -37,6 +37,10 @@ export const rmuConfigSchema = z.object({
   vtBurdenVa: z.string().trim().max(40).optional().nullable(),
   vtClass: z.string().trim().max(20).optional().nullable(),
   meteringWithFuse: z.boolean().default(false),
+  // Per-feeder Aux / Shunt-trip ticks, keyed by feeder id ("R1","T1"…). Persist so the config
+  // round-trips; priced client-side into the RMU (only when RTU is off).
+  feederAux: z.record(z.boolean()).optional(),
+  feederShunt: z.record(z.boolean()).optional(),
 })
   .refine((c) => c.nalCount + c.nalfCount > 0, {
     message: "At least one NAL or NALF cubicle is required",

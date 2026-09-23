@@ -56,7 +56,7 @@ import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
 import MvTransformerPanelEditor, { DEFAULT_TRANSFORMER_CONFIG } from "../components/MvTransformerPanelEditor";
 import MvKioskPanelEditor from "../components/MvKioskPanelEditor";
-import { DEFAULT_RMU_CONFIG, rmuShortCode } from "../components/RmuConfigForm";
+import { DEFAULT_RMU_CONFIG, rmuShortCode, rmuAuxShuntUsd } from "../components/RmuConfigForm";
 import { TransformerCover, TransformerTechnicalSheet } from "../components/TransformerTechnicalSheet";
 import { findTransformerTech, trModel, trDisplayCode } from "../components/transformerTechData";
 import type { PdfPageImage } from "../lv/renderPdfPages";
@@ -683,7 +683,8 @@ export default function LvConfiguratorPage() {
         if (!lp || !lp.found || lp.basePrice == null) return null;
         const sellOffer = (lp.basePrice + (lp.addOns ?? []).reduce((sum, a) => sum + a.price, 0)) * rate;
         const costOffer = Math.round(sellOffer * (g.rmuFactor ?? 0.85));
-        return curr === "EGP" ? costOffer : Math.round(costOffer * usdRate);
+        const baseEgp = curr === "EGP" ? costOffer : Math.round(costOffer * usdRate);
+        return baseEgp + Math.round(rmuAuxShuntUsd(cfg) * usdRate); // per-feeder Aux / Shunt-trip into the RMU cost
       } catch { return null; }
     };
     const lines: string[] = [];
@@ -5244,7 +5245,8 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
         .map((a) => a.name.replace(/^\s*smart\s*\/\s*rtu\s*—\s*/i, "").trim())
         .filter(Boolean);
       const desc = extras.length ? `${baseDesc.replace(/\.\s*$/, "")}, including ${extras.join(" and ")}.` : baseDesc;
-      const unit = base + addUnit;
+      // Per-feeder Aux / Shunt-trip add to the RMU's price (in the offer currency).
+      const unit = base + addUnit + rmuAuxShuntUsd(p.mvRmuConfig) * rate;
       const qty = p.qty || 1;
       return [{ desc, qty, unit, total: unit * qty, poa: baseUsd == null }];
     }
@@ -5269,7 +5271,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
       const rmuFactor = g?.rmuFactor ?? 0.85;
       const rmuSellOffer = ((lp?.basePrice ?? 0) + (lp?.addOns ?? []).reduce((sum, a) => sum + a.price, 0)) * rate;
       const rmuCostOffer = Math.round(rmuSellOffer * rmuFactor);
-      const rmuCostEgp = rmuPriced ? (currency === "EGP" ? rmuCostOffer : Math.round(rmuCostOffer * usdRate)) : null;
+      const rmuCostEgp = rmuPriced ? (currency === "EGP" ? rmuCostOffer : Math.round(rmuCostOffer * usdRate)) + Math.round(rmuAuxShuntUsd(p.mvRmuConfig ?? DEFAULT_RMU_CONFIG) * usdRate) : null;
       // Transformer part COST in EGP — the inside-kiosk (IP00) row's cost × the USD→EGP rate.
       const c = p.mvTransformerConfig;
       const trBase = c ? trCatalog?.rows.find((r) => r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation) : undefined;
@@ -5417,7 +5419,7 @@ function KioskAnalysisTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
     const rmuPriced = !!lp && lp.found && lp.basePrice != null;
     const rmuSellOffer = ((lp?.basePrice ?? 0) + (lp?.addOns ?? []).reduce((sum, a) => sum + a.price, 0)) * rmuRate;
     const rmuCostOffer = Math.round(rmuSellOffer * (g?.rmuFactor ?? 0.85));
-    const rmuCostEgp = rmuPriced ? (rmuCur === "EGP" ? rmuCostOffer : Math.round(rmuCostOffer * usdRate)) : null;
+    const rmuCostEgp = rmuPriced ? (rmuCur === "EGP" ? rmuCostOffer : Math.round(rmuCostOffer * usdRate)) + Math.round(rmuAuxShuntUsd(rc) * usdRate) : null;
     const c = p.mvTransformerConfig;
     const trBase = c && c.ratingKva != null ? trCatalog?.rows.find((r) => r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation) : undefined;
     const trMatch = trBase ? (trCatalog?.rows.find((r) => r.code === trDisplayCode(trBase.code, true)) ?? trBase) : undefined;

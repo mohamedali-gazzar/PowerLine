@@ -15,7 +15,7 @@ import ApprovalChat from "../components/ApprovalChat";
 import ActiveTimeBadge from "../components/ActiveTimeBadge";
 import { useStaff, findPerson, SALES_MANAGER } from "../staff";
 import type { GeneratedOffer, Offer, OfferInput, RmuConfigInput, StoredRmu } from "../types";
-import RmuConfigForm from "../components/RmuConfigForm";
+import RmuConfigForm, { rmuAuxShuntAddOns } from "../components/RmuConfigForm";
 
 const initialRmu: RmuConfigInput = {
   productType: "PRAL",
@@ -149,6 +149,8 @@ export default function NewOfferPage() {
   const rmu = cur.config;
   const setR = <K extends keyof RmuConfigInput>(k: K, v: RmuConfigInput[K]) =>
     setRows((arr) => arr.map((r, i) => (i === selIdx ? { ...r, config: { ...r.config, [k]: v } } : r)));
+  const setMany = (patch: Partial<RmuConfigInput>) =>
+    setRows((arr) => arr.map((r, i) => (i === selIdx ? { ...r, config: { ...r.config, ...patch } } : r)));
   const setRowPrice = (i: number, patch: Partial<RmuRow>) =>
     setRows((arr) => arr.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const addRmu = () => { setRows((arr) => [...arr, newRow()]); setSel(rows.length); };
@@ -249,7 +251,8 @@ export default function NewOfferPage() {
     const baseUsd = p?.listPricing?.basePrice ?? null;
     const base = baseUsd == null ? null : baseUsd * rate;
     const eff = r.priceTouched && r.unitPrice > 0 ? r.unitPrice : base ?? 0;
-    const addOns = p?.listPricing?.addOns ?? [];
+    // Per-feeder Aux / Shunt-trip ride along as add-on lines (only when RTU is off).
+    const addOns = [...(p?.listPricing?.addOns ?? []), ...rmuAuxShuntAddOns(r.config)];
     const addUnit = addOns.reduce((s, a) => s + a.price, 0) * rate;
     const qty = r.quantity || 1;
     return { row: r, preview: p, base, eff, addOns, addUnit, qty, panelSub: eff * qty, addSub: addUnit * qty };
@@ -779,7 +782,7 @@ export default function NewOfferPage() {
             </button>
           </div>
           <div className="space-y-5">
-          <RmuConfigForm value={rmu} onChange={setR} code={code} panelCode={panelCode} />
+          <RmuConfigForm value={rmu} onChange={setR} onChangeMany={setMany} code={code} panelCode={panelCode} />
 
           <div className="flex justify-between">
             <button type="button" className="btn-ghost" onClick={() => setTab("settings")}>← Settings</button>

@@ -23,6 +23,23 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**Change: the RMU is now built by an "RMU feeder" dropdown, with per-feeder Aux / Shunt-trip.**
+
+The RMU configurator (everywhere it appears — kiosk, MV RMU panels, the standalone RMU offer) changed:
+- **Indoor/Outdoor is gone**, replaced by an **RMU feeder** dropdown: 2+1, 3+1, 0+1, 1+0, 1+1, 2+2, 4+0
+  (the two feeder-count boxes are removed — the dropdown is them). New RMUs are always indoor now.
+- Under it, **one row per feeder** — a "0" side still gets one row, so 0+1 shows R1 & T1, and 4+0 shows
+  R1–R4 & T1 — each with an **Aux.** and a **Shunt trip** tick-box. These show **only when RTU is off**.
+- Aux is **$301** and Shunt-trip **$220** each; ticking one folds into the **RMU** line (RMU factor 0.85),
+  e.g. one Aux adds ~15,652 EGP to the RMU cost at a 52 rate.
+- **Shunt and Aux are removed from the kiosk "Extra" list** — Extra now holds Capacitor Box and Stone Paint only.
+
+⚠️ HEADS-UP: kiosks that previously ticked Shunt/Aux in the old Extra will drop that amount until they are
+re-ticked at the feeder level (that is the point of the move). New quotations are unaffected, and prices
+already frozen on submitted offers do not change.
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **Tidy-up: the Code column now reads like the Item column in both kiosk price tables.**
 
 The part codes (RMU / Transformer / LV codes, kiosk size, etc.) used to be shown in an orange

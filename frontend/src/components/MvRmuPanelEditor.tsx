@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import RmuConfigForm, { DEFAULT_RMU_CONFIG, rmuShortCode } from "./RmuConfigForm";
+import RmuConfigForm, { DEFAULT_RMU_CONFIG, rmuShortCode, rmuAuxShuntUsd } from "./RmuConfigForm";
 import { api } from "../api";
 import type { GeneratedOffer, RmuConfigInput } from "../types";
 import { DEFAULT_MV_COMMERCIAL, type LvPanel, type LvState } from "../lv/store";
@@ -43,6 +43,8 @@ export default function MvRmuPanelEditor({
   // teammate quotation — so no extra guard is needed here.
   const setR = <K extends keyof RmuConfigInput>(k: K, v: RmuConfigInput[K]) =>
     upPanel(p.id, { mvRmuConfig: { ...rmu, [k]: v } });
+  const setMany = (patch: Partial<RmuConfigInput>) =>
+    upPanel(p.id, { mvRmuConfig: { ...rmu, ...patch } });
 
   const code = rmuShortCode(rmu);
 
@@ -80,12 +82,19 @@ export default function MvRmuPanelEditor({
   const priced = !!lp && lp.found && lp.basePrice != null;
   const baseUnit = (lp?.basePrice ?? 0) * rate;
   const addUnit = (lp?.addOns ?? []).reduce((sum, a) => sum + a.price, 0) * rate;
-  const selling = baseUnit + addUnit;               // base + add-ons = list price = SELLING
+  const listSelling = baseUnit + addUnit;           // base + add-ons = list price (no Aux/Shunt)
   const factor = preview?.rmuFactor ?? 0.85;
-  const cost = Math.round(selling * factor);        // cost = selling × factor
-  // Report the RMU cost in EGP to the kiosk price table. `cost` is already EGP for an EGP offer;
-  // a USD offer keeps USD floor prices, so multiply by the quotation's USD→EGP rate.
-  const costEgp = !priced ? null : currency === "EGP" ? cost : Math.round(cost * (s.factors?.usd || 1));
+  const auxShuntOffer = rmuAuxShuntUsd(rmu) * rate; // per-feeder Aux / Shunt-trip in the offer currency
+  // The standalone RMU-panel "Panel cost (live)" card: Aux/Shunt add to the selling; cost = selling × factor.
+  const selling = listSelling + auxShuntOffer;
+  const cost = Math.round(selling * factor);
+  // Report the RMU cost in EGP to the kiosk price table: the LIST cost plus Aux/Shunt at full price,
+  // so inside a kiosk they ride the RMU row's factor (0.85). `cost` is EGP for an EGP offer; a USD
+  // offer keeps USD floor prices, so multiply by the quotation's USD→EGP rate. Zero Aux/Shunt ⇒ same
+  // number as before this feature.
+  const usdRate = s.factors?.usd || 1;
+  const listCostEgp = currency === "EGP" ? Math.round(listSelling * factor) : Math.round(Math.round(listSelling * factor) * usdRate);
+  const costEgp = !priced ? null : listCostEgp + Math.round(rmuAuxShuntUsd(rmu) * usdRate);
   useEffect(() => { onCost?.(costEgp); }, [costEgp, onCost]);
 
   return (
@@ -125,7 +134,7 @@ export default function MvRmuPanelEditor({
       </div>
       )}
 
-      <RmuConfigForm value={rmu} onChange={setR} code={code} panelCode={panelCode} />
+      <RmuConfigForm value={rmu} onChange={setR} onChangeMany={setMany} code={code} panelCode={panelCode} />
     </div>
   );
 }

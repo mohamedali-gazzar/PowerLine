@@ -77,9 +77,9 @@ export type KioskExtra =
   | { key: string; name: string; kind: "qty"; usd: number }
   | { key: string; name: string; kind: "check"; usd?: number; kg?: number };
 
+// Shunt trip and Aux moved OUT of Extra — they are now ticked per RMU feeder (see RmuConfigForm),
+// priced into the RMU. Extra now carries only the Capacitor Box and Stone Paint.
 export const KIOSK_EXTRAS: KioskExtra[] = [
-  { key: "shunt", name: "Shunt", kind: "qty", usd: 220 },
-  { key: "aux", name: "Aux", kind: "qty", usd: 301 },
   { key: "capbox", name: "Capacitor Box", kind: "check", kg: CAPACITOR_BOX_KG },
   { key: "stonepaint", name: "Stone Paint", kind: "check", usd: 600 },
 ];
