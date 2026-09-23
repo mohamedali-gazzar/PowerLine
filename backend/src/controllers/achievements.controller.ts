@@ -20,9 +20,31 @@ function parseSeen(s: string | null | undefined): number[] {
   }
 }
 
+// ── One-time "seen" reset ────────────────────────────────────────────────────
+// The FIRST version of milestones auto-showed a milestone to anyone already past its count (a
+// background poll), which quietly marked 10/25 as "seen" for existing users before the trigger became
+// "fire when you REACH it". To give everyone a clean start with the real trigger, clear every user's
+// seen list ONCE. Guarded by a marker row (PriceSetting scope "achievements") so it runs a single time,
+// no matter how many serverless cold-starts hit it; bump RESET_TOKEN to reset everyone again later.
+// The marker's scope is never touched by pricing (all pricing reads filter on RMU/LV/TRANSFORMER).
+const RESET_TOKEN = "reach-trigger-v1";
+const MARKER = { scope: "achievements", key: "resetMarker" };
+
+async function ensureSeenReset(): Promise<void> {
+  const marker = await prisma.priceSetting.findUnique({ where: { scope_key: MARKER } });
+  if (marker?.text === RESET_TOKEN) return; // already done
+  await prisma.user.updateMany({ data: { achievementsSeen: "[]" } });
+  await prisma.priceSetting.upsert({
+    where: { scope_key: MARKER },
+    create: { ...MARKER, text: RESET_TOKEN, updatedBy: "system" },
+    update: { text: RESET_TOKEN },
+  });
+}
+
 /** GET /api/achievements/seen — the milestone thresholds this user has already been shown. */
 export async function getSeen(req: Request, res: Response) {
   try {
+    await ensureSeenReset(); // one-time, idempotent; a no-op after the first run
     const userId = req.userId as string;
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { achievementsSeen: true } });
     res.json({ seen: parseSeen(user?.achievementsSeen) });

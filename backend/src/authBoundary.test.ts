@@ -108,7 +108,9 @@ describe("routes that are public on purpose stay public", () => {
   it("health check", async () => {
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "ok", service: "powerline-backend" });
+    // `version` is the deployed commit (used to verify backend-only deploys); "dev" outside Vercel.
+    expect(res.body).toMatchObject({ status: "ok", service: "powerline-backend" });
+    expect(res.body).toHaveProperty("version");
   });
 
   it("the RMU option lists, which carry no prices", async () => {

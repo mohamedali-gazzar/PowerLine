@@ -139,7 +139,9 @@ export function createApp() {
   app.use(express.json({ limit: "8mb" }));
 
   app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", service: "powerline-backend" });
+    // `version` is the deployed git commit (Vercel injects VERCEL_GIT_COMMIT_SHA) so a backend-only
+    // deploy — which doesn't change the frontend bundle hash — can still be verified by polling this.
+    res.json({ status: "ok", service: "powerline-backend", version: (process.env.VERCEL_GIT_COMMIT_SHA || "dev").slice(0, 7) });
   });
 
   // Option lists + the standards table, so the frontend can show ratings live.

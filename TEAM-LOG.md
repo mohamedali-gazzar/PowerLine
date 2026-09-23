@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**Milestone popups get a clean slate (so they show fresh again).**
+
+The very first version of the milestones briefly showed 10 and 25 automatically to anyone already past
+those counts, which quietly marked them as "seen" — so once the trigger became "show when you reach it",
+those wouldn't reappear. This release clears everyone's "seen" record **once**, so the whole team sees
+10 / 25 / 50 fresh the next time they reach each. After that it's back to once-per-person. Safe, one-time,
+runs itself on the first load after this update. (Also: the health check now reports the deployed version,
+so backend-only updates can be confirmed live.)
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **New milestone: the "Fully Charged" celebration at 50 completed panels.**
 
 Reaching **50 panels** now plays a third celebration: the engineer hoists a big breaker overhead, gets
