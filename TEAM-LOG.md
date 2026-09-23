@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**New milestone: the "Fully Charged" celebration at 50 completed panels.**
+
+Reaching **50 panels** now plays a third celebration: the engineer hoists a big breaker overhead, gets
+a comic electric zap (spiky hair, soot, popped helmet, smoke), shakes it off and poses — finishing on
+**"Fully Charged Mode: ON"**. The milestones now run 10 → 25 → 50 → 100. Same trigger as before (fires
+when the count reaches the milestone, by any add method) and shown once. Frontend-only; no database change.
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **Milestone popup now fires the moment you reach 10 / 25 panels — by any means.**
 
 The celebration now appears as soon as a quotation reaches a milestone (10, then 25, …), whether that
