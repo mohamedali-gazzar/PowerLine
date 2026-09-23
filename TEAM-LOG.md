@@ -23,6 +23,22 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**Follow-ups to the RMU / kiosk pricing.**
+
+Three refinements:
+- **Aux / Shunt-trip are selling prices.** The $301 / $220 you enter are the SELLING prices; the cost
+  is that × 0.85. So a ticked Aux reads cost 256 / selling 301 (before it was the other way round).
+- **RMU cost vs Aux/Shunt cost are shown separately.** The RMU panel's "Panel cost (live)" card now
+  splits into an RMU line and an Aux + Shunt-trip line (each Cost · Factor · Selling) with a Total,
+  instead of one lumped Cost — so you can see what the accessories add.
+- **Capacitor Box & Stone Paint moved to Accessories; the Extra section is gone.** The kiosk now has
+  four sections (RMU, Transformer, Low, Accessories); Accessories carries the connections, the fixed
+  items, and the Capacitor Box / Stone Paint tick-boxes. The "Extra" row is removed from the price table.
+
+Look-and-price only; no database change.
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **Change: the RMU is now built by an "RMU feeder" dropdown, with per-feeder Aux / Shunt-trip.**
 
 The RMU configurator (everywhere it appears — kiosk, MV RMU panels, the standalone RMU offer) changed:

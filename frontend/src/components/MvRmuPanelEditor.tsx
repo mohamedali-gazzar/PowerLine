@@ -82,19 +82,23 @@ export default function MvRmuPanelEditor({
   const priced = !!lp && lp.found && lp.basePrice != null;
   const baseUnit = (lp?.basePrice ?? 0) * rate;
   const addUnit = (lp?.addOns ?? []).reduce((sum, a) => sum + a.price, 0) * rate;
-  const listSelling = baseUnit + addUnit;           // base + add-ons = list price (no Aux/Shunt)
+  const listSelling = baseUnit + addUnit;           // base + add-ons = the RMU's list price (no Aux/Shunt)
   const factor = preview?.rmuFactor ?? 0.85;
-  const auxShuntOffer = rmuAuxShuntUsd(rmu) * rate; // per-feeder Aux / Shunt-trip in the offer currency
-  // The standalone RMU-panel "Panel cost (live)" card: Aux/Shunt add to the selling; cost = selling × factor.
-  const selling = listSelling + auxShuntOffer;
-  const cost = Math.round(selling * factor);
-  // Report the RMU cost in EGP to the kiosk price table: the LIST cost plus Aux/Shunt at full price,
-  // so inside a kiosk they ride the RMU row's factor (0.85). `cost` is EGP for an EGP offer; a USD
-  // offer keeps USD floor prices, so multiply by the quotation's USD→EGP rate. Zero Aux/Shunt ⇒ same
-  // number as before this feature.
+  // The card separates the RMU from its per-feeder Aux / Shunt-trip. The RMU sells at its list price
+  // (cost = list × factor). Aux/Shunt PRICES are SELLING prices; their cost is selling × factor (0.85).
+  // Totals are the two added together.
+  const rmuCost = Math.round(listSelling * factor);
+  const rmuSelling = listSelling;
+  const auxSelling = Math.round(rmuAuxShuntUsd(rmu) * rate);
+  const auxCost = Math.round(auxSelling * factor);
+  const cost = rmuCost + auxCost;
+  const selling = rmuSelling + auxSelling;
+  // Report the RMU cost in EGP to the kiosk price table: the LIST cost plus the Aux/Shunt COST
+  // (their selling × factor), so the kiosk RMU row's selling (cost ÷ factor) carries Aux/Shunt at
+  // their entered selling price. Zero Aux/Shunt ⇒ same number as before.
   const usdRate = s.factors?.usd || 1;
   const listCostEgp = currency === "EGP" ? Math.round(listSelling * factor) : Math.round(Math.round(listSelling * factor) * usdRate);
-  const costEgp = !priced ? null : listCostEgp + Math.round(rmuAuxShuntUsd(rmu) * usdRate);
+  const costEgp = !priced ? null : listCostEgp + Math.round(rmuAuxShuntUsd(rmu) * factor * usdRate);
   useEffect(() => { onCost?.(costEgp); }, [costEgp, onCost]);
 
   return (
@@ -121,11 +125,38 @@ export default function MvRmuPanelEditor({
             <div className="skeleton h-14 rounded-lg" />
           </div>
         ) : priced ? (
-          <div className="mt-3 grid grid-cols-3 gap-2 text-sm [&_b]:text-base">
-            <div className="rounded-lg bg-surface p-2.5">Cost<br /><b>{fmt(cost)} {currency}</b></div>
-            <div className="rounded-lg bg-surface p-2.5">Factor<br /><b>{factor}</b></div>
-            <div className="rounded-lg bg-brand p-2.5 text-white">Selling<br /><b>{fmt(selling)} {currency}</b></div>
-          </div>
+          auxCost > 0 ? (
+            // Aux/Shunt present → separate the RMU line from the Aux + Shunt-trip line, then the total.
+            <div className="mt-3 space-y-1 text-sm">
+              <div className="grid grid-cols-[1fr_5rem_2.75rem_5rem] gap-x-2 text-[11px] font-bold uppercase tracking-wide text-muted">
+                <span></span><span className="text-right">Cost</span><span className="text-center">Factor</span><span className="text-right">Selling</span>
+              </div>
+              <div className="grid grid-cols-[1fr_5rem_2.75rem_5rem] items-center gap-x-2">
+                <span className="font-semibold text-ink">RMU</span>
+                <span className="text-right tabular-nums">{fmt(rmuCost)}</span>
+                <span className="text-center tabular-nums text-muted">{factor}</span>
+                <span className="text-right font-semibold tabular-nums">{fmt(rmuSelling)}</span>
+              </div>
+              <div className="grid grid-cols-[1fr_5rem_2.75rem_5rem] items-center gap-x-2">
+                <span className="font-semibold text-ink">Aux + Shunt trip</span>
+                <span className="text-right tabular-nums">{fmt(auxCost)}</span>
+                <span className="text-center tabular-nums text-muted">{factor}</span>
+                <span className="text-right font-semibold tabular-nums">{fmt(auxSelling)}</span>
+              </div>
+              <div className="grid grid-cols-[1fr_5rem_2.75rem_5rem] items-center gap-x-2 border-t border-line pt-1 font-bold text-brand-dark">
+                <span>Total</span>
+                <span className="text-right tabular-nums">{fmt(cost)} {currency}</span>
+                <span className="text-center tabular-nums">{factor}</span>
+                <span className="text-right tabular-nums">{fmt(selling)} {currency}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-3 grid grid-cols-3 gap-2 text-sm [&_b]:text-base">
+              <div className="rounded-lg bg-surface p-2.5">Cost<br /><b>{fmt(cost)} {currency}</b></div>
+              <div className="rounded-lg bg-surface p-2.5">Factor<br /><b>{factor}</b></div>
+              <div className="rounded-lg bg-brand p-2.5 text-white">Selling<br /><b>{fmt(selling)} {currency}</b></div>
+            </div>
+          )
         ) : (
           <p className="mt-3 rounded-lg bg-amber-50 p-2.5 text-xs font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
             This exact configuration isn't in the RMU price list yet, so it has no automatic price. It will show as “Price on request” until the price list includes it (the code above is {panelCode}).

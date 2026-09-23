@@ -7,13 +7,13 @@
 import { calcPanel, DEFAULT_MV_CABLE_EGP_PER_M, type LvState, type LvPanel } from "./store";
 import { kioskKg, lvCopperKg, MV_CABLE_METERS, KIOSK_EXTRAS, DEFAULT_KIOSK_ACCESSORIES } from "./kioskParts";
 
-/** The six priced parts of a kiosk, in the order they appear on the cost sheet. */
-export type KioskPartKey = "rmu" | "transformer" | "lv" | "size" | "accessories" | "extra";
-export const KIOSK_PART_KEYS: KioskPartKey[] = ["rmu", "transformer", "lv", "size", "accessories", "extra"];
+/** The five priced parts of a kiosk, in the order they appear on the cost sheet. */
+export type KioskPartKey = "rmu" | "transformer" | "lv" | "size" | "accessories";
+export const KIOSK_PART_KEYS: KioskPartKey[] = ["rmu", "transformer", "lv", "size", "accessories"];
 
 // Default selling factor per kiosk part (selling = cost ÷ factor). Overridable per row in the table.
 export const DEFAULT_KIOSK_FACTORS: Record<string, number> = {
-  rmu: 0.85, transformer: 0.95, lv: 0.7, size: 0.7, accessories: 0.7, extra: 0.7,
+  rmu: 0.85, transformer: 0.95, lv: 0.7, size: 0.7, accessories: 0.7,
 };
 
 /**
@@ -40,16 +40,14 @@ export function kioskCostsEgp(
   const lvCopperKgVal = lvCopperKg(trRating);
   const lvCopperCost = lvCopperKgVal != null ? Math.round(lvCopperKgVal * copperRate) : 0;
   const accItemsTotal = DEFAULT_KIOSK_ACCESSORIES.reduce((sum, a) => sum + (a.cost || 0) * (a.qty || 0), 0);
-  const accessories = (mvCableCost + lvCopperCost + accItemsTotal) || null;
-  // Extra: Shunt/Aux by quantity, Capacitor Box/Stone Paint by tick-box (ticked = 1).
-  const extraQty = p.mvKioskExtraQty ?? {};
+  // The tick-box items (Capacitor Box / Stone Paint) now live under Accessories, not a separate Extra.
   const accChecks = p.mvKioskAccChecks ?? {};
-  const extra = KIOSK_EXTRAS.reduce((sum, e) => {
-    if (e.kind === "qty") return sum + (extraQty[e.key] || 0) * Math.round(e.usd * usdRate);
+  const checksTotal = KIOSK_EXTRAS.reduce((sum, e) => {
     const price = e.usd != null ? Math.round(e.usd * usdRate) : Math.round((e.kg || 0) * sheetMetalRate);
     return sum + (accChecks[e.key] ? price : 0);
-  }, 0) || null;
-  return { rmu: rmuCostEgp, transformer: trCostEgp, lv, size, accessories, extra };
+  }, 0);
+  const accessories = (mvCableCost + lvCopperCost + accItemsTotal + checksTotal) || null;
+  return { rmu: rmuCostEgp, transformer: trCostEgp, lv, size, accessories };
 }
 
 /** The selling factor for a part: the typed override on the panel, else the house default. */

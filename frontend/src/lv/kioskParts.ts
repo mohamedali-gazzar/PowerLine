@@ -73,15 +73,13 @@ export interface KioskAccessory {
 /** The kiosk "EXTRA" group. Shunt + Aux are quantity items (USD unit price → EGP by the QTN rate);
  *  Capacitor Box + Stone Paint are single tick-boxes (ticked = 1). Capacitor Box is costed by its
  *  sheet-metal weight; Stone Paint by a USD price. */
-export type KioskExtra =
-  | { key: string; name: string; kind: "qty"; usd: number }
-  | { key: string; name: string; kind: "check"; usd?: number; kg?: number };
+export type KioskExtra = { key: string; name: string; usd?: number; kg?: number };
 
-// Shunt trip and Aux moved OUT of Extra — they are now ticked per RMU feeder (see RmuConfigForm),
-// priced into the RMU. Extra now carries only the Capacitor Box and Stone Paint.
+// Tick-box accessory items shown under Accessories (a ticked item counts once). Capacitor Box is
+// costed by its sheet-metal weight; Stone Paint by a USD price. (Shunt/Aux moved to the RMU feeders.)
 export const KIOSK_EXTRAS: KioskExtra[] = [
-  { key: "capbox", name: "Capacitor Box", kind: "check", kg: CAPACITOR_BOX_KG },
-  { key: "stonepaint", name: "Stone Paint", kind: "check", usd: 600 },
+  { key: "capbox", name: "Capacitor Box", kg: CAPACITOR_BOX_KG },
+  { key: "stonepaint", name: "Stone Paint", usd: 600 },
 ];
 
 /** The default accessory checklist for a new kiosk (editable / removable per panel). */

@@ -684,7 +684,7 @@ export default function LvConfiguratorPage() {
         const sellOffer = (lp.basePrice + (lp.addOns ?? []).reduce((sum, a) => sum + a.price, 0)) * rate;
         const costOffer = Math.round(sellOffer * (g.rmuFactor ?? 0.85));
         const baseEgp = curr === "EGP" ? costOffer : Math.round(costOffer * usdRate);
-        return baseEgp + Math.round(rmuAuxShuntUsd(cfg) * usdRate); // per-feeder Aux / Shunt-trip into the RMU cost
+        return baseEgp + Math.round(rmuAuxShuntUsd(cfg) * (g.rmuFactor ?? 0.85) * usdRate); // Aux/Shunt cost = selling × factor
       } catch { return null; }
     };
     const lines: string[] = [];
@@ -5245,8 +5245,9 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
         .map((a) => a.name.replace(/^\s*smart\s*\/\s*rtu\s*—\s*/i, "").trim())
         .filter(Boolean);
       const desc = extras.length ? `${baseDesc.replace(/\.\s*$/, "")}, including ${extras.join(" and ")}.` : baseDesc;
-      // Per-feeder Aux / Shunt-trip add to the RMU's price (in the offer currency).
-      const unit = base + addUnit + rmuAuxShuntUsd(p.mvRmuConfig) * rate;
+      // Per-feeder Aux / Shunt-trip: their entered prices are SELLING prices, so add them straight
+      // to the RMU's selling (in the offer currency).
+      const unit = base + addUnit + Math.round(rmuAuxShuntUsd(p.mvRmuConfig) * rate);
       const qty = p.qty || 1;
       return [{ desc, qty, unit, total: unit * qty, poa: baseUsd == null }];
     }
@@ -5271,7 +5272,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
       const rmuFactor = g?.rmuFactor ?? 0.85;
       const rmuSellOffer = ((lp?.basePrice ?? 0) + (lp?.addOns ?? []).reduce((sum, a) => sum + a.price, 0)) * rate;
       const rmuCostOffer = Math.round(rmuSellOffer * rmuFactor);
-      const rmuCostEgp = rmuPriced ? (currency === "EGP" ? rmuCostOffer : Math.round(rmuCostOffer * usdRate)) + Math.round(rmuAuxShuntUsd(p.mvRmuConfig ?? DEFAULT_RMU_CONFIG) * usdRate) : null;
+      const rmuCostEgp = rmuPriced ? (currency === "EGP" ? rmuCostOffer : Math.round(rmuCostOffer * usdRate)) + Math.round(rmuAuxShuntUsd(p.mvRmuConfig ?? DEFAULT_RMU_CONFIG) * rmuFactor * usdRate) : null;
       // Transformer part COST in EGP — the inside-kiosk (IP00) row's cost × the USD→EGP rate.
       const c = p.mvTransformerConfig;
       const trBase = c ? trCatalog?.rows.find((r) => r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation) : undefined;
@@ -5387,7 +5388,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
 //    "Kiosk_Analysis-<QTN> (<Project>)". Standalone RMU / Transformer panels are skipped. Read-only,
 //    and reuses the shared kioskPricing helpers so every number matches the live editor table. ──
 const KIOSK_ROW_LABEL: Record<KioskPartKey, string> = {
-  rmu: "RMU", transformer: "Transformer", lv: "LV", size: "Kiosk Size", accessories: "Accessories", extra: "Extra",
+  rmu: "RMU", transformer: "Transformer", lv: "LV", size: "Kiosk Size", accessories: "Accessories",
 };
 function KioskAnalysisTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const kiosks = mvKioskPanels(s);
@@ -5419,7 +5420,7 @@ function KioskAnalysisTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
     const rmuPriced = !!lp && lp.found && lp.basePrice != null;
     const rmuSellOffer = ((lp?.basePrice ?? 0) + (lp?.addOns ?? []).reduce((sum, a) => sum + a.price, 0)) * rmuRate;
     const rmuCostOffer = Math.round(rmuSellOffer * (g?.rmuFactor ?? 0.85));
-    const rmuCostEgp = rmuPriced ? (rmuCur === "EGP" ? rmuCostOffer : Math.round(rmuCostOffer * usdRate)) + Math.round(rmuAuxShuntUsd(rc) * usdRate) : null;
+    const rmuCostEgp = rmuPriced ? (rmuCur === "EGP" ? rmuCostOffer : Math.round(rmuCostOffer * usdRate)) + Math.round(rmuAuxShuntUsd(rc) * (g?.rmuFactor ?? 0.85) * usdRate) : null;
     const c = p.mvTransformerConfig;
     const trBase = c && c.ratingKva != null ? trCatalog?.rows.find((r) => r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation) : undefined;
     const trMatch = trBase ? (trCatalog?.rows.find((r) => r.code === trDisplayCode(trBase.code, true)) ?? trBase) : undefined;

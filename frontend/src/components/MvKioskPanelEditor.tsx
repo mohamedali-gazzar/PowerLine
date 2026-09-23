@@ -85,7 +85,6 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
     { key: "lv", label: "LV", autoCode: lvCode },
     { key: "size", label: "Kiosk Size" },
     { key: "accessories", label: "Accessories", autoCode: "Acc." },
-    { key: "extra", label: "Extra", autoCode: "Ext." },
   ];
   const priceMap = p.mvKioskCost ?? {};
   const setPrice = (key: string, patch: Partial<{ code: string; cost: number; factor: number }>) =>
@@ -98,24 +97,17 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
   const mvCableRate = s.mvCableEgpPerM ?? DEFAULT_MV_CABLE_EGP_PER_M;
   // Kiosk Size code drives the enclosure-steel cost (inside kioskCostsEgp); kept for the dropdown.
   const sizeCode = priceMap.size?.code || "";
-  // Accessories / Extra tick-box + quantity state (the checklist accordions below the price sheet).
+  // Accessories tick-box state — Capacitor Box / Stone Paint (moved here from the old Extra section).
   const accChecks = p.mvKioskAccChecks ?? {};
   const setAccCheck = (key: string, on: boolean) => upPanel(p.id, { mvKioskAccChecks: { ...accChecks, [key]: on } });
-  const extraQty = p.mvKioskExtraQty ?? {};
-  const setExtraQty = (key: string, n: number) => upPanel(p.id, { mvKioskExtraQty: { ...extraQty, [key]: n } });
   const mvCableCost = Math.round(MV_CABLE_METERS * mvCableRate);
   const lvCopperKgVal = lvCopperKg(trRating);
   const lvCopperCost = lvCopperKgVal != null ? Math.round(lvCopperKgVal * copperRate) : 0;
-  // The EXTRA group: Shunt/Aux by quantity, Capacitor Box/Stone Paint by tick-box (ticked = 1).
-  const extraRows = KIOSK_EXTRAS.map((e) => {
-    if (e.kind === "qty") {
-      const qty = extraQty[e.key] || 0;
-      const price = Math.round(e.usd * usdRate);
-      return { key: e.key, name: e.name, kind: "qty" as const, qty, unit: "-", price, total: qty * price, checked: false };
-    }
+  // The optional tick-box accessories (Capacitor Box / Stone Paint): ticked ⇒ its price counts.
+  const checkRows = KIOSK_EXTRAS.map((e) => {
     const price = e.usd != null ? Math.round(e.usd * usdRate) : Math.round((e.kg || 0) * sheetMetalRate);
     const checked = !!accChecks[e.key];
-    return { key: e.key, name: e.name, kind: "check" as const, qty: checked ? 1 : 0, unit: "-", price, total: checked ? price : 0, checked };
+    return { key: e.key, name: e.name, price, total: checked ? price : 0, checked };
   });
   // The read-only standard accessory rows: connections (by length/weight) + the fixed item list.
   const accRows = [
@@ -253,14 +245,9 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
         </div>
       </Section>
 
-      <Section n={4} title="Accessories" subtitle="MV cable, LV copper & items" open={open.acc} onToggle={() => toggle("acc")}
+      <Section n={4} title="Accessories" subtitle="MV cable, LV copper, items, capacitor box & stone paint" open={open.acc} onToggle={() => toggle("acc")}
         code={costs.accessories ? `${costs.accessories.toLocaleString()} EGP` : undefined}>
-        <KioskAccessoriesEditor rows={accRows} />
-      </Section>
-
-      <Section n={5} title="Extra" subtitle="Shunt, Aux, capacitor box & stone paint" open={open.extra} onToggle={() => toggle("extra")}
-        code={costs.extra ? `${costs.extra.toLocaleString()} EGP` : undefined}>
-        <KioskExtraEditor extras={extraRows} onExtraQty={setExtraQty} onExtraCheck={setAccCheck} />
+        <KioskAccessoriesEditor rows={accRows} checks={checkRows} onCheck={setAccCheck} />
       </Section>
     </div>
   );
@@ -277,13 +264,15 @@ function KioskAccHeader() {
   );
 }
 
-/** The Accessories accordion body: a read-only standard list (MV cable + LV copper connections and
- *  the fixed accessory items) with Qty · Unit · Price · Total columns. Its total feeds the
- *  "Accessories" row of the Kiosk price table. */
-function KioskAccessoriesEditor({ rows }: {
+/** The Accessories accordion body: the read-only standard list (MV cable + LV copper connections and
+ *  the fixed accessory items) followed by the optional tick-box items (Capacitor Box / Stone Paint,
+ *  moved here from the old "Extra" section). Its total feeds the "Accessories" row of the price table. */
+function KioskAccessoriesEditor({ rows, checks, onCheck }: {
   rows: { key: string; name: string; qty: number; unit: string; price: number; total: number }[];
+  checks: { key: string; name: string; price: number; total: number; checked: boolean }[];
+  onCheck: (key: string, on: boolean) => void;
 }) {
-  const total = rows.reduce((sum, r) => sum + r.total, 0);
+  const total = rows.reduce((sum, r) => sum + r.total, 0) + checks.reduce((sum, c) => sum + c.total, 0);
   return (
     <div className="space-y-2">
       <KioskAccHeader />
@@ -296,47 +285,21 @@ function KioskAccessoriesEditor({ rows }: {
           <span className="text-right text-sm font-semibold tabular-nums text-ink">{r.total ? r.total.toLocaleString() : "—"}</span>
         </div>
       ))}
-      <div className="flex items-center justify-between border-t border-line pt-2 text-sm font-extrabold text-brand-dark">
-        <span>Accessories total</span>
-        <span className="tabular-nums">{total.toLocaleString()} EGP</span>
-      </div>
-    </div>
-  );
-}
-
-/** The Extra accordion body: Shunt/Aux by quantity, Capacitor Box/Stone Paint by tick-box
- *  (ticked = 1). Its total feeds the "Extra" row of the Kiosk price table. */
-function KioskExtraEditor({ extras, onExtraQty, onExtraCheck }: {
-  extras: { key: string; name: string; kind: "qty" | "check"; qty: number; unit: string; price: number; total: number; checked: boolean }[];
-  onExtraQty: (key: string, n: number) => void;
-  onExtraCheck: (key: string, on: boolean) => void;
-}) {
-  const total = extras.reduce((sum, e) => sum + e.total, 0);
-  return (
-    <div className="space-y-2">
-      <KioskAccHeader />
-      {extras.map((e) => (
-        // A fixed row height so the tick-box rows (Capacitor Box / Stone Paint) line up
-        // with the taller number-input rows (Shunt / Aux) instead of sitting shorter.
-        <div key={e.key} className={`${KIOSK_ACC_COLS} min-h-[2.25rem]`}>
-          <span className="min-w-0 truncate text-sm font-semibold text-ink">{e.name}</span>
-          {e.kind === "qty" ? (
-            <input type="number" inputMode="numeric" value={e.qty || ""} onChange={(ev) => onExtraQty(e.key, ev.target.value === "" ? 0 : Number(ev.target.value))}
-              className="w-full rounded-md border border-line px-2 py-1 text-right text-sm tabular-nums focus:border-brand focus:outline-none" />
-          ) : (
-            <span className="flex justify-end pr-1">
-              <input type="checkbox" checked={e.checked} onChange={(ev) => onExtraCheck(e.key, ev.target.checked)}
-                aria-label={e.name}
-                className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
-            </span>
-          )}
-          <span className="text-right text-sm text-muted">{e.unit}</span>
-          <span className="text-right text-sm tabular-nums text-muted">{e.price.toLocaleString()}</span>
-          <span className="text-right text-sm font-semibold tabular-nums text-ink">{e.total ? e.total.toLocaleString() : "—"}</span>
+      {checks.map((c) => (
+        <div key={c.key} className={`${KIOSK_ACC_COLS} min-h-[2.25rem]`}>
+          <span className="min-w-0 truncate text-sm font-semibold text-ink">{c.name}</span>
+          <span className="flex justify-end pr-1">
+            <input type="checkbox" checked={c.checked} onChange={(ev) => onCheck(c.key, ev.target.checked)}
+              aria-label={c.name}
+              className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
+          </span>
+          <span className="text-right text-sm text-muted">-</span>
+          <span className="text-right text-sm tabular-nums text-muted">{c.price.toLocaleString()}</span>
+          <span className="text-right text-sm font-semibold tabular-nums text-ink">{c.total ? c.total.toLocaleString() : "—"}</span>
         </div>
       ))}
       <div className="flex items-center justify-between border-t border-line pt-2 text-sm font-extrabold text-brand-dark">
-        <span>Extra total</span>
+        <span>Accessories total</span>
         <span className="tabular-nums">{total.toLocaleString()} EGP</span>
       </div>
     </div>

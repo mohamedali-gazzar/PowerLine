@@ -251,7 +251,7 @@ export default function NewOfferPage() {
     const baseUsd = p?.listPricing?.basePrice ?? null;
     const base = baseUsd == null ? null : baseUsd * rate;
     const eff = r.priceTouched && r.unitPrice > 0 ? r.unitPrice : base ?? 0;
-    // Per-feeder Aux / Shunt-trip ride along as add-on lines (only when RTU is off).
+    // Per-feeder Aux / Shunt-trip ride along as add-on lines (only when RTU is off) at their SELLING price.
     const addOns = [...(p?.listPricing?.addOns ?? []), ...rmuAuxShuntAddOns(r.config)];
     const addUnit = addOns.reduce((s, a) => s + a.price, 0) * rate;
     const qty = r.quantity || 1;
