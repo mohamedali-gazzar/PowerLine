@@ -1,0 +1,54 @@
+/* Milestone 10 ("Baby Engineer") rig — moved out of MilestoneModal.css so each milestone's stage
+   animation is self-contained. Every selector is scoped under .pl-ach-scene-10 (a class the shell
+   puts on the card) so it applies only to this scene; keyframes keep their plach- prefix.
+   Shared chrome (backdrop / card / banner / particles / final block) lives in MilestoneModal.css. */
+
+.pl-ach-scene-10 #troupe{transform:translateX(-420px)}
+.pl-ach-scene-10 .walking #troupe{animation:plach-walkin 1.9s cubic-bezier(.35,.1,.45,1) forwards}
+.pl-ach-scene-10 .after-walk #troupe{transform:none}
+@keyframes plach-walkin{from{transform:translateX(-420px)}to{transform:translateX(0)}}
+
+.pl-ach-scene-10 .eng-waddle,.pl-ach-scene-10 .eng-jump{transform-origin:0 0}
+.pl-ach-scene-10 .eng-fall{transform-origin:-16px 0}
+.pl-ach-scene-10 .legL{transform-origin:-8px -26px}.pl-ach-scene-10 .legR{transform-origin:8px -26px}
+.pl-ach-scene-10 .walking .eng-waddle{animation:plach-waddle .32s ease-in-out infinite alternate}
+.pl-ach-scene-10 .walking .legL{animation:plach-step .32s ease-in-out infinite alternate}
+.pl-ach-scene-10 .walking .legR{animation:plach-step .32s ease-in-out infinite alternate-reverse}
+@keyframes plach-waddle{from{transform:rotate(-7deg)}to{transform:rotate(7deg) translateY(-3px)}}
+@keyframes plach-step{from{transform:rotate(-20deg)}to{transform:rotate(20deg)}}
+
+.pl-ach-scene-10 .wobble .eng-waddle{animation:plach-wobble .55s ease-in-out forwards}
+@keyframes plach-wobble{0%{transform:rotate(0)}25%{transform:rotate(12deg)}50%{transform:rotate(-9deg)}75%{transform:rotate(15deg)}100%{transform:rotate(4deg)}}
+
+.pl-ach-scene-10 .fallen .eng-fall{animation:plach-fall .55s cubic-bezier(.5,0,.7,1) forwards}
+@keyframes plach-fall{0%{transform:rotate(0)}18%{transform:rotate(9deg)}72%{transform:rotate(-84deg)}86%{transform:rotate(-73deg)}100%{transform:rotate(-78deg)}}
+.pl-ach-scene-10 .posed .eng-fall{animation:plach-getup .32s cubic-bezier(.3,1.4,.5,1) forwards}
+@keyframes plach-getup{from{transform:rotate(-78deg)}to{transform:rotate(0)}}
+.pl-ach-scene-10 .posed .eng-jump{animation:plach-jump .7s cubic-bezier(.3,.9,.4,1) .2s both}
+@keyframes plach-jump{0%{transform:translateY(0) scale(1,1)}20%{transform:translateY(0) scale(1.1,.88)}
+  55%{transform:translateY(-54px) scale(.94,1.08)}82%{transform:translateY(0) scale(1.12,.86)}100%{transform:translateY(0) scale(1,1)}}
+
+.pl-ach-scene-10 .bk-tilt{transform-origin:0 0;transform:rotate(-6deg)}
+.pl-ach-scene-10 .bk-fall{transform-origin:118px 0}
+.pl-ach-scene-10 .walking .bk-tilt{animation:plach-drag .32s ease-in-out infinite alternate}
+@keyframes plach-drag{from{transform:rotate(-4deg)}to{transform:rotate(-9deg)}}
+.pl-ach-scene-10 .wobble .bk-tilt{animation:plach-bkwob .55s ease-in-out forwards}
+@keyframes plach-bkwob{0%{transform:rotate(-6deg)}40%{transform:rotate(-16deg)}100%{transform:rotate(3deg)}}
+.pl-ach-scene-10 .dropped .bk-tilt{transform:rotate(0)}
+.pl-ach-scene-10 .bk-shadow{transition:transform .35s ease-in .3s;transform-origin:62px 3px}
+.pl-ach-scene-10 .dropped .bk-shadow{transform:translateX(118px) scaleX(1.2)}
+.pl-ach-scene-10 .dropped .bk-fall{animation:plach-bkfall .5s cubic-bezier(.55,0,.9,.6) forwards}
+@keyframes plach-bkfall{0%{transform:rotate(0)}78%{transform:rotate(92deg)}90%{transform:rotate(85deg)}100%{transform:rotate(90deg)}}
+
+.pl-ach-scene-10 .arms-pose{opacity:0}
+.pl-ach-scene-10 .posed .arms-carry{opacity:0}.pl-ach-scene-10 .posed .arms-pose{opacity:1}
+.pl-ach-scene-10 .pl-ach-face{opacity:0}
+.pl-ach-scene-10 [data-face=strain] .f-strain,.pl-ach-scene-10 [data-face=oh] .f-oh,.pl-ach-scene-10 [data-face=happy] .f-happy{opacity:1}
+.pl-ach-scene-10 .sweat{opacity:0}
+.pl-ach-scene-10 .walking .sweat,.pl-ach-scene-10 .wobble .sweat{opacity:1;animation:plach-drip .64s ease-in infinite}
+@keyframes plach-drip{from{transform:translateY(0);opacity:1}to{transform:translateY(10px);opacity:0}}
+
+.pl-ach-scene-10 .pl-ach-dizzy{opacity:0;transform-origin:91px 262px}
+.pl-ach-scene-10 .pl-ach-dizzy.on{opacity:1;animation:plach-spin 0.9s linear infinite}
+@keyframes plach-spin{from{transform:rotate(0) scaleY(.45)}to{transform:rotate(360deg) scaleY(.45)}}
+.pl-ach-scene-10 .pl-ach-dizzy-wrap{transform-origin:91px 262px}

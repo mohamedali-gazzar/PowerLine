@@ -23,6 +23,21 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**New milestone: the "Breaker Juggler" celebration at 25 completed panels.**
+
+A second celebration now plays at **25 panels**: the engineer walks to a distribution board, its door
+swings open, and he juggles three breakers faster and faster — until the last throws go too high, one
+bonks his helmet and clicks straight into the board's slot (the light turns green) while the others land
+on his head; he gets dizzy, then poses. It finishes on **"Breaker Juggler Mode: ON"** with the button
+"Let's do Panel 26 ⚡".
+
+- The milestones now run in order **10 → 25 → 50**, so the 10-panel popup points to 25.
+- Under the hood each milestone is now a self-contained "scene" (its own drawing + animation), so adding
+  the next ones (50 / 100 / …) is quick: send the approved HTML + the title/message for each.
+- The 10-panel popup is unchanged and still works; this is purely additive (no database change).
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **New: a milestone celebration popup when an engineer completes 10 panels.**
 
 When someone has completed **10 panels**, a full-screen celebration now pops up: the "⚡ Achievement

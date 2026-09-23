@@ -1,6 +1,7 @@
 // One entry per milestone. The number, title, message and next target all come from here, so
-// adding 50/100/200/300/400 later is just filling in the text. Only milestone 10 is live now;
-// entries whose title is still "TBD" are skipped by the checker. `next: null` hides the progress bar.
+// adding 100/200/300/400 later is just filling in the text (plus a scene in ./scenes for the
+// animation). Milestones 10 and 25 are live; entries whose title is still "TBD" are skipped by the
+// checker. `next: null` hides the progress bar.
 //
 // Title convention: the part after the last ": " prints in the PowerLine orange (e.g. "…Mode: ON").
 export interface Milestone {
@@ -13,9 +14,15 @@ export interface Milestone {
 export const MILESTONES: Milestone[] = [
   {
     count: 10,
-    next: 50,
+    next: 25,
     title: "Baby Engineer Mode: ON",
     quote: "“10 panels down! Look who’s playing with power! Your journey has officially started. Keep growing, little engineer!”",
+  },
+  {
+    count: 25,
+    next: 50,
+    title: "Breaker Juggler Mode: ON",
+    quote: "“25 panels done! Look at you juggling breakers like a pro. Keep the panels coming!”",
   },
   { count: 50, next: 100, title: "TBD", quote: "TBD" },
   { count: 100, next: 200, title: "TBD", quote: "TBD" },

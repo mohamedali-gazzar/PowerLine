@@ -1,6 +1,8 @@
-/* Milestone achievement modal — ported verbatim from milestone-10-baby-engineer.html.
-   ALL rules are scoped under .pl-ach-backdrop and keyframes are prefixed `plach-` so nothing
-   leaks into the app. Generic classes (.face/.pt/.dizzy) were renamed .pl-ach-*. Do not restyle. */
+/* Milestone achievement modal — SHARED CHROME only. The backdrop, card, banner, particles and the
+   final "achievement unlocked" card are identical for every milestone and live here, scoped under
+   .pl-ach-backdrop with keyframes prefixed `plach-`. Each milestone's animated STAGE (its SVG rig)
+   lives in its own scene stylesheet (scenes/milestone10.css, scenes/milestone25.css), scoped under a
+   per-scene class on the card so scenes never collide. Do not restyle. */
 
 /* ---------- modal ---------- */
 .pl-ach-backdrop{
@@ -33,62 +35,11 @@
 .pl-ach-backdrop .pl-ach-banner.pop{animation:plach-pop .6s cubic-bezier(.2,1.6,.4,1) forwards}
 @keyframes plach-pop{0%{transform:scale(0) rotate(-8deg)}70%{transform:scale(1.12) rotate(2deg)}100%{transform:scale(1) rotate(-2deg)}}
 
-/* ---------- particles ---------- */
+/* ---------- particles (shared by all scenes) ---------- */
 .pl-ach-backdrop .pl-ach-pt{position:absolute;pointer-events:none;will-change:transform,opacity;z-index:2}
 .pl-ach-backdrop .pl-ach-pt.conf{width:9px;height:14px;border-radius:2px}
 .pl-ach-backdrop .pl-ach-pt.dust{width:26px;height:26px;border-radius:50%;background:rgba(220,228,245,.55)}
-
-/* ---------- SVG rig ---------- */
-.pl-ach-backdrop #troupe{transform:translateX(-420px)}
-.pl-ach-backdrop .walking #troupe{animation:plach-walkin 1.9s cubic-bezier(.35,.1,.45,1) forwards}
-.pl-ach-backdrop .after-walk #troupe{transform:none}
-@keyframes plach-walkin{from{transform:translateX(-420px)}to{transform:translateX(0)}}
-
-.pl-ach-backdrop .eng-waddle,.pl-ach-backdrop .eng-jump{transform-origin:0 0}
-.pl-ach-backdrop .eng-fall{transform-origin:-16px 0}
-.pl-ach-backdrop .legL{transform-origin:-8px -26px}.pl-ach-backdrop .legR{transform-origin:8px -26px}
-.pl-ach-backdrop .walking .eng-waddle{animation:plach-waddle .32s ease-in-out infinite alternate}
-.pl-ach-backdrop .walking .legL{animation:plach-step .32s ease-in-out infinite alternate}
-.pl-ach-backdrop .walking .legR{animation:plach-step .32s ease-in-out infinite alternate-reverse}
-@keyframes plach-waddle{from{transform:rotate(-7deg)}to{transform:rotate(7deg) translateY(-3px)}}
-@keyframes plach-step{from{transform:rotate(-20deg)}to{transform:rotate(20deg)}}
-
-.pl-ach-backdrop .wobble .eng-waddle{animation:plach-wobble .55s ease-in-out forwards}
-@keyframes plach-wobble{0%{transform:rotate(0)}25%{transform:rotate(12deg)}50%{transform:rotate(-9deg)}75%{transform:rotate(15deg)}100%{transform:rotate(4deg)}}
-
-.pl-ach-backdrop .fallen .eng-fall{animation:plach-fall .55s cubic-bezier(.5,0,.7,1) forwards}
-@keyframes plach-fall{0%{transform:rotate(0)}18%{transform:rotate(9deg)}72%{transform:rotate(-84deg)}86%{transform:rotate(-73deg)}100%{transform:rotate(-78deg)}}
-.pl-ach-backdrop .posed .eng-fall{animation:plach-getup .32s cubic-bezier(.3,1.4,.5,1) forwards}
-@keyframes plach-getup{from{transform:rotate(-78deg)}to{transform:rotate(0)}}
-.pl-ach-backdrop .posed .eng-jump{animation:plach-jump .7s cubic-bezier(.3,.9,.4,1) .2s both}
-@keyframes plach-jump{0%{transform:translateY(0) scale(1,1)}20%{transform:translateY(0) scale(1.1,.88)}
-  55%{transform:translateY(-54px) scale(.94,1.08)}82%{transform:translateY(0) scale(1.12,.86)}100%{transform:translateY(0) scale(1,1)}}
-
-.pl-ach-backdrop .bk-tilt{transform-origin:0 0;transform:rotate(-6deg)}
-.pl-ach-backdrop .bk-fall{transform-origin:118px 0}
-.pl-ach-backdrop .walking .bk-tilt{animation:plach-drag .32s ease-in-out infinite alternate}
-@keyframes plach-drag{from{transform:rotate(-4deg)}to{transform:rotate(-9deg)}}
-.pl-ach-backdrop .wobble .bk-tilt{animation:plach-bkwob .55s ease-in-out forwards}
-@keyframes plach-bkwob{0%{transform:rotate(-6deg)}40%{transform:rotate(-16deg)}100%{transform:rotate(3deg)}}
-.pl-ach-backdrop .dropped .bk-tilt{transform:rotate(0)}
-.pl-ach-backdrop .bk-shadow{transition:transform .35s ease-in .3s;transform-origin:62px 3px}
-.pl-ach-backdrop .dropped .bk-shadow{transform:translateX(118px) scaleX(1.2)}
-.pl-ach-backdrop .dropped .bk-fall{animation:plach-bkfall .5s cubic-bezier(.55,0,.9,.6) forwards}
-@keyframes plach-bkfall{0%{transform:rotate(0)}78%{transform:rotate(92deg)}90%{transform:rotate(85deg)}100%{transform:rotate(90deg)}}
-
-/* arms + faces */
-.pl-ach-backdrop .arms-pose{opacity:0}
-.pl-ach-backdrop .posed .arms-carry{opacity:0}.pl-ach-backdrop .posed .arms-pose{opacity:1}
-.pl-ach-backdrop .pl-ach-face{opacity:0}
-.pl-ach-backdrop [data-face=strain] .f-strain,.pl-ach-backdrop [data-face=oh] .f-oh,.pl-ach-backdrop [data-face=happy] .f-happy{opacity:1}
-.pl-ach-backdrop .sweat{opacity:0}
-.pl-ach-backdrop .walking .sweat,.pl-ach-backdrop .wobble .sweat{opacity:1;animation:plach-drip .64s ease-in infinite}
-@keyframes plach-drip{from{transform:translateY(0);opacity:1}to{transform:translateY(10px);opacity:0}}
-
-.pl-ach-backdrop .pl-ach-dizzy{opacity:0;transform-origin:91px 262px}
-.pl-ach-backdrop .pl-ach-dizzy.on{opacity:1;animation:plach-spin 0.9s linear infinite}
-@keyframes plach-spin{from{transform:rotate(0) scaleY(.45)}to{transform:rotate(360deg) scaleY(.45)}}
-.pl-ach-backdrop .pl-ach-dizzy-wrap{transform-origin:91px 262px}
+.pl-ach-backdrop .pl-ach-pt.smoke{width:30px;height:30px;border-radius:50%;background:rgba(90,96,110,.6)}
 
 /* ---------- final block ---------- */
 .pl-ach-backdrop .pl-ach-final{display:grid;grid-template-rows:0fr;transition:grid-template-rows .55s cubic-bezier(.2,.9,.3,1)}

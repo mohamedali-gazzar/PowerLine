@@ -1,0 +1,78 @@
+/* Milestone 25 ("Breaker Juggler") rig — ported from milestone-25.html.
+   Every selector is scoped under .pl-ach-scene-25 (a class the shell puts on the card) and every
+   keyframe is prefixed m25- so nothing collides with the app, the shared chrome, or other scenes.
+   Shared chrome (backdrop / card / banner / particles / final block) lives in MilestoneModal.css. */
+
+/* ---------- SVG rig ---------- */
+.pl-ach-scene-25 #troupe{transform:translateX(-380px)}
+.pl-ach-scene-25 .walking #troupe{animation:m25-walkin 1.5s cubic-bezier(.35,.1,.45,1) forwards}
+.pl-ach-scene-25 .after-walk #troupe{transform:none}
+@keyframes m25-walkin{from{transform:translateX(-380px)}to{transform:translateX(0)}}
+.pl-ach-scene-25 .eng-waddle,.pl-ach-scene-25 .eng-jump,.pl-ach-scene-25 .eng-squat,.pl-ach-scene-25 .eng-jitter{transform-origin:0 0}
+.pl-ach-scene-25 .legL{transform-origin:-8px -26px}.pl-ach-scene-25 .legR{transform-origin:8px -26px}
+.pl-ach-scene-25 .walking .eng-waddle{animation:m25-strut .3s ease-in-out infinite alternate}
+.pl-ach-scene-25 .walking .legL{animation:m25-step .3s ease-in-out infinite alternate}
+.pl-ach-scene-25 .walking .legR{animation:m25-step .3s ease-in-out infinite alternate-reverse}
+.pl-ach-scene-25 .walking .a-side .armL{animation:m25-swing .3s ease-in-out infinite alternate}
+.pl-ach-scene-25 .walking .a-side .armR{animation:m25-swing .3s ease-in-out infinite alternate-reverse}
+.pl-ach-scene-25 .armL{transform-origin:-20px -58px}.pl-ach-scene-25 .armR{transform-origin:20px -58px}
+@keyframes m25-strut{from{transform:rotate(-4deg)}to{transform:rotate(4deg) translateY(-4px)}}
+@keyframes m25-step{from{transform:rotate(-22deg)}to{transform:rotate(22deg)}}
+@keyframes m25-swing{from{transform:rotate(-24deg)}to{transform:rotate(24deg)}}
+
+.pl-ach-scene-25 .eng-squat{transition:transform .2s ease-out}
+.pl-ach-scene-25 .squat .eng-squat{transform:scale(1.08,.84)}
+.pl-ach-scene-25 .holding .eng-waddle{animation:m25-hold .28s ease-in-out infinite alternate}
+@keyframes m25-hold{from{transform:rotate(-2.5deg)}to{transform:rotate(2.5deg)}}
+.pl-ach-scene-25 .zapping .eng-jitter{animation:m25-jitter .07s steps(2) infinite}
+@keyframes m25-jitter{0%{transform:translate(-2px,1px)}50%{transform:translate(2px,-1px)}100%{transform:translate(-1px,-2px)}}
+.pl-ach-scene-25 .posed .eng-jump{animation:m25-jump .7s cubic-bezier(.3,.9,.4,1) both}
+@keyframes m25-jump{0%{transform:translateY(0) scale(1,1)}20%{transform:translateY(0) scale(1.1,.88)}
+  55%{transform:translateY(-54px) scale(.94,1.08)}82%{transform:translateY(0) scale(1.12,.86)}100%{transform:translateY(0) scale(1,1)}}
+
+.pl-ach-scene-25 .bk-lift{transition:transform .32s cubic-bezier(.6,0,1,1)}
+.pl-ach-scene-25 .lifted .bk-lift{transform:translateY(-132px);transition:transform .45s cubic-bezier(.3,1.5,.5,1)}
+.pl-ach-scene-25 .bk-shadow{transform-origin:-75px 3px;transition:transform .4s,opacity .4s}
+.pl-ach-scene-25 .lifted .bk-shadow{transform:scale(.6);opacity:.5}
+.pl-ach-scene-25 .bk-handle{transform:translateY(20px);transition:transform .12s}
+.pl-ach-scene-25 .switched .bk-handle{transform:none}
+
+.pl-ach-scene-25 .arm,.pl-ach-scene-25 .face{opacity:0}
+.pl-ach-scene-25 [data-arms=side] .a-side,.pl-ach-scene-25 [data-arms=grab] .a-grab,.pl-ach-scene-25 [data-arms=up] .a-up,.pl-ach-scene-25 [data-arms=pose] .a-pose{opacity:1}
+.pl-ach-scene-25 [data-face=strain] .f-strain,.pl-ach-scene-25 [data-face=oh] .f-oh,.pl-ach-scene-25 [data-face=happy] .f-happy,.pl-ach-scene-25 [data-face=zapped] .f-zapped{opacity:1}
+.pl-ach-scene-25 .sweat{opacity:0}
+.pl-ach-scene-25 .squat .sweat,.pl-ach-scene-25 .holding .sweat{opacity:1;animation:m25-drip .6s ease-in infinite}
+@keyframes m25-drip{from{transform:translateY(0);opacity:1}to{transform:translateY(10px);opacity:0}}
+
+.pl-ach-scene-25 .soot{opacity:0;transition:opacity .5s}
+.pl-ach-scene-25 .sooty .soot{opacity:.6}
+.pl-ach-scene-25 .sooty-lite .soot{opacity:.18}
+.pl-ach-scene-25 .hair{transform-origin:0 -108px;transform:scaleY(0);transition:transform .15s cubic-bezier(.3,1.8,.5,1)}
+.pl-ach-scene-25 .spiky .hair{transform:scaleY(1)}
+.pl-ach-scene-25 .helmet{transform-origin:0 -100px;transition:transform .35s cubic-bezier(.3,1.6,.5,1)}
+.pl-ach-scene-25 .popped .helmet{transform:translateY(-26px) rotate(-14deg)}
+
+.pl-ach-scene-25 .zap{opacity:0;filter:drop-shadow(0 0 5px #FFE45C) drop-shadow(0 0 10px #FFD000)}
+.pl-ach-scene-25 .zapping .zap{animation:m25-flicker .12s steps(2) infinite}
+@keyframes m25-flicker{0%{opacity:1}50%{opacity:.25}100%{opacity:1}}
+.pl-ach-scene-25 .pl-ach-flash{position:absolute;inset:0;background:#fffbe0;opacity:0;pointer-events:none;z-index:1}
+.pl-ach-scene-25 .pl-ach-flash.go{animation:m25-flash .6s linear}
+@keyframes m25-flash{0%{opacity:0}10%{opacity:.85}25%{opacity:0}40%{opacity:.6}55%{opacity:0}70%{opacity:.35}100%{opacity:0}}
+
+/* ---------- milestone 25 extras ---------- */
+.pl-ach-scene-25 #troupe,.pl-ach-scene-25 .walking #troupe,.pl-ach-scene-25 .after-walk #troupe{animation:none;transform:none}
+.pl-ach-scene-25 [data-arms=juggle] .a-juggle{opacity:1}
+.pl-ach-scene-25 .jL{transform-origin:-20px -58px}.pl-ach-scene-25 .jR{transform-origin:20px -58px}
+.pl-ach-scene-25 .juggling .jL{animation:m25-jbob .2s ease-in-out infinite alternate}
+.pl-ach-scene-25 .juggling .jR{animation:m25-jbob .2s ease-in-out infinite alternate-reverse}
+.pl-ach-scene-25 .fast .jL,.pl-ach-scene-25 .fast .jR{animation-duration:.15s}
+@keyframes m25-jbob{from{transform:rotate(-6deg)}to{transform:rotate(8deg)}}
+.pl-ach-scene-25 .worried .sweat{opacity:1;animation:m25-drip .6s ease-in infinite}
+.pl-ach-scene-25 .door{transform-origin:385px 252px;transition:transform .3s cubic-bezier(.3,1.5,.5,1)}
+.pl-ach-scene-25 .open .door{transform:scaleX(-.22)}
+.pl-ach-scene-25 #slotLed{fill:#6C7482;transition:fill .2s}
+.pl-ach-scene-25 #slotLed.on{fill:#3FF07A;filter:drop-shadow(0 0 4px #3FF07A)}
+.pl-ach-scene-25 .dizzy{opacity:0;transform-origin:280px 190px}
+.pl-ach-scene-25 .dizzy.on{opacity:1;animation:m25-spin .8s linear infinite}
+@keyframes m25-spin{from{transform:rotate(0) scaleY(.45)}to{transform:rotate(360deg) scaleY(.45)}}
+.pl-ach-scene-25 .bonk .helmet{transform:translateY(4px) scaleY(.9)}
