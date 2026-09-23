@@ -37,7 +37,7 @@ import {
   type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow, type CustomOfferItem, type ScratchPad,
 } from "../lv/store";
 // (MvPanel type is referenced only through LvState.mvPanels; MvPanelType is used directly.)
-import { writeBackup, clearBackup, unsavedWork, type Backup } from "../lv/offlineBackup";
+import { writeBackup, readBackup, clearBackup, unsavedWork, type Backup } from "../lv/offlineBackup";
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
   buildSync, type SyncUnit,
@@ -330,6 +330,10 @@ export default function LvConfiguratorPage() {
   // Async-loaded from the backend (per signed-in user). `rec` is null until loaded.
   const [rec, setRec] = useState<QtnRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  /** The quotation could not be fetched and it was NOT a 404 — server down, or no network. */
+  const [openFailed, setOpenFailed] = useState(false);
+  /** Bumped by "Try again" to re-run the loader without a full page reload. */
+  const [reloadKey, setReloadKey] = useState(0);
   // RPT-1: history-aware state (Undo/Redo). Starts on a placeholder so the hooks
   // below stay unconditional, then is replaced once the quotation loads.
   const [hist, setHist] = useState<{ past: LvState[]; present: LvState; future: LvState[] }>(
@@ -420,7 +424,16 @@ export default function LvConfiguratorPage() {
         // else: the autosave effect writes a fresh backup as soon as the state settles, so
         // any later check would be comparing the server's copy against itself and would
         // always find nothing. This is the one moment both versions still exist.
-        setRecovery(unsavedWork(r.id, JSON.stringify(st), user?.id ?? ""));
+        const loaded = JSON.stringify(st);
+        setRecovery(unsavedWork(r.id, loaded, user?.id ?? ""));
+        // The server HAS this exact state, so record it as sent. Without this the autosave
+        // effect saw "nothing sent yet", wrote the whole quotation back to the server on
+        // every single open (the bandwidth this file works hard to avoid), and — worse —
+        // overwrote this device's backup with the server's copy. A second tab opening the
+        // same quotation would have destroyed the first tab's unsaved offline work.
+        sentRef.current = loaded;
+        sentContentRef.current = JSON.stringify({ ...st, selectedId: "" });
+        setSaveState("saved");
         setHist({ past: [], present: st, future: [] });
         setQtnNum(r.number);
         setStatus(r.status);
@@ -434,9 +447,12 @@ export default function LvConfiguratorPage() {
         }
         setLoading(false);
       })
-      .catch(() => { if (alive) navigate("/lv", { replace: true }); });
+      // Only a missing quotation sends you away (handled above as `!r`). An unreachable
+      // server must keep you here: the list would not load either, and this device may be
+      // holding unsaved work that is only recoverable by opening THIS quotation.
+      .catch(() => { if (alive) { setOpenFailed(true); setLoading(false); } });
     return () => { alive = false; };
-  }, [routeQtnId, navigate, tabKey]);
+  }, [routeQtnId, navigate, tabKey, reloadKey]);
   // Load the approval conversation (every return + re-send event), and refresh it whenever
   // the workflow status changes so a new message shows up at once. The endpoint is
   // owner/approver-gated; a 403 just leaves the conversation empty.
@@ -1040,7 +1056,7 @@ export default function LvConfiguratorPage() {
    * perfectly normal editor the whole time. Six hours of work was lost that way. The state
    * is tracked here so the light can never be silent about it again.
    */
-  const [saveState, setSaveState] = useState<"saved" | "saving" | "pending" | "failed">("saved");
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "pending" | "failed" | "refused">("saved");
   const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   /** False when this device refused the backup (private mode, storage full/blocked). */
   const [backupOk, setBackupOk] = useState(true);
@@ -1062,10 +1078,17 @@ export default function LvConfiguratorPage() {
         // The server holds it now, so the on-device copy has done its job.
         clearBackup(id);
       })
-      .catch(() => {
+      .catch((e: { status?: number }) => {
         // Keep saveRef so the edit is retried on the next change, on hide, on unmount, and
         // the moment the network comes back. The work is already on this device.
-        setSaveState("failed");
+        //
+        // WHY the save failed decides whether retrying is worth anything. A dropped
+        // connection clears by itself; a rejected payload never will, and retrying it every
+        // 15 seconds for the rest of the day just hides a real problem behind a spinner.
+        const status = e?.status;
+        setSaveState(status !== undefined && status >= 400 && status < 500 && status !== 408 && status !== 429
+          ? "refused"
+          : "failed");
       });
   };
 
@@ -1770,6 +1793,34 @@ export default function LvConfiguratorPage() {
 
   // The QTN loads asynchronously, so every hook above must run on every render;
   // only now — after the last hook — may we early-return the loading state.
+  // Could not reach the server. Stay here and offer a retry rather than sending the user
+  // to a list that will not load either — and say plainly whether this device is still
+  // holding work, because that is the only question that matters in this moment.
+  if (openFailed) {
+    const held = readBackup(routeQtnId);
+    return (
+      <div className="mx-auto max-w-lg py-16 text-center animate-fade-up">
+        <p className="text-2xl font-extrabold text-ink">Could not reach the server</p>
+        <p className="mt-2 text-sm text-muted">
+          This quotation has not been deleted — the app simply cannot get to it right now.
+          Check the internet connection and try again.
+        </p>
+        {held && (
+          <p className="mt-4 rounded-xl border border-amber-400 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:bg-amber-400/10 dark:text-amber-200">
+            ⚠ Unsaved work from <b>{new Date(held.savedAt).toLocaleString()}</b> is still saved
+            on this computer. It will be offered back once this quotation opens, so do not
+            clear the browser data and keep using this same computer.
+          </p>
+        )}
+        <div className="mt-5 flex justify-center gap-2">
+          <button className="btn btn-primary" onClick={() => { setOpenFailed(false); setReloadKey((k) => k + 1); }}>
+            Try again
+          </button>
+          <button className="btn btn-ghost" onClick={() => navigate("/lv")}>Back to all QTNs</button>
+        </div>
+      </div>
+    );
+  }
   if (loading || !rec) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -2417,13 +2468,17 @@ function PanelNameClash({ s, p }: { s: LvState; p: LvPanel }) {
 function SaveLamp({
   state, online, backupOk,
 }: {
-  state: "saved" | "saving" | "pending" | "failed";
+  state: "saved" | "saving" | "pending" | "failed" | "refused";
   online: boolean;
   backupOk: boolean;
 }) {
   const offline = !online;
   // Offline outranks the rest: it is the reason, and it is the thing the user can act on.
-  const look = offline
+  // "refused" outranks even that — the connection is not the problem and waiting will not
+  // help, so it must not be dressed up as a network blip that will clear on its own.
+  const look = state === "refused"
+    ? { dot: "bg-red-600", text: "text-red-700 dark:text-red-400", label: "Rejected — tell Mohamed" }
+    : offline
     ? { dot: "bg-red-500", text: "text-red-700 dark:text-red-400", label: "Offline — not saved" }
     : state === "failed"
     ? { dot: "bg-red-500", text: "text-red-700 dark:text-red-400", label: "Not saved — retrying" }
@@ -2433,8 +2488,11 @@ function SaveLamp({
     ? { dot: "bg-amber-500", text: "text-amber-700 dark:text-amber-400", label: "Unsaved changes" }
     : { dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-400", label: "Saved" };
 
-  const bad = offline || state === "failed";
-  const title = bad
+  const bad = offline || state === "failed" || state === "refused";
+  const title = state === "refused"
+    ? "The server refused this change, so waiting will not fix it. Your work is kept on this " +
+      "device — leave this page open and report it before closing the tab."
+    : bad
     ? backupOk
       ? "Your work is kept on this device and is sent as soon as the connection is back. Do not " +
         "clear the browser data, and reopen this quotation on THIS computer."

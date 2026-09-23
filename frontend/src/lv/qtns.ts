@@ -358,11 +358,29 @@ export async function setCoWorkers(id: string, coOwnerIds: string[], note?: stri
   return api.qtns.cowork(id, coOwnerIds, note);
 }
 
+/**
+ * NULL means "there is no such quotation for you" — anything else THROWS.
+ *
+ * This used to swallow every error and return null, so the editor could not tell a deleted
+ * quotation from an unreachable server and bounced to the list either way. With no internet
+ * that is actively harmful: the list will not load either, and any unsaved work this device
+ * is holding (see offlineBackup.ts) can only be recovered by opening the quotation — which
+ * the bounce prevents. Losing the connection must never look like losing the quotation.
+ */
+export function isMissingQtn(e: unknown): boolean {
+  const status = (e as { status?: number } | null | undefined)?.status;
+  // 404 no such quotation, 403 not yours. Everything else — no network (no status at all),
+  // 5xx, a 401 the app handles globally — is a FAULT, and a fault must not be dressed up as
+  // a deleted quotation.
+  return status === 404 || status === 403;
+}
+
 export async function getQtn(id: string): Promise<QtnRecord | null> {
   try {
     return toRecord(await api.qtns.get(id));
-  } catch {
-    return null;
+  } catch (e) {
+    if (isMissingQtn(e)) return null;
+    throw e;
   }
 }
 

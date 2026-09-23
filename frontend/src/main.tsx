@@ -37,8 +37,35 @@ import "@fontsource-variable/montserrat";
 import "./index.css";
 
 /** Login wall: shows the auth page until the user is signed in, then the app. */
+/**
+ * Signed in, but the server cannot be reached.
+ *
+ * Shown INSTEAD of the sign-in form, because showing a login box to someone whose session is
+ * perfectly valid tells them a lie: they conclude their account is broken, and the usual
+ * home remedy — clearing the browser data — throws away the unsaved work the app is holding
+ * on that device for them (lv/offlineBackup.ts).
+ */
+function ServerUnreachable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-surface px-6">
+      <div className="max-w-md text-center">
+        <p className="text-2xl font-extrabold text-ink">Cannot reach the server</p>
+        <p className="mt-2 text-sm text-muted">
+          You are still signed in — this is a connection problem, not a login problem. Check
+          the internet and try again.
+        </p>
+        <p className="mt-4 rounded-xl border border-amber-400 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          Do not clear your browser data. Any quotation work that has not reached the server
+          is saved on this computer and will be offered back when you open it again.
+        </p>
+        <button className="btn btn-primary mt-5" onClick={onRetry}>Try again</button>
+      </div>
+    </div>
+  );
+}
+
 function Gate() {
-  const { user, loading } = useAuth();
+  const { user, loading, serverUnreachable, retry } = useAuth();
   const [, bumpCatalog] = React.useState(0);
   // Pull the published prices once the user is known (the endpoint needs a login).
   // refreshCatalog mutates the catalogue arrays IN PLACE, so React sees no change on
@@ -61,6 +88,8 @@ function Gate() {
       </div>
     );
   }
+  // A session we could not CONFIRM is not a session we should end — see ServerUnreachable.
+  if (!user && serverUnreachable) return <ServerUnreachable onRetry={retry} />;
   if (!user) return <AuthPage />;
   return (
     <Routes>
