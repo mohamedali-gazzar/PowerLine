@@ -48,7 +48,7 @@ import {
   type ComboLine, type AtsTypeId,
 } from "../lv/combos";
 import { rankSearchOptions } from "../lv/search";
-import { kioskCostsEgp, kioskTotalSellingEgp } from "../lv/kioskPricing";
+import { kioskCostsEgp, kioskTotalCostEgp, kioskTotalSellingEgp } from "../lv/kioskPricing";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
 import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalogSource";
@@ -649,17 +649,76 @@ export default function LvConfiguratorPage() {
   // A mailto can't carry attachments, so the Technical & Commercial PDFs are attached
   // by hand after Outlook opens.
   const salesMailSubject = () => `${qtnNum} (${s.project.name.trim()})`;
-  const salesMailBody = () => [
+  // Format a selling factor for the message: up to 2 decimals, trailing zeros trimmed (0.85, 0.9, 0.77).
+  const fmtFactor = (f: number | null): string => (f == null ? "—" : String(Number(f.toFixed(2))));
+  // For an MV quotation, list every MV part (RMU-01, Transformer-01, Kiosk-01…) with its OWN selling
+  // factor instead of one project factor. An RMU uses its pricing factor (≈0.85); a transformer the
+  // catalogue factor (≈0.95); a KIOSK its blended Total factor (total cost ÷ total selling — the
+  // "Total" row of its live price table). Reads the same RMU previews / transformer catalogue the
+  // commercial offer uses, so the numbers match. Returns [] for a plain (non-MV) quotation.
+  const mvFactorLines = async (): Promise<string[]> => {
+    const mvPanels = s.panels.filter((p) => !!p.mvType);
+    if (!mvPanels.length) return [];
+    const usdRate = s.factors?.usd || 1;
+    const curr = (s.mvRmu ?? DEFAULT_MV_COMMERCIAL).currency;
+    const rate = curr === "EGP" ? usdRate : 1;
+    const needTr = mvPanels.some((p) => p.mvType === "transformer" || p.mvType === "kiosk");
+    let trRows: TransformerRow[] = [];
+    let trFactor = 0.95;
+    if (needTr) {
+      try { const r = await api.pricing.transformerList({ activeOnly: true, take: 1000 }); trRows = r.rows; trFactor = r.factor || 0.95; } catch { /* keep defaults */ }
+    }
+    // Kiosk transformer part cost (EGP): the inside-kiosk (IP00) row's cost × the USD→EGP rate.
+    const trCostEgpOf = (c: TransformerConfigInput | undefined): number | null => {
+      if (!c || c.ratingKva == null) return null;
+      const base = trRows.find((r) => r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation);
+      const match = base ? (trRows.find((r) => r.code === trDisplayCode(base.code, true)) ?? base) : undefined;
+      return match ? Math.round(match.costEgp * usdRate) : null;
+    };
+    // Kiosk RMU part cost (EGP): the RMU list price × its pricing factor, converted to EGP.
+    const rmuCostEgpOf = async (cfg: RmuConfigInput): Promise<number | null> => {
+      try {
+        const g = await api.previewConfig(cfg);
+        const lp = g?.listPricing;
+        if (!lp || !lp.found || lp.basePrice == null) return null;
+        const sellOffer = (lp.basePrice + (lp.addOns ?? []).reduce((sum, a) => sum + a.price, 0)) * rate;
+        const costOffer = Math.round(sellOffer * (g.rmuFactor ?? 0.85));
+        return curr === "EGP" ? costOffer : Math.round(costOffer * usdRate);
+      } catch { return null; }
+    };
+    const lines: string[] = [];
+    let n = 0;
+    for (const p of mvPanels) {
+      n++;
+      const name = mvDefaultName(p, s.panels);
+      let factor: number | null = null;
+      if (p.mvType === "rmu") {
+        try { factor = (await api.previewConfig(p.mvRmuConfig ?? DEFAULT_RMU_CONFIG)).rmuFactor ?? 0.85; } catch { factor = 0.85; }
+      } else if (p.mvType === "transformer") {
+        factor = trFactor;
+      } else if (p.mvType === "kiosk") {
+        const costs = kioskCostsEgp(p, s, await rmuCostEgpOf(p.mvRmuConfig ?? DEFAULT_RMU_CONFIG), trCostEgpOf(p.mvTransformerConfig));
+        const tc = kioskTotalCostEgp(costs);
+        const ts = kioskTotalSellingEgp(costs, p);
+        factor = ts > 0 ? tc / ts : null;
+      }
+      lines.push(`${`${n}- ${name}`.padEnd(20)}${fmtFactor(factor)}`);
+    }
+    return lines;
+  };
+  const salesMailBody = (factorLines: string[]) => [
     `Dear ${s.project.salesPerson.trim() || "Sales"},`,
-    "Please find attached the Technical and Commercial offers",
-    // The PROJECT factor — the achieved total cost ÷ total selling — not the panels-factor default.
-    `on factor "${(projectFactor(s) || s.factors.factor).toFixed(3)}"`,
+    // MV → one line per part with its own factor; otherwise the single achieved project factor.
+    ...(factorLines.length
+      ? ["Please find attached the Technical and Commercial offers on factors:", ...factorLines]
+      : ["Please find attached the Technical and Commercial offers",
+         `on factor "${(projectFactor(s) || s.factors.factor).toFixed(3)}"`]),
     "",
     "Best regards,",
     s.project.supportEngineer.trim() || user?.name || "",
   ].join("\r\n");
-  const salesMailtoHref = () =>
-    `mailto:${s.project.salesEmail.trim()}?subject=${encodeURIComponent(salesMailSubject())}&body=${encodeURIComponent(salesMailBody())}`;
+  const salesMailtoHref = (factorLines: string[]) =>
+    `mailto:${s.project.salesEmail.trim()}?subject=${encodeURIComponent(salesMailSubject())}&body=${encodeURIComponent(salesMailBody(factorLines))}`;
   const downloadBlob = (blob: Blob, name: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -706,6 +765,7 @@ export default function LvConfiguratorPage() {
     setSendingOffers(true);
     try {
       const { graphConfigured, createOutlookDraft } = await import("../lv/outlookGraph");
+      const factorLines = await mvFactorLines();
       const { toBlob, coBlob, toName, coName } = await buildOfferPdfs();
 
       if (graphConfigured()) {
@@ -714,7 +774,7 @@ export default function LvConfiguratorPage() {
           coBlob ? { name: coName, blob: coBlob } : null,
         ].filter(Boolean) as { name: string; blob: Blob }[];
         const link = await createOutlookDraft({
-          to: s.project.salesEmail.trim(), subject: salesMailSubject(), body: salesMailBody(), attachments,
+          to: s.project.salesEmail.trim(), subject: salesMailSubject(), body: salesMailBody(factorLines), attachments,
         });
         if (link) window.open(link, "_blank", "noopener");
         return;
@@ -728,7 +788,7 @@ export default function LvConfiguratorPage() {
       // exactly what was missing.
       if (toBlob) downloadBlob(toBlob, toName);
       if (coBlob) downloadBlob(coBlob, coName);
-      window.location.href = salesMailtoHref();
+      window.location.href = salesMailtoHref(factorLines);
     } catch (e) {
       setTab(original);
       setWfError(`Couldn't build the offer e-mail — ${(e as Error).message || "please try again"}.`);
@@ -752,7 +812,7 @@ export default function LvConfiguratorPage() {
   // WhatsApp message = the SAME wording as the Outlook e-mail (owner's request). Outlook
   // splits into a subject and a body; WhatsApp has no subject line, so the subject
   // ("<QTN> (<Project>)") goes on top, then the identical e-mail body underneath.
-  const salesWaText = () => `${salesMailSubject()}\n\n${salesMailBody()}`;
+  const salesWaText = (factorLines: string[]) => `${salesMailSubject()}\n\n${salesMailBody(factorLines)}`;
   const sendViaWhatsApp = async () => {
     if (sendingOffers) return;
     const digits = salesWaDigits(s.project.salesMobile);
@@ -766,11 +826,12 @@ export default function LvConfiguratorPage() {
     const original = tab;
     setSendingOffers(true);
     try {
+      const factorLines = await mvFactorLines();
       const { toBlob, coBlob, toName, coName } = await buildOfferPdfs();
       // wa.me cannot attach files — download them so they are ready to attach in the chat.
       if (toBlob) downloadBlob(toBlob, toName);
       if (coBlob) downloadBlob(coBlob, coName);
-      window.open(`https://wa.me/${digits}?text=${encodeURIComponent(salesWaText())}`, "_blank", "noopener");
+      window.open(`https://wa.me/${digits}?text=${encodeURIComponent(salesWaText(factorLines))}`, "_blank", "noopener");
     } catch (e) {
       setTab(original);
       setWfError(`Couldn't prepare the WhatsApp message — ${(e as Error).message || "please try again"}.`);

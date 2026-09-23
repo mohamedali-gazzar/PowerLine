@@ -23,6 +23,22 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**Change: the MV "Send to sales" message now lists every item with its own factor.**
+
+For an MV quotation, the offer message (Outlook and WhatsApp) used to cite a single project
+factor. It now lists each MV part with its own selling factor, e.g.:
+
+> Please find attached the Technical and Commercial offers on factors:
+> 1- RMU-01           0.85
+> 2- Transformer-01   0.95
+> 3- Kiosk-01         0.77
+
+An RMU shows its pricing factor, a transformer the catalogue factor, and a **kiosk its blended
+Total factor** (the "Total" row of its live price table — cost ÷ selling). Plain LV quotations are
+unchanged (still the single project factor). Wording/message only — no pricing or data change.
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **Tidy-up: a Kiosk is now labelled "Kiosk-01" in the panel list, not the name of the LV panel inside it.**
 
 The kiosk panel was borrowing the name of the standard LV panel in its "Low" section (e.g.
