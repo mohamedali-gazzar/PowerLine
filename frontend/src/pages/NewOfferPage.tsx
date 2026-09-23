@@ -10,6 +10,7 @@ import {
 import OfferView from "../components/OfferView";
 import OfferCover from "../components/OfferCover";
 import { QtnNumberInput, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
+import { notePanelCount } from "../components/achievements/milestoneBus";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
 import ApprovalChat from "../components/ApprovalChat";
 import ActiveTimeBadge from "../components/ActiveTimeBadge";
@@ -159,6 +160,21 @@ export default function NewOfferPage() {
     setRows((arr) => arr.filter((_, j) => j !== i));
     setSel((s) => Math.max(0, Math.min(s >= i ? s - 1 : s, rows.length - 2)));
   };
+
+  // Milestone celebration: fire when this offer's RMU count REACHES a milestone (10, 25, 50, …) — the
+  // same trigger the LV/MV configurator uses, so RMU offers celebrate too. A per-offer baseline (set
+  // once the offer has hydrated) stops it from firing when an offer that already has many RMUs is merely
+  // opened; it fires only on a genuine increase (adding an RMU) within the open offer.
+  const rmuCountBaseline = useRef<{ id: string; count: number } | null>(null);
+  useEffect(() => {
+    if (editing && !hydrated) return;            // wait until an edited offer has loaded
+    const key = editId || "new";
+    const count = rows.length;
+    const prev = rmuCountBaseline.current;
+    rmuCountBaseline.current = { id: key, count };
+    if (!prev || prev.id !== key) return;        // first settled read for this offer → baseline only
+    if (count > prev.count) notePanelCount(count); // a real increase → the app-level modal decides
+  }, [editing, hydrated, editId, rows.length]);
 
   // Offer cover-page team — sales lists are the SHARED registry (also used by LV)
   const [staff, setStaff] = useStaff();

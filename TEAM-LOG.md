@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**Milestone celebration now works for RMU offers too.**
+
+LV and MV-package quotations already showed the milestone popups (they're built in the same screen). The
+standalone **RMU offer** editor is a separate screen and didn't — now it does: reaching 10 / 25 / 50 RMUs
+in an offer shows the celebration, same as reaching that many panels in LV/MV. Frontend-only; no database
+change.
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **Milestone popups get a clean slate (so they show fresh again).**
 
 The very first version of the milestones briefly showed 10 and 25 automatically to anyone already past
