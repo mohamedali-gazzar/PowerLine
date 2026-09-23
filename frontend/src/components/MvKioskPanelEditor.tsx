@@ -181,12 +181,12 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
                     <td className="py-1.5 pr-2">
                       {row.key === "size" ? (
                         <select value={sizeCode} onChange={(e) => setPrice("size", { code: e.target.value })}
-                          className="-ml-1 cursor-pointer border-0 bg-transparent px-1 font-mono text-[12px] font-bold text-brand-dark focus:outline-none focus:ring-0 dark:bg-transparent">
+                          className="-ml-1 cursor-pointer border-0 bg-transparent px-1 text-sm font-semibold text-ink focus:outline-none focus:ring-0 dark:bg-transparent">
                           <option value="">—</option>
                           {KIOSK_SIZE_CODES.map((c) => <option key={c} value={c}>{c}</option>)}
                         </select>
                       ) : (
-                        <span className="font-mono text-[12px] font-bold text-brand-dark">{row.autoCode || "—"}</span>
+                        <span className="text-sm font-semibold text-ink">{row.autoCode || "—"}</span>
                       )}
                     </td>
                     <td className="py-1.5 pr-2 font-semibold text-ink">{row.label}</td>

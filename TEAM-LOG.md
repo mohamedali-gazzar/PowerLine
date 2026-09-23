@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**Tidy-up: the Code column now reads like the Item column in both kiosk price tables.**
+
+The part codes (RMU / Transformer / LV codes, kiosk size, etc.) used to be shown in an orange
+typewriter font. They now use the same normal font and dark colour as the item names beside them —
+in both the live "Kiosk price (live)" table and the new Kiosk Analysis report. Look only.
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **New: a "Kiosk Analysis" tab that shows every kiosk's cost breakdown for the sales team, as one PDF.**
 
 MV quotations now have a **Kiosk Analysis** tab (after Commercial). It shows, for each kiosk, the

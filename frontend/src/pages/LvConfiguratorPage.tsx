@@ -5490,7 +5490,7 @@ function KioskAnalysisTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                 </div>
                 {k.rows.map((r) => (
                   <div key={r.key} className={`${COLS} border-b border-line py-2.5 text-sm`}>
-                    <span className="min-w-0 truncate font-mono text-[12px] font-bold" style={{ color: TRED }}>{r.code}</span>
+                    <span className="min-w-0 truncate font-semibold">{r.code}</span>
                     <span className="font-semibold">{r.label}</span>
                     <span className="text-right tabular-nums">{fmt(r.cost)}</span>
                     <span className="text-right tabular-nums text-muted">{fmtFactor(r.factor)}</span>
