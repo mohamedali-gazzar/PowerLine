@@ -23,6 +23,21 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**Kiosk (compact substation) Technical Offer.**
+
+A kiosk now has a full Technical Offer, where before it showed nothing. Each compact substation gets:
+- a **cover** (like the RMU / Transformer covers): its **kVA**, type code, the RMU it contains, the
+  transformer it contains, and a **"Stone Painting Included"** badge when that option is chosen;
+- then the **full technical of the RMU** (cover + datasheet), the **transformer** (cover + datasheet,
+  IP00 inside-kiosk), and the **LV distribution board** (spec sheet — MDB rating, ABB breakers, PFC,
+  standard).
+
+All of it exports to the A4 technical PDF like the rest of the MV offer. Standalone RMU and Transformer
+technical offers are unchanged (the shared rendering was factored out and reused). Look-and-feel only;
+no database change.
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **Milestone celebration now works for RMU offers too.**
 
 LV and MV-package quotations already showed the milestone popups (they're built in the same screen). The

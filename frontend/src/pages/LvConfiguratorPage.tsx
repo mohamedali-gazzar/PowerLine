@@ -62,7 +62,7 @@ import { TransformerCover, TransformerTechnicalSheet } from "../components/Trans
 import { findTransformerTech, trModel, trDisplayCode } from "../components/transformerTechData";
 import type { PdfPageImage } from "../lv/renderPdfPages";
 import OfferView from "../components/OfferView";
-import type { GeneratedOffer, RmuConfigInput, TransformerConfigInput } from "../types";
+import type { GeneratedOffer, RmuConfigInput, TransformerConfigInput, KioskLvConfigInput } from "../types";
 import {
   api, getToken, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type QtnAttachmentDto, type QtnStatus,
@@ -5078,29 +5078,218 @@ function UploadedTransformerSheet({ code }: { code: string }) {
   );
 }
 
+// A branded cover page for one Compact Substation (kiosk) — the same spec-sheet look as RmuCover /
+// TransformerCover. It summarises the whole package on one page: the kiosk rating (kVA, taken from its
+// transformer), the Ring Main Unit it contains, the Transformer it contains, and — when chosen — the
+// stone-painting finish. Everything is read straight off the kiosk panel. One per kiosk item.
+function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project }: {
+  rmu?: RmuConfigInput; tr?: TransformerConfigInput; code: string; kva: number;
+  stonePaint: boolean; index: number; total: number; project: string;
+}) {
+  const rmuMeta = rmu ? (RMU_COVER[rmu.productType] ?? RMU_COVER.PRAL) : null;
+  const rmuSpecs = rmu ? [
+    { label: "Type", value: rmuMeta!.family },
+    { label: "Rated voltage", value: `${rmu.voltageKv} kV` },
+    { label: "Configuration", value: `${rmu.nalCount}R + ${rmu.nalfCount}T` },
+    { label: "OEM", value: rmu.lbsBrand || "—" },
+  ] : [];
+  const trSpecs = tr ? [
+    { label: "Rated power", value: `${tr.ratingKva} kVA` },
+    { label: "Voltage", value: `${tr.primaryKv} / 0.4 kV` },
+    { label: "Insulation", value: `${tr.insulation || "—"} type` },
+    { label: "Brand", value: tr.brand || "—" },
+  ] : [];
+  return (
+    <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>
+      <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
+      <img src="/brand/mark-color.png" alt="" aria-hidden="true"
+        className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
+
+      <div className="relative flex flex-1 flex-col px-16 py-14">
+        <div className="flex items-center justify-between">
+          <div className="text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Medium Voltage · Compact Substation</div>
+          {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">Kiosk {index + 1} of {total}</div>}
+        </div>
+
+        {/* Hero: the compact-substation rating (kVA) + tagline + type code. */}
+        <div className="py-8">
+          <div className="text-7xl font-extrabold leading-none text-ink">{kva ? `${kva} kVA` : "Compact Substation"}</div>
+          <div className="mt-4 text-2xl font-semibold text-muted">Compact Secondary Substation</div>
+          {code && (
+            <div className="mt-8">
+              <div className="mb-2 text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Type code</div>
+              <div className="font-mono text-2xl font-bold tracking-wide text-ink">{code}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Composition: the RMU + Transformer the kiosk contains, side by side. */}
+        <div className="grid flex-1 grid-cols-2 gap-6">
+          {rmu && (
+            <div className="rounded-2xl border border-line p-6">
+              <div className="text-sm font-extrabold uppercase tracking-[0.2em]" style={{ color: TRED }}>Ring Main Unit</div>
+              <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5">
+                {rmuSpecs.map((sp) => (
+                  <div key={sp.label}>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{sp.label}</div>
+                    <div className="mt-1 text-base font-bold text-ink">{sp.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {tr && (
+            <div className="rounded-2xl border border-line p-6">
+              <div className="text-sm font-extrabold uppercase tracking-[0.2em]" style={{ color: TRED }}>Transformer</div>
+              <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5">
+                {trSpecs.map((sp) => (
+                  <div key={sp.label}>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{sp.label}</div>
+                    <div className="mt-1 text-base font-bold text-ink">{sp.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer strip: enclosure finish (stone painting when chosen) + project. */}
+        <div className="mt-6 border-t-2 pt-6" style={{ borderColor: TRED }}>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Enclosure finish</div>
+              <div className="mt-1 text-lg font-bold text-ink">{stonePaint ? "Stone painting" : "Standard RAL finish"}</div>
+            </div>
+            {stonePaint && (
+              <div className="rounded-full px-4 py-2 text-sm font-extrabold text-white" style={{ background: TRED }}>Stone Painting Included</div>
+            )}
+          </div>
+          {project && <div className="mt-4 text-sm text-muted">{project}</div>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// One RMU's technical pages: its cover + the generated datasheet. Used both for a standalone RMU panel
+// and for the RMU inside a kiosk, so both look identical.
+function MvRmuTechnical({ config, g, index, total, project }: {
+  config: RmuConfigInput; g: GeneratedOffer | undefined; index: number; total: number; project: string;
+}) {
+  return (
+    <>
+      <RmuCover config={config} code={g?.panelCode || g?.configCode || rmuShortCode(config)} index={index} total={total} project={project} />
+      <div className="a4-sheet px-12 py-10">
+        {g ? <OfferView g={g} /> : (
+          <div className="space-y-3"><div className="skeleton h-24" /><div className="skeleton h-32" /><div className="skeleton h-40" /></div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// One transformer's technical pages: its cover + the right datasheet (uploaded sheet → built-in PDTR
+// datasheet → a note). Used for a standalone transformer AND the transformer inside a kiosk (insideKiosk).
+function MvTransformerTechnical({ config: c, insideKiosk, index, total, project, trCatalog }: {
+  config: TransformerConfigInput; insideKiosk: boolean; index: number; total: number; project: string;
+  trCatalog: { rows: TransformerRow[]; sheetCodes: string[] } | null;
+}) {
+  const dry = (c.insulation || "").trim().toLowerCase() === "dry";
+  const isPowerline = (c.brand || "").trim().toLowerCase() === "powerline";
+  const tech = dry && isPowerline ? findTransformerTech(c.primaryKv, c.ratingKva) : null;
+  const row = trCatalog?.rows.find((r) =>
+    r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation);
+  const coverCode = row?.code ? trDisplayCode(row.code, insideKiosk) : (tech ? trModel(tech, insideKiosk) : "");
+  const hasUploaded = !!coverCode && (trCatalog?.sheetCodes.includes(coverCode) ?? false) && !!row;
+  const desc = [c.ratingKva ? `${c.ratingKva} kVA` : null, c.primaryKv ? `${c.primaryKv} kV` : null, c.insulation ? `${c.insulation} type` : null].filter(Boolean).join(" · ");
+  return (
+    <>
+      <TransformerCover config={c} code={coverCode} insideKiosk={insideKiosk} index={index} total={total} project={project} />
+      {trCatalog == null ? (
+        <div className="a4-sheet p-6"><div className="skeleton h-[260mm] w-full rounded-lg" /></div>
+      ) : hasUploaded ? (
+        <UploadedTransformerSheet code={coverCode} />
+      ) : tech ? (
+        <TransformerTechnicalSheet t={tech} insideKiosk={insideKiosk} />
+      ) : (
+        <div className="a4-sheet px-12 py-10 text-sm text-muted">
+          <h2 className="mb-3 text-xl font-extrabold text-ink">Technical Datasheet</h2>
+          <p className="leading-relaxed">
+            A full type-tested datasheet is published for Powerline cast-resin <b className="text-ink">dry-type</b> transformers
+            at <b className="text-ink">11 kV / 22 kV</b> in the standard ratings 500 · 1000 · 1500 · 1600 · 2000 · 2500 kVA.
+            {desc ? <> This transformer (<b className="text-ink">{desc}</b>) will be supplied to its own type-test certificate.</> : null}
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
+// The LV compartment of a kiosk — a one-page spec sheet (the LV board is the house-standard ABB build,
+// so there's no generated datasheet like the RMU has). Reads the kiosk's LV config + its kVA.
+function MvKioskLvCover({ lv, kva, project }: { lv: KioskLvConfigInput; kva: number; project: string }) {
+  const specs = [
+    { label: "Distribution board", value: kva ? `MDB · ${kva} kVA` : "MDB" },
+    { label: "Standard", value: lv.iec === "eehc" ? "EEHC" : "Non-EEHC" },
+    { label: "Configuration", value: lv.lvConfig === "inout" ? "Incoming & Outgoing" : "Incoming only" },
+    { label: "Circuit breakers", value: "ABB" },
+    { label: "Power-factor correction", value: lv.includePf ? (lv.pfBrand || "Included") : "—" },
+    { label: "Switch-fuse units", value: lv.includeSwitchFuse ? "Included" : "—" },
+  ];
+  return (
+    <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>
+      <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
+      <img src="/brand/mark-color.png" alt="" aria-hidden="true"
+        className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
+      <div className="relative flex flex-1 flex-col px-16 py-14">
+        <div className="text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Low Voltage · Distribution Board</div>
+        <div className="flex min-h-0 flex-1 flex-col justify-center py-10">
+          <div className="text-7xl font-extrabold leading-none text-ink">Low Voltage</div>
+          <div className="mt-4 text-2xl font-semibold text-muted">Main Distribution Board · ABB</div>
+        </div>
+        <div className="border-t-2 pt-6" style={{ borderColor: TRED }}>
+          <div className="grid grid-cols-3 gap-x-4 gap-y-6">
+            {specs.map((sp) => (
+              <div key={sp.label}>
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{sp.label}</div>
+                <div className="mt-1 text-lg font-bold text-ink">{sp.value}</div>
+              </div>
+            ))}
+          </div>
+          {project && <div className="mt-5 text-sm text-muted">{project}</div>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const rmuPanels = mvRmuPanels(s);
   const trPanels = mvTransformerPanels(s);
-  const previews = useRmuPreviews(rmuPanels.map((p) => p.mvRmuConfig!));
+  const kioskPanels = mvKioskPanels(s);
+  // Previews cover standalone RMUs AND the RMU inside each kiosk (both render an RMU technical page).
+  const previews = useRmuPreviews([...rmuPanels, ...kioskPanels].map((p) => p.mvRmuConfig).filter((c): c is RmuConfigInput => !!c));
   // Transformer catalogue — needed to map each transformer config to its real code and to learn
   // whether a technical sheet has been uploaded for it. Fetched once when there are transformers;
   // a failure falls back to an empty list (built-in datasheet / note still render).
   const [trCatalog, setTrCatalog] = useState<{ rows: TransformerRow[]; sheetCodes: string[] } | null>(null);
   useEffect(() => {
-    if (!trPanels.length) return;
+    if (!trPanels.length && !kioskPanels.length) return; // kiosks carry a transformer too
     let alive = true;
     api.pricing.transformerList({ activeOnly: true, take: 1000 })
       .then((r) => { if (alive) setTrCatalog({ rows: r.rows, sheetCodes: r.sheetCodes ?? [] }); })
       .catch(() => { if (alive) setTrCatalog({ rows: [], sheetCodes: [] }); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trPanels.length]);
+  }, [trPanels.length, kioskPanels.length]);
   // Per-type running position, so each cover reads "RMU 1 of N" / "Transformer 1 of M".
   const rmuPos: Record<string, number> = {};
   rmuPanels.forEach((p, i) => { rmuPos[p.id] = i; });
   const trPos: Record<string, number> = {};
   trPanels.forEach((p, i) => { trPos[p.id] = i; });
-  const total = rmuPanels.length + trPanels.length;
+  const kioskPos: Record<string, number> = {};
+  kioskPanels.forEach((p, i) => { kioskPos[p.id] = i; });
+  const total = rmuPanels.length + trPanels.length + kioskPanels.length;
 
   const printRef = useRef<HTMLDivElement>(null);
   const exportPdf = async () => {
@@ -5113,6 +5302,7 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const label = [
     rmuPanels.length ? `${rmuPanels.length} RMU${rmuPanels.length === 1 ? "" : "s"}` : "",
     trPanels.length ? `${trPanels.length} transformer${trPanels.length === 1 ? "" : "s"}` : "",
+    kioskPanels.length ? `${kioskPanels.length} compact substation${kioskPanels.length === 1 ? "" : "s"}` : "",
   ].filter(Boolean).join(" · ") + " → A4 technical PDF.";
 
   return (
@@ -5126,7 +5316,7 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
       )}
       {total === 0 ? (
         <div className="card p-10 text-center text-sm text-muted no-print">
-          Add an RMU or Transformer on the <b className="text-brand-dark">MV</b> tab to build its technical offer.
+          Add an RMU, Transformer or Kiosk on the <b className="text-brand-dark">MV</b> tab to build its technical offer.
         </div>
       ) : (
         <div ref={printRef} className="print-area space-y-5">
@@ -5136,60 +5326,23 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
           {s.panels.map((p) => {
             if (p.mvType === "rmu" && p.mvRmuConfig) {
               const c = p.mvRmuConfig;
-              const g = previews[JSON.stringify(c)];
-              return (
-                <Fragment key={p.id}>
-                  <RmuCover config={c} code={g?.panelCode || g?.configCode || rmuShortCode(c)} index={rmuPos[p.id]} total={rmuPanels.length} project={s.project?.name || ""} />
-                  <div className="a4-sheet px-12 py-10">
-                    {g ? (
-                      <OfferView g={g} />
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="skeleton h-24" />
-                        <div className="skeleton h-32" />
-                        <div className="skeleton h-40" />
-                      </div>
-                    )}
-                  </div>
-                </Fragment>
-              );
+              return <MvRmuTechnical key={p.id} config={c} g={previews[JSON.stringify(c)]} index={rmuPos[p.id]} total={rmuPanels.length} project={s.project?.name || ""} />;
             }
             if (p.mvType === "transformer" && p.mvTransformerConfig) {
               const c = p.mvTransformerConfig;
-              const insideKiosk = !!c.insideKiosk;
-              // The built-in datasheet holds POWERLINE's cast-resin dry-type values, so only ever show
-              // it for a Powerline dry transformer at a standard 11/22 kV rating. Other brands (Sewedy,
-              // Hitachi, …) use their own uploaded datasheet, never Powerline's numbers under their name.
-              const dry = (c.insulation || "").trim().toLowerCase() === "dry";
-              const isPowerline = (c.brand || "").trim().toLowerCase() === "powerline";
-              const tech = dry && isPowerline ? findTransformerTech(c.primaryKv, c.ratingKva) : null;
-              // Match this config to a catalogue row → its code. The code + the uploaded sheet both
-              // follow the IP toggle: standalone uses the "…2300" code, inside-kiosk the "…0000".
-              const row = trCatalog?.rows.find((r) =>
-                r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation);
-              const coverCode = row?.code ? trDisplayCode(row.code, insideKiosk) : (tech ? trModel(tech, insideKiosk) : "");
-              const hasUploaded = !!coverCode && (trCatalog?.sheetCodes.includes(coverCode) ?? false) && !!row;
-              const desc = [c.ratingKva ? `${c.ratingKva} kVA` : null, c.primaryKv ? `${c.primaryKv} kV` : null, c.insulation ? `${c.insulation} type` : null].filter(Boolean).join(" · ");
+              return <MvTransformerTechnical key={p.id} config={c} insideKiosk={!!c.insideKiosk} index={trPos[p.id]} total={trPanels.length} project={s.project?.name || ""} trCatalog={trCatalog} />;
+            }
+            if (p.mvType === "kiosk") {
+              // A compact substation: the overview cover, then the full technical of the RMU, the
+              // transformer (always inside-kiosk → IP00) and the LV board it's built from.
+              const rc = p.mvRmuConfig, tc = p.mvTransformerConfig, lv = p.mvLvConfig, proj = s.project?.name || "";
               return (
                 <Fragment key={p.id}>
-                  <TransformerCover config={c} code={coverCode} insideKiosk={insideKiosk} index={trPos[p.id]} total={trPanels.length} project={s.project?.name || ""} />
-                  {trCatalog == null ? (
-                    <div className="a4-sheet p-6"><div className="skeleton h-[260mm] w-full rounded-lg" /></div>
-                  ) : hasUploaded ? (
-                    // An uploaded technical sheet (for this IP variant) takes precedence over the built-in datasheet.
-                    <UploadedTransformerSheet code={coverCode} />
-                  ) : tech ? (
-                    <TransformerTechnicalSheet t={tech} insideKiosk={insideKiosk} />
-                  ) : (
-                    <div className="a4-sheet px-12 py-10 text-sm text-muted">
-                      <h2 className="mb-3 text-xl font-extrabold text-ink">Technical Datasheet</h2>
-                      <p className="leading-relaxed">
-                        A full type-tested datasheet is published for Powerline cast-resin <b className="text-ink">dry-type</b> transformers
-                        at <b className="text-ink">11 kV / 22 kV</b> in the standard ratings 500 · 1000 · 1500 · 1600 · 2000 · 2500 kVA.
-                        {desc ? <> This transformer (<b className="text-ink">{desc}</b>) will be supplied to its own type-test certificate.</> : null}
-                      </p>
-                    </div>
-                  )}
+                  <KioskCover rmu={rc} tr={tc} code={p.mvKioskCost?.size?.code || ""} kva={tc?.ratingKva || 0}
+                    stonePaint={!!p.mvKioskAccChecks?.stonepaint} index={kioskPos[p.id]} total={kioskPanels.length} project={proj} />
+                  {rc && <MvRmuTechnical config={rc} g={previews[JSON.stringify(rc)]} index={0} total={1} project={proj} />}
+                  {tc && <MvTransformerTechnical config={tc} insideKiosk={true} index={0} total={1} project={proj} trCatalog={trCatalog} />}
+                  {lv && <MvKioskLvCover lv={lv} kva={tc?.ratingKva || 0} project={proj} />}
                 </Fragment>
               );
             }
