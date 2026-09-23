@@ -7457,6 +7457,11 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
             // MV panels get a default, still-editable name (RMU-01, Transformer-01, …) instead of
             // "(unnamed panel)"; plain LV panels have none (mvName === "").
             const mvName = p.mvType ? mvDefaultName(p, s.panels) : "";
+            // A Kiosk's "Low" section is a real LV panel, so picking the house-standard panel writes
+            // that panel's name ("MDB 2000A…") into p.name — correct for the LV panel, wrong as the
+            // kiosk's label. In the rail a kiosk is always "Kiosk-01/02…" (its type), never that LV
+            // name; every other panel still shows its own name, falling back to its type default.
+            const railName = p.mvType === "kiosk" ? mvName : (p.name.trim() || mvName);
             return (
               <div key={p.id} ref={setRowRef(i)} data-panelrow data-panelid={p.id}
                 {...(canReorder ? rowDragProps(i) : {})}
@@ -7497,13 +7502,15 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
                         onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setRenamingId(null); } }}
                         className="min-w-0 flex-1 rounded border border-brand px-1.5 py-0.5 text-sm font-bold text-ink outline-none" />
                     ) : (
-                      <button onClick={() => up({ selectedId: p.id, activeGroupId: null })} title={p.name.trim() || mvName || "(unnamed panel)"} className="min-w-0 text-left">
-                        <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!p.name.trim() && !mvName ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{p.name.trim() || mvName || "(unnamed panel)"}</div>
+                      <button onClick={() => up({ selectedId: p.id, activeGroupId: null })} title={railName || "(unnamed panel)"} className="min-w-0 text-left">
+                        <div className={`break-words text-sm font-bold ${active ? "text-brand-dark" : "text-ink"} ${!railName ? "italic text-muted" : ""}`}>{p.spare && <><SpareKindIcon kind={p.spareKind} /> </>}{railName || "(unnamed panel)"}</div>
                       </button>
                     )}
                   </div>
                   <div data-nodrag className="ml-auto flex shrink-0 items-center gap-0.5">
-                    {hideEditor && (
+                    {/* A kiosk's rail name is automatic (Kiosk-01/02…), so it has no rename pencil —
+                        its p.name belongs to the LV panel inside it, not to the kiosk label. */}
+                    {hideEditor && p.mvType !== "kiosk" && (
                       <button onClick={() => { if (mvName && !p.name.trim()) upPanel(p.id, { name: mvName }); setRenamingId(p.id); }} title="Edit name"
                         className="shrink-0 rounded p-0.5 text-sm leading-none text-muted transition-colors hover:bg-white hover:text-brand-dark">✎</button>
                     )}

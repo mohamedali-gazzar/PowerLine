@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**Tidy-up: a Kiosk is now labelled "Kiosk-01" in the panel list, not the name of the LV panel inside it.**
+
+The kiosk panel was borrowing the name of the standard LV panel in its "Low" section (e.g.
+"MDB 2000A+8*250A+50kVAR"). It now shows its own name — Kiosk-01, Kiosk-02, … — exactly like
+RMU-01 beside it. The LV panel keeps that name where it genuinely belongs; only the list label
+changed. (A kiosk's name is automatic, so it has no rename pencil.) Display only — no price or data change.
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **New: a Kiosk now appears as one priced "compact substation" line on the Commercial offer.**
 
 When a quotation has a Kiosk, the Commercial tab now prints one item that describes the whole
