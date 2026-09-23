@@ -1,0 +1,78 @@
+// One source of truth for a kiosk's price. Both the live "Kiosk price (live)" table in the
+// editor and the kiosk line on the MV Commercial offer compute from the functions here, so the
+// number the engineer sees while building and the number the customer sees on paper can never
+// drift apart. The RMU and Transformer costs are fetched from their own databases (async) by the
+// caller and passed in; everything else (the LV panel build-up, the enclosure steel, the standard
+// accessories and the extras) is a pure function of the panel and the quotation's rates.
+import { calcPanel, DEFAULT_MV_CABLE_EGP_PER_M, type LvState, type LvPanel } from "./store";
+import { kioskKg, lvCopperKg, MV_CABLE_METERS, KIOSK_EXTRAS, DEFAULT_KIOSK_ACCESSORIES } from "./kioskParts";
+
+/** The six priced parts of a kiosk, in the order they appear on the cost sheet. */
+export type KioskPartKey = "rmu" | "transformer" | "lv" | "size" | "accessories" | "extra";
+export const KIOSK_PART_KEYS: KioskPartKey[] = ["rmu", "transformer", "lv", "size", "accessories", "extra"];
+
+// Default selling factor per kiosk part (selling = cost ÷ factor). Overridable per row in the table.
+export const DEFAULT_KIOSK_FACTORS: Record<string, number> = {
+  rmu: 0.85, transformer: 0.95, lv: 0.7, size: 0.7, accessories: 0.7, extra: 0.7,
+};
+
+/**
+ * Every part's COST in EGP. `rmuCostEgp` / `trCostEgp` are fetched from the RMU and transformer
+ * databases by the caller (they are async) and simply passed through; the other four are derived
+ * here from the panel and the QTN's Pricing-Settings rates so a rate change reprices live.
+ */
+export function kioskCostsEgp(
+  p: LvPanel, s: LvState, rmuCostEgp: number | null, trCostEgp: number | null,
+): Record<KioskPartKey, number | null> {
+  const usdRate = s.factors?.usd || 1;
+  const sheetMetalRate = s.factors.sheetMetal || 0;
+  const copperRate = s.factors.copper || 0;
+  const mvCableRate = s.mvCableEgpPerM ?? DEFAULT_MV_CABLE_EGP_PER_M;
+  const trRating = p.mvTransformerConfig?.ratingKva;
+  // Kiosk Size: the chosen enclosure's steel weight × the sheet-metal rate.
+  const sizeCode = p.mvKioskCost?.size?.code || "";
+  const sizeKg = kioskKg(sizeCode, trRating);
+  const size = sizeKg != null ? Math.round(sizeKg * sheetMetalRate) : null;
+  // LV: the built-up cost of the LV panel (components + copper + enclosure + kits), before markup.
+  const lv = Math.round(calcPanel(p, s.factors, s.abbItemDiscounts).unitCost) || null;
+  // Accessories: MV-cable + LV-copper connections + the fixed accessory item list.
+  const mvCableCost = Math.round(MV_CABLE_METERS * mvCableRate);
+  const lvCopperKgVal = lvCopperKg(trRating);
+  const lvCopperCost = lvCopperKgVal != null ? Math.round(lvCopperKgVal * copperRate) : 0;
+  const accItemsTotal = DEFAULT_KIOSK_ACCESSORIES.reduce((sum, a) => sum + (a.cost || 0) * (a.qty || 0), 0);
+  const accessories = (mvCableCost + lvCopperCost + accItemsTotal) || null;
+  // Extra: Shunt/Aux by quantity, Capacitor Box/Stone Paint by tick-box (ticked = 1).
+  const extraQty = p.mvKioskExtraQty ?? {};
+  const accChecks = p.mvKioskAccChecks ?? {};
+  const extra = KIOSK_EXTRAS.reduce((sum, e) => {
+    if (e.kind === "qty") return sum + (extraQty[e.key] || 0) * Math.round(e.usd * usdRate);
+    const price = e.usd != null ? Math.round(e.usd * usdRate) : Math.round((e.kg || 0) * sheetMetalRate);
+    return sum + (accChecks[e.key] ? price : 0);
+  }, 0) || null;
+  return { rmu: rmuCostEgp, transformer: trCostEgp, lv, size, accessories, extra };
+}
+
+/** The selling factor for a part: the typed override on the panel, else the house default. */
+export function kioskFactorOf(p: LvPanel, key: string): number | undefined {
+  return p.mvKioskCost?.[key]?.factor ?? DEFAULT_KIOSK_FACTORS[key];
+}
+
+/** One part's SELLING price in EGP (cost ÷ factor), or null when it isn't priced yet. */
+export function kioskPartSellingEgp(
+  costs: Record<KioskPartKey, number | null>, p: LvPanel, key: KioskPartKey,
+): number | null {
+  const c = costs[key];
+  const f = kioskFactorOf(p, key);
+  if (!c || !f) return null;
+  return Math.round(c / f);
+}
+
+/** The whole kiosk's COST in EGP (sum of the six parts). */
+export function kioskTotalCostEgp(costs: Record<KioskPartKey, number | null>): number {
+  return KIOSK_PART_KEYS.reduce((sum, k) => sum + (costs[k] ?? 0), 0);
+}
+
+/** The whole kiosk's SELLING price in EGP — what the commercial line charges for one unit. */
+export function kioskTotalSellingEgp(costs: Record<KioskPartKey, number | null>, p: LvPanel): number {
+  return KIOSK_PART_KEYS.reduce((sum, k) => sum + (kioskPartSellingEgp(costs, p, k) ?? 0), 0);
+}

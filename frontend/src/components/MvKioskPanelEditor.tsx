@@ -1,19 +1,18 @@
 import { useState, type ReactNode } from "react";
-import { calcPanel, DEFAULT_MV_CABLE_EGP_PER_M, type LvState, type LvPanel } from "../lv/store";
+import { DEFAULT_MV_CABLE_EGP_PER_M, type LvState, type LvPanel } from "../lv/store";
 import type { KioskLvConfigInput } from "../types";
 import MvRmuPanelEditor from "./MvRmuPanelEditor";
 import MvTransformerPanelEditor from "./MvTransformerPanelEditor";
 import { DEFAULT_RMU_CONFIG } from "./RmuConfigForm";
 import { rmuKioskLimitation } from "../pcss/kioskRmu";
 import {
-  KIOSK_SIZE_CODES, kioskKg, MV_CABLE_METERS, lvCopperKg,
+  KIOSK_SIZE_CODES, MV_CABLE_METERS, lvCopperKg,
   KIOSK_EXTRAS, DEFAULT_KIOSK_ACCESSORIES,
 } from "../lv/kioskParts";
-
-// Default selling factor per kiosk part (selling = cost ÷ factor). Editable per row in the table.
-const DEFAULT_KIOSK_FACTORS: Record<string, number> = {
-  rmu: 0.85, transformer: 0.95, lv: 0.7, size: 0.7, accessories: 0.7, extra: 0.7,
-};
+import {
+  DEFAULT_KIOSK_FACTORS, kioskCostsEgp, kioskPartSellingEgp,
+  kioskTotalCostEgp, kioskTotalSellingEgp, type KioskPartKey,
+} from "../lv/kioskPricing";
 
 // A kiosk (packaged compact secondary substation) is ONE unit holding an MV ring main unit, a
 // transformer and the LV panel. The panel stores the RMU + transformer in the SAME fields a
@@ -80,7 +79,7 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
   // The LV panel's code follows the transformer rating, e.g. a 1000 kVA transformer → "MDB-1000KVA".
   const trRating = p.mvTransformerConfig?.ratingKva;
   const lvCode = trRating ? `MDB-${trRating}KVA` : "";
-  const priceRows: { key: string; label: string; autoCode?: string }[] = [
+  const priceRows: { key: KioskPartKey; label: string; autoCode?: string }[] = [
     { key: "rmu", label: "RMU", autoCode: rmuCode },
     { key: "transformer", label: "Transformer", autoCode: trCode },
     { key: "lv", label: "LV", autoCode: lvCode },
@@ -97,13 +96,9 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
   const sheetMetalRate = s.factors.sheetMetal || 0;
   const copperRate = s.factors.copper || 0;
   const mvCableRate = s.mvCableEgpPerM ?? DEFAULT_MV_CABLE_EGP_PER_M;
-  // Kiosk Size: the chosen enclosure's steel weight × the sheet-metal rate.
+  // Kiosk Size code drives the enclosure-steel cost (inside kioskCostsEgp); kept for the dropdown.
   const sizeCode = priceMap.size?.code || "";
-  const sizeKg = kioskKg(sizeCode, trRating);
-  const sizeCost = sizeKg != null ? Math.round(sizeKg * sheetMetalRate) : null;
-  // LV: the built-up cost of the LV panel (components + copper + enclosure + kits), before markup.
-  const lvCost = Math.round(calcPanel(p, s.factors, s.abbItemDiscounts).unitCost) || null;
-  // Accessories: MV-cable + LV-copper connections + capacitor box + the item list + ticked extras.
+  // Accessories / Extra tick-box + quantity state (the checklist accordions below the price sheet).
   const accChecks = p.mvKioskAccChecks ?? {};
   const setAccCheck = (key: string, on: boolean) => upPanel(p.id, { mvKioskAccChecks: { ...accChecks, [key]: on } });
   const extraQty = p.mvKioskExtraQty ?? {};
@@ -111,7 +106,6 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
   const mvCableCost = Math.round(MV_CABLE_METERS * mvCableRate);
   const lvCopperKgVal = lvCopperKg(trRating);
   const lvCopperCost = lvCopperKgVal != null ? Math.round(lvCopperKgVal * copperRate) : 0;
-  const accItemsTotal = DEFAULT_KIOSK_ACCESSORIES.reduce((sum, a) => sum + (a.cost || 0) * (a.qty || 0), 0);
   // The EXTRA group: Shunt/Aux by quantity, Capacitor Box/Stone Paint by tick-box (ticked = 1).
   const extraRows = KIOSK_EXTRAS.map((e) => {
     if (e.kind === "qty") {
@@ -123,8 +117,6 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
     const checked = !!accChecks[e.key];
     return { key: e.key, name: e.name, kind: "check" as const, qty: checked ? 1 : 0, unit: "-", price, total: checked ? price : 0, checked };
   });
-  const extrasTotal = extraRows.reduce((sum, r) => sum + r.total, 0);
-  const accCost = mvCableCost + lvCopperCost + accItemsTotal;
   // The read-only standard accessory rows: connections (by length/weight) + the fixed item list.
   const accRows = [
     { key: "mvcable", name: "MV cable", qty: MV_CABLE_METERS, unit: "m", price: mvCableRate, total: mvCableCost },
@@ -132,27 +124,14 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
     ...DEFAULT_KIOSK_ACCESSORIES.map((a) => ({ key: a.id, name: a.name, qty: a.qty, unit: "-", price: a.cost, total: (a.cost || 0) * (a.qty || 0) })),
   ];
 
-  // Every cost cell is computed — RMU + Transformer from their databases, LV from the LV panel,
-  // Kiosk Size + Accessories from the tables above — so the whole Cost column is read-only.
-  const costOf = (key: string): number | null => {
-    if (key === "rmu") return rmuCostEgp;
-    if (key === "transformer") return trCostEgp;
-    if (key === "lv") return lvCost;
-    if (key === "size") return sizeCost;
-    if (key === "accessories") return accCost || null;
-    if (key === "extra") return extrasTotal || null;
-    return null;
-  };
-  // The selling factor for a row: the typed override, else the house default.
-  const factorOf = (key: string): number | undefined => priceMap[key]?.factor ?? DEFAULT_KIOSK_FACTORS[key];
-  const sellingOf = (key: string): number | null => {
-    const c = costOf(key);
-    const f = factorOf(key);
-    if (!c || !f) return null;
-    return Math.round(c / f);
-  };
-  const totalCost = priceRows.reduce((sum, r) => sum + (costOf(r.key) ?? 0), 0);
-  const totalSelling = priceRows.reduce((sum, r) => sum + (sellingOf(r.key) ?? 0), 0);
+  // The whole cost sheet — RMU + Transformer from their databases (fetched above by the child
+  // editors), the other four parts from the panel + rates — comes from the shared kioskPricing
+  // helpers, so this live table and the kiosk line on the Commercial offer use the same math.
+  const costs = kioskCostsEgp(p, s, rmuCostEgp, trCostEgp);
+  const costOf = (key: KioskPartKey): number | null => costs[key];
+  const sellingOf = (key: KioskPartKey): number | null => kioskPartSellingEgp(costs, p, key);
+  const totalCost = kioskTotalCostEgp(costs);
+  const totalSelling = kioskTotalSellingEgp(costs, p);
   const totalFactor = totalSelling > 0 ? totalCost / totalSelling : 0;
 
   // Display currency for the table (EGP default). Internals stay EGP; USD divides by the rate.
@@ -275,12 +254,12 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
       </Section>
 
       <Section n={4} title="Accessories" subtitle="MV cable, LV copper & items" open={open.acc} onToggle={() => toggle("acc")}
-        code={accCost ? `${accCost.toLocaleString()} EGP` : undefined}>
+        code={costs.accessories ? `${costs.accessories.toLocaleString()} EGP` : undefined}>
         <KioskAccessoriesEditor rows={accRows} />
       </Section>
 
       <Section n={5} title="Extra" subtitle="Shunt, Aux, capacitor box & stone paint" open={open.extra} onToggle={() => toggle("extra")}
-        code={extrasTotal ? `${extrasTotal.toLocaleString()} EGP` : undefined}>
+        code={costs.extra ? `${costs.extra.toLocaleString()} EGP` : undefined}>
         <KioskExtraEditor extras={extraRows} onExtraQty={setExtraQty} onExtraCheck={setAccCheck} />
       </Section>
     </div>

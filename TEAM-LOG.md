@@ -23,6 +23,28 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**New: a Kiosk now appears as one priced "compact substation" line on the Commercial offer.**
+
+When a quotation has a Kiosk, the Commercial tab now prints one item that describes the whole
+packaged substation in the standard house wording, for example:
+
+> Supply of compact substation Powerline Type Consists of :
+> Medium voltage compartment : SF6 load break switches (3RC+1T+M)
+> Transformer compartment : Dry type transformer 1000KVA 22/0.4 KV Elsewedy
+> Low voltage compartment : ABB Circuit breakers
+> As per specifications enclosed.
+
+Every part of the text fills itself in from what you build in the kiosk — the ring-main-unit type
+and make-up (rings, transformer feeders, metering), the transformer's type/rating/voltage/brand,
+and the LV breakers (ABB). The line is priced at the **exact same total** you see in the live
+"Kiosk price (live)" table while building — both now read from one shared price calculation, so the
+number you quote and the number on the customer's paper can never drift apart. The kiosk also gets
+its own section on the Terms page. Display only — no database change, and saved quotations keep
+their frozen prices. (Open question for later: should the LV breaker brand be a per-kiosk choice
+rather than always ABB?)
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **Tidy-up: the MV Kiosk "Extra" rows now line up evenly.**
 
 In the Kiosk's **Extra** section the two rows you type a quantity into (Shunt, Aux) were

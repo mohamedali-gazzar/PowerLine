@@ -48,6 +48,7 @@ import {
   type ComboLine, type AtsTypeId,
 } from "../lv/combos";
 import { rankSearchOptions } from "../lv/search";
+import { kioskCostsEgp, kioskTotalSellingEgp } from "../lv/kioskPricing";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
 import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalogSource";
@@ -4783,6 +4784,10 @@ function mvRmuPanels(s: LvState): LvPanel[] {
 function mvTransformerPanels(s: LvState): LvPanel[] {
   return s.panels.filter((p) => p.mvType === "transformer" && p.mvTransformerConfig);
 }
+/** All Kiosk-kind panels in an MV quotation — each is one packaged compact substation. */
+function mvKioskPanels(s: LvState): LvPanel[] {
+  return s.panels.filter((p) => p.mvType === "kiosk");
+}
 
 // The MV commercial standard line for a transformer. IP 23 for a standalone transformer; IP 00
 // when it sits inside a kiosk (the "Inside kiosk" toggle on the Transformer panel).
@@ -4791,6 +4796,27 @@ function transformerDesc(c: TransformerConfigInput): string {
   const isOil = (c.insulation || "").trim().toLowerCase() === "oil";
   const ip = isOil ? "00" : c.insideKiosk ? "00" : "23";
   return `Supply of ${c.ratingKva ?? ""} KVA ${c.insulation || ""} Type Transformer, ${c.primaryKv ?? ""}/0.4KV, ${c.brand || ""}, IP ${ip} As per specification enclosed.`;
+}
+
+// The MV commercial standard line for a KIOSK (packaged compact substation): one item that names
+// all three compartments in the house wording. The MV compartment reads the RMU product type
+// (PSEC → SF6, LUCY → GIS, PRAL → Air) and its functional units (rings "RC", transformer tees "T",
+// metering "M"); the transformer compartment reads the transformer config; the LV compartment names
+// the house-standard ABB breakers. Missing parts drop their line rather than printing blanks.
+function kioskDesc(p: LvPanel): string {
+  const rc = p.mvRmuConfig ?? DEFAULT_RMU_CONFIG;
+  const tr = p.mvTransformerConfig;
+  const mvType = rc.productType === "PSEC" ? "SF6" : rc.productType === "LUCY" ? "GIS" : "Air";
+  const mvLine = `Medium voltage compartment : ${mvType} load break switches (${rc.nalCount}RC+${rc.nalfCount}T${rc.hasMetering ? "+M" : ""})`;
+  const trLine = tr && tr.ratingKva
+    ? `Transformer compartment : ${tr.insulation || ""} type transformer ${tr.ratingKva}KVA ${tr.primaryKv ?? ""}/0.4 KV ${tr.brand || ""}`.replace(/\s+/g, " ").trim()
+    : "";
+  const lvLine = "Low voltage compartment : ABB Circuit breakers";
+  return [
+    "Supply of compact substation Powerline Type Consists of :",
+    mvLine, trLine, lvLine,
+    "As per specifications enclosed.",
+  ].filter(Boolean).join("\n");
 }
 
 // One terms section (Validity / Delivery / Payment / Warranty) on the MV commercial Terms page —
@@ -5109,20 +5135,28 @@ function formatRmuDesc(desc: string): string {
 
 function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const panels = mvRmuPanels(s);
-  const previews = useRmuPreviews(panels.map((p) => p.mvRmuConfig!));
   const trPanels = mvTransformerPanels(s);
-  // Transformer prices (cost + factor) fetched once; each transformer line is priced from its
-  // matched DB row (selling = round(cost / factor)). Same USD→display-currency rate as the RMUs.
+  const kioskPanels = mvKioskPanels(s);
+  // RMU previews cover both standalone RMU panels AND the RMU inside each kiosk (same lookup key).
+  const previews = useRmuPreviews([
+    ...panels.map((p) => p.mvRmuConfig!),
+    // A kiosk always has an MV ring-main unit; if the engineer hasn't tweaked it, the editor prices
+    // (and shows) the house default, so the commercial line must price the same default.
+    ...kioskPanels.map((p) => p.mvRmuConfig ?? DEFAULT_RMU_CONFIG),
+  ]);
+  // Transformer prices (cost + factor) fetched once; each transformer line — standalone or inside a
+  // kiosk — is priced from its matched DB row. Same USD→display-currency rate as the RMUs.
   const [trCatalog, setTrCatalog] = useState<{ rows: TransformerRow[]; factor: number } | null>(null);
+  const needTr = trPanels.length > 0 || kioskPanels.length > 0;
   useEffect(() => {
-    if (!trPanels.length) return;
+    if (!needTr) return;
     let alive = true;
     api.pricing.transformerList({ activeOnly: true, take: 1000 })
       .then((r) => { if (alive) setTrCatalog({ rows: r.rows, factor: r.factor || 0.95 }); })
       .catch(() => { /* leave the lines as POA */ });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trPanels.length]);
+  }, [needTr]);
   const printRef = useRef<HTMLDivElement>(null);
   const cm = s.mvRmu ?? DEFAULT_MV_COMMERCIAL;
   const currency = cm.currency;
@@ -5163,6 +5197,29 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
       const qty = p.qty || 1;
       return [{ desc: transformerDesc(c), qty, unit, total: unit * qty, poa: sellUsd == null }];
     }
+    if (p.mvType === "kiosk") {
+      const usdRate = s.factors?.usd || 1;
+      // RMU part COST in EGP — the same figure the kiosk editor's price table uses: the RMU list
+      // price (base + add-ons) × the RMU selling factor, converted to EGP.
+      const g = previews[JSON.stringify(p.mvRmuConfig ?? DEFAULT_RMU_CONFIG)];
+      const lp = g?.listPricing;
+      const rmuPriced = !!lp && lp.found && lp.basePrice != null;
+      const rmuFactor = g?.rmuFactor ?? 0.85;
+      const rmuSellOffer = ((lp?.basePrice ?? 0) + (lp?.addOns ?? []).reduce((sum, a) => sum + a.price, 0)) * rate;
+      const rmuCostOffer = Math.round(rmuSellOffer * rmuFactor);
+      const rmuCostEgp = rmuPriced ? (currency === "EGP" ? rmuCostOffer : Math.round(rmuCostOffer * usdRate)) : null;
+      // Transformer part COST in EGP — the inside-kiosk (IP00) row's cost × the USD→EGP rate.
+      const c = p.mvTransformerConfig;
+      const trBase = c ? trCatalog?.rows.find((r) => r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation) : undefined;
+      const trMatch = trBase ? (trCatalog?.rows.find((r) => r.code === trDisplayCode(trBase.code, true)) ?? trBase) : undefined;
+      const trCostEgp = trMatch ? Math.round(trMatch.costEgp * usdRate) : null;
+      // The whole kiosk's SELLING price (EGP) from the shared helper, then into the offer currency.
+      const costs = kioskCostsEgp(p, s, rmuCostEgp, trCostEgp);
+      const sellEgp = kioskTotalSellingEgp(costs, p);
+      const unit = currency === "EGP" ? sellEgp : Math.round(sellEgp / usdRate);
+      const qty = p.qty || 1;
+      return [{ desc: kioskDesc(p), qty, unit, total: unit * qty, poa: sellEgp <= 0 }];
+    }
     return [];
   });
   const subtotal = mvItems.reduce((sum, it) => sum + it.total, 0);
@@ -5179,7 +5236,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
 
   return (
     <div className="animate-fade-up">
-      {panels.length > 0 || trPanels.length > 0 ? (
+      {panels.length > 0 || trPanels.length > 0 || kioskPanels.length > 0 ? (
         <PrintBar
           label="Priced MV commercial offer → A4 PDF."
           docTitle={offerTitle("CO", qtnNo, s.project.revisionNo)}
@@ -5190,9 +5247,9 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
           <span className="h-2 w-2 rounded-full bg-green-500" /> Live commercial offer · RMU
         </div>
       )}
-      {panels.length === 0 && trPanels.length === 0 ? (
+      {panels.length === 0 && trPanels.length === 0 && kioskPanels.length === 0 ? (
         <div className="card p-10 text-center text-sm text-muted no-print">
-          Add an RMU or Transformer on the <b className="text-brand-dark">MV</b> tab to build its commercial offer.
+          Add an RMU, Transformer or Kiosk on the <b className="text-brand-dark">MV</b> tab to build its commercial offer.
         </div>
       ) : (
         <div ref={printRef} className="print-area space-y-5">
@@ -5252,6 +5309,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
           <h2 className="mb-6 text-3xl font-extrabold" style={{ color: TRED }}>Terms &amp; Conditions</h2>
           {panels.length > 0 && <MvTermsBlock title="Ring Main Unit (RMU)" cm={cm} />}
           {trPanels.length > 0 && <MvTermsBlock title="Transformer" cm={s.mvTransformer ?? DEFAULT_MV_COMMERCIAL} />}
+          {kioskPanels.length > 0 && <MvTermsBlock title="Compact Substation (Kiosk)" cm={cm} />}
         </section>
         </div>
       )}
