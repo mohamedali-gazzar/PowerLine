@@ -86,7 +86,13 @@ export function summaryOf(state: LvState): QtnSummaryInput {
   };
 }
 
-/** Forward-compatible defaults for a state loaded from the server. */
+/**
+ * Forward-compatible defaults for a state loaded from the server.
+ *
+ * Exported because the offline backup needs it too: a backup can be written by one version
+ * of the app and restored after a deploy, so it arrives with the same "old shape" problem a
+ * stored quotation has, and must be repaired the same way.
+ */
 export function normalize(state: LvState): LvState {
   // STRUCTURAL DEFAULTS FIRST. The server is deliberately lenient — it stores
   // `state ?? {}` and hands back `{}` for a row it cannot parse — so any of these

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorkers, listQtns, supersededNumbers, type QtnRecord } from "../lv/qtns";
+import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorkers, listQtns, supersededNumbers, normalize as normalizeQtnState, type QtnRecord } from "../lv/qtns";
 import ReassignQtnModal from "../components/ReassignQtnModal";
 import CoWorkModal from "../components/CoWorkModal";
 import { maskQtn, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
@@ -37,6 +37,7 @@ import {
   type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow, type CustomOfferItem, type ScratchPad,
 } from "../lv/store";
 // (MvPanel type is referenced only through LvState.mvPanels; MvPanelType is used directly.)
+import { writeBackup, clearBackup, unsavedWork, type Backup } from "../lv/offlineBackup";
 import {
   ATS_TYPES, atsBreakerPool, frameOf, buildAts,
   buildSync, type SyncUnit,
@@ -415,6 +416,11 @@ export default function LvConfiguratorPage() {
         // offers to apply them, and only an explicit choice changes anything. (This replaced an
         // old rule that silently bumped a Draft's copper to the live value on every open.)
         const st = r.state;
+        // Work this device holds that the server never received, checked HERE and nowhere
+        // else: the autosave effect writes a fresh backup as soon as the state settles, so
+        // any later check would be comparing the server's copy against itself and would
+        // always find nothing. This is the one moment both versions still exist.
+        setRecovery(unsavedWork(r.id, JSON.stringify(st), user?.id ?? ""));
         setHist({ past: [], present: st, future: [] });
         setQtnNum(r.number);
         setStatus(r.status);
@@ -1026,22 +1032,80 @@ export default function LvConfiguratorPage() {
   const sentRef = useRef(""); // the exact payload the server last accepted
   const sentContentRef = useRef(""); // …the same, ignoring which panel was selected
 
+  /**
+   * What the save light shows.
+   *
+   * Until 24 Sep 2026 a failed save was swallowed with an empty catch and nothing appeared
+   * on screen, so an estimator could work for hours against a dead connection and see a
+   * perfectly normal editor the whole time. Six hours of work was lost that way. The state
+   * is tracked here so the light can never be silent about it again.
+   */
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "pending" | "failed">("saved");
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  /** False when this device refused the backup (private mode, storage full/blocked). */
+  const [backupOk, setBackupOk] = useState(true);
+  const [recovery, setRecovery] = useState<Backup | null>(null);
+
   // One place that writes, so a flush and a debounce can never double-send.
   const commit = useRef((_id: string, _state: LvState) => {});
   commit.current = (id: string, state: LvState) => {
     const payload = JSON.stringify(state);
     if (payload === sentRef.current) return; // already stored — writing it again is waste
     const contentKey = JSON.stringify({ ...state, selectedId: "" });
+    setSaveState("saving");
     saveQtn(id, state)
       .then(() => {
         sentRef.current = payload;
         sentContentRef.current = contentKey;
         saveRef.current = null;
+        setSaveState("saved");
+        // The server holds it now, so the on-device copy has done its job.
+        clearBackup(id);
       })
       .catch(() => {
-        // Keep saveRef so the edit is retried on the next change, on hide, or on unmount.
+        // Keep saveRef so the edit is retried on the next change, on hide, on unmount, and
+        // the moment the network comes back. The work is already on this device.
+        setSaveState("failed");
       });
   };
+
+  // Network state drives the light, and coming back online flushes immediately rather than
+  // waiting for the next keystroke — which may never come if the user has stopped typing.
+  useEffect(() => {
+    const up = () => {
+      setOnline(true);
+      if (saveRef.current) commit.current(saveRef.current.id, saveRef.current.state);
+    };
+    const down = () => setOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    return () => {
+      window.removeEventListener("online", up);
+      window.removeEventListener("offline", down);
+    };
+  }, []);
+
+  // `online`/`offline` do not fire for every kind of outage — a captive portal, a dead
+  // Wi-Fi router or a server that is down all look "online" to the browser. So retry on a
+  // timer too, for as long as something is waiting to be saved.
+  useEffect(() => {
+    if (saveState !== "failed") return;
+    const t = setInterval(() => {
+      if (saveRef.current) commit.current(saveRef.current.id, saveRef.current.state);
+    }, 15000);
+    return () => clearInterval(t);
+  }, [saveState]);
+
+  // Last line of defence: if work has not reached the server, say so before the tab closes.
+  useEffect(() => {
+    const onLeave = (e: BeforeUnloadEvent) => {
+      if (!saveRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onLeave);
+    return () => window.removeEventListener("beforeunload", onLeave);
+  }, []);
 
   useEffect(() => {
     if (!rec || loading) return;
@@ -1050,12 +1114,19 @@ export default function LvConfiguratorPage() {
     const payload = JSON.stringify(s);
     if (payload === sentRef.current) return; // nothing to write
     saveRef.current = { id: rec.id, state: s };
+    setSaveState((prev) => (prev === "failed" ? "failed" : "pending"));
     // Blanking selectedId tells content changes apart from navigation between panels.
     const contentKey = JSON.stringify({ ...s, selectedId: "" });
     const selectionOnly = sentContentRef.current !== "" && contentKey === sentContentRef.current;
+    // ON THIS DEVICE FIRST, before any network attempt. This is what actually survives an
+    // outage: the server save can fail for hours, but the work is already on disk and is
+    // offered back when the quotation is reopened. Writing it here (not in commit) means
+    // it lands even while offline, when commit's request never succeeds.
+    setBackupOk(writeBackup(rec.id, payload, user?.id ?? ""));
     const t = setTimeout(() => commit.current(rec.id, s), selectionOnly ? SELECTION_SAVE_MS : CONTENT_SAVE_MS);
     return () => clearTimeout(t);
-  }, [rec, s, loading, reviewSandbox, readOnly]);
+  }, [rec, s, loading, reviewSandbox, readOnly, user?.id]);
+
 
   // Flush a pending save when the tab is hidden. This runs while the page is still alive,
   // so an ordinary fetch still works — unlike an unload handler, which cannot carry the
@@ -1839,6 +1910,10 @@ export default function LvConfiguratorPage() {
             </span>
             {/* Live active-working-time — real hands-on time, recorded on the quotation. */}
             <ActiveTimeBadge qtnId={rec?.id} initialSeconds={rec?.activeSeconds ?? 0} enabled={!sharedReadOnly && !reviewSandbox} />
+            {/* Is this work on the server? Hidden only where nothing is ever saved. */}
+            {!readOnly && !reviewSandbox && (
+              <SaveLamp state={saveState} online={online} backupOk={backupOk} />
+            )}
             {/* Admin editing someone else's quotation in place — makes whose QTN this is unmistakable. */}
             {adminEditing && (
               <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2.5 py-1 text-sm font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
@@ -2165,6 +2240,47 @@ export default function LvConfiguratorPage() {
         </div>
       )}
 
+      {/* Work this device saved that the server never got — from an offline spell, a closed
+          tab, or a crash. Offered, never applied on its own: a colleague may have edited the
+          quotation since, so only the estimator can say which version is the real one. */}
+      {recovery && (
+        <div className="mb-4 rounded-xl border-2 border-amber-400 bg-amber-50 px-4 py-3 no-print animate-fade-up dark:bg-amber-400/10">
+          <p className="text-sm font-bold text-amber-900 dark:text-amber-200">
+            ⚠ Unsaved work was found on this computer
+          </p>
+          <p className="mt-1 text-sm text-amber-900/90 dark:text-amber-200/90">
+            This device still holds changes from{" "}
+            <b>{new Date(recovery.savedAt).toLocaleString()}</b> that never reached the server —
+            usually because the internet dropped. Restoring replaces what is on screen with that
+            version. Nothing is lost by looking: if you discard it, the version on the server stays.
+          </p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            <button
+              className="btn btn-primary text-sm"
+              onClick={() => {
+                try {
+                  // Through the same door as every other edit, so Undo can take it back and
+                  // the normal autosave picks it up and sends it to the server.
+                  const restored = normalizeQtnState(JSON.parse(recovery.state) as LvState);
+                  apply(() => restored);
+                } catch {
+                  /* unreadable backup — drop the offer rather than wedge the page */
+                }
+                setRecovery(null);
+              }}
+            >
+              Restore my work
+            </button>
+            <button
+              className="btn btn-ghost text-sm"
+              onClick={() => { if (rec) clearBackup(rec.id); setRecovery(null); }}
+            >
+              Discard it — keep the saved version
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Tabs — sticky header so sections are reachable without scrolling up.
           Negative margins let the bg band span the full content width; py keeps a
           solid band so content scrolls cleanly underneath. */}
@@ -2291,6 +2407,57 @@ function PanelNameClash({ s, p }: { s: LvState; p: LvPanel }) {
   if (!twin) return null;
   return <p className="mt-1 text-[11px] font-semibold text-red-600">⚠ {panelNameClashMessage(twin, s.panels)}</p>;
 }
+/**
+ * The save light — is this work on the server, or only on this screen?
+ *
+ * Deliberately always visible, including when all is well. A light that appears only on
+ * failure is one nobody learns to look at; a light that normally reads "Saved" is one whose
+ * turning red gets noticed.
+ */
+function SaveLamp({
+  state, online, backupOk,
+}: {
+  state: "saved" | "saving" | "pending" | "failed";
+  online: boolean;
+  backupOk: boolean;
+}) {
+  const offline = !online;
+  // Offline outranks the rest: it is the reason, and it is the thing the user can act on.
+  const look = offline
+    ? { dot: "bg-red-500", text: "text-red-700 dark:text-red-400", label: "Offline — not saved" }
+    : state === "failed"
+    ? { dot: "bg-red-500", text: "text-red-700 dark:text-red-400", label: "Not saved — retrying" }
+    : state === "saving"
+    ? { dot: "bg-amber-500", text: "text-amber-700 dark:text-amber-400", label: "Saving…" }
+    : state === "pending"
+    ? { dot: "bg-amber-500", text: "text-amber-700 dark:text-amber-400", label: "Unsaved changes" }
+    : { dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-400", label: "Saved" };
+
+  const bad = offline || state === "failed";
+  const title = bad
+    ? backupOk
+      ? "Your work is kept on this device and is sent as soon as the connection is back. Do not " +
+        "clear the browser data, and reopen this quotation on THIS computer."
+      : "This device would not store a backup (private window, or storage full). Copy your work " +
+        "out before closing the page."
+    : state === "saved"
+    ? "Everything is stored on the server."
+    : "Saving your latest change.";
+
+  return (
+    <span
+      title={title}
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-sm font-bold ${
+        bad ? "border-red-500/40 bg-red-50 dark:bg-red-400/10" : "border-line bg-surface"
+      } ${look.text}`}
+    >
+      <span className={`h-2 w-2 shrink-0 rounded-full ${look.dot} ${bad ? "animate-pulse" : ""}`} />
+      {look.label}
+      {bad && !backupOk && <span className="ml-0.5">⚠</span>}
+    </span>
+  );
+}
+
 function OfferBlocked({ issues }: { issues: string[] }) {
   return (
     <div className="card border-amber-300 bg-amber-50 p-6 animate-fade-up">
