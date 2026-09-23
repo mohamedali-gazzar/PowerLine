@@ -23,6 +23,18 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-23 · Mohamed's side · Claude
 
+**New: a "Kiosk Analysis" tab that shows every kiosk's cost breakdown for the sales team, as one PDF.**
+
+MV quotations now have a **Kiosk Analysis** tab (after Commercial). It shows, for each kiosk, the
+same "Kiosk price (live)" breakdown you build with — Code · Item · Cost · Factor · Selling for the
+RMU, Transformer, LV, Kiosk Size, Accessories and Extra, plus the blended Total — one PowerLine
+page per kiosk, with an EGP/USD switch and a **Download PDF** button. The PDF is named
+`Kiosk_Analysis-<QTN> (<Project>)`. Standalone RMU and Transformer panels are skipped — kiosks
+only. Read-only report; the numbers come from the same shared calculation as the live table, so
+they always agree. Display only — no pricing or data change.
+
+## 2026-09-23 · Mohamed's side · Claude
+
 **Change: the MV "Send to sales" message now lists every item with its own factor.**
 
 For an MV quotation, the offer message (Outlook and WhatsApp) used to cite a single project

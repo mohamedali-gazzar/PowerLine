@@ -48,7 +48,7 @@ import {
   type ComboLine, type AtsTypeId,
 } from "../lv/combos";
 import { rankSearchOptions } from "../lv/search";
-import { kioskCostsEgp, kioskTotalCostEgp, kioskTotalSellingEgp } from "../lv/kioskPricing";
+import { kioskCostsEgp, kioskPartSellingEgp, kioskFactorOf, kioskTotalCostEgp, kioskTotalSellingEgp, KIOSK_PART_KEYS, type KioskPartKey } from "../lv/kioskPricing";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
 import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalogSource";
@@ -88,7 +88,7 @@ import { panelPoles, POLE_CM, POLE_KINDS, GROUP_LABEL, KIND_LABEL, type PoleGrou
 import { stdPanel, applyStdPanel, STD_EDMS_KVA } from "../lv/standardEdms";
 import { stdAts, applyStdAts, stdAtsRatings, atsBreakersFor, type StdAtsVariant } from "../lv/standardAtsEdms";
 
-type Tab = "project" | "pricing" | "specs" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "sizing" | "summary" | "mv";
+type Tab = "project" | "pricing" | "specs" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "sizing" | "summary" | "mv" | "kioskAnalysis";
 const TABS: Tab[] = ["project", "pricing", "specs", "panels", "technical", "commercial", "material", "spare", "selectivity"];
 
 // How many edits Undo/Redo can step through. Text fields record one step PER KEYSTROKE, so the
@@ -1265,7 +1265,7 @@ export default function LvConfiguratorPage() {
   // anything on them. Its VAT and exchange rate are edited on the Commercial tab itself,
   // since Pricing Settings (where they normally live) is not shown.
   const tabs: [Tab, string][] = isMvQtn
-    ? [["project", "Project"], ["pricing", "Pricing Settings"], ["specs", "Specs"], ["panels", "MV"], ["technical", "Technical"], ["commercial", "Commercial"]] // MV's interface, built up tab by tab.
+    ? [["project", "Project"], ["pricing", "Pricing Settings"], ["specs", "Specs"], ["panels", "MV"], ["technical", "Technical"], ["commercial", "Commercial"], ["kioskAnalysis", "Kiosk Analysis"]] // MV's interface, built up tab by tab.
     : isCustomQtn
     ? [["project", "Project"], ["commercial", "Commercial Offer"]]
     : isSpareQtn
@@ -2228,6 +2228,7 @@ export default function LvConfiguratorPage() {
         )}
         {activeTab === "technical" && (isMvQtn ? <MvTechnicalTab s={s} qtnNo={qtnNum} /> : (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} onScratch={upScratch} readOnly={sharedReadOnly} />))}
         {activeTab === "commercial" && (isMvQtn ? <MvCommercialTab s={s} qtnNo={qtnNum} /> : (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} readOnly={readOnly} />))}
+        {activeTab === "kioskAnalysis" && <KioskAnalysisTab s={s} qtnNo={qtnNum} />}
         {activeTab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
         {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} qtnNo={qtnNum} onOpenPanel={openPanelInPanels} />}
         {activeTab === "sizing" && <SizingReviewTab key={rec?.id ?? "none"} s={s} qtnId={rec?.id ?? ""} />}
@@ -5372,6 +5373,139 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
           {trPanels.length > 0 && <MvTermsBlock title="Transformer" cm={s.mvTransformer ?? DEFAULT_MV_COMMERCIAL} />}
           {kioskPanels.length > 0 && <MvTermsBlock title="Compact Substation (Kiosk)" cm={cm} />}
         </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── MV "Kiosk Analysis" tab — a sales-facing report of every KIOSK's price breakdown: the same
+//    "Kiosk price (live)" figures the engineer builds with (Code · Cost · Factor · Selling per part,
+//    plus the blended Total), one PowerLine-themed A4 page per kiosk, downloadable as one PDF named
+//    "Kiosk_Analysis-<QTN> (<Project>)". Standalone RMU / Transformer panels are skipped. Read-only,
+//    and reuses the shared kioskPricing helpers so every number matches the live editor table. ──
+const KIOSK_ROW_LABEL: Record<KioskPartKey, string> = {
+  rmu: "RMU", transformer: "Transformer", lv: "LV", size: "Kiosk Size", accessories: "Accessories", extra: "Extra",
+};
+function KioskAnalysisTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
+  const kiosks = mvKioskPanels(s);
+  const previews = useRmuPreviews(kiosks.map((p) => p.mvRmuConfig ?? DEFAULT_RMU_CONFIG));
+  const [trCatalog, setTrCatalog] = useState<{ rows: TransformerRow[]; factor: number } | null>(null);
+  useEffect(() => {
+    if (!kiosks.length) return;
+    let alive = true;
+    api.pricing.transformerList({ activeOnly: true, take: 1000 })
+      .then((r) => { if (alive) setTrCatalog({ rows: r.rows, factor: r.factor || 0.95 }); })
+      .catch(() => { /* leave transformer rows unpriced — LV / size / accessories still show */ });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kiosks.length]);
+  const printRef = useRef<HTMLDivElement>(null);
+  const [currency, setCurrency] = useState<"EGP" | "USD">("USD");
+  const usdRate = s.factors?.usd || 1;
+  // The kiosk RMU cost is computed in the RMU commercial currency, exactly as the live editor does.
+  const rmuCur = (s.mvRmu ?? DEFAULT_MV_COMMERCIAL).currency;
+  const rmuRate = rmuCur === "EGP" ? usdRate : 1;
+  const fmt = (egp: number | null): string => (egp == null ? "—" : Math.round(currency === "USD" ? egp / usdRate : egp).toLocaleString());
+  const fmtFactor = (f: number | null): string => (f == null ? "—" : String(Number(f.toFixed(2))));
+
+  // One kiosk's full breakdown — the six parts (code / cost / factor / selling) + the totals.
+  const analyseKiosk = (p: LvPanel) => {
+    const rc = p.mvRmuConfig ?? DEFAULT_RMU_CONFIG;
+    const g = previews[JSON.stringify(rc)];
+    const lp = g?.listPricing;
+    const rmuPriced = !!lp && lp.found && lp.basePrice != null;
+    const rmuSellOffer = ((lp?.basePrice ?? 0) + (lp?.addOns ?? []).reduce((sum, a) => sum + a.price, 0)) * rmuRate;
+    const rmuCostOffer = Math.round(rmuSellOffer * (g?.rmuFactor ?? 0.85));
+    const rmuCostEgp = rmuPriced ? (rmuCur === "EGP" ? rmuCostOffer : Math.round(rmuCostOffer * usdRate)) : null;
+    const c = p.mvTransformerConfig;
+    const trBase = c && c.ratingKva != null ? trCatalog?.rows.find((r) => r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation) : undefined;
+    const trMatch = trBase ? (trCatalog?.rows.find((r) => r.code === trDisplayCode(trBase.code, true)) ?? trBase) : undefined;
+    const trCostEgp = trMatch && trMatch.costEgp > 0 ? Math.round(trMatch.costEgp * usdRate) : null;
+    const costs = kioskCostsEgp(p, s, rmuCostEgp, trCostEgp);
+    const trRating = p.mvTransformerConfig?.ratingKva;
+    const codeOf = (key: KioskPartKey): string =>
+      key === "rmu" ? (g?.panelCode || g?.configCode || rmuShortCode(rc))
+      : key === "transformer" ? (trMatch?.code || "—")
+      : key === "lv" ? (trRating ? `MDB-${trRating}KVA` : "—")
+      : key === "size" ? (p.mvKioskCost?.size?.code || "—")
+      : key === "accessories" ? "Acc."
+      : "Ext.";
+    const rows = KIOSK_PART_KEYS.map((key) => ({
+      key, code: codeOf(key), label: KIOSK_ROW_LABEL[key],
+      cost: costs[key], factor: kioskFactorOf(p, key) ?? null, selling: kioskPartSellingEgp(costs, p, key),
+    }));
+    const totalCost = kioskTotalCostEgp(costs);
+    const totalSelling = kioskTotalSellingEgp(costs, p);
+    return { name: mvDefaultName(p, s.panels), rows, totalCost, totalSelling, totalFactor: totalSelling > 0 ? totalCost / totalSelling : 0 };
+  };
+
+  const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
+  const qtnRef = revNum > 0 ? `${qtnNo}-${revNum}` : qtnNo;
+  const exportPdf = async () => {
+    if (!printRef.current) return;
+    const { exportSheetsPdf } = await import("../lv/technicalPdf");
+    const proj = s.project.name.trim();
+    await exportSheetsPdf({ printArea: printRef.current, filename: `Kiosk_Analysis-${qtnRef}${proj ? ` (${proj})` : ""}` });
+  };
+
+  const COLS = "grid grid-cols-[1fr_8.5rem_7rem_5rem_7rem] gap-x-3";
+  return (
+    <div className="animate-fade-up">
+      {kiosks.length > 0 && (
+        <div className="mb-3 flex items-center justify-between gap-2 no-print">
+          <p className="text-xs text-muted">Kiosk cost breakdown for the sales team → one A4 PDF.</p>
+          <div className="flex items-center gap-3">
+            <div className="inline-flex rounded-lg border border-line bg-surface p-0.5">
+              {(["EGP", "USD"] as const).map((cc) => (
+                <button key={cc} type="button" onClick={() => setCurrency(cc)}
+                  className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${currency === cc ? "bg-brand text-white shadow-soft" : "text-muted hover:text-brand-dark"}`}>{cc}</button>
+              ))}
+            </div>
+            <button type="button" onClick={() => void exportPdf()} className="btn-primary">⭳ Download PDF</button>
+          </div>
+        </div>
+      )}
+      {kiosks.length === 0 ? (
+        <div className="card p-10 text-center text-sm text-muted no-print">
+          Add a <b className="text-brand-dark">Kiosk</b> on the MV tab to see its cost analysis here.
+        </div>
+      ) : (
+        <div ref={printRef} className="print-area space-y-5">
+          {kiosks.map((p) => {
+            const k = analyseKiosk(p);
+            return (
+              <section key={p.id} className="a4-sheet relative px-12 py-10 text-ink" style={{ breakAfter: "page" }}>
+                <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
+                <div className="flex items-center justify-between border-b-2 pb-4" style={{ borderColor: TRED }}>
+                  <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-14" />
+                  <div className="text-right">
+                    <div className="text-2xl font-extrabold" style={{ color: TRED }}>Kiosk Analysis</div>
+                    <div className="text-sm font-semibold text-muted">{qtnRef}{s.project.name ? ` · ${s.project.name}` : ""}</div>
+                  </div>
+                </div>
+                <h3 className="mb-4 mt-8 text-3xl font-extrabold" style={{ color: TRED }}>{k.name}</h3>
+                <div className={`${COLS} border-b-2 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted`} style={{ borderColor: TRED }}>
+                  <span>Code</span><span>Item</span><span className="text-right">Cost ({currency})</span><span className="text-right">Factor</span><span className="text-right">Selling ({currency})</span>
+                </div>
+                {k.rows.map((r) => (
+                  <div key={r.key} className={`${COLS} border-b border-line py-2.5 text-sm`}>
+                    <span className="min-w-0 truncate font-mono text-[12px] font-bold" style={{ color: TRED }}>{r.code}</span>
+                    <span className="font-semibold">{r.label}</span>
+                    <span className="text-right tabular-nums">{fmt(r.cost)}</span>
+                    <span className="text-right tabular-nums text-muted">{fmtFactor(r.factor)}</span>
+                    <span className="text-right font-bold tabular-nums">{fmt(r.selling)}</span>
+                  </div>
+                ))}
+                <div className={`${COLS} border-t-2 pt-2 text-sm font-extrabold`} style={{ borderColor: TRED }}>
+                  <span style={{ color: TRED }}>Total</span><span></span>
+                  <span className="text-right tabular-nums">{fmt(k.totalCost)}</span>
+                  <span className="text-right tabular-nums">{k.totalFactor ? k.totalFactor.toFixed(2) : "—"}</span>
+                  <span className="text-right tabular-nums" style={{ color: TRED }}>{fmt(k.totalSelling)}</span>
+                </div>
+              </section>
+            );
+          })}
         </div>
       )}
     </div>
