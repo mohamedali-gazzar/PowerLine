@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**Kiosk cover cleaned up.**
+
+On the compact-substation cover: removed the four-fact ribbon (MV voltage · RMU make-up · Transformer ·
+Finish), added more empty space at the top of the page, and removed the boxed borders around the RMU /
+Transformer / Low Voltage sections — they're now clean numbered blocks. Still fits one A4 page.
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **Kiosk cover redesign, transformer datasheet fits one page, and offers export as a real text PDF.**
 
 - **Kiosk cover upgraded + LV summary added.** The compact-substation cover now has the kVA hero beside a

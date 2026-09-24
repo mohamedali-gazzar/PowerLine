@@ -5342,13 +5342,6 @@ function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project, lv,
     { label: "Configuration", value: lv?.lvConfig === "inout" ? "Incoming & Outgoing" : "Incoming only" },
   ];
   const finish = stonePaint ? "Stone Painting" : "Electrostatic RAL 7035";
-  // A horizontal "at a glance" ribbon under the hero — the four headline facts of the substation.
-  const ribbon = [
-    { label: "MV voltage", value: rmu ? `${rmu.voltageKv} kV` : "—" },
-    { label: "RMU make-up", value: rmu ? `${rmu.nalCount}R + ${rmu.nalfCount}T` : "—" },
-    { label: "Transformer", value: tr?.withoutTransformer ? "By others" : (tr?.ratingKva ? `${tr.ratingKva} kVA` : "—") },
-    { label: "Finish", value: finish },
-  ];
   // The three compartments a compact substation is built from, numbered ①②③.
   const compartments: { n: number; title: string; specs: { label: string; value: string }[] | null; note?: string }[] = [
     ...(rmu ? [{ n: 1, title: "Ring Main Unit", specs: rmuSpecs }] : []),
@@ -5364,7 +5357,7 @@ function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project, lv,
         className="pointer-events-none absolute -right-16 -top-16 h-[26rem] w-auto" style={{ opacity: 0.05 }} />
       <div className="pointer-events-none absolute -bottom-24 -left-10 h-[22rem] w-[22rem] rounded-full" style={{ background: `radial-gradient(circle, ${TRED}14, transparent 70%)` }} />
 
-      <div className="relative flex flex-1 flex-col px-14 py-12">
+      <div className="relative flex flex-1 flex-col px-14 pb-12 pt-20">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="h-3 w-3 rounded-sm" style={{ background: TRED }} />
@@ -5374,7 +5367,7 @@ function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project, lv,
         </div>
 
         {/* Hero: the substation rating (kVA) with the type code alongside. */}
-        <div className="mt-6 flex items-end justify-between gap-6">
+        <div className="mt-14 flex items-end justify-between gap-6">
           <div>
             <div className="text-[64px] font-extrabold leading-[0.95] text-ink">{kva ? `${kva} kVA` : "Compact"}</div>
             <div className="mt-3 text-xl font-semibold text-muted">Compact Secondary Substation · Powerline</div>
@@ -5387,20 +5380,11 @@ function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project, lv,
           )}
         </div>
 
-        {/* At-a-glance ribbon — four headline facts in a single banded row. */}
-        <div className="mt-6 grid grid-cols-4 overflow-hidden rounded-xl" style={{ background: "#faf7f5", border: `1px solid ${TRED}22` }}>
-          {ribbon.map((r, i) => (
-            <div key={r.label} className={`px-4 py-3 ${i > 0 ? "border-l" : ""}`} style={i > 0 ? { borderColor: `${TRED}22` } : undefined}>
-              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-muted">{r.label}</div>
-              <div className="mt-1 truncate text-[15px] font-extrabold text-ink">{r.value}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Composition: the three numbered compartments — RMU, Transformer, then Low Voltage. */}
-        <div className="mt-6 flex flex-1 flex-col gap-4">
+        {/* Composition: the three numbered compartments — RMU, Transformer, then Low Voltage.
+            Frameless: a number badge + its specs, with generous spacing instead of a boxed card. */}
+        <div className="mt-10 flex flex-1 flex-col gap-8">
           {compartments.map((c) => (
-            <div key={c.n} className="flex flex-1 gap-4 rounded-2xl border border-line p-5">
+            <div key={c.n} className="flex flex-1 gap-4">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-extrabold text-white" style={{ background: TRED }}>{c.n}</div>
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-extrabold uppercase tracking-[0.2em]" style={{ color: TRED }}>{c.title}</div>
