@@ -39,7 +39,7 @@ export function kioskCostsEgp(
   const mvCableCost = Math.round(MV_CABLE_METERS * mvCableRate);
   const lvCopperKgVal = lvCopperKg(trRating);
   const lvCopperCost = lvCopperKgVal != null ? Math.round(lvCopperKgVal * copperRate) : 0;
-  const accItemsTotal = DEFAULT_KIOSK_ACCESSORIES.reduce((sum, a) => sum + (a.cost || 0) * (a.qty || 0), 0);
+  const accItemsTotal = DEFAULT_KIOSK_ACCESSORIES.reduce((sum, a) => sum + (a.cost || 0) * ((p.mvKioskAccQty?.[a.id] ?? a.qty) || 0), 0);
   // The tick-box items (Capacitor Box / Stone Paint) now live under Accessories, not a separate Extra.
   const accChecks = p.mvKioskAccChecks ?? {};
   const checksTotal = KIOSK_EXTRAS.reduce((sum, e) => {

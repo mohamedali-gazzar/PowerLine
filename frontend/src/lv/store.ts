@@ -111,6 +111,9 @@ export interface LvPanel {
   mvKioskAccessories?: { id: string; name: string; code?: string; qty: number; cost: number }[];
   /** MV Kiosk panels only: EXTRA tick-boxes (Capacitor Box / Stone Paint), keyed by id. */
   mvKioskAccChecks?: Record<string, boolean>;
+  /** MV Kiosk panels only: per-accessory quantity override, keyed by accessory id (e.g. the Fire
+   *  extinguisher's 1/2/3 dropdown). Absent ⇒ the accessory's default quantity. */
+  mvKioskAccQty?: Record<string, number>;
   /** MV Kiosk panels only: EXTRA quantity items (Shunt / Aux), keyed by id. */
   mvKioskExtraQty?: Record<string, number>;
   /** MV Kiosk panels only: the display currency for the "Kiosk price (live)" table (default EGP). */

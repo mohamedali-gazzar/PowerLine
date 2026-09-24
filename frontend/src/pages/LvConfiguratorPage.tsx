@@ -5313,110 +5313,158 @@ function UploadedTransformerSheet({ code }: { code: string }) {
   );
 }
 
-// A branded cover page for one Compact Substation (kiosk) — the same spec-sheet look as RmuCover /
-// TransformerCover. It summarises the whole package on one page: the kiosk rating (kVA, taken from its
-// transformer), the Ring Main Unit it contains, the Transformer it contains, and — when chosen — the
-// stone-painting finish. Everything is read straight off the kiosk panel. One per kiosk item.
-function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project, lv, lvRatingA }: {
-  rmu?: RmuConfigInput; tr?: TransformerConfigInput; code: string; kva: number;
+// A branded cover page for one Compact Substation (kiosk) — the "isometric kiosk" concept: a 3D drawing
+// of the packaged unit with numbered callouts (①②③) leading down to three spec cards (RMU / Transformer /
+// LV), over a faint isometric grid, with a header (kVA hero + IP54 pill) and a three-fact footer.
+// Rendered as one full-bleed A4 SVG so it prints as crisp vector + selectable text. All values are read
+// straight off the kiosk panel. One per kiosk item.
+function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRatingA }: {
+  rmu?: RmuConfigInput; tr?: TransformerConfigInput; code?: string; kva: number;
   stonePaint: boolean; index: number; total: number; project: string;
   lv?: KioskLvConfigInput; lvRatingA?: number;
 }) {
   const rmuMeta = rmu ? (RMU_COVER[rmu.productType] ?? RMU_COVER.PRAL) : null;
-  const rmuSpecs = rmu ? [
-    { label: "Type", value: rmuMeta!.family },
-    { label: "Rated voltage", value: `${rmu.voltageKv} kV` },
-    { label: "Configuration", value: `${rmu.nalCount}R + ${rmu.nalfCount}T` },
-    { label: "OEM", value: rmu.lbsBrand || "—" },
-  ] : [];
-  const trSpecs = tr ? [
-    { label: "Rated power", value: `${tr.ratingKva} kVA` },
-    { label: "Voltage", value: `${tr.primaryKv} / 0.4 kV` },
-    { label: "Insulation", value: `${tr.insulation || "—"} type` },
-    { label: "Brand", value: tr.brand || "—" },
-  ] : [];
-  const lvSpecs = [
-    { label: "Board", value: kva ? `MDB · ${kva} kVA` : "MDB" },
-    { label: "Rated current", value: lvRatingA ? `${lvRatingA} A` : "—" },
-    { label: "Circuit breakers", value: "ABB" },
-    { label: "Configuration", value: lv?.lvConfig === "inout" ? "Incoming & Outgoing" : "Incoming only" },
-  ];
+  const without = !!tr?.withoutTransformer;
   const finish = stonePaint ? "Stone Painting" : "Electrostatic RAL 7035";
-  // The three compartments a compact substation is built from, numbered ①②③.
-  const compartments: { n: number; title: string; specs: { label: string; value: string }[] | null; note?: string }[] = [
-    ...(rmu ? [{ n: 1, title: "Ring Main Unit", specs: rmuSpecs }] : []),
-    ...(tr ? [{ n: 2, title: "Transformer", specs: tr.withoutTransformer ? null : trSpecs, note: tr.withoutTransformer ? withoutTransformerLabel(tr) : undefined }] : []),
-    { n: 3, title: "Low Voltage", specs: lvSpecs },
-  ];
+  const uid = `kc${index}`; // unique gradient/pattern ids (several kiosks can be on one offer)
+  const OR = "#F26B21", INK = "#1F2026", DK = "#2A2A30", GY = "#9A9BA3", MU = "#55565E";
   return (
-    <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>
-      <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
-      {/* Two faint brand marks — one bleeding off the top-right, a larger ghost anchored bottom-right —
-          give the page depth without competing with the content. */}
-      <img src="/brand/mark-color.png" alt="" aria-hidden="true"
-        className="pointer-events-none absolute -right-16 -top-16 h-[26rem] w-auto" style={{ opacity: 0.05 }} />
-      <div className="pointer-events-none absolute -bottom-24 -left-10 h-[22rem] w-[22rem] rounded-full" style={{ background: `radial-gradient(circle, ${TRED}14, transparent 70%)` }} />
+    <section className="a4-sheet" style={{ breakAfter: "page", background: "#fff" }}>
+      <svg viewBox="0 0 595 842" width="100%" style={{ display: "block" }} preserveAspectRatio="xMidYMid meet"
+        fontFamily="Poppins, Arial, sans-serif">
+        <defs>
+          <linearGradient id={`${uid}-bg`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFFFFF" /><stop offset="1" stopColor="#F4F4F6" /></linearGradient>
+          <linearGradient id={`${uid}-fade`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFFFFF" stopOpacity="1" /><stop offset="1" stopColor="#FFFFFF" stopOpacity="0" /></linearGradient>
+          <filter id={`${uid}-blur`} x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6" /></filter>
+          <pattern id={`${uid}-iso`} width="34.64" height="20" patternUnits="userSpaceOnUse">
+            <path d="M0 0 L34.64 20 M34.64 0 L0 20" stroke="#ECECF0" strokeWidth="0.6" fill="none" />
+          </pattern>
+        </defs>
+        <rect width="595" height="842" fill={`url(#${uid}-bg)`} />
+        <rect x="0" y="190" width="595" height="400" fill={`url(#${uid}-iso)`} opacity="0.9" />
+        <rect x="0" y="189" width="595" height="90" fill={`url(#${uid}-fade)`} />
+        <rect x="0" y="0" width="4" height="842" fill={OR} />
 
-      <div className="relative flex flex-1 flex-col px-14 pb-12 pt-20">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="h-3 w-3 rounded-sm" style={{ background: TRED }} />
-            <span className="text-[13px] font-bold uppercase tracking-[0.28em] text-muted">Medium Voltage · Compact Substation</span>
-          </div>
-          {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">Kiosk {index + 1} of {total}</div>}
-        </div>
+        {/* Header */}
+        <rect x="40" y="52" width="7" height="7" fill={OR} />
+        <text x="55" y="59" fontSize="7.5" fontWeight="700" letterSpacing="2.2" fill="#6B6B73">MEDIUM VOLTAGE · COMPACT SUBSTATION</text>
+        {total > 1 ? <text x="555" y="59" fontSize="7.5" fontWeight="700" letterSpacing="1.2" fill={GY} textAnchor="end">KIOSK {index + 1} OF {total}</text> : null}
+        <text x="38" y="128" fontSize="54" fontWeight="700" letterSpacing="-1.5" fill={INK}>{kva || "—"} <tspan fill={OR} fontSize="26">kVA</tspan></text>
+        <text x="40" y="152" fontSize="13" fill={MU}>Compact Secondary Substation · Powerline</text>
+        {project ? <text x="40" y="169" fontSize="8.5" fill={GY}>{project}</text> : null}
 
-        {/* Hero: the substation rating (kVA) with the type code alongside. */}
-        <div className="mt-14 flex items-end justify-between gap-6">
-          <div>
-            <div className="text-[64px] font-extrabold leading-[0.95] text-ink">{kva ? `${kva} kVA` : "Compact"}</div>
-            <div className="mt-3 text-xl font-semibold text-muted">Compact Secondary Substation · Powerline</div>
-          </div>
-          {code && (
-            <div className="shrink-0 rounded-xl border-2 px-4 py-3 text-right" style={{ borderColor: TRED }}>
-              <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-muted">Type code</div>
-              <div className="mt-1 font-mono text-lg font-bold tracking-wide text-ink">{code}</div>
-            </div>
+        {/* Kiosk — isometric drawing (static art) */}
+        <g filter={`url(#${uid}-blur)`} opacity="0.10"><polygon points="258.0,380.0 474.5,505.0 387.9,555.0 171.4,430.0" fill="#000" /></g>
+        <polygon points="143.4,420.0 359.9,545.0 359.9,425.0 143.4,300.0" fill="#FFFFFF" stroke={DK} strokeWidth="1.1" strokeLinejoin="round" />
+        <polygon points="446.5,495.0 359.9,545.0 359.9,425.0 446.5,375.0" fill="#ECECF0" stroke={DK} strokeWidth="1.1" strokeLinejoin="round" />
+        <polygon points="143.4,420.0 359.9,545.0 359.9,535.0 143.4,410.0" fill={DK} />
+        <polygon points="446.5,495.0 359.9,545.0 359.9,535.0 446.5,485.0" fill="#1B1B20" />
+        <line x1="208.3" y1="447.5" x2="208.3" y2="337.5" stroke={DK} strokeWidth="1" />
+        <line x1="295.0" y1="497.5" x2="295.0" y2="387.5" stroke={DK} strokeWidth="1" />
+        <polygon points="148.6,405.0 203.2,436.5 203.2,342.5 148.6,311.0" fill="#FFFFFF" stroke="#8A8A92" strokeWidth="0.8" />
+        <line x1="155.5" y1="327.0" x2="196.2" y2="350.5" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="155.5" y1="333.0" x2="196.2" y2="356.5" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="155.5" y1="339.0" x2="196.2" y2="362.5" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="155.5" y1="387.0" x2="196.2" y2="410.5" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="155.5" y1="393.0" x2="196.2" y2="416.5" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="155.5" y1="399.0" x2="196.2" y2="422.5" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="198.8" y1="392.0" x2="198.8" y2="380.0" stroke={DK} strokeWidth="1.6" strokeLinecap="round" />
+        <polygon points="213.5,442.5 289.8,486.5 289.8,392.5 213.5,348.5" fill="#FFF4EC" stroke="#8A8A92" strokeWidth="0.8" />
+        <line x1="220.5" y1="364.5" x2="282.8" y2="400.5" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="220.5" y1="370.5" x2="282.8" y2="406.5" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="220.5" y1="376.5" x2="282.8" y2="412.5" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="220.5" y1="424.5" x2="282.8" y2="460.5" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="220.5" y1="430.5" x2="282.8" y2="466.5" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="220.5" y1="436.5" x2="282.8" y2="472.5" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="285.4" y1="442.0" x2="285.4" y2="430.0" stroke={DK} strokeWidth="1.6" strokeLinecap="round" />
+        <polygon points="300.1,492.5 354.7,524.0 354.7,430.0 300.1,398.5" fill="#FFFFFF" stroke="#8A8A92" strokeWidth="0.8" />
+        <line x1="307.1" y1="414.5" x2="347.8" y2="438.0" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="307.1" y1="420.5" x2="347.8" y2="444.0" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="307.1" y1="426.5" x2="347.8" y2="450.0" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="307.1" y1="474.5" x2="347.8" y2="498.0" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="307.1" y1="480.5" x2="347.8" y2="504.0" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="307.1" y1="486.5" x2="347.8" y2="510.0" stroke="#B4B4BC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="350.4" y1="479.5" x2="350.4" y2="467.5" stroke={DK} strokeWidth="1.6" strokeLinecap="round" />
+        <line x1="429.2" y1="405.0" x2="377.2" y2="435.0" stroke="#C4C4CC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="429.2" y1="411.0" x2="377.2" y2="441.0" stroke="#C4C4CC" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="429.2" y1="417.0" x2="377.2" y2="447.0" stroke="#C4C4CC" strokeWidth="1.2" strokeLinecap="round" />
+        <polygon points="133.0,300.0 359.9,431.0 359.9,421.0 133.0,290.0" fill={OR} />
+        <polygon points="456.9,375.0 359.9,431.0 359.9,421.0 456.9,365.0" fill="#C9530F" />
+        <polygon points="230.0,234.0 456.9,365.0 359.9,421.0 133.0,290.0" fill="#F6F6F8" stroke={DK} strokeWidth="0.8" strokeLinejoin="round" />
+        <g transform="matrix(0.866,-0.5,0,1,403.2,458.0)"><text x="0" y="0" fontSize="11" fontWeight="700" letterSpacing="2" fill={DK} textAnchor="middle">POWERLINE</text><text x="0" y="14" fontSize="6.5" fontWeight="700" letterSpacing="1.5" fill={OR} textAnchor="middle">IP54</text></g>
+        <polyline points="175.9,374.8 175.9,586 121.5,586 121.5,604" fill="none" stroke={OR} strokeWidth="0.8" strokeDasharray="2 2" />
+        <circle cx="121.5" cy="586" r="1.8" fill={OR} />
+        <polyline points="251.7,418.5 251.7,578 297.5,578 297.5,604" fill="none" stroke={OR} strokeWidth="0.8" strokeDasharray="2 2" />
+        <circle cx="297.5" cy="578" r="1.8" fill={OR} />
+        <polyline points="327.4,462.2 327.4,570 473.5,570 473.5,604" fill="none" stroke={OR} strokeWidth="0.8" strokeDasharray="2 2" />
+        <circle cx="473.5" cy="570" r="1.8" fill={OR} />
+        <circle cx="175.9" cy="374.8" r="10" fill={OR} stroke="#FFFFFF" strokeWidth="2" /><text x="175.9" y="378.0" fontSize="8" fontWeight="700" fill="#FFF" textAnchor="middle">01</text>
+        <circle cx="251.7" cy="418.5" r="10" fill={OR} stroke="#FFFFFF" strokeWidth="2" /><text x="251.7" y="421.7" fontSize="8" fontWeight="700" fill="#FFF" textAnchor="middle">02</text>
+        <circle cx="327.4" cy="462.2" r="10" fill={OR} stroke="#FFFFFF" strokeWidth="2" /><text x="327.4" y="465.4" fontSize="8" fontWeight="700" fill="#FFF" textAnchor="middle">03</text>
+
+        {/* Card 01 — RMU */}
+        <g>
+          <rect x="40" y="604" width="163" height="128" rx="6" fill="#FFFFFF" stroke="#E4E4E9" />
+          <rect x="40" y="604" width="163" height="3" rx="1.5" fill={OR} />
+          <text x="54" y="624" fontSize="6.5" fontWeight="700" letterSpacing="1.8" fill={OR}>01 · RING MAIN UNIT</text>
+          <text x="54" y="642" fontSize="14" fontWeight="700" fill={INK}>{rmuMeta?.family ?? "—"}</text>
+          <line x1="54" y1="651" x2="189" y2="651" stroke="#ECECF0" />
+          <text x="54" y="667" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>VOLTAGE</text>
+          <text x="189" y="667" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{rmu ? `${rmu.voltageKv} kV` : "—"}</text>
+          <text x="54" y="689" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>CONFIG.</text>
+          <text x="189" y="689" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{rmu ? `${rmu.nalCount}R + ${rmu.nalfCount}T` : "—"}</text>
+          <text x="54" y="711" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>OEM</text>
+          <text x="189" y="711" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{rmu?.lbsBrand || "—"}</text>
+        </g>
+        {/* Card 02 — Transformer */}
+        <g>
+          <rect x="216" y="604" width="163" height="128" rx="6" fill="#FFFFFF" stroke="#E4E4E9" />
+          <rect x="216" y="604" width="163" height="3" rx="1.5" fill={OR} />
+          <text x="230" y="624" fontSize="6.5" fontWeight="700" letterSpacing="1.8" fill={OR}>02 · TRANSFORMER</text>
+          {without ? (
+            <>
+              <text x="230" y="642" fontSize="14" fontWeight="700" fill={INK}>Not included</text>
+              <line x1="230" y1="651" x2="365" y2="651" stroke="#ECECF0" />
+              <text x="230" y="669" fontSize="8" fill={MU}>{withoutTransformerLabel(tr!)}</text>
+              <text x="230" y="686" fontSize="7.5" fill={GY}>Supplied by others.</text>
+            </>
+          ) : (
+            <>
+              <text x="230" y="642" fontSize="14" fontWeight="700" fill={INK}>{tr?.ratingKva ? `${tr.ratingKva} kVA` : "—"}</text>
+              <line x1="230" y1="651" x2="365" y2="651" stroke="#ECECF0" />
+              <text x="230" y="667" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>RATIO</text>
+              <text x="365" y="667" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{tr?.primaryKv ? `${tr.primaryKv} / 0.4 kV` : "—"}</text>
+              <text x="230" y="689" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>INSULATION</text>
+              <text x="365" y="689" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{tr?.insulation ? `${tr.insulation} type` : "—"}</text>
+              <text x="230" y="711" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>BRAND</text>
+              <text x="365" y="711" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{tr?.brand || "—"}</text>
+            </>
           )}
-        </div>
+        </g>
+        {/* Card 03 — Low Voltage */}
+        <g>
+          <rect x="392" y="604" width="163" height="128" rx="6" fill="#FFFFFF" stroke="#E4E4E9" />
+          <rect x="392" y="604" width="163" height="3" rx="1.5" fill={DK} />
+          <text x="406" y="624" fontSize="6.5" fontWeight="700" letterSpacing="1.8" fill={DK}>03 · LOW VOLTAGE</text>
+          <text x="406" y="642" fontSize="14" fontWeight="700" fill={INK}>MDB</text>
+          <line x1="406" y1="651" x2="541" y2="651" stroke="#ECECF0" />
+          <text x="406" y="667" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>CURRENT</text>
+          <text x="541" y="667" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{lvRatingA ? `${lvRatingA} A` : "—"}</text>
+          <text x="406" y="689" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>BREAKERS</text>
+          <text x="541" y="689" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">ABB</text>
+          <text x="406" y="711" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>CONFIG.</text>
+          <text x="541" y="711" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{lv?.lvConfig === "inout" ? "Incoming & Outgoing" : "Incoming only"}</text>
+        </g>
 
-        {/* Composition: the three numbered compartments — RMU, Transformer, then Low Voltage.
-            Frameless: a number badge + its specs, with generous spacing instead of a boxed card. */}
-        <div className="mt-10 flex flex-1 flex-col gap-8">
-          {compartments.map((c) => (
-            <div key={c.n} className="flex flex-1 gap-4">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-extrabold text-white" style={{ background: TRED }}>{c.n}</div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-extrabold uppercase tracking-[0.2em]" style={{ color: TRED }}>{c.title}</div>
-                {c.specs ? (
-                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
-                    {c.specs.map((sp) => (
-                      <div key={sp.label}>
-                        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{sp.label}</div>
-                        <div className="mt-0.5 text-base font-bold text-ink">{sp.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-3">
-                    <div className="text-base font-bold text-ink">{c.note}</div>
-                    <div className="mt-0.5 text-xs text-muted">Supplied by others — not included</div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Footer strip: enclosure finish (stone painting when chosen) + project. */}
-        <div className="mt-6 flex items-end justify-between gap-4 border-t-2 pt-5" style={{ borderColor: TRED }}>
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Enclosure finish</div>
-            <div className="mt-1 text-lg font-bold text-ink">{finish}</div>
-          </div>
-          {project && <div className="text-right text-sm font-semibold text-muted">{project}</div>}
-        </div>
-      </div>
+        {/* Footer */}
+        <line x1="40" y1="758" x2="555" y2="758" stroke={OR} strokeWidth="0.8" />
+        <g fontSize="5.8" fontWeight="700" letterSpacing="1.5" fill={GY}>
+          <text x="40" y="780">ENCLOSURE FINISH</text><text x="200" y="780">KIOSK PROTECTION</text><text x="360" y="780">OEM PARTNER</text>
+        </g>
+        <g fontSize="12" fontWeight="700" fill={INK}>
+          <text x="40" y="797">{finish}</text><text x="200" y="797">IP54</text><text x="360" y="797">ABB Certified</text>
+        </g>
+      </svg>
     </section>
   );
 }

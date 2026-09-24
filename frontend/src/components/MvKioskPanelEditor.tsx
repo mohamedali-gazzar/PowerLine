@@ -100,6 +100,9 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
   // Accessories tick-box state — Capacitor Box / Stone Paint (moved here from the old Extra section).
   const accChecks = p.mvKioskAccChecks ?? {};
   const setAccCheck = (key: string, on: boolean) => upPanel(p.id, { mvKioskAccChecks: { ...accChecks, [key]: on } });
+  // Per-accessory quantity override (currently the Fire extinguisher's 1/2/3 dropdown). Absent ⇒ default.
+  const accQty = p.mvKioskAccQty ?? {};
+  const setAccQty = (id: string, qty: number) => upPanel(p.id, { mvKioskAccQty: { ...accQty, [id]: qty } });
   const mvCableCost = Math.round(MV_CABLE_METERS * mvCableRate);
   const lvCopperKgVal = lvCopperKg(trRating);
   const lvCopperCost = lvCopperKgVal != null ? Math.round(lvCopperKgVal * copperRate) : 0;
@@ -113,7 +116,11 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
   const accRows = [
     { key: "mvcable", name: "MV cable", qty: MV_CABLE_METERS, unit: "m", price: mvCableRate, total: mvCableCost },
     { key: "lvcopper", name: "LV copper", qty: lvCopperKgVal ?? 0, unit: "kg", price: copperRate, total: lvCopperCost },
-    ...DEFAULT_KIOSK_ACCESSORIES.map((a) => ({ key: a.id, name: a.name, qty: a.qty, unit: "-", price: a.cost, total: (a.cost || 0) * (a.qty || 0) })),
+    // The Fire extinguisher's quantity is a 1/2/3 dropdown (default 2); the other fixed items keep theirs.
+    ...DEFAULT_KIOSK_ACCESSORIES.map((a) => {
+      const qty = accQty[a.id] ?? a.qty;
+      return { key: a.id, name: a.name, qty, unit: "-", price: a.cost, total: (a.cost || 0) * (qty || 0), qtyOptions: a.id === "acc-fire" ? [1, 2, 3] : undefined };
+    }),
   ];
 
   // The whole cost sheet — RMU + Transformer from their databases (fetched above by the child
@@ -247,7 +254,7 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
 
       <Section n={4} title="Accessories" subtitle="MV cable, LV copper, items, capacitor box & stone paint" open={open.acc} onToggle={() => toggle("acc")}
         code={costs.accessories ? `${costs.accessories.toLocaleString()} EGP` : undefined}>
-        <KioskAccessoriesEditor rows={accRows} checks={checkRows} onCheck={setAccCheck} />
+        <KioskAccessoriesEditor rows={accRows} checks={checkRows} onCheck={setAccCheck} onQty={setAccQty} />
       </Section>
     </div>
   );
@@ -269,10 +276,11 @@ function KioskAccHeader() {
 /** The Accessories accordion body: the read-only standard list (MV cable + LV copper connections and
  *  the fixed accessory items) followed by the optional tick-box items (Capacitor Box / Stone Paint,
  *  moved here from the old "Extra" section). Its total feeds the "Accessories" row of the price table. */
-function KioskAccessoriesEditor({ rows, checks, onCheck }: {
-  rows: { key: string; name: string; qty: number; unit: string; price: number; total: number }[];
+function KioskAccessoriesEditor({ rows, checks, onCheck, onQty }: {
+  rows: { key: string; name: string; qty: number; unit: string; price: number; total: number; qtyOptions?: number[] }[];
   checks: { key: string; name: string; price: number; total: number; checked: boolean }[];
   onCheck: (key: string, on: boolean) => void;
+  onQty: (id: string, qty: number) => void;
 }) {
   const total = rows.reduce((sum, r) => sum + r.total, 0) + checks.reduce((sum, c) => sum + c.total, 0);
   return (
@@ -281,7 +289,17 @@ function KioskAccessoriesEditor({ rows, checks, onCheck }: {
       {rows.map((r) => (
         <div key={r.key} className={KIOSK_ACC_ROW}>
           <span className="min-w-0 truncate text-sm font-semibold text-ink">{r.name}</span>
-          <span className="text-right text-sm tabular-nums text-muted">{r.qty}</span>
+          {r.qtyOptions ? (
+            <span className="flex justify-end">
+              <select value={r.qty} aria-label={`${r.name} quantity`}
+                onChange={(e) => onQty(r.key, Number(e.target.value))}
+                className="cursor-pointer rounded-md border border-line bg-white px-1.5 py-0.5 text-right text-sm tabular-nums focus:border-brand focus:outline-none">
+                {r.qtyOptions.map((q) => <option key={q} value={q}>{q}</option>)}
+              </select>
+            </span>
+          ) : (
+            <span className="text-right text-sm tabular-nums text-muted">{r.qty}</span>
+          )}
           <span className="text-right text-sm text-muted">{r.unit}</span>
           <span className="text-right text-sm tabular-nums text-muted">{r.price.toLocaleString()}</span>
           <span className="text-right text-sm font-semibold tabular-nums text-ink">{r.total ? r.total.toLocaleString() : "—"}</span>

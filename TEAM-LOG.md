@@ -23,6 +23,21 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**New isometric kiosk cover, and the Fire-extinguisher quantity is now a 1/2/3 dropdown.**
+
+- **Kiosk Technical cover redesigned** to the "isometric" concept: a 3D drawing of the compact
+  substation with numbered callouts (①②③) leading down to three spec cards — Ring Main Unit, Transformer,
+  and Low Voltage — over a faint grid, with the kVA hero and a three-fact footer (finish · IP54 · OEM).
+  All values come from the kiosk. It's a vector drawing, so it stays crisp and keeps selectable text in
+  the PDF. (Removed the IP54 pill, the side labels/type-code, and the bottom-right wordmark per review.)
+- **Fire extinguisher quantity is a 1/2/3 dropdown** (default 2) in the kiosk Accessories, and drives the
+  row total, the Accessories total and the kiosk cost. Stored per kiosk (additive nullable field);
+  existing kiosks keep 2.
+
+No database migration (the new field is nullable).
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **Panels tab scroll fixed.**
 
 The panel list and the editor were each trapped inside a fixed viewport-height box with a hidden
