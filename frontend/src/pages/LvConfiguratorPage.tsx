@@ -63,7 +63,7 @@ import { TransformerCover, TransformerTechnicalSheet, withoutTransformerLabel } 
 import { findTransformerTech, trModel, trDisplayCode } from "../components/transformerTechData";
 import type { PdfPageImage } from "../lv/renderPdfPages";
 import OfferView from "../components/OfferView";
-import type { GeneratedOffer, RmuConfigInput, TransformerConfigInput } from "../types";
+import type { GeneratedOffer, RmuConfigInput, TransformerConfigInput, KioskLvConfigInput } from "../types";
 import {
   api, getToken, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type QtnAttachmentDto, type QtnStatus,
@@ -2916,6 +2916,21 @@ function offerTitle(kind: "TO" | "CO" | "ML", qtnNo: string, rev: string): strin
   return `${kind}-${qtnNo} Rev ${String(rev ?? "").padStart(2, "0")}`;
 }
 
+/**
+ * Export an offer as a real, text-based PDF via the browser's own "Save as PDF". The print stylesheet
+ * (index.css @media print) already scopes the print job to the visible .print-area and drops everything
+ * else, so the output is selectable text at a fraction of the old rasterised size and matches the
+ * on-screen design exactly. We only set the document title so the saved file is named after the offer,
+ * then restore it once the print dialog closes.
+ */
+function printOfferDoc(docTitle: string) {
+  const prev = document.title;
+  document.title = docTitle;
+  const restore = () => { document.title = prev; window.removeEventListener("afterprint", restore); };
+  window.addEventListener("afterprint", restore);
+  window.print();
+}
+
 function PrintBar({ label, docTitle, blockers, exportFn }: { label: string; docTitle?: string; blockers?: ExportCheck[]; exportFn?: () => Promise<void> | void }) {
   const { notify, dialogs } = useDialogs();
   // Set the document title right before printing so the saved PDF / print job is
@@ -2926,7 +2941,8 @@ function PrintBar({ label, docTitle, blockers, exportFn }: { label: string; docT
   const issues = blockers ?? [];
   const count = issues.reduce((n, c) => n + c.items.length, 0);
   const doPrint = async () => {
-    // Technical offer builds a real multi-page PDF (jsPDF) instead of window.print().
+    // Offers pass an exportFn that triggers the browser's own "Save as PDF" (printOfferDoc); the
+    // fallback below is the same native print for anything without a custom filename.
     if (exportFn) {
       setBusy(true);
       try { await exportFn(); }
@@ -4012,14 +4028,10 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel, onScratch, readOnly }: { s:
   // Revision is folded into the QTN number: rev 00 → unchanged, rev 01 → "-1", rev 02 → "-2", …
   const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
   const qtnRef = revNum > 0 ? `${qtnNo}-${revNum}` : qtnNo;
-  const exportPdf = async () => {
-    const printArea = document.querySelector<HTMLElement>("[data-pdf-root]");
-    if (!printArea) return;
-    // Lazy-load html2canvas + jsPDF only on export. The PDF is built by capturing the
-    // on-screen offer HTML (so Arabic / RTL render exactly like the preview) and
-    // paginating it across A4 pages with a repeated header + "Page X of Y" footer.
-    const { exportTechnicalPdf } = await import("../lv/technicalPdf");
-    await exportTechnicalPdf({ printArea, filename: offerTitle("TO", qtnNo, s.project.revisionNo) });
+  const exportPdf = () => {
+    // Text-based "Save as PDF" via the browser print dialog (see printOfferDoc). Prints the flow-view
+    // source (the a4-preview is hidden in print), so the output is selectable and small.
+    printOfferDoc(offerTitle("TO", qtnNo, s.project.revisionNo));
   };
   return (
     <div className="animate-fade-up">
@@ -4695,12 +4707,7 @@ function CommercialTab({ s, qtnNo, up, readOnly }: { s: LvState; qtnNo: string; 
   const m = (egp: number) => fmtEgp(egp / rate);
   const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
   const qtnRef = revNum > 0 ? `${qtnNo}-${revNum}` : qtnNo;
-  const exportPdf = async () => {
-    const printArea = document.querySelector<HTMLElement>("[data-co-root]");
-    if (!printArea) return;
-    const { exportCommercialPdf } = await import("../lv/technicalPdf");
-    await exportCommercialPdf({ printArea, filename: offerTitle("CO", qtnNo, s.project.revisionNo) });
-  };
+  const exportPdf = () => printOfferDoc(offerTitle("CO", qtnNo, s.project.revisionNo));
   // Download JUST the commercial line-item table (main offer) as an .xlsx — no cover, no
   // terms. Same columns, currency and figures as the on-screen table; numbers go in as real
   // numbers (rounded like the offer) so Excel can total them. xlsx is loaded on demand.
@@ -5310,9 +5317,10 @@ function UploadedTransformerSheet({ code }: { code: string }) {
 // TransformerCover. It summarises the whole package on one page: the kiosk rating (kVA, taken from its
 // transformer), the Ring Main Unit it contains, the Transformer it contains, and — when chosen — the
 // stone-painting finish. Everything is read straight off the kiosk panel. One per kiosk item.
-function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project }: {
+function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project, lv, lvRatingA }: {
   rmu?: RmuConfigInput; tr?: TransformerConfigInput; code: string; kva: number;
   stonePaint: boolean; index: number; total: number; project: string;
+  lv?: KioskLvConfigInput; lvRatingA?: number;
 }) {
   const rmuMeta = rmu ? (RMU_COVER[rmu.productType] ?? RMU_COVER.PRAL) : null;
   const rmuSpecs = rmu ? [
@@ -5327,74 +5335,102 @@ function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project }: {
     { label: "Insulation", value: `${tr.insulation || "—"} type` },
     { label: "Brand", value: tr.brand || "—" },
   ] : [];
+  const lvSpecs = [
+    { label: "Board", value: kva ? `MDB · ${kva} kVA` : "MDB" },
+    { label: "Rated current", value: lvRatingA ? `${lvRatingA} A` : "—" },
+    { label: "Circuit breakers", value: "ABB" },
+    { label: "Configuration", value: lv?.lvConfig === "inout" ? "Incoming & Outgoing" : "Incoming only" },
+  ];
+  const finish = stonePaint ? "Stone Painting" : "Electrostatic RAL 7035";
+  // A horizontal "at a glance" ribbon under the hero — the four headline facts of the substation.
+  const ribbon = [
+    { label: "MV voltage", value: rmu ? `${rmu.voltageKv} kV` : "—" },
+    { label: "RMU make-up", value: rmu ? `${rmu.nalCount}R + ${rmu.nalfCount}T` : "—" },
+    { label: "Transformer", value: tr?.withoutTransformer ? "By others" : (tr?.ratingKva ? `${tr.ratingKva} kVA` : "—") },
+    { label: "Finish", value: finish },
+  ];
+  // The three compartments a compact substation is built from, numbered ①②③.
+  const compartments: { n: number; title: string; specs: { label: string; value: string }[] | null; note?: string }[] = [
+    ...(rmu ? [{ n: 1, title: "Ring Main Unit", specs: rmuSpecs }] : []),
+    ...(tr ? [{ n: 2, title: "Transformer", specs: tr.withoutTransformer ? null : trSpecs, note: tr.withoutTransformer ? withoutTransformerLabel(tr) : undefined }] : []),
+    { n: 3, title: "Low Voltage", specs: lvSpecs },
+  ];
   return (
     <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>
       <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
+      {/* Two faint brand marks — one bleeding off the top-right, a larger ghost anchored bottom-right —
+          give the page depth without competing with the content. */}
       <img src="/brand/mark-color.png" alt="" aria-hidden="true"
-        className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
+        className="pointer-events-none absolute -right-16 -top-16 h-[26rem] w-auto" style={{ opacity: 0.05 }} />
+      <div className="pointer-events-none absolute -bottom-24 -left-10 h-[22rem] w-[22rem] rounded-full" style={{ background: `radial-gradient(circle, ${TRED}14, transparent 70%)` }} />
 
-      <div className="relative flex flex-1 flex-col px-16 py-14">
+      <div className="relative flex flex-1 flex-col px-14 py-12">
         <div className="flex items-center justify-between">
-          <div className="text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Medium Voltage · Compact Substation</div>
+          <div className="flex items-center gap-3">
+            <span className="h-3 w-3 rounded-sm" style={{ background: TRED }} />
+            <span className="text-[13px] font-bold uppercase tracking-[0.28em] text-muted">Medium Voltage · Compact Substation</span>
+          </div>
           {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">Kiosk {index + 1} of {total}</div>}
         </div>
 
-        {/* Hero: the compact-substation rating (kVA) + tagline + type code. */}
-        <div className="py-8">
-          <div className="text-7xl font-extrabold leading-none text-ink">{kva ? `${kva} kVA` : "Compact Substation"}</div>
-          <div className="mt-4 text-2xl font-semibold text-muted">Compact Secondary Substation</div>
+        {/* Hero: the substation rating (kVA) with the type code alongside. */}
+        <div className="mt-6 flex items-end justify-between gap-6">
+          <div>
+            <div className="text-[64px] font-extrabold leading-[0.95] text-ink">{kva ? `${kva} kVA` : "Compact"}</div>
+            <div className="mt-3 text-xl font-semibold text-muted">Compact Secondary Substation · Powerline</div>
+          </div>
           {code && (
-            <div className="mt-8">
-              <div className="mb-2 text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Type code</div>
-              <div className="font-mono text-2xl font-bold tracking-wide text-ink">{code}</div>
+            <div className="shrink-0 rounded-xl border-2 px-4 py-3 text-right" style={{ borderColor: TRED }}>
+              <div className="text-[9px] font-bold uppercase tracking-[0.22em] text-muted">Type code</div>
+              <div className="mt-1 font-mono text-lg font-bold tracking-wide text-ink">{code}</div>
             </div>
           )}
         </div>
 
-        {/* Composition: the RMU, then the Transformer below it — stacked, each full width. */}
-        <div className="flex flex-1 flex-col gap-6">
-          {rmu && (
-            <div className="rounded-2xl border border-line p-6">
-              <div className="text-sm font-extrabold uppercase tracking-[0.2em]" style={{ color: TRED }}>Ring Main Unit</div>
-              <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5">
-                {rmuSpecs.map((sp) => (
-                  <div key={sp.label}>
-                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{sp.label}</div>
-                    <div className="mt-1 text-base font-bold text-ink">{sp.value}</div>
+        {/* At-a-glance ribbon — four headline facts in a single banded row. */}
+        <div className="mt-6 grid grid-cols-4 overflow-hidden rounded-xl" style={{ background: "#faf7f5", border: `1px solid ${TRED}22` }}>
+          {ribbon.map((r, i) => (
+            <div key={r.label} className={`px-4 py-3 ${i > 0 ? "border-l" : ""}`} style={i > 0 ? { borderColor: `${TRED}22` } : undefined}>
+              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-muted">{r.label}</div>
+              <div className="mt-1 truncate text-[15px] font-extrabold text-ink">{r.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Composition: the three numbered compartments — RMU, Transformer, then Low Voltage. */}
+        <div className="mt-6 flex flex-1 flex-col gap-4">
+          {compartments.map((c) => (
+            <div key={c.n} className="flex flex-1 gap-4 rounded-2xl border border-line p-5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-extrabold text-white" style={{ background: TRED }}>{c.n}</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-extrabold uppercase tracking-[0.2em]" style={{ color: TRED }}>{c.title}</div>
+                {c.specs ? (
+                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
+                    {c.specs.map((sp) => (
+                      <div key={sp.label}>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{sp.label}</div>
+                        <div className="mt-0.5 text-base font-bold text-ink">{sp.value}</div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                ) : (
+                  <div className="mt-3">
+                    <div className="text-base font-bold text-ink">{c.note}</div>
+                    <div className="mt-0.5 text-xs text-muted">Supplied by others — not included</div>
+                  </div>
+                )}
               </div>
             </div>
-          )}
-          {tr && (
-            <div className="rounded-2xl border border-line p-6">
-              <div className="text-sm font-extrabold uppercase tracking-[0.2em]" style={{ color: TRED }}>Transformer</div>
-              {tr.withoutTransformer ? (
-                <div className="mt-5">
-                  <div className="text-base font-bold text-ink">{withoutTransformerLabel(tr)}</div>
-                  <div className="mt-1 text-xs text-muted">Supplied by others — not included</div>
-                </div>
-              ) : (
-                <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5">
-                  {trSpecs.map((sp) => (
-                    <div key={sp.label}>
-                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{sp.label}</div>
-                      <div className="mt-1 text-base font-bold text-ink">{sp.value}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          ))}
         </div>
 
         {/* Footer strip: enclosure finish (stone painting when chosen) + project. */}
-        <div className="mt-6 border-t-2 pt-6" style={{ borderColor: TRED }}>
+        <div className="mt-6 flex items-end justify-between gap-4 border-t-2 pt-5" style={{ borderColor: TRED }}>
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Enclosure finish</div>
-            <div className="mt-1 text-lg font-bold text-ink">{stonePaint ? "Stone Painting" : "Electrostatic RAL 7035"}</div>
+            <div className="mt-1 text-lg font-bold text-ink">{finish}</div>
           </div>
-          {project && <div className="mt-4 text-sm text-muted">{project}</div>}
+          {project && <div className="text-right text-sm font-semibold text-muted">{project}</div>}
         </div>
       </div>
     </section>
@@ -5652,13 +5688,7 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const total = rmuPanels.length + trPanels.length + kioskPanels.length;
 
   const printRef = useRef<HTMLDivElement>(null);
-  const exportPdf = async () => {
-    if (!printRef.current) return;
-    // Same on-screen-DOM → A4 PDF path the LV/Commercial offers use (each .a4-sheet
-    // becomes a page). Captures exactly what's shown, so the MV pages print as seen.
-    const { exportSheetsPdf } = await import("../lv/technicalPdf");
-    await exportSheetsPdf({ printArea: printRef.current, filename: offerTitle("TO", qtnNo, s.project.revisionNo) });
-  };
+  const exportPdf = () => printOfferDoc(offerTitle("TO", qtnNo, s.project.revisionNo));
   const label = [
     rmuPanels.length ? `${rmuPanels.length} RMU${rmuPanels.length === 1 ? "" : "s"}` : "",
     trPanels.length ? `${trPanels.length} transformer${trPanels.length === 1 ? "" : "s"}` : "",
@@ -5699,7 +5729,8 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
               return (
                 <Fragment key={p.id}>
                   <KioskCover rmu={rc} tr={tc} code={p.mvKioskCost?.size?.code || ""} kva={tc?.ratingKva || 0}
-                    stonePaint={!!p.mvKioskAccChecks?.stonepaint} index={kioskPos[p.id]} total={kioskPanels.length} project={proj} />
+                    stonePaint={!!p.mvKioskAccChecks?.stonepaint} index={kioskPos[p.id]} total={kioskPanels.length} project={proj}
+                    lv={p.mvLvConfig} lvRatingA={p.ratingA} />
                   {/* Inside a kiosk the RMU and Transformer drop their own cover pages — the compact-
                       substation cover above already introduces them — and keep only their datasheets. */}
                   {rc && <MvRmuTechnical config={rc} g={previews[JSON.stringify(rc)]} index={0} total={1} project={proj} hideCover />}
@@ -5838,11 +5869,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   const vat = exVat * (vatPct / 100);
   const incVat = exVat + vat;
 
-  const exportPdf = async () => {
-    if (!printRef.current) return;
-    const { exportSheetsPdf } = await import("../lv/technicalPdf");
-    await exportSheetsPdf({ printArea: printRef.current, filename: offerTitle("CO", qtnNo, s.project.revisionNo) });
-  };
+  const exportPdf = () => printOfferDoc(offerTitle("CO", qtnNo, s.project.revisionNo));
 
   return (
     <div className="animate-fade-up">
@@ -5990,11 +6017,9 @@ function KioskAnalysisTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
 
   const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
   const qtnRef = revNum > 0 ? `${qtnNo}-${revNum}` : qtnNo;
-  const exportPdf = async () => {
-    if (!printRef.current) return;
-    const { exportSheetsPdf } = await import("../lv/technicalPdf");
+  const exportPdf = () => {
     const proj = s.project.name.trim();
-    await exportSheetsPdf({ printArea: printRef.current, filename: `Kiosk_Analysis-${qtnRef}${proj ? ` (${proj})` : ""}` });
+    printOfferDoc(`Kiosk_Analysis-${qtnRef}${proj ? ` (${proj})` : ""}`);
   };
 
   const COLS = "grid grid-cols-[1fr_8.5rem_7rem_5rem_7rem] gap-x-3";

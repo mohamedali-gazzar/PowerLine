@@ -23,6 +23,26 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**Kiosk cover redesign, transformer datasheet fits one page, and offers export as a real text PDF.**
+
+- **Kiosk cover upgraded + LV summary added.** The compact-substation cover now has the kVA hero beside a
+  boxed type-code, an "at a glance" ribbon (MV voltage · RMU make-up · Transformer · Finish), and the
+  composition is three numbered compartments — ① Ring Main Unit, ② Transformer, ③ Low Voltage (the new LV
+  block shows the board/MDB, rated current, ABB breakers, configuration). Fits one A4 page.
+- **Transformer datasheet fits one A4 page.** Capped to A4 height and scaled down just enough if a
+  variant's content runs long (short ones stay full-size, footer pinned to the bottom).
+- **Offers now export as a real, text-based PDF via the browser's "Save as PDF".** The **PDF / Print**
+  button (Technical, Commercial, MV Technical/Commercial, Kiosk Analysis) now opens the browser print
+  dialog on the actual offer pages instead of building an image-PDF. Result: **selectable/searchable
+  text** and a **much smaller file** (was ~90 MB image-PDFs), matching the on-screen design.
+  ⚠️ HEADS-UP: please eyeball a printed Technical offer (PDF / Print → Save as PDF) to confirm page
+  breaks / headers look right. The old image export code is still there; "Send to sales" still uses it
+  for its two-file download (native print can't silently produce two files).
+
+Look-and-feel + export path; no database change.
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **Kiosk cover tidy-up, a fixed toggle switch, and the kiosk LV shown as a full technical page.**
 
 - **Kiosk cover — enclosure finish:** removed the orange “Stone Painting Included” pill on the right; the

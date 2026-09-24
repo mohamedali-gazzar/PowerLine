@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { TransformerConfigInput } from "../types";
 import {
   type TransformerTech, TR_TECH_BY_KV, TR_TAP_LABELS, trModel, trEnclosureIp, trSeriesName,
@@ -79,9 +79,24 @@ export function TransformerTechnicalSheet({ t, insideKiosk }: { t: TransformerTe
     { label: "Temperature rise, K @ ambient 40 °C", value: t.tempRise },
   ];
 
+  // Fit the whole datasheet onto exactly ONE A4 page: measure the content's natural height and, if it
+  // runs past the page, scale it down just enough to fit (short sheets stay at 1×, footer pinned to the
+  // bottom via the min-height + mt-auto). The layout height that `scrollHeight` reports is unaffected by
+  // the transform, so re-measuring is stable and never loops.
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  useLayoutEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    const A4_H = (297 / 25.4) * 96; // A4 content height in CSS px (≈1122.5)
+    const natural = el.scrollHeight;
+    setScale(natural > A4_H + 2 ? A4_H / natural : 1);
+  }, [t, insideKiosk, model]);
+
   return (
-    <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>
-      <div className="flex flex-1 flex-col px-10 py-8 text-ink">
+    <section className="a4-sheet relative overflow-hidden bg-white" style={{ height: "297mm", breakAfter: "page" }}>
+      <div ref={innerRef} className="flex flex-col px-10 py-8 text-ink"
+        style={{ minHeight: "297mm", transform: scale < 1 ? `scale(${scale})` : undefined, transformOrigin: "top center" }}>
         {/* Header — logo + sheet title, over the orange rule. */}
         <div className="flex items-end justify-between border-b-2 pb-3" style={{ borderColor: TRED }}>
           <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-9 w-auto" />
