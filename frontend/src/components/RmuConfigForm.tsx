@@ -60,21 +60,28 @@ export function rmuFeederIds(c: RmuConfigInput): string[] {
   const trafos = Array.from({ length: Math.max(1, c.nalfCount || 0) }, (_, i) => `T${i + 1}`);
   return [...rings, ...trafos];
 }
-/** Total Aux + Shunt-trip add-on for an RMU, in USD. Zero when RTU is on (the option is hidden). */
+/** A transformer feeder (T1…Tm). Shunt trip is only offered on these — a ring feeder (R) never gets one. */
+const isTransformerFeeder = (id: string): boolean => id.startsWith("T");
+
+/** Total Aux + Shunt-trip add-on for an RMU, in USD. Zero when RTU is on (the option is hidden) or the
+ *  brand is Murge (Murge RMUs carry no per-feeder Aux/Shunt). Shunt only counts on transformer feeders. */
 export function rmuAuxShuntUsd(c: RmuConfigInput): number {
   if (c.rtuType && c.rtuType !== "NONE") return 0;
+  if (c.lbsBrand === "MURGE") return 0;
   const ids = rmuFeederIds(c);
   const aux = ids.filter((id) => c.feederAux?.[id]).length;
-  const shunt = ids.filter((id) => c.feederShunt?.[id]).length;
+  const shunt = ids.filter((id) => isTransformerFeeder(id) && c.feederShunt?.[id]).length;
   return aux * RMU_AUX_USD + shunt * RMU_SHUNT_USD;
 }
-/** The per-feeder Aux / Shunt-trip ticks as named add-on lines (USD), for the RMU offer's add-on list. */
+/** The per-feeder Aux / Shunt-trip ticks as named add-on lines (USD), for the RMU offer's add-on list.
+ *  Shunt trip only on transformer feeders; nothing at all for Murge. */
 export function rmuAuxShuntAddOns(c: RmuConfigInput): { name: string; price: number }[] {
   if (c.rtuType && c.rtuType !== "NONE") return [];
+  if (c.lbsBrand === "MURGE") return [];
   const out: { name: string; price: number }[] = [];
   for (const id of rmuFeederIds(c)) {
     if (c.feederAux?.[id]) out.push({ name: `Aux — ${id}`, price: RMU_AUX_USD });
-    if (c.feederShunt?.[id]) out.push({ name: `Shunt trip — ${id}`, price: RMU_SHUNT_USD });
+    if (isTransformerFeeder(id) && c.feederShunt?.[id]) out.push({ name: `Shunt trip — ${id}`, price: RMU_SHUNT_USD });
   }
   return out;
 }
@@ -109,9 +116,14 @@ function FeederAccessories({
               className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
           </span>
           <span className="flex justify-center">
-            <input type="checkbox" checked={!!shunt[id]} aria-label={`${id} Shunt trip`}
-              onChange={(e) => onChange("feederShunt", { ...shunt, [id]: e.target.checked })}
-              className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
+            {/* Shunt trip is only meaningful on a transformer feeder (T) — a ring feeder (R) shows a dash. */}
+            {isTransformerFeeder(id) ? (
+              <input type="checkbox" checked={!!shunt[id]} aria-label={`${id} Shunt trip`}
+                onChange={(e) => onChange("feederShunt", { ...shunt, [id]: e.target.checked })}
+                className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
+            ) : (
+              <span className="text-muted" aria-hidden="true">—</span>
+            )}
           </span>
         </div>
       ))}
@@ -263,9 +275,10 @@ export default function RmuConfigForm({
             </Field>
           </div>
 
-          {/* Per-feeder Aux / Shunt-trip — one row per ring + transformer feeder, each with two
-              tick-boxes. Only offered when RTU is OFF (an RTU covers these functions itself). */}
-          {rmu.rtuType === "NONE" && <FeederAccessories rmu={rmu} onChange={setR} />}
+          {/* Per-feeder Aux / Shunt-trip — one row per ring + transformer feeder. Only offered when RTU
+              is OFF (an RTU covers these functions itself) and the brand is not Murge (Murge RMUs have
+              no per-feeder Aux/Shunt). Shunt trip is offered on transformer feeders only. */}
+          {rmu.rtuType === "NONE" && rmu.lbsBrand !== "MURGE" && <FeederAccessories rmu={rmu} onChange={setR} />}
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Busbar current">

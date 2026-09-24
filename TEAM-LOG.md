@@ -23,6 +23,22 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**RMU feeders: Shunt trip is transformer-only, and Murge RMUs drop the Aux/Shunt list.**
+
+Two tidy-ups to the RMU's per-feeder Aux / Shunt-trip list:
+
+- **Shunt trip is now offered only on transformer feeders (T).** Ring feeders (R1, R2…) still have an
+  **Aux.** tick-box but no Shunt-trip box — they show a dash instead. A ring feeder can no longer be given
+  a shunt trip. The price follows the screen, so a shunt on a ring feeder can no longer be charged.
+- **Murge RMUs hide the Aux/Shunt list entirely.** When the LBS brand is **Murge**, the whole per-feeder
+  Aux/Shunt table disappears (Murge doesn't use it) and carries no Aux/Shunt cost. Any other brand (ABB…)
+  shows it as before.
+
+This is the same RMU form everywhere, so both rules apply in the standalone RMU offer, the MV RMU panel,
+and the kiosk's RMU. Look-and-feel + pricing-consistency only; no database change.
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **PLP cells are now 2 mm, and a kiosk's LV part is fixed to PLP at 70 cm.**
 
 Two small sizing changes:
