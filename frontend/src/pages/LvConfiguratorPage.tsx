@@ -57,13 +57,13 @@ import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalog
 import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
 import MvTransformerPanelEditor, { DEFAULT_TRANSFORMER_CONFIG } from "../components/MvTransformerPanelEditor";
-import MvKioskPanelEditor, { DEFAULT_KIOSK_LV } from "../components/MvKioskPanelEditor";
+import MvKioskPanelEditor from "../components/MvKioskPanelEditor";
 import { DEFAULT_RMU_CONFIG, rmuShortCode, rmuAuxShuntUsd } from "../components/RmuConfigForm";
 import { TransformerCover, TransformerTechnicalSheet, withoutTransformerLabel } from "../components/TransformerTechnicalSheet";
 import { findTransformerTech, trModel, trDisplayCode } from "../components/transformerTechData";
 import type { PdfPageImage } from "../lv/renderPdfPages";
 import OfferView from "../components/OfferView";
-import type { GeneratedOffer, RmuConfigInput, TransformerConfigInput, KioskLvConfigInput } from "../types";
+import type { GeneratedOffer, RmuConfigInput, TransformerConfigInput } from "../types";
 import {
   api, getToken, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type QtnAttachmentDto, type QtnStatus,
@@ -5351,8 +5351,8 @@ function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project }: {
           )}
         </div>
 
-        {/* Composition: the RMU + Transformer the kiosk contains, side by side. */}
-        <div className="grid flex-1 grid-cols-2 gap-6">
+        {/* Composition: the RMU, then the Transformer below it — stacked, each full width. */}
+        <div className="flex flex-1 flex-col gap-6">
           {rmu && (
             <div className="rounded-2xl border border-line p-6">
               <div className="text-sm font-extrabold uppercase tracking-[0.2em]" style={{ color: TRED }}>Ring Main Unit</div>
@@ -5390,14 +5390,9 @@ function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project }: {
 
         {/* Footer strip: enclosure finish (stone painting when chosen) + project. */}
         <div className="mt-6 border-t-2 pt-6" style={{ borderColor: TRED }}>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Enclosure finish</div>
-              <div className="mt-1 text-lg font-bold text-ink">{stonePaint ? "Stone Painting" : "Electrostatic RAL 7035"}</div>
-            </div>
-            {stonePaint && (
-              <div className="rounded-full px-4 py-2 text-sm font-extrabold text-white" style={{ background: TRED }}>Stone Painting Included</div>
-            )}
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Enclosure finish</div>
+            <div className="mt-1 text-lg font-bold text-ink">{stonePaint ? "Stone Painting" : "Electrostatic RAL 7035"}</div>
           </div>
           {project && <div className="mt-4 text-sm text-muted">{project}</div>}
         </div>
@@ -5474,40 +5469,156 @@ function MvTransformerTechnical({ config: c, insideKiosk, index, total, project,
   );
 }
 
-// The LV compartment of a kiosk — a one-page spec sheet (the LV board is the house-standard ABB build,
-// so there's no generated datasheet like the RMU has). Reads the kiosk's LV config + its kVA.
-function MvKioskLvCover({ lv, kva, project }: { lv: KioskLvConfigInput; kva: number; project: string }) {
-  const specs = [
-    { label: "Distribution board", value: kva ? `MDB · ${kva} kVA` : "MDB" },
-    { label: "Standard", value: lv.iec === "eehc" ? "EEHC" : "Non-EEHC" },
-    { label: "Configuration", value: lv.lvConfig === "inout" ? "Incoming & Outgoing" : "Incoming only" },
-    { label: "Circuit breakers", value: "ABB" },
-    { label: "Power-factor correction", value: lv.includePf ? (lv.pfBrand || "Included") : "—" },
-    { label: "Switch-fuse units", value: lv.includeSwitchFuse ? "Included" : "—" },
+// The LV compartment of a kiosk, rendered as a full LV panel technical page — the SAME spec table +
+// component list the standalone LV Technical offer prints for a panel, so the kiosk's LV reads exactly
+// like an ordinary LV board. Read-only: no page-break / scratch / notes editing chrome, brand hidden
+// (matching the LV offer's default). Reuses the shared PageHeader + effectiveGroups / isSpacer helpers.
+function KioskLvTechnical({ s, p, qtnNo }: { s: LvState; p: LvPanel; qtnNo: string }) {
+  const revNum = parseInt((s.project.revisionNo || "").replace(/\D/g, ""), 10) || 0;
+  const qtnRef = revNum > 0 ? `${qtnNo}-${revNum}` : qtnNo;
+  const hideBrand = true;
+  const sp = (() => {
+    if (p.spare && (p.spareKind === "lcp" || p.spareKind === "kwhm")) {
+      const enc = lcpEnclosureRecord(p);
+      return { panelType: p.panelsSizing?.family ?? "—", ip: enc?.ip || "—", mount: enc?.mount || "—", ral: enc?.ral || "—" };
+    }
+    if (p.sizingMode === "cells") {
+      const cc = p.cellConfig;
+      return { panelType: `${cc.type} cell`, ip: cc.ip.replace(/^IP/, ""), mount: "Floor standing", ral: "7035" };
+    }
+    const it = (p.panelItems ?? [])[0];
+    const enc = it ? ENCLOSURES.find((e) => e.ref === it.ref && e.name === it.name) : undefined;
+    return { panelType: it ? it.fam : "—", ip: it?.ip || "—", mount: enc?.mount || "—", ral: enc?.ral || "—" };
+  })();
+  const Lbl = ({ children }: { children: React.ReactNode }) => (
+    <td className="whitespace-nowrap border px-2 py-1 font-display text-[11px] font-bold leading-[15px]" style={{ color: TRED, background: "#fdf0e9", borderColor: "#E7E7EB" }}>{children}</td>
+  );
+  const Val = ({ children }: { children?: React.ReactNode }) => (
+    <td className="whitespace-nowrap border px-2 py-1 text-[12px] leading-[15px]" style={{ borderColor: "#E7E7EB" }}>{children}</td>
+  );
+  const specRows: [string, React.ReactNode, string, React.ReactNode][] = [
+    ["Panel Type", sp.panelType, "IP", sp.ip],
+    ["Mounting", sp.mount, "Rating", p.ratingA ? `${p.ratingA} A` : ""],
+    ["RAL", sp.ral, "Amb. Temp.", p.ambTemp],
+    ["Copper", p.copperType, "Neutral", p.neutral],
+    ["Incoming Cables", p.incomingCables, "Earth", p.earth],
+    ["Outgoing Cables", p.outgoingCables, "Form", p.form],
+    ["Short Circuit", p.shortCircuit, "Fed From", p.fedFrom],
   ];
   return (
-    <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>
-      <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
-      <img src="/brand/mark-color.png" alt="" aria-hidden="true"
-        className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
-      <div className="relative flex flex-1 flex-col px-16 py-14">
-        <div className="text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Low Voltage · Distribution Board</div>
-        <div className="flex min-h-0 flex-1 flex-col justify-center py-10">
-          <div className="text-7xl font-extrabold leading-none text-ink">Low Voltage</div>
-          <div className="mt-4 text-2xl font-semibold text-muted">Main Distribution Board · ABB</div>
-        </div>
-        <div className="border-t-2 pt-6" style={{ borderColor: TRED }}>
-          <div className="grid grid-cols-3 gap-x-4 gap-y-6">
-            {specs.map((sp) => (
-              <div key={sp.label}>
-                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{sp.label}</div>
-                <div className="mt-1 text-lg font-bold text-ink">{sp.value}</div>
-              </div>
+    <section data-offer-panel={p.id} className="a4-sheet flex flex-col px-8 pb-3 pt-6" style={{ breakAfter: "page" }}>
+      <PageHeader s={s} qtnRef={qtnRef} />
+      {/* panel-data frame: item bar + spec grid */}
+      <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
+        <table className="w-full table-fixed border-separate border-spacing-0">
+          <colgroup><col className="w-[18%]" /><col className="w-[51%]" /><col className="w-[18%]" /><col className="w-[13%]" /></colgroup>
+          <tbody>
+            <tr style={{ background: TRED }} className="text-white font-display">
+              <td className="border-r border-white/40 px-3 text-sm font-bold leading-[26px]">Low Voltage</td>
+              <td className="px-3 text-center text-sm font-bold leading-[26px]">{p.name}</td>
+              <td className="border-l border-white/40 px-3 text-left text-sm font-bold leading-[26px]">Item Qty.</td>
+              <td className="border-l border-white/40 px-3 text-center text-sm font-bold leading-[26px]">{p.qty}</td>
+            </tr>
+          </tbody>
+        </table>
+        <table className="w-full table-fixed border-collapse">
+          <colgroup><col className="w-[18%]" /><col className="w-[51%]" /><col className="w-[18%]" /><col className="w-[13%]" /></colgroup>
+          <tbody>
+            {specRows.map(([l1, v1, l2, v2]) => (
+              <tr key={l1}><Lbl>{l1}</Lbl><Val>{v1}</Val><Lbl>{l2}</Lbl><Val>{v2}</Val></tr>
             ))}
-          </div>
-          {project && <div className="mt-5 text-sm text-muted">{project}</div>}
-        </div>
+          </tbody>
+        </table>
       </div>
+      <div className="h-3" aria-hidden />
+      {/* components table */}
+      <div className="overflow-hidden rounded-lg border isolate" style={{ borderColor: "#d4d4da" }}>
+        <table className="w-full table-fixed border-separate border-spacing-0">
+          <colgroup>
+            <col className="w-[9%]" />
+            <col className={hideBrand ? "w-[76%]" : "w-[67%]"} />
+            <col className="w-[7%]" />
+            {!hideBrand && <col className="w-[9%]" />}
+            <col className="w-[8%]" />
+          </colgroup>
+          <thead>
+            <tr style={{ background: TRED }} className="text-white font-display">
+              <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">Qty</th>
+              <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">Description</th>
+              <th className="px-2 text-center py-1 text-[12px] font-bold leading-[17px]">ADJ</th>
+              {!hideBrand && <th className="px-2 text-left py-1 text-[12px] font-bold leading-[17px]">Brand</th>}
+              <th className="px-2 text-left py-1 text-[12px] font-bold leading-[17px]">NOTE</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(() => {
+              let secs = p.sections.filter((sec) => p.components.some((c) => c.section === sec));
+              if (secs.length === 0 && p.components.length > 0)
+                secs = [...new Set(p.components.map((c) => c.section).filter(Boolean))];
+              if (secs.length === 0)
+                return <tr><td colSpan={5} className="px-2 py-5 text-center text-sm text-muted">No components.</td></tr>;
+              const multiSection = secs.length > 1;
+              const effGroup = effectiveGroups(p.components);
+              return secs.flatMap((sec) => {
+                const comps = p.components.filter((c) => c.section === sec);
+                const hasGroups = comps.some((c) => effGroup.get(c.id));
+                const rows: JSX.Element[] = [];
+                let dataRow = 0;
+                if (multiSection || hasGroups) {
+                  rows.push(
+                    <tr key={`s-${sec}`} data-pdf-head style={{ breakInside: "avoid", breakAfter: "avoid" }}>
+                      {sec.length > 40 ? (
+                        <td colSpan={5} className="border-y px-2 py-1 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[15px] whitespace-nowrap" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }}>{sec}</td>
+                      ) : (
+                        <>
+                          <td className="border-y" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }} />
+                          <td className="border-y px-2 py-1 text-center font-display text-[12px] font-bold capitalize tracking-wide leading-[15px]" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }}>{sec}</td>
+                          <td colSpan={3} className="border-y" style={{ background: "#d6d6dc", borderColor: "#c4c4cc" }} />
+                        </>
+                      )}
+                    </tr>
+                  );
+                }
+                let curGroup = " ";
+                for (const c of comps) {
+                  const g = effGroup.get(c.id) || "";
+                  if (g !== curGroup) {
+                    curGroup = g;
+                    if (g) {
+                      const gf = comps.find((x) => !isSpacer(x) && (effGroup.get(x.id) || "") === g);
+                      const gbase = gf ? (gf.baseQty ?? gf.qty) : 0;
+                      const gcq = gf && gbase > 0 ? Math.max(1, Math.round(gf.qty / gbase)) : 1;
+                      const gScalable = /\(Type \d+\)/.test(g) || !!comps.find((x) => !isSpacer(x) && (effGroup.get(x.id) || "") === g)?.comboScalable;
+                      rows.push(
+                        <tr key={`g-${sec}-${g}`} data-pdf-head style={{ breakInside: "avoid", breakAfter: "avoid" }}>
+                          <td className="py-1" />
+                          <td colSpan={hideBrand ? 3 : 4} className="px-2 py-1 text-left font-display font-normal leading-[20px] text-[13.5px] underline underline-offset-2" style={{ color: TRED }}><span className="uppercase">{g}</span>{gScalable ? <span className="font-bold">, QTY ({gcq}) each contain:</span> : ""}</td>
+                        </tr>
+                      );
+                    }
+                  }
+                  rows.push(isSpacer(c) ? (
+                    <tr key={c.id}><td colSpan={hideBrand ? 4 : 5} className="px-2 py-0.5 text-[12.5px] leading-[12.5px]">&nbsp;</td></tr>
+                  ) : (
+                    <tr key={c.id} style={{ breakInside: "avoid" }} className={`align-middle ${dataRow++ % 2 === 1 ? "bg-[#f4f4f6]" : ""}`}>
+                      <td className="px-2 py-1 text-center text-[12.5px] font-semibold leading-[15px]">{c.baseQty ?? c.qty}</td>
+                      <td className="px-2 py-1 text-[12.5px] leading-[15px]">
+                        {c.name}
+                        {c.comment && <div className="mt-0.5 text-[11px] italic leading-tight text-muted">{c.comment}</div>}
+                      </td>
+                      <td className="px-2 py-1 text-center text-[12.5px] leading-[15px]">{c.adj}</td>
+                      {!hideBrand && <td className="px-2 py-1 text-[12.5px] leading-[15px]">{c.brand}</td>}
+                      <td className="px-2 py-1 text-[11.5px] text-muted leading-[15px]">{c.note}</td>
+                    </tr>
+                  ));
+                }
+                return rows;
+              });
+            })()}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-auto pt-3 text-center text-[10.5px] font-semibold text-muted">Low Voltage · Main Distribution Board</div>
     </section>
   );
 }
@@ -5584,7 +5695,7 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             if (p.mvType === "kiosk") {
               // A compact substation: the overview cover, then the full technical of the RMU, the
               // transformer (always inside-kiosk → IP00) and the LV board it's built from.
-              const rc = p.mvRmuConfig, tc = p.mvTransformerConfig, lv = p.mvLvConfig, proj = s.project?.name || "";
+              const rc = p.mvRmuConfig, tc = p.mvTransformerConfig, proj = s.project?.name || "";
               return (
                 <Fragment key={p.id}>
                   <KioskCover rmu={rc} tr={tc} code={p.mvKioskCost?.size?.code || ""} kva={tc?.ratingKva || 0}
@@ -5593,9 +5704,9 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                       substation cover above already introduces them — and keep only their datasheets. */}
                   {rc && <MvRmuTechnical config={rc} g={previews[JSON.stringify(rc)]} index={0} total={1} project={proj} hideCover />}
                   {tc && <MvTransformerTechnical config={tc} insideKiosk={true} index={0} total={1} project={proj} trCatalog={trCatalog} hideCover />}
-                  {/* The LV board always gets its page — a kiosk always has one, even before its LV
-                      options were touched (so `mvLvConfig` may be unset → fall back to the default). */}
-                  <MvKioskLvCover lv={lv ?? DEFAULT_KIOSK_LV} kva={tc?.ratingKva || 0} project={proj} />
+                  {/* The LV compartment renders as a full LV panel technical (spec + component list),
+                      the same as a standalone LV board — no separate cover page. */}
+                  <KioskLvTechnical s={s} p={p} qtnNo={qtnNo} />
                 </Fragment>
               );
             }

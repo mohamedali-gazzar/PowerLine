@@ -177,26 +177,36 @@ export function Toggle({
   checked,
   onChange,
   label,
+  disabled = false,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="flex w-full items-center justify-between gap-3"
+      className={`group flex w-full items-center justify-between gap-3 focus:outline-none ${
+        disabled ? "cursor-not-allowed opacity-50" : ""
+      }`}
     >
       <span className="min-w-0 text-sm font-semibold text-ink">{label}</span>
+      {/* Track: fixed 44×24, never shrinks. The thumb is absolutely positioned with a static 2px
+          inset (left-0.5) and only translates, so its ON position (translateX 20px) keeps it fully
+          inside the track (2 + 20 + 20 = 42 ≤ 44) instead of sliding past the right edge. */}
       <span
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${
-          checked ? "bg-brand" : "bg-line"
+        className={`relative box-border h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ease-out group-focus-visible:ring-2 group-focus-visible:ring-brand group-focus-visible:ring-offset-2 ${
+          checked ? "bg-brand" : "bg-[#D1D5DB] dark:bg-[#4B5563]"
         }`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
-            checked ? "translate-x-5" : "translate-x-0.5"
+          className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-transform duration-200 ease-out ${
+            checked ? "translate-x-5" : "translate-x-0"
           }`}
         />
       </span>

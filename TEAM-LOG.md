@@ -23,6 +23,24 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**Kiosk cover tidy-up, a fixed toggle switch, and the kiosk LV shown as a full technical page.**
+
+- **Kiosk cover — enclosure finish:** removed the orange “Stone Painting Included” pill on the right; the
+  strip now shows only the left label (“Electrostatic RAL 7035” / “Stone Painting”).
+- **Kiosk cover — composition:** the RMU and Transformer boxes are now **stacked (RMU on top,
+  Transformer below)**, each full width, instead of side by side.
+- **Toggle switch fixed:** the white knob no longer slides past the right edge of the orange track — it
+  stays fully inside in both states (44×24 track, 20×20 knob). Added keyboard/focus accessibility and a
+  disabled state. Affects every on/off toggle in the app.
+- **Kiosk LV in the Technical offer is now a full LV technical page** (spec table + component list, the
+  same as a standalone LV board), replacing the one-line summary cover. A kiosk’s technical now reads:
+  compact-substation cover → RMU datasheet → Transformer datasheet → LV technical. (Note: a very long LV
+  component list isn’t auto-paginated yet, unlike the standalone LV offer.)
+
+Look-and-feel only; no database change.
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **Kiosk transformer: transportation charge, a "Without transformer" option, and a tidier technical.**
 
 Six changes to the compact substation (kiosk):
