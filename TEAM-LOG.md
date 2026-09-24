@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**Panels tab scroll fixed.**
+
+The panel list and the editor were each trapped inside a fixed viewport-height box with a hidden
+scrollbar, so on a big project the content scrolled inside a box while the page scrollbar barely moved.
+Now the editor (Panel details + cost + Components) scrolls normally with the page, and the panel list
+stays pinned as you scroll and shows a real scrollbar so you can drag through all the panels.
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **Big-project speed: per-panel cost is now cached (typing lag fix, step 1).**
 
 For projects with hundreds of unique panels, every keystroke used to re-price the WHOLE project. Now each

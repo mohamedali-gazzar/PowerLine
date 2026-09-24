@@ -8167,7 +8167,7 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
       {/* Clicking the empty area around or below the list does nothing — the open panel stays open
           and any tick selection is kept (cleared only via "Clear" or an action). */}
       {/* panel list — sticks below the tab header, with its own scroll (independent of the editor) */}
-      <div ref={panelListRef} className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
+      <div ref={panelListRef} className="card p-3 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto">
         {/* Actions for ticked panels — Group / Delete / Move-to appear here once one or more are
             ticked. (Reordering several at once is done by dragging any ticked panel.) */}
         {!hideSelect && selPanels.size > 0 && (
@@ -8406,7 +8406,7 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
       {/* editor — its own scroll area so the panel list and editor scroll independently.
           LCP / KWHM cells use the LcpEditor; any other spare cell the stripped SpareEditor;
           every other cell the full PanelEditor. */}
-      <div ref={editorRef} className="min-w-0 lg:sticky lg:top-16 lg:max-h-[calc(100vh_-_5.5rem)] lg:overflow-y-auto no-scrollbar">
+      <div ref={editorRef} className="min-w-0">
         {hideEditor ? (
           sel && sel.mvType === "rmu" ? (
             <MvRmuPanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />
