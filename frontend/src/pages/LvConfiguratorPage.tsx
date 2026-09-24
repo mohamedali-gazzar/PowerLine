@@ -5213,8 +5213,7 @@ function RmuCover({ config, code, index, total, project }: {
         className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
 
       <div className="relative flex flex-1 flex-col px-16 py-14">
-        <div className="flex items-center justify-between">
-          <div className="text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Medium Voltage · Ring Main Unit</div>
+        <div className="flex items-center justify-end">
           {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">RMU {index + 1} of {total}</div>}
         </div>
 
@@ -5313,15 +5312,30 @@ function UploadedTransformerSheet({ code }: { code: string }) {
   );
 }
 
+/** The dominant breaker brand in a kiosk's LV board (ABB / Himel / …), read from its actual protective
+ *  devices (MCCB / ACB / MCB), for the cover's "Breakers" line. Falls back to ABB when none are found. */
+function kioskLvBreakerBrand(p: LvPanel): string {
+  const isBreaker = (t: string) => /mccb|acb|mdrc|mcb/i.test(t || "");
+  const counts = new Map<string, number>();
+  for (const c of p.components ?? []) {
+    if (!isBreaker(c.type) || !c.brand) continue;
+    counts.set(c.brand, (counts.get(c.brand) ?? 0) + 1);
+  }
+  if (counts.size === 0) return "ABB";
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+}
+
 // A branded cover page for one Compact Substation (kiosk) — the "isometric kiosk" concept: a 3D drawing
 // of the packaged unit with numbered callouts (①②③) leading down to three spec cards (RMU / Transformer /
 // LV), over a faint isometric grid, with a header (kVA hero + IP54 pill) and a three-fact footer.
 // Rendered as one full-bleed A4 SVG so it prints as crisp vector + selectable text. All values are read
 // straight off the kiosk panel. One per kiosk item.
-function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRatingA }: {
+function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRatingA, lvBreakerBrand }: {
   rmu?: RmuConfigInput; tr?: TransformerConfigInput; code?: string; kva: number;
   stonePaint: boolean; index: number; total: number; project: string;
   lv?: KioskLvConfigInput; lvRatingA?: number;
+  /** Dominant breaker brand of the LV board (ABB / Himel / …), read from its actual devices. */
+  lvBreakerBrand?: string;
 }) {
   const rmuMeta = rmu ? (RMU_COVER[rmu.productType] ?? RMU_COVER.PRAL) : null;
   const without = !!tr?.withoutTransformer;
@@ -5346,12 +5360,25 @@ function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRat
         <rect x="0" y="0" width="4" height="842" fill={OR} />
 
         {/* Header */}
-        <rect x="40" y="52" width="7" height="7" fill={OR} />
-        <text x="55" y="59" fontSize="7.5" fontWeight="700" letterSpacing="2.2" fill="#6B6B73">MEDIUM VOLTAGE · COMPACT SUBSTATION</text>
         {total > 1 ? <text x="555" y="59" fontSize="7.5" fontWeight="700" letterSpacing="1.2" fill={GY} textAnchor="end">KIOSK {index + 1} OF {total}</text> : null}
         <text x="38" y="128" fontSize="54" fontWeight="700" letterSpacing="-1.5" fill={INK}>{kva || "—"} <tspan fill={OR} fontSize="26">kVA</tspan></text>
         <text x="40" y="152" fontSize="13" fill={MU}>Compact Secondary Substation · Powerline</text>
         {project ? <text x="40" y="169" fontSize="8.5" fill={GY}>{project}</text> : null}
+
+        {/* Spec badge — enclosure finish / protection / certification, in a unique top-right corner panel
+            with an orange rail (replaces the old three-value footer). */}
+        <g>
+          <rect x="408" y="70" width="147" height="104" rx="7" fill="#FFFFFF" stroke="#ECECF0" />
+          <rect x="408" y="70" width="3" height="104" rx="1.5" fill={OR} />
+          <text x="422" y="84" fontSize="6" fontWeight="700" letterSpacing="1.4" fill={GY}>ENCLOSURE FINISH</text>
+          <text x="422" y="96" fontSize="9.5" fontWeight="700" fill={INK}>{finish}</text>
+          <line x1="422" y1="105" x2="543" y2="105" stroke="#F0F0F3" />
+          <text x="422" y="119" fontSize="6" fontWeight="700" letterSpacing="1.4" fill={GY}>INGRESS PROTECTION</text>
+          <text x="422" y="131" fontSize="9.5" fontWeight="700" fill={INK}>IP54</text>
+          <line x1="422" y1="139" x2="543" y2="139" stroke="#F0F0F3" />
+          <text x="422" y="154" fontSize="6" fontWeight="700" letterSpacing="1.4" fill={GY}>CERTIFICATION</text>
+          <text x="422" y="166" fontSize="9.5" fontWeight="700" fill={INK}>ABB Certified</text>
+        </g>
 
         {/* Kiosk — isometric drawing (static art) */}
         <g filter={`url(#${uid}-blur)`} opacity="0.10"><polygon points="258.0,380.0 474.5,505.0 387.9,555.0 171.4,430.0" fill="#000" /></g>
@@ -5392,68 +5419,73 @@ function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRat
         <polygon points="456.9,375.0 359.9,431.0 359.9,421.0 456.9,365.0" fill="#C9530F" />
         <polygon points="230.0,234.0 456.9,365.0 359.9,421.0 133.0,290.0" fill="#F6F6F8" stroke={DK} strokeWidth="0.8" strokeLinejoin="round" />
         <g transform="matrix(0.866,-0.5,0,1,403.2,458.0)"><text x="0" y="0" fontSize="11" fontWeight="700" letterSpacing="2" fill={DK} textAnchor="middle">POWERLINE</text><text x="0" y="14" fontSize="6.5" fontWeight="700" letterSpacing="1.5" fill={OR} textAnchor="middle">IP54</text></g>
-        <polyline points="175.9,374.8 175.9,586 121.5,586 121.5,604" fill="none" stroke={OR} strokeWidth="0.8" strokeDasharray="2 2" />
-        <circle cx="121.5" cy="586" r="1.8" fill={OR} />
-        <polyline points="251.7,418.5 251.7,578 297.5,578 297.5,604" fill="none" stroke={OR} strokeWidth="0.8" strokeDasharray="2 2" />
-        <circle cx="297.5" cy="578" r="1.8" fill={OR} />
-        <polyline points="327.4,462.2 327.4,570 473.5,570 473.5,604" fill="none" stroke={OR} strokeWidth="0.8" strokeDasharray="2 2" />
-        <circle cx="473.5" cy="570" r="1.8" fill={OR} />
+        <polyline points="175.9,374.8 175.9,636 121.5,636 121.5,654" fill="none" stroke={OR} strokeWidth="0.8" strokeDasharray="2 2" />
+        <circle cx="121.5" cy="636" r="1.8" fill={OR} />
+        <polyline points="251.7,418.5 251.7,628 297.5,628 297.5,654" fill="none" stroke={OR} strokeWidth="0.8" strokeDasharray="2 2" />
+        <circle cx="297.5" cy="628" r="1.8" fill={OR} />
+        <polyline points="327.4,462.2 327.4,620 473.5,620 473.5,654" fill="none" stroke={OR} strokeWidth="0.8" strokeDasharray="2 2" />
+        <circle cx="473.5" cy="620" r="1.8" fill={OR} />
         <circle cx="175.9" cy="374.8" r="10" fill={OR} stroke="#FFFFFF" strokeWidth="2" /><text x="175.9" y="378.0" fontSize="8" fontWeight="700" fill="#FFF" textAnchor="middle">01</text>
         <circle cx="251.7" cy="418.5" r="10" fill={OR} stroke="#FFFFFF" strokeWidth="2" /><text x="251.7" y="421.7" fontSize="8" fontWeight="700" fill="#FFF" textAnchor="middle">02</text>
         <circle cx="327.4" cy="462.2" r="10" fill={OR} stroke="#FFFFFF" strokeWidth="2" /><text x="327.4" y="465.4" fontSize="8" fontWeight="700" fill="#FFF" textAnchor="middle">03</text>
 
+        {/* Spec cards — boxed tables (label / value rows) with the big orange RMU / Transformer / LV
+            header replacing the old numbered eyebrow. Nudged lower on the page as a group. */}
+        <g transform="translate(0,50)">
         {/* Card 01 — RMU */}
         <g>
-          <rect x="40" y="604" width="163" height="128" rx="6" fill="#FFFFFF" stroke="#E4E4E9" />
+          <rect x="40" y="604" width="163" height="132" rx="6" fill="#FFFFFF" stroke="#E4E4E9" />
           <rect x="40" y="604" width="163" height="3" rx="1.5" fill={OR} />
-          <text x="54" y="624" fontSize="6.5" fontWeight="700" letterSpacing="1.8" fill={OR}>RMU</text>
-          <text x="54" y="642" fontSize="14" fontWeight="700" fill={INK}>{rmuMeta?.family ?? "—"}</text>
-          <line x1="54" y1="651" x2="189" y2="651" stroke="#ECECF0" />
-          <text x="54" y="669" fontSize="10" fontWeight="700" fill={DK}>{rmu ? `${rmu.voltageKv} kV` : "—"}</text>
-          <text x="54" y="691" fontSize="10" fontWeight="700" fill={DK}>{rmu ? `${rmu.nalCount}R + ${rmu.nalfCount}T` : "—"}</text>
-          <text x="54" y="713" fontSize="10" fontWeight="700" fill={DK}>{rmu?.lbsBrand || "—"}</text>
+          <text x="54" y="628" fontSize="15" fontWeight="700" fill={OR}>RMU</text>
+          <text x="54" y="648" fontSize="14" fontWeight="700" fill={INK}>{rmuMeta?.family ?? "—"}</text>
+          <line x1="54" y1="657" x2="189" y2="657" stroke="#ECECF0" />
+          <text x="54" y="677" fontSize="6.5" fontWeight="700" letterSpacing="1.2" fill={GY}>VOLTAGE</text>
+          <text x="189" y="677" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{rmu ? `${rmu.voltageKv} kV` : "—"}</text>
+          <text x="54" y="699" fontSize="6.5" fontWeight="700" letterSpacing="1.2" fill={GY}>CONFIG.</text>
+          <text x="189" y="699" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{rmu ? `${rmu.nalCount}+${rmu.nalfCount}${rmu.hasMetering ? "+M" : ""}` : "—"}</text>
+          <text x="54" y="721" fontSize="6.5" fontWeight="700" letterSpacing="1.2" fill={GY}>OEM</text>
+          <text x="189" y="721" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{rmu?.lbsBrand || "—"}</text>
         </g>
         {/* Card 02 — Transformer */}
         <g>
-          <rect x="216" y="604" width="163" height="128" rx="6" fill="#FFFFFF" stroke="#E4E4E9" />
+          <rect x="216" y="604" width="163" height="132" rx="6" fill="#FFFFFF" stroke="#E4E4E9" />
           <rect x="216" y="604" width="163" height="3" rx="1.5" fill={OR} />
-          <text x="230" y="624" fontSize="6.5" fontWeight="700" letterSpacing="1.8" fill={OR}>TR</text>
+          <text x="230" y="628" fontSize="15" fontWeight="700" fill={OR}>Transformer</text>
           {without ? (
             <>
-              <text x="230" y="642" fontSize="14" fontWeight="700" fill={INK}>Not included</text>
-              <line x1="230" y1="651" x2="365" y2="651" stroke="#ECECF0" />
-              <text x="230" y="669" fontSize="8" fill={MU}>{withoutTransformerLabel(tr!)}</text>
-              <text x="230" y="686" fontSize="7.5" fill={GY}>Supplied by others.</text>
+              <text x="230" y="648" fontSize="14" fontWeight="700" fill={INK}>Without</text>
+              <line x1="230" y1="657" x2="365" y2="657" stroke="#ECECF0" />
+              <text x="230" y="686" fontSize="8" fill={GY}>Supplied by others.</text>
             </>
           ) : (
             <>
-              <text x="230" y="642" fontSize="14" fontWeight="700" fill={INK}>{tr?.ratingKva ? `${tr.ratingKva} kVA` : "—"}</text>
-              <line x1="230" y1="651" x2="365" y2="651" stroke="#ECECF0" />
-              <text x="230" y="669" fontSize="10" fontWeight="700" fill={DK}>{tr?.primaryKv ? `${tr.primaryKv} / 0.4 kV` : "—"}</text>
-              <text x="230" y="691" fontSize="10" fontWeight="700" fill={DK}>{tr?.insulation ? `${tr.insulation} type` : "—"}</text>
-              <text x="230" y="713" fontSize="10" fontWeight="700" fill={DK}>{tr?.brand || "—"}</text>
+              <text x="230" y="648" fontSize="14" fontWeight="700" fill={INK}>{tr?.ratingKva ? `${tr.ratingKva} kVA` : "—"}</text>
+              <line x1="230" y1="657" x2="365" y2="657" stroke="#ECECF0" />
+              <text x="230" y="677" fontSize="6.5" fontWeight="700" letterSpacing="1.2" fill={GY}>RATIO</text>
+              <text x="365" y="677" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{tr?.primaryKv ? `${tr.primaryKv} / 0.4 kV` : "—"}</text>
+              <text x="230" y="699" fontSize="6.5" fontWeight="700" letterSpacing="1.2" fill={GY}>INSULATION</text>
+              <text x="365" y="699" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{tr?.insulation ? `${tr.insulation} type` : "—"}</text>
+              <text x="230" y="721" fontSize="6.5" fontWeight="700" letterSpacing="1.2" fill={GY}>BRAND</text>
+              <text x="365" y="721" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{tr?.brand || "—"}</text>
             </>
           )}
         </g>
         {/* Card 03 — Low Voltage */}
         <g>
-          <rect x="392" y="604" width="163" height="128" rx="6" fill="#FFFFFF" stroke="#E4E4E9" />
+          <rect x="392" y="604" width="163" height="132" rx="6" fill="#FFFFFF" stroke="#E4E4E9" />
           <rect x="392" y="604" width="163" height="3" rx="1.5" fill={OR} />
-          <text x="406" y="624" fontSize="6.5" fontWeight="700" letterSpacing="1.8" fill={OR}>LV</text>
-          <text x="406" y="642" fontSize="14" fontWeight="700" fill={INK}>MDB</text>
-          <line x1="406" y1="651" x2="541" y2="651" stroke="#ECECF0" />
-          <text x="406" y="669" fontSize="10" fontWeight="700" fill={DK}>{lvRatingA ? `${lvRatingA} A` : "—"}</text>
-          <text x="406" y="691" fontSize="10" fontWeight="700" fill={DK}>ABB</text>
-          <text x="406" y="713" fontSize="10" fontWeight="700" fill={DK}>{lv?.lvConfig === "inout" ? "Incoming & Outgoing" : "Incoming only"}</text>
+          <text x="406" y="628" fontSize="15" fontWeight="700" fill={OR}>LV</text>
+          <text x="406" y="648" fontSize="14" fontWeight="700" fill={INK}>MDB</text>
+          <line x1="406" y1="657" x2="541" y2="657" stroke="#ECECF0" />
+          <text x="406" y="677" fontSize="6.5" fontWeight="700" letterSpacing="1.2" fill={GY}>CURRENT</text>
+          <text x="541" y="677" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{lvRatingA ? `${lvRatingA} A` : "—"}</text>
+          <text x="406" y="699" fontSize="6.5" fontWeight="700" letterSpacing="1.2" fill={GY}>BREAKERS</text>
+          <text x="541" y="699" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{lvBreakerBrand || "ABB"}</text>
+          <text x="406" y="721" fontSize="6.5" fontWeight="700" letterSpacing="1.2" fill={GY}>CONFIG.</text>
+          <text x="541" y="721" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{lv?.lvConfig === "inout" ? "In & Out" : "Incoming only"}</text>
+        </g>
         </g>
 
-        {/* Footer — three values (no labels): finish left, IP54 centered, OEM right. */}
-        <line x1="40" y1="758" x2="555" y2="758" stroke={OR} strokeWidth="0.8" />
-        <g fontSize="12" fontWeight="700" fill={INK}>
-          <text x="40" y="792">{finish}</text>
-          <text x="297.5" y="792" textAnchor="middle">IP54</text>
-          <text x="555" y="792" textAnchor="end">ABB Certified</text>
-        </g>
       </svg>
     </section>
   );
@@ -5742,7 +5774,7 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                 <Fragment key={p.id}>
                   <KioskCover rmu={rc} tr={tc} code={p.mvKioskCost?.size?.code || ""} kva={tc?.ratingKva || 0}
                     stonePaint={!!p.mvKioskAccChecks?.stonepaint} index={kioskPos[p.id]} total={kioskPanels.length} project={proj}
-                    lv={p.mvLvConfig} lvRatingA={p.ratingA} />
+                    lv={p.mvLvConfig} lvRatingA={p.ratingA} lvBreakerBrand={kioskLvBreakerBrand(p)} />
                   {/* Inside a kiosk the RMU and Transformer drop their own cover pages — the compact-
                       substation cover above already introduces them — and keep only their datasheets. */}
                   {rc && <MvRmuTechnical config={rc} g={previews[JSON.stringify(rc)]} index={0} total={1} project={proj} hideCover />}

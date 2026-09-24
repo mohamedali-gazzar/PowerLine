@@ -267,8 +267,7 @@ export function TransformerCover({ config, code, insideKiosk, index, total, proj
         <img src="/brand/mark-color.png" alt="" aria-hidden="true"
           className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
         <div className="relative flex flex-1 flex-col px-16 py-14">
-          <div className="flex items-center justify-between">
-            <div className="text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Medium Voltage · Distribution Transformer</div>
+          <div className="flex items-center justify-end">
             {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">Transformer {index + 1} of {total}</div>}
           </div>
           <div className="flex min-h-0 flex-1 flex-col justify-center py-10">
@@ -291,8 +290,7 @@ export function TransformerCover({ config, code, insideKiosk, index, total, proj
         className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
 
       <div className="relative flex flex-1 flex-col px-16 py-14">
-        <div className="flex items-center justify-between">
-          <div className="text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Medium Voltage · Distribution Transformer</div>
+        <div className="flex items-center justify-end">
           {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">Transformer {index + 1} of {total}</div>}
         </div>
 

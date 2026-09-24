@@ -102,6 +102,12 @@ export interface RmuConfigInput {
   vtBurdenVa?: string | null; // VT burden, default "50-100"
   vtClass?: string | null; // VT accuracy class, default "0.5"
   meteringWithFuse?: boolean | null; // VT-Type: with fuse (true) or without (false/default)
+  // Per-feeder Aux-contact / Shunt-trip ticks, keyed by feeder id ("R1","T1"…). Aux adds an
+  // "Auxiliary contact for LBS" line, Shunt (transformer feeders only) a "Shunt Trip for LBS"
+  // line. When the ticks differ between feeders of one family the cubicle is split so each line
+  // lands only on the feeders that carry it (see feederCubicles).
+  feederAux?: Record<string, boolean> | null;
+  feederShunt?: Record<string, boolean> | null;
 }
 
 export interface Row {
@@ -312,24 +318,34 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
   // ---- Cubicles ----
   const cubicles: Cubicle[] = [];
 
-  if (c.nalCount > 0) {
-    cubicles.push({
-      code: "PCC",
-      name: `PCC (Powerline LBS Cubical)-${c.busbarCurrentA}A(${p.cubicleDims})mm²`,
-      qty: c.nalCount,
-      dims: p.cubicleDims,
-      items: nalItems(insulWord, mz(nalSwitch), lbsBrand, hasRtu),
-    });
-  }
-  if (c.nalfCount > 0) {
-    cubicles.push({
-      code: "PFC",
-      name: `PFC (Powerline LBS Cubical)-${c.busbarCurrentA}A(${p.cubicleDims})mm²`,
-      qty: c.nalfCount,
-      dims: p.cubicleDims,
-      items: nalfItems(insulWord, mz(nalfSwitch), lbsBrand, c.voltageKv, fuseA, hasRtu, fuseOverride),
-    });
-  }
+  const feederAux = c.feederAux ?? {};
+  const feederShunt = c.feederShunt ?? {};
+  // Ring (R) cubicles — Aux contact only (shunt trip never applies to a ring feeder).
+  cubicles.push(
+    ...feederCubicles(
+      "PCC",
+      `PCC (Powerline LBS Cubical)-${c.busbarCurrentA}A(${p.cubicleDims})mm²`,
+      p.cubicleDims,
+      c.nalCount,
+      "R",
+      nalItems(insulWord, mz(nalSwitch), lbsBrand, hasRtu),
+      feederAux,
+      feederShunt
+    )
+  );
+  // Transformer (T) cubicles — Shunt trip and/or Aux contact.
+  cubicles.push(
+    ...feederCubicles(
+      "PFC",
+      `PFC (Powerline LBS Cubical)-${c.busbarCurrentA}A(${p.cubicleDims})mm²`,
+      p.cubicleDims,
+      c.nalfCount,
+      "T",
+      nalfItems(insulWord, mz(nalfSwitch), lbsBrand, c.voltageKv, fuseA, hasRtu, fuseOverride),
+      feederAux,
+      feederShunt
+    )
+  );
   if (c.hasMetering) {
     cubicles.push({
       code: "PMC",
@@ -401,6 +417,49 @@ export function assembleOffer(c: RmuConfigInput): GeneratedOffer {
 }
 
 // ---- per-cubicle bills of material ----
+
+/** The extra "Shunt Trip / Auxiliary contact for LBS" lines a single feeder carries. */
+function feederExtras(aux: boolean, shunt: boolean): CubicleItem[] {
+  const rows: CubicleItem[] = [];
+  if (shunt) rows.push({ qty: 1, description: "Shunt Trip for LBS" });
+  if (aux) rows.push({ qty: 1, description: "Auxiliary contact for LBS" });
+  return rows;
+}
+
+/**
+ * Emit the PCC/PFC cubicles for one feeder family (R rings or T transformers), inserting the
+ * per-feeder Aux-contact / Shunt-trip lines.
+ *
+ * When every feeder of the family carries the same ticks they stay merged as ONE cubicle of
+ * qty = count (e.g. "3 Cubical: PCC…" with the aux line, when all three rings have aux). When the
+ * ticks differ, the family is split into one qty-1 cubicle per feeder — so a 3-ring unit with aux
+ * on only two rings renders as three "1 Cubical: PCC…" tables and the aux line appears in just the
+ * two that were ticked. Total physical cubicle count is unchanged either way.
+ */
+function feederCubicles(
+  code: string,
+  name: string,
+  dims: string,
+  count: number,
+  prefix: "R" | "T",
+  baseItems: CubicleItem[],
+  aux: Record<string, boolean>,
+  shunt: Record<string, boolean>
+): Cubicle[] {
+  if (count <= 0) return [];
+  // Shunt trip is a transformer-feeder feature only; a ring cubicle never carries it even if a
+  // stray id slips into the shunt map.
+  const extras = Array.from({ length: count }, (_, i) => {
+    const id = `${prefix}${i + 1}`;
+    return feederExtras(!!aux[id], prefix === "T" && !!shunt[id]);
+  });
+  const sig = (rows: CubicleItem[]) => rows.map((r) => r.description).join("|");
+  const allSame = extras.every((e) => sig(e) === sig(extras[0]));
+  if (allSame) {
+    return [{ code, name, qty: count, dims, items: [...baseItems, ...extras[0]] }];
+  }
+  return extras.map((e) => ({ code, name, qty: 1, dims, items: [...baseItems, ...e] }));
+}
 
 function nalItems(insul: string, switchName: string, brand: string, rtu: boolean): CubicleItem[] {
   const items: CubicleItem[] = [

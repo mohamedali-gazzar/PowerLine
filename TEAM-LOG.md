@@ -23,6 +23,25 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**Kiosk cover redesigned, MV covers' strapline removed, and the RMU technical gained Shunt Trip / Aux rows.**
+
+- **Kiosk cover:** the enclosure finish / IP54 / certification now sit in a labelled panel in the **top-right
+  corner** (the old row along the bottom is gone). The three spec cards (RMU / Transformer / LV) keep their
+  detail tables but now carry **big orange headers**; the RMU **CONFIG** reads **"2+1+M"** (rings + transformers,
+  `+M` when metering is fitted); the cards sit a little **lower** on the page. The transformer card's
+  "no transformer" case now simply says **"Without"**.
+- **Breakers brand is automatic:** the LV card's **Breakers** line now reads the real breakers in that kiosk's
+  LV board and shows their brand — **ABB or Himel** — instead of always "ABB".
+- **Covers:** the **"MEDIUM VOLTAGE · …"** strapline was removed from the kiosk, RMU and transformer covers.
+- **RMU Technical — Shunt Trip / Auxiliary contact:** ticking **Shunt trip** on a transformer feeder adds a
+  **"Shunt Trip for LBS"** line; ticking **Aux** on rings adds **"Auxiliary contact for LBS"**. If Aux is on
+  every ring the ring table stays merged; if it's on only some, the ring table **splits into one table per
+  ring** and the line lands only on the ticked ones. Works for a standalone RMU and for one inside a kiosk.
+
+Look-and-feel + RMU technical wording; no schema change. Backend 365 tests / frontend 181 tests green.
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **Kiosk cover cards cleaned up, dropdown blended in, transformer note moved, and P.F.C fan/filter fixed.**
 
 - **Kiosk cover cards:** the three cards now show short headers **RMU / TR / LV**, the values are
