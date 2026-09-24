@@ -11942,10 +11942,18 @@ function SizingCard({ p, u, factors }: {
             <div className={isKiosk ? "grid grid-cols-2 items-start gap-3" : "space-y-3"}>
               <div>
                 <L>Cell type</L>
-                <Sel value={cc.type as any} onChange={(v) => {
-                  const fresh = defaultCellConfig(v as CellType);
-                  u({ cellConfig: fresh });
-                }} options={(isKiosk ? ["PLP"] : CELL_SYSTEMS) as any} />
+                {/* Kiosk: cell type is fixed to PLP — show it as a plain value, not a one-item dropdown,
+                    styled to match the locked "70 cm" depth pill beside it. */}
+                {isKiosk ? (
+                  <div className="rounded-md border border-brand bg-brand-light px-2 py-1.5 text-center text-xs font-bold text-brand-dark">
+                    PLP
+                  </div>
+                ) : (
+                  <Sel value={cc.type as any} onChange={(v) => {
+                    const fresh = defaultCellConfig(v as CellType);
+                    u({ cellConfig: fresh });
+                  }} options={CELL_SYSTEMS as any} />
+                )}
               </div>
               <div>
                 <L>Cell depth</L>

@@ -23,6 +23,21 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**Kiosk LV: Cell type shown as a plain value; Accessories rows lined up evenly.**
+
+Two small look-and-feel tidy-ups in the kiosk (compact substation):
+
+- **Cell type is no longer a one-item dropdown.** Since a kiosk's cell type is locked to PLP, the field now
+  shows **PLP** as a plain value (a small pill that matches the "70 cm" depth box beside it) instead of a
+  dropdown you can open. The normal LV configurator still has the full dropdown (Pro-E / IS2 / PLP).
+- **The Accessories table rows are now all the same height.** The two tick-box rows (Capacitor Box, Stone
+  Paint) used to sit taller than the number rows; every row now shares one height, so the list reads as an
+  even grid.
+
+Look-and-feel only; no database change.
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **RMU feeders: Shunt trip is transformer-only, and Murge RMUs drop the Aux/Shunt list.**
 
 Two tidy-ups to the RMU's per-feeder Aux / Shunt-trip list:

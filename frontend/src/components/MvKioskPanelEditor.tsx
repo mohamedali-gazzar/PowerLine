@@ -255,6 +255,8 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
 
 // The shared 5-column grid for both the accessories and extra tables.
 const KIOSK_ACC_COLS = "grid grid-cols-[1fr_3.5rem_3rem_6rem_7rem] items-center gap-2";
+// Every data row shares one height so the numeric rows and the tick-box rows line up evenly.
+const KIOSK_ACC_ROW = `${KIOSK_ACC_COLS} min-h-[2.25rem]`;
 
 function KioskAccHeader() {
   return (
@@ -277,7 +279,7 @@ function KioskAccessoriesEditor({ rows, checks, onCheck }: {
     <div className="space-y-2">
       <KioskAccHeader />
       {rows.map((r) => (
-        <div key={r.key} className={KIOSK_ACC_COLS}>
+        <div key={r.key} className={KIOSK_ACC_ROW}>
           <span className="min-w-0 truncate text-sm font-semibold text-ink">{r.name}</span>
           <span className="text-right text-sm tabular-nums text-muted">{r.qty}</span>
           <span className="text-right text-sm text-muted">{r.unit}</span>
@@ -286,7 +288,7 @@ function KioskAccessoriesEditor({ rows, checks, onCheck }: {
         </div>
       ))}
       {checks.map((c) => (
-        <div key={c.key} className={`${KIOSK_ACC_COLS} min-h-[2.25rem]`}>
+        <div key={c.key} className={KIOSK_ACC_ROW}>
           <span className="min-w-0 truncate text-sm font-semibold text-ink">{c.name}</span>
           <span className="flex justify-end pr-1">
             <input type="checkbox" checked={c.checked} onChange={(ev) => onCheck(c.key, ev.target.checked)}
