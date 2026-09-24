@@ -1667,9 +1667,28 @@ export function rateUpdate(
   return { current, latest: pickRates(latestRates) };
 }
 
+/**
+ * Memoized calcPanel. The result is cached on the panel OBJECT (a WeakMap keyed by `p`), so an
+ * unchanged panel — same object reference, same `factors` and `abbDiscounts` references — is returned
+ * from cache instead of recomputed. Panel edits are immutable (upPanel maps to a brand-new panel
+ * object while every other panel keeps its reference), so on a single-panel edit only that one panel
+ * misses the cache; the other 399 hit it. Changing a global rate makes `factors` a new object, which
+ * misses for every panel and reprices the whole project — exactly as before. Results are byte-for-byte
+ * identical to calcPanel (it is a pure function of these three inputs), so no total can move.
+ * This turns grandTotals / per-row cost from O(all panels) per keystroke into O(changed panels).
+ */
+const _calcPanelCache = new WeakMap<LvPanel, { f: Factors; abb: Record<string, number> | undefined; r: PanelCalc }>();
+export function calcPanelCached(p: LvPanel, f: Factors, abbDiscounts?: Record<string, number>): PanelCalc {
+  const hit = _calcPanelCache.get(p);
+  if (hit && hit.f === f && hit.abb === abbDiscounts) return hit.r;
+  const r = calcPanel(p, f, abbDiscounts);
+  _calcPanelCache.set(p, { f, abb: abbDiscounts, r });
+  return r;
+}
+
 export function grandTotals(s: LvState) {
   let sell = 0;
-  s.panels.forEach((p) => (sell += calcPanel(p, s.factors, s.abbItemDiscounts).totalSell));
+  s.panels.forEach((p) => (sell += calcPanelCached(p, s.factors, s.abbItemDiscounts).totalSell));
   // A custom quotation has no panels and prices its offer from these instead. Adding it
   // here rather than at each call site means the history list, the dashboard figures and
   // the saved summary all pick it up without knowing the kind exists.

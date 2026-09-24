@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**Big-project speed: per-panel cost is now cached (typing lag fix, step 1).**
+
+For projects with hundreds of unique panels, every keystroke used to re-price the WHOLE project. Now each
+panel's cost is worked out once and remembered on that panel; editing one field re-prices only that panel,
+and the project totals reuse the cached numbers. This is the biggest CPU cost per keystroke, removed — no
+change to the data model, storage, or any figure. A new automated test proves the totals are identical to
+the old way, including across a 400-panel project (so no price can drift). Next step (optional) is
+virtualizing the long panel list so a 400-row list scrolls without lag.
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **Kiosk cover cleaned up.**
 
 On the compact-substation cover: removed the four-fact ribbon (MV voltage · RMU make-up · Transformer ·

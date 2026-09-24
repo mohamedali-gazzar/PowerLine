@@ -30,7 +30,7 @@ import {
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpEnclosureRecord, lcpSizes, lcpRealBox,
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
-  initialState, calcPanel, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, STONE_PAINT_USD, stonePaintUnits, mvDefaultName, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog, pickRates, ratesEqual,
+  initialState, calcPanelCached, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, STONE_PAINT_USD, stonePaintUnits, mvDefaultName, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog, pickRates, ratesEqual,
   panelLayout, panelNumbers, commonNamePrefix, resortByGroup, reorderVisiblePanels, reorderVisiblePanelsMany, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
   withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS, DEFAULT_MV_COMMERCIAL, DEFAULT_MV_CABLE_EGP_PER_M,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote, type MvCommercial, type MvPanelType,
@@ -4698,7 +4698,7 @@ function CommercialTab({ s, qtnNo, up, readOnly }: { s: LvState; qtnNo: string; 
   const altItems = s.altItems ?? [];
   const altSubtotal = altItems.reduce((t, r) => t + r.qty * r.unitPrice, 0);
   const altVat = altSubtotal * s.factors.vat;
-  const calcs: [LvPanel, PanelCalc][] = s.panels.map((p) => [p, calcPanel(p, s.factors, s.abbItemDiscounts)]);
+  const calcs: [LvPanel, PanelCalc][] = s.panels.map((p) => [p, calcPanelCached(p, s.factors, s.abbItemDiscounts)]);
   const subtotal = custom
     ? customItemsTotal(s)
     : calcs.reduce((t, [, c]) => t + c.totalSell, 0);
@@ -6231,7 +6231,7 @@ function PanelTargetTable({ s, up }: { s: LvState; up: (p: Partial<LvState>) => 
   // proposes a NEW factor — nothing is written until "Apply to Panels & Commercial Offer".
   const rows = s.panels.map((p) => {
     const currentFactor = p.sellFactor > 0 ? p.sellFactor : global; // "Factor" = project/current
-    const calc = calcPanel(p, s.factors, s.abbItemDiscounts);        // at the saved factor
+    const calc = calcPanelCached(p, s.factors, s.abbItemDiscounts);        // at the saved factor
     const stagedSf = p.id in staged ? staged[p.id] : null;           // 0 = global · >0 custom · null = none
     const newFactor = stagedSf == null ? null : stagedSf > 0 ? stagedSf : global; // proposed factor
     // Total selling previews the target while one is staged (total cost ÷ new factor × qty);
@@ -6746,7 +6746,7 @@ function EnclosureSearch({ factors, onPick, placeholder, inputRef }: {
 function SpareEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: string, patch: Partial<LvPanel>) => void }) {
   const f = s.factors;
   const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
-  const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
+  const calc = calcPanelCached(p, s.factors, s.abbItemDiscounts);
   const priceOf = (c: PanelComponent) => componentPriceEgp(c, f);
 
   // Picking a result opens a small qty popup before the row is added — the same flow
@@ -6922,7 +6922,7 @@ function LcpEditor({ s, p, upPanel }: { s: LvState; p: LvPanel; upPanel: (id: st
   const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
   const { notify, dialogs } = useDialogs();
   const sizeWarnRef = useRef(false); // one warning per editing session (the flag below makes it once per panel)
-  const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
+  const calc = calcPanelCached(p, s.factors, s.abbItemDiscounts);
   const priceOf = (c: PanelComponent) => componentPriceEgp(c, f);
   const G = p.noGroups || 0;
   // The same editor drives the LCP and KWHM auxiliary panels — same formula, different labels.
@@ -8628,7 +8628,7 @@ function PanelEditor({ s, p, up, upPanel }: {
       <Sel value={p[key] as any} onChange={(v) => u({ [key]: v } as Partial<LvPanel>)} options={options as any} />
     </div>
   );
-  const calc = calcPanel(p, s.factors, s.abbItemDiscounts);
+  const calc = calcPanelCached(p, s.factors, s.abbItemDiscounts);
   // Busbar Rating — auto-selected from the incoming C.B's ampere frame; still editable.
   // 0 (→ "— Select —") means no incoming C.B.
   const predictedRating = predictIncomerRating(p);
