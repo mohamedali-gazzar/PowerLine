@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, type TransformerRow } from "../api";
 import { TR_ICON_DRY, TR_ICON_OIL } from "../pcss/data";
 import { trDisplayCode } from "./transformerTechData";
+import { Toggle } from "./fields";
+import { withoutTransformerLabel } from "./TransformerTechnicalSheet";
 import type { TransformerConfigInput } from "../types";
 import type { LvPanel } from "../lv/store";
 
@@ -250,6 +252,21 @@ export default function MvTransformerPanelEditor({
           from the price database. Left column on desktop. */}
       <div className="card flex flex-col space-y-4 px-4 py-3 lg:order-1">
         <h2 className="sec-head mb-0">Transformer Details</h2>
+        {/* Kiosk only: supply the compact substation WITHOUT a transformer. The compartment is then not
+            priced; the rating / voltage / insulation below become the (optional) description of the
+            transformer the customer will fit, shown on the offer as "Without … Transformer …". */}
+        {insideKioskOnly && (
+          <div className="rounded-lg border border-line bg-surface p-3">
+            <Toggle checked={!!cfg.withoutTransformer} onChange={(v) => set("withoutTransformer", v)}
+              label="Without transformer (supplied by others)" />
+            {cfg.withoutTransformer && (
+              <p className="mt-2 text-xs text-muted">
+                Not charged. Pick a rating, voltage and insulation below to print
+                “{withoutTransformerLabel(cfg)}”, or leave them blank for just “Without Transformer”.
+              </p>
+            )}
+          </div>
+        )}
         {error && (
           <p className="rounded-lg bg-red-50 p-2.5 text-xs font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>
         )}

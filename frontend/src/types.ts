@@ -60,6 +60,10 @@ export interface TransformerConfigInput {
   /** Standalone (false, default) → IP23; inside a kiosk (true) → IP00. Drives the technical
    *  datasheet's enclosure IP + model suffix and the commercial "IP 23 / IP 00" wording. */
   insideKiosk?: boolean;
+  /** Kiosk only: the compact substation is supplied WITHOUT a transformer (the customer provides it).
+   *  The transformer compartment is then not priced, and the technical/commercial show a "Without …
+   *  Transformer …" line built from whatever rating/voltage/insulation the user still selected. */
+  withoutTransformer?: boolean;
 }
 
 /** MV Kiosk panels only: the "Low" (LV) accordion section — the P-CSS LV selections. Stored as

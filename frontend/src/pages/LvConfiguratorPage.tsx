@@ -57,9 +57,9 @@ import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalog
 import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
 import MvTransformerPanelEditor, { DEFAULT_TRANSFORMER_CONFIG } from "../components/MvTransformerPanelEditor";
-import MvKioskPanelEditor from "../components/MvKioskPanelEditor";
+import MvKioskPanelEditor, { DEFAULT_KIOSK_LV } from "../components/MvKioskPanelEditor";
 import { DEFAULT_RMU_CONFIG, rmuShortCode, rmuAuxShuntUsd } from "../components/RmuConfigForm";
-import { TransformerCover, TransformerTechnicalSheet } from "../components/TransformerTechnicalSheet";
+import { TransformerCover, TransformerTechnicalSheet, withoutTransformerLabel } from "../components/TransformerTechnicalSheet";
 import { findTransformerTech, trModel, trDisplayCode } from "../components/transformerTechData";
 import type { PdfPageImage } from "../lv/renderPdfPages";
 import OfferView from "../components/OfferView";
@@ -738,7 +738,7 @@ export default function LvConfiguratorPage() {
       } else if (p.mvType === "kiosk") {
         const costs = kioskCostsEgp(p, s, await rmuCostEgpOf(p.mvRmuConfig ?? DEFAULT_RMU_CONFIG), trCostEgpOf(p.mvTransformerConfig));
         const tc = kioskTotalCostEgp(costs);
-        const ts = kioskTotalSellingEgp(costs, p);
+        const ts = kioskTotalSellingEgp(costs, p, usdRate);
         factor = ts > 0 ? tc / ts : null;
       }
       lines.push(`${`${n}- ${name}`.padEnd(20)}${fmtFactor(factor)}`);
@@ -5113,7 +5113,9 @@ function kioskDesc(p: LvPanel): string {
   const tr = p.mvTransformerConfig;
   const mvType = rc.productType === "PSEC" ? "SF6" : rc.productType === "LUCY" ? "GIS" : "Air";
   const mvLine = `Medium voltage compartment : ${mvType} load break switches (${rc.nalCount}RC+${rc.nalfCount}T${rc.hasMetering ? "+M" : ""})`;
-  const trLine = tr && tr.ratingKva
+  const trLine = tr?.withoutTransformer
+    ? `Transformer compartment : ${withoutTransformerLabel(tr)}`
+    : tr && tr.ratingKva
     ? `Transformer compartment : ${tr.insulation || ""} type transformer ${tr.ratingKva}KVA ${tr.primaryKv ?? ""}/0.4 KV ${tr.brand || ""}`.replace(/\s+/g, " ").trim()
     : "";
   const lvLine = "Low voltage compartment : ABB Circuit breakers";
@@ -5367,14 +5369,21 @@ function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project }: {
           {tr && (
             <div className="rounded-2xl border border-line p-6">
               <div className="text-sm font-extrabold uppercase tracking-[0.2em]" style={{ color: TRED }}>Transformer</div>
-              <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5">
-                {trSpecs.map((sp) => (
-                  <div key={sp.label}>
-                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{sp.label}</div>
-                    <div className="mt-1 text-base font-bold text-ink">{sp.value}</div>
-                  </div>
-                ))}
-              </div>
+              {tr.withoutTransformer ? (
+                <div className="mt-5">
+                  <div className="text-base font-bold text-ink">{withoutTransformerLabel(tr)}</div>
+                  <div className="mt-1 text-xs text-muted">Supplied by others — not included</div>
+                </div>
+              ) : (
+                <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5">
+                  {trSpecs.map((sp) => (
+                    <div key={sp.label}>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{sp.label}</div>
+                      <div className="mt-1 text-base font-bold text-ink">{sp.value}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -5384,7 +5393,7 @@ function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project }: {
           <div className="flex items-center justify-between gap-4">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">Enclosure finish</div>
-              <div className="mt-1 text-lg font-bold text-ink">{stonePaint ? "Stone painting" : "Standard RAL finish"}</div>
+              <div className="mt-1 text-lg font-bold text-ink">{stonePaint ? "Stone Painting" : "Electrostatic RAL 7035"}</div>
             </div>
             {stonePaint && (
               <div className="rounded-full px-4 py-2 text-sm font-extrabold text-white" style={{ background: TRED }}>Stone Painting Included</div>
@@ -5399,12 +5408,14 @@ function KioskCover({ rmu, tr, code, kva, stonePaint, index, total, project }: {
 
 // One RMU's technical pages: its cover + the generated datasheet. Used both for a standalone RMU panel
 // and for the RMU inside a kiosk, so both look identical.
-function MvRmuTechnical({ config, g, index, total, project }: {
+function MvRmuTechnical({ config, g, index, total, project, hideCover }: {
   config: RmuConfigInput; g: GeneratedOffer | undefined; index: number; total: number; project: string;
+  /** Inside a kiosk the compact-substation cover already introduces the RMU, so its own cover is dropped. */
+  hideCover?: boolean;
 }) {
   return (
     <>
-      <RmuCover config={config} code={g?.panelCode || g?.configCode || rmuShortCode(config)} index={index} total={total} project={project} />
+      {!hideCover && <RmuCover config={config} code={g?.panelCode || g?.configCode || rmuShortCode(config)} index={index} total={total} project={project} />}
       <div className="a4-sheet px-12 py-10">
         {g ? <OfferView g={g} /> : (
           <div className="space-y-3"><div className="skeleton h-24" /><div className="skeleton h-32" /><div className="skeleton h-40" /></div>
@@ -5416,9 +5427,11 @@ function MvRmuTechnical({ config, g, index, total, project }: {
 
 // One transformer's technical pages: its cover + the right datasheet (uploaded sheet → built-in PDTR
 // datasheet → a note). Used for a standalone transformer AND the transformer inside a kiosk (insideKiosk).
-function MvTransformerTechnical({ config: c, insideKiosk, index, total, project, trCatalog }: {
+function MvTransformerTechnical({ config: c, insideKiosk, index, total, project, trCatalog, hideCover }: {
   config: TransformerConfigInput; insideKiosk: boolean; index: number; total: number; project: string;
   trCatalog: { rows: TransformerRow[]; sheetCodes: string[] } | null;
+  /** Inside a kiosk the compact-substation cover already introduces the transformer, so its own cover is dropped. */
+  hideCover?: boolean;
 }) {
   const dry = (c.insulation || "").trim().toLowerCase() === "dry";
   const isPowerline = (c.brand || "").trim().toLowerCase() === "powerline";
@@ -5428,9 +5441,15 @@ function MvTransformerTechnical({ config: c, insideKiosk, index, total, project,
   const coverCode = row?.code ? trDisplayCode(row.code, insideKiosk) : (tech ? trModel(tech, insideKiosk) : "");
   const hasUploaded = !!coverCode && (trCatalog?.sheetCodes.includes(coverCode) ?? false) && !!row;
   const desc = [c.ratingKva ? `${c.ratingKva} kVA` : null, c.primaryKv ? `${c.primaryKv} kV` : null, c.insulation ? `${c.insulation} type` : null].filter(Boolean).join(" · ");
+  // "Without transformer": there is no physical transformer to publish a datasheet for. The cover states
+  // "Without … Transformer …"; inside a kiosk the cover is dropped, and the kiosk's own cover already
+  // carries that line, so nothing is rendered here.
+  if (c.withoutTransformer) {
+    return hideCover ? null : <TransformerCover config={c} code="" insideKiosk={insideKiosk} index={index} total={total} project={project} />;
+  }
   return (
     <>
-      <TransformerCover config={c} code={coverCode} insideKiosk={insideKiosk} index={index} total={total} project={project} />
+      {!hideCover && <TransformerCover config={c} code={coverCode} insideKiosk={insideKiosk} index={index} total={total} project={project} />}
       {trCatalog == null ? (
         <div className="a4-sheet p-6"><div className="skeleton h-[260mm] w-full rounded-lg" /></div>
       ) : hasUploaded ? (
@@ -5438,14 +5457,18 @@ function MvTransformerTechnical({ config: c, insideKiosk, index, total, project,
       ) : tech ? (
         <TransformerTechnicalSheet t={tech} insideKiosk={insideKiosk} />
       ) : (
-        <div className="a4-sheet px-12 py-10 text-sm text-muted">
-          <h2 className="mb-3 text-xl font-extrabold text-ink">Technical Datasheet</h2>
-          <p className="leading-relaxed">
-            A full type-tested datasheet is published for Powerline cast-resin <b className="text-ink">dry-type</b> transformers
-            at <b className="text-ink">11 kV / 22 kV</b> in the standard ratings 500 · 1000 · 1500 · 1600 · 2000 · 2500 kVA.
-            {desc ? <> This transformer (<b className="text-ink">{desc}</b>) will be supplied to its own type-test certificate.</> : null}
-          </p>
-        </div>
+        // No uploaded PDF and no built-in Powerline datasheet for this transformer → the offer states the
+        // transformer is supplied to its own technical datasheet (provided separately).
+        <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>
+          <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
+          <img src="/brand/mark-color.png" alt="" aria-hidden="true"
+            className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
+          <div className="relative flex flex-1 flex-col items-center justify-center px-16 py-14 text-center">
+            <div className="text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Medium Voltage · Distribution Transformer</div>
+            <div className="mt-6 text-5xl font-extrabold leading-tight text-ink">As per Technical Data Sheet</div>
+            {desc && <div className="mt-4 text-xl font-semibold text-muted">{desc}</div>}
+          </div>
+        </section>
       )}
     </>
   );
@@ -5566,9 +5589,13 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
                 <Fragment key={p.id}>
                   <KioskCover rmu={rc} tr={tc} code={p.mvKioskCost?.size?.code || ""} kva={tc?.ratingKva || 0}
                     stonePaint={!!p.mvKioskAccChecks?.stonepaint} index={kioskPos[p.id]} total={kioskPanels.length} project={proj} />
-                  {rc && <MvRmuTechnical config={rc} g={previews[JSON.stringify(rc)]} index={0} total={1} project={proj} />}
-                  {tc && <MvTransformerTechnical config={tc} insideKiosk={true} index={0} total={1} project={proj} trCatalog={trCatalog} />}
-                  {lv && <MvKioskLvCover lv={lv} kva={tc?.ratingKva || 0} project={proj} />}
+                  {/* Inside a kiosk the RMU and Transformer drop their own cover pages — the compact-
+                      substation cover above already introduces them — and keep only their datasheets. */}
+                  {rc && <MvRmuTechnical config={rc} g={previews[JSON.stringify(rc)]} index={0} total={1} project={proj} hideCover />}
+                  {tc && <MvTransformerTechnical config={tc} insideKiosk={true} index={0} total={1} project={proj} trCatalog={trCatalog} hideCover />}
+                  {/* The LV board always gets its page — a kiosk always has one, even before its LV
+                      options were touched (so `mvLvConfig` may be unset → fall back to the default). */}
+                  <MvKioskLvCover lv={lv ?? DEFAULT_KIOSK_LV} kva={tc?.ratingKva || 0} project={proj} />
                 </Fragment>
               );
             }
@@ -5687,7 +5714,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
       const trCostEgp = trMatch ? Math.round(trMatch.costEgp * usdRate) : null;
       // The whole kiosk's SELLING price (EGP) from the shared helper, then into the offer currency.
       const costs = kioskCostsEgp(p, s, rmuCostEgp, trCostEgp);
-      const sellEgp = kioskTotalSellingEgp(costs, p);
+      const sellEgp = kioskTotalSellingEgp(costs, p, usdRate);
       const unit = currency === "EGP" ? sellEgp : Math.round(sellEgp / usdRate);
       const qty = p.qty || 1;
       return [{ desc: kioskDesc(p), qty, unit, total: unit * qty, poa: sellEgp <= 0, hl: ["compact substation"] }];
@@ -5843,10 +5870,10 @@ function KioskAnalysisTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
       : "Ext.";
     const rows = KIOSK_PART_KEYS.map((key) => ({
       key, code: codeOf(key), label: KIOSK_ROW_LABEL[key],
-      cost: costs[key], factor: kioskFactorOf(p, key) ?? null, selling: kioskPartSellingEgp(costs, p, key),
+      cost: costs[key], factor: kioskFactorOf(p, key) ?? null, selling: kioskPartSellingEgp(costs, p, key, usdRate),
     }));
     const totalCost = kioskTotalCostEgp(costs);
-    const totalSelling = kioskTotalSellingEgp(costs, p);
+    const totalSelling = kioskTotalSellingEgp(costs, p, usdRate);
     return { name: mvDefaultName(p, s.panels), rows, totalCost, totalSelling, totalFactor: totalSelling > 0 ? totalCost / totalSelling : 0 };
   };
 

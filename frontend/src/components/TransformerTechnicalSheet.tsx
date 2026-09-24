@@ -6,6 +6,20 @@ import {
 
 // Brand orange — same value the LV/RMU offers use for their accents.
 const TRED = "#F16722";
+
+/**
+ * The "supplied without a transformer" line for a kiosk. When the rating, primary voltage AND
+ * insulation were all chosen it reads the transformer out in full ("Without Oil Transformer 1000 KVA
+ * 11/0.4 KV"); if any of those is missing it falls back to the plain "Without Transformer".
+ */
+export function withoutTransformerLabel(c: TransformerConfigInput): string {
+  const ins = (c.insulation || "").trim();
+  if (ins && c.ratingKva && c.primaryKv) {
+    const insCap = ins.charAt(0).toUpperCase() + ins.slice(1).toLowerCase();
+    return `Without ${insCap} Transformer ${c.ratingKva} KVA ${c.primaryKv}/0.4 KV`;
+  }
+  return "Without Transformer";
+}
 // Dark banner behind the model code (matches the printed datasheet's slate header).
 const INK_BAND = "#2b2f38";
 
@@ -216,6 +230,9 @@ export function TransformerCover({ config, code, insideKiosk, index, total, proj
   config: TransformerConfigInput; code: string; insideKiosk: boolean; index: number; total: number; project: string;
 }) {
   const fam = trFamily(config.brand, config.insulation);
+  // "Without transformer": the compact substation ships with no transformer, so the cover states that
+  // (reading out the intended transformer when it was described) instead of a family / type code.
+  const without = !!config.withoutTransformer;
   // Oil transformers have no enclosure, so they are always IP00 (never IP23), whatever the toggle says.
   const isOil = (config.insulation || "").trim().toLowerCase() === "oil";
   const protectionIp = isOil ? "IP00" : trEnclosureIp(insideKiosk);
@@ -225,6 +242,28 @@ export function TransformerCover({ config, code, insideKiosk, index, total, proj
     { label: "Insulation", value: config.insulation ? `${config.insulation} type` : "—" },
     { label: "Protection", value: protectionIp },
   ];
+  if (without) {
+    return (
+      <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>
+        <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
+        <img src="/brand/mark-color.png" alt="" aria-hidden="true"
+          className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
+        <div className="relative flex flex-1 flex-col px-16 py-14">
+          <div className="flex items-center justify-between">
+            <div className="text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Medium Voltage · Distribution Transformer</div>
+            {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">Transformer {index + 1} of {total}</div>}
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col justify-center py-10">
+            <div className="text-6xl font-extrabold leading-tight text-ink">{withoutTransformerLabel(config)}</div>
+            <div className="mt-4 text-2xl font-semibold text-muted">Transformer not included — supplied by others</div>
+          </div>
+          <div className="border-t-2 pt-6" style={{ borderColor: TRED }}>
+            {project && <div className="text-sm text-muted">{project}</div>}
+          </div>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>
       {/* Orange left strip — same as the RMU / LV offer covers. */}

@@ -47,7 +47,10 @@ export function kioskCostsEgp(
     return sum + (accChecks[e.key] ? price : 0);
   }, 0);
   const accessories = (mvCableCost + lvCopperCost + accItemsTotal + checksTotal) || null;
-  return { rmu: rmuCostEgp, transformer: trCostEgp, lv, size, accessories };
+  // "Without transformer": the compact substation ships without a transformer, so nothing is charged
+  // for the transformer compartment (and its transportation drops out with it).
+  const transformer = p.mvTransformerConfig?.withoutTransformer ? null : trCostEgp;
+  return { rmu: rmuCostEgp, transformer, lv, size, accessories };
 }
 
 /** The selling factor for a part: the typed override on the panel, else the house default. */
@@ -55,14 +58,24 @@ export function kioskFactorOf(p: LvPanel, key: string): number | undefined {
   return p.mvKioskCost?.[key]?.factor ?? DEFAULT_KIOSK_FACTORS[key];
 }
 
-/** One part's SELLING price in EGP (cost ÷ factor), or null when it isn't priced yet. */
+/** The transformer's flat transportation charge in USD (default $300), added to its selling price
+ *  WITHOUT the factor — exactly as the standalone Transformer panel does. */
+export function trTransportationUsd(p: LvPanel): number {
+  return p.mvTransformerConfig?.transportation ?? 300;
+}
+
+/** One part's SELLING price in EGP, or null when it isn't priced yet. Normally cost ÷ factor; the
+ *  transformer additionally carries a flat transportation charge (USD → EGP) added without the factor,
+ *  so a transformer inside a kiosk is charged the same $300 transport as a standalone one. */
 export function kioskPartSellingEgp(
-  costs: Record<KioskPartKey, number | null>, p: LvPanel, key: KioskPartKey,
+  costs: Record<KioskPartKey, number | null>, p: LvPanel, key: KioskPartKey, usdRate: number,
 ): number | null {
   const c = costs[key];
   const f = kioskFactorOf(p, key);
   if (!c || !f) return null;
-  return Math.round(c / f);
+  let selling = Math.round(c / f);
+  if (key === "transformer") selling += Math.round(trTransportationUsd(p) * (usdRate || 1));
+  return selling;
 }
 
 /** The whole kiosk's COST in EGP (sum of the six parts). */
@@ -70,7 +83,10 @@ export function kioskTotalCostEgp(costs: Record<KioskPartKey, number | null>): n
   return KIOSK_PART_KEYS.reduce((sum, k) => sum + (costs[k] ?? 0), 0);
 }
 
-/** The whole kiosk's SELLING price in EGP — what the commercial line charges for one unit. */
-export function kioskTotalSellingEgp(costs: Record<KioskPartKey, number | null>, p: LvPanel): number {
-  return KIOSK_PART_KEYS.reduce((sum, k) => sum + (kioskPartSellingEgp(costs, p, k) ?? 0), 0);
+/** The whole kiosk's SELLING price in EGP — what the commercial line charges for one unit
+ *  (includes the transformer's transportation charge, via kioskPartSellingEgp). */
+export function kioskTotalSellingEgp(
+  costs: Record<KioskPartKey, number | null>, p: LvPanel, usdRate: number,
+): number {
+  return KIOSK_PART_KEYS.reduce((sum, k) => sum + (kioskPartSellingEgp(costs, p, k, usdRate) ?? 0), 0);
 }

@@ -21,7 +21,7 @@ import {
 // modes — Standard EDMS (the house-standard panel for the transformer rating, built components-only
 // so the engineer sizes it) and Private Sector (build from the component search). Both share the
 // ordinary LV component editor + sizing card, passed in as `lvEditor` (avoids a circular import).
-const DEFAULT_KIOSK_LV: KioskLvConfigInput = {
+export const DEFAULT_KIOSK_LV: KioskLvConfigInput = {
   iec: "eehc", lvConfig: "inout", lvMode: "sizing", includePf: false, pfBrand: "ABB", includeSwitchFuse: false, lvSource: "standard",
 };
 
@@ -121,9 +121,9 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
   // helpers, so this live table and the kiosk line on the Commercial offer use the same math.
   const costs = kioskCostsEgp(p, s, rmuCostEgp, trCostEgp);
   const costOf = (key: KioskPartKey): number | null => costs[key];
-  const sellingOf = (key: KioskPartKey): number | null => kioskPartSellingEgp(costs, p, key);
+  const sellingOf = (key: KioskPartKey): number | null => kioskPartSellingEgp(costs, p, key, usdRate);
   const totalCost = kioskTotalCostEgp(costs);
-  const totalSelling = kioskTotalSellingEgp(costs, p);
+  const totalSelling = kioskTotalSellingEgp(costs, p, usdRate);
   const totalFactor = totalSelling > 0 ? totalCost / totalSelling : 0;
 
   // Display currency for the table (EGP default). Internals stay EGP; USD divides by the rate.

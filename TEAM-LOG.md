@@ -23,6 +23,32 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**Kiosk transformer: transportation charge, a "Without transformer" option, and a tidier technical.**
+
+Six changes to the compact substation (kiosk):
+
+- **The $300 transformer transportation is now included in the kiosk transformer price.** Before, a
+  transformer inside a kiosk was priced as cost ÷ factor with no transport; now it adds the flat $300
+  (in EGP, no factor) just like a standalone transformer, on both the live kiosk table and the offer.
+- **Enclosure finish** on the kiosk cover now reads **“Electrostatic RAL 7035”** by default, and
+  **“Stone Painting”** when Stone Paint is ticked in Accessories (was “Standard RAL finish”).
+- **The kiosk’s LV compartment now always appears in the Technical offer.** It used to disappear when the
+  LV options hadn’t been touched.
+- **New “Without transformer (supplied by others)” option** in the kiosk transformer compartment. When
+  on, the transformer compartment is **not charged**, and the offer prints
+  **“Without Oil/Dry Transformer 1000 KVA 11/0.4 KV”** from whatever was selected — or just
+  **“Without Transformer”** if nothing was selected.
+- **Inside a kiosk, the RMU and Transformer cover pages are dropped** from the Technical offer — the
+  compact-substation cover already introduces them. Their datasheets stay. Order is now:
+  compact-substation cover → RMU datasheet → Transformer datasheet → LV.
+- **A transformer with no datasheet now prints “As per Technical Data Sheet.”** This only affects
+  transformers with no uploaded PDF **and** no built-in Powerline datasheet — the Powerline datasheet and
+  uploaded PDFs are unchanged.
+
+One additive nullable field (`TransformerConfigInput.withoutTransformer`); no data migration.
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **Kiosk LV: Cell type shown as a plain value; Accessories rows lined up evenly.**
 
 Two small look-and-feel tidy-ups in the kiosk (compact substation):
