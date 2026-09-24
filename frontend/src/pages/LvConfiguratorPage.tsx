@@ -5456,13 +5456,12 @@ function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRat
           <text x="541" y="711" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{lv?.lvConfig === "inout" ? "Incoming & Outgoing" : "Incoming only"}</text>
         </g>
 
-        {/* Footer */}
+        {/* Footer — three values (no labels): finish left, IP54 centered, OEM right. */}
         <line x1="40" y1="758" x2="555" y2="758" stroke={OR} strokeWidth="0.8" />
-        <g fontSize="5.8" fontWeight="700" letterSpacing="1.5" fill={GY}>
-          <text x="40" y="780">ENCLOSURE FINISH</text><text x="200" y="780">KIOSK PROTECTION</text><text x="360" y="780">OEM PARTNER</text>
-        </g>
         <g fontSize="12" fontWeight="700" fill={INK}>
-          <text x="40" y="797">{finish}</text><text x="200" y="797">IP54</text><text x="360" y="797">ABB Certified</text>
+          <text x="40" y="792">{finish}</text>
+          <text x="297.5" y="792" textAnchor="middle">IP54</text>
+          <text x="555" y="792" textAnchor="end">ABB Certified</text>
         </g>
       </svg>
     </section>

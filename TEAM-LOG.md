@@ -23,6 +23,13 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**Kiosk cover footer simplified.**
+
+Dropped the small labels (ENCLOSURE FINISH / KIOSK PROTECTION / OEM PARTNER) from the cover footer and
+kept just the three values: the enclosure finish on the left, IP54 centred, and "ABB Certified" on the right.
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **New isometric kiosk cover, and the Fire-extinguisher quantity is now a 1/2/3 dropdown.**
 
 - **Kiosk Technical cover redesigned** to the "isometric" concept: a 3D drawing of the compact
