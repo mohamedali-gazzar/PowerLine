@@ -5194,8 +5194,8 @@ const RMU_COVER: Record<string, { family: string; tagline: string }> = {
 // family name, its type CODE in a bordered chip, and a four-cell spec strip pulled straight
 // from the configuration. A faint concentric-ring motif (a nod to "Ring Main Unit") sits in
 // the corner. Same orange left strip as the LV offer cover. One per RMU item.
-function RmuCover({ config, code, index, total, project }: {
-  config: RmuConfigInput; code: string; index: number; total: number; project: string;
+function RmuCover({ config, code, index, total, project, itemNo }: {
+  config: RmuConfigInput; code: string; index: number; total: number; project: string; itemNo?: number;
 }) {
   const meta = RMU_COVER[config.productType] ?? RMU_COVER.PRAL;
   const specs: { label: string; value: string }[] = [
@@ -5212,8 +5212,15 @@ function RmuCover({ config, code, index, total, project }: {
       <img src="/brand/mark-color.png" alt="" aria-hidden="true"
         className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
 
-      <div className="relative flex flex-1 flex-col px-16 py-14">
-        <div className="flex items-center justify-end">
+      <div className="relative flex flex-1 flex-col px-16 pt-24 pb-14">
+        <div className="flex items-center justify-between">
+          {itemNo != null ? (
+            <span className="inline-flex items-center gap-2.5 rounded-2xl bg-brand px-4 py-2 text-white shadow-sm ring-1 ring-black/5">
+              <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/85">Item</span>
+              <span className="h-5 w-px bg-white/40" />
+              <span className="font-mono text-3xl font-extrabold leading-none tracking-tight">{String(itemNo).padStart(2, "0")}</span>
+            </span>
+          ) : <span />}
           {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">RMU {index + 1} of {total}</div>}
         </div>
 
@@ -5330,12 +5337,14 @@ function kioskLvBreakerBrand(p: LvPanel): string {
 // LV), over a faint isometric grid, with a header (kVA hero + IP54 pill) and a three-fact footer.
 // Rendered as one full-bleed A4 SVG so it prints as crisp vector + selectable text. All values are read
 // straight off the kiosk panel. One per kiosk item.
-function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRatingA, lvBreakerBrand }: {
+function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRatingA, lvBreakerBrand, itemNo }: {
   rmu?: RmuConfigInput; tr?: TransformerConfigInput; code?: string; kva: number;
   stonePaint: boolean; index: number; total: number; project: string;
   lv?: KioskLvConfigInput; lvRatingA?: number;
   /** Dominant breaker brand of the LV board (ABB / Himel / …), read from its actual devices. */
   lvBreakerBrand?: string;
+  /** Offer item number — printed as a bookmark; every page of this kiosk carries the same one. */
+  itemNo?: number;
 }) {
   const rmuMeta = rmu ? (RMU_COVER[rmu.productType] ?? RMU_COVER.PRAL) : null;
   const without = !!tr?.withoutTransformer;
@@ -5359,11 +5368,19 @@ function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRat
         <rect x="0" y="189" width="595" height="90" fill={`url(#${uid}-fade)`} />
         <rect x="0" y="0" width="4" height="842" fill={OR} />
 
-        {/* Header */}
+        {/* Header — item bookmark (left) + kiosk position (right) */}
+        {itemNo != null ? (
+          <g>
+            <rect x="40" y="60" width="82" height="30" rx="11" fill={OR} />
+            <text x="55" y="79" fontSize="9" fontWeight="700" letterSpacing="1.6" fill="#FFFFFF">ITEM</text>
+            <line x1="86" y1="67" x2="86" y2="83" stroke="#FFFFFF" strokeOpacity="0.45" strokeWidth="1" />
+            <text x="104" y="81" fontSize="19" fontWeight="800" fill="#FFFFFF" textAnchor="middle" fontFamily="'JetBrains Mono', ui-monospace, monospace">{String(itemNo).padStart(2, "0")}</text>
+          </g>
+        ) : null}
         {total > 1 ? <text x="555" y="59" fontSize="7.5" fontWeight="700" letterSpacing="1.2" fill={GY} textAnchor="end">KIOSK {index + 1} OF {total}</text> : null}
-        <text x="38" y="128" fontSize="54" fontWeight="700" letterSpacing="-1.5" fill={INK}>{kva || "—"} <tspan fill={OR} fontSize="26">kVA</tspan></text>
-        <text x="40" y="152" fontSize="13" fill={MU}>Compact Secondary Substation · Powerline</text>
-        {project ? <text x="40" y="169" fontSize="8.5" fill={GY}>{project}</text> : null}
+        <text x="38" y="148" fontSize="54" fontWeight="700" letterSpacing="-1.5" fill={INK}>{kva || "—"} <tspan fill={OR} fontSize="26">kVA</tspan></text>
+        <text x="40" y="172" fontSize="13" fill={MU}>Compact Secondary Substation · Powerline</text>
+        {project ? <text x="40" y="189" fontSize="8.5" fill={GY}>{project}</text> : null}
 
         {/* Spec badge — enclosure finish / protection / certification, in a unique top-right corner panel
             with an orange rail (replaces the old three-value footer). */}
@@ -5491,16 +5508,69 @@ function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRat
   );
 }
 
+// The LV compartment's cover page inside a kiosk — same branded A4 layout as the RMU / Transformer
+// covers (orange strip, watermark, hero + spec strip), so the three parts introduce identically.
+function KioskLvCover({ p, lvBreakerBrand, project, itemNo }: {
+  p: LvPanel; lvBreakerBrand: string; project: string; itemNo?: number;
+}) {
+  const inout = p.mvLvConfig?.lvConfig === "inout";
+  const specs: { label: string; value: string }[] = [
+    { label: "Rated current", value: p.ratingA ? `${p.ratingA} A` : "—" },
+    { label: "Breakers", value: lvBreakerBrand || "ABB" },
+    { label: "Configuration", value: inout ? "Incoming & Outgoing" : "Incoming only" },
+    { label: "Protection", value: "IP54" },
+  ];
+  return (
+    <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>
+      <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
+      <img src="/brand/mark-color.png" alt="" aria-hidden="true"
+        className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
+      <div className="relative flex flex-1 flex-col px-16 pt-24 pb-14">
+        <div className="flex items-center justify-between">
+          {itemNo != null ? (
+            <span className="inline-flex items-center gap-2.5 rounded-2xl bg-brand px-4 py-2 text-white shadow-sm ring-1 ring-black/5">
+              <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/85">Item</span>
+              <span className="h-5 w-px bg-white/40" />
+              <span className="font-mono text-3xl font-extrabold leading-none tracking-tight">{String(itemNo).padStart(2, "0")}</span>
+            </span>
+          ) : <span />}
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col justify-center py-10">
+          <div className="text-7xl font-extrabold leading-none text-ink">MDB</div>
+          <div className="mt-4 text-2xl font-semibold text-muted">Low Voltage · Main Distribution Board</div>
+          <div className="mt-10">
+            <div className="mb-2 text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Board</div>
+            <div className="font-mono text-2xl font-bold tracking-wide text-ink">{p.name || "Main Distribution Board"}</div>
+          </div>
+        </div>
+        <div className="border-t-2 pt-6" style={{ borderColor: TRED }}>
+          <div className="grid grid-cols-4 gap-4">
+            {specs.map((sp) => (
+              <div key={sp.label}>
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{sp.label}</div>
+                <div className="mt-1 text-lg font-bold text-ink">{sp.value}</div>
+              </div>
+            ))}
+          </div>
+          {project && <div className="mt-5 text-sm text-muted">{project}</div>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // One RMU's technical pages: its cover + the generated datasheet. Used both for a standalone RMU panel
 // and for the RMU inside a kiosk, so both look identical.
-function MvRmuTechnical({ config, g, index, total, project, hideCover }: {
+function MvRmuTechnical({ config, g, index, total, project, hideCover, itemNo }: {
   config: RmuConfigInput; g: GeneratedOffer | undefined; index: number; total: number; project: string;
   /** Inside a kiosk the compact-substation cover already introduces the RMU, so its own cover is dropped. */
   hideCover?: boolean;
+  /** Offer item number — printed on the cover as a bookmark so all pages of one kiosk share it. */
+  itemNo?: number;
 }) {
   return (
     <>
-      {!hideCover && <RmuCover config={config} code={g?.panelCode || g?.configCode || rmuShortCode(config)} index={index} total={total} project={project} />}
+      {!hideCover && <RmuCover config={config} code={g?.panelCode || g?.configCode || rmuShortCode(config)} index={index} total={total} project={project} itemNo={itemNo} />}
       <div className="a4-sheet px-12 py-10">
         {g ? <OfferView g={g} /> : (
           <div className="space-y-3"><div className="skeleton h-24" /><div className="skeleton h-32" /><div className="skeleton h-40" /></div>
@@ -5512,11 +5582,13 @@ function MvRmuTechnical({ config, g, index, total, project, hideCover }: {
 
 // One transformer's technical pages: its cover + the right datasheet (uploaded sheet → built-in PDTR
 // datasheet → a note). Used for a standalone transformer AND the transformer inside a kiosk (insideKiosk).
-function MvTransformerTechnical({ config: c, insideKiosk, index, total, project, trCatalog, hideCover }: {
+function MvTransformerTechnical({ config: c, insideKiosk, index, total, project, trCatalog, hideCover, itemNo }: {
   config: TransformerConfigInput; insideKiosk: boolean; index: number; total: number; project: string;
   trCatalog: { rows: TransformerRow[]; sheetCodes: string[] } | null;
   /** Inside a kiosk the compact-substation cover already introduces the transformer, so its own cover is dropped. */
   hideCover?: boolean;
+  /** Offer item number — printed on the cover as a bookmark so all pages of one kiosk share it. */
+  itemNo?: number;
 }) {
   const dry = (c.insulation || "").trim().toLowerCase() === "dry";
   const isPowerline = (c.brand || "").trim().toLowerCase() === "powerline";
@@ -5533,11 +5605,11 @@ function MvTransformerTechnical({ config: c, insideKiosk, index, total, project,
   // "Without … Transformer …"; inside a kiosk the cover is dropped, and the kiosk's own cover already
   // carries that line, so nothing is rendered here.
   if (c.withoutTransformer) {
-    return hideCover ? null : <TransformerCover config={c} code="" insideKiosk={insideKiosk} index={index} total={total} project={project} />;
+    return hideCover ? null : <TransformerCover config={c} code="" insideKiosk={insideKiosk} index={index} total={total} project={project} itemNo={itemNo} />;
   }
   return (
     <>
-      {!hideCover && <TransformerCover config={c} code={coverCode} insideKiosk={insideKiosk} index={index} total={total} project={project} asPerDataSheet={asPerDataSheet} />}
+      {!hideCover && <TransformerCover config={c} code={coverCode} insideKiosk={insideKiosk} index={index} total={total} project={project} asPerDataSheet={asPerDataSheet} itemNo={itemNo} />}
       {trCatalog == null ? (
         <div className="a4-sheet p-6"><div className="skeleton h-[260mm] w-full rounded-lg" /></div>
       ) : hasUploaded ? (
@@ -5757,30 +5829,31 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
           <OfferCover s={s} qtnNo={qtnNo} kind="Technical" />
           {/* One cover + technical page per MV item, in the MV panel-list order (RMU and
               Transformer pages interleave just like the Commercial tab). */}
-          {s.panels.map((p) => {
+          {s.panels.map((p, pi) => {
+            const itemNo = pi + 1; // offer item number, shared by every page of this item
             if (p.mvType === "rmu" && p.mvRmuConfig) {
               const c = p.mvRmuConfig;
-              return <MvRmuTechnical key={p.id} config={c} g={previews[JSON.stringify(c)]} index={rmuPos[p.id]} total={rmuPanels.length} project={s.project?.name || ""} />;
+              return <MvRmuTechnical key={p.id} config={c} g={previews[JSON.stringify(c)]} index={rmuPos[p.id]} total={rmuPanels.length} project={s.project?.name || ""} itemNo={itemNo} />;
             }
             if (p.mvType === "transformer" && p.mvTransformerConfig) {
               const c = p.mvTransformerConfig;
-              return <MvTransformerTechnical key={p.id} config={c} insideKiosk={!!c.insideKiosk} index={trPos[p.id]} total={trPanels.length} project={s.project?.name || ""} trCatalog={trCatalog} />;
+              return <MvTransformerTechnical key={p.id} config={c} insideKiosk={!!c.insideKiosk} index={trPos[p.id]} total={trPanels.length} project={s.project?.name || ""} trCatalog={trCatalog} itemNo={itemNo} />;
             }
             if (p.mvType === "kiosk") {
-              // A compact substation: the overview cover, then the full technical of the RMU, the
-              // transformer (always inside-kiosk → IP00) and the LV board it's built from.
+              // A compact substation: the overview cover, then a cover + technical for each of the RMU,
+              // the transformer (always inside-kiosk → IP00) and the LV board. Every page of this kiosk
+              // carries the same Item number so the parts stay grouped in the PDF.
               const rc = p.mvRmuConfig, tc = p.mvTransformerConfig, proj = s.project?.name || "";
+              const lvBrand = kioskLvBreakerBrand(p);
               return (
                 <Fragment key={p.id}>
                   <KioskCover rmu={rc} tr={tc} code={p.mvKioskCost?.size?.code || ""} kva={tc?.ratingKva || 0}
                     stonePaint={!!p.mvKioskAccChecks?.stonepaint} index={kioskPos[p.id]} total={kioskPanels.length} project={proj}
-                    lv={p.mvLvConfig} lvRatingA={p.ratingA} lvBreakerBrand={kioskLvBreakerBrand(p)} />
-                  {/* Inside a kiosk the RMU and Transformer drop their own cover pages — the compact-
-                      substation cover above already introduces them — and keep only their datasheets. */}
-                  {rc && <MvRmuTechnical config={rc} g={previews[JSON.stringify(rc)]} index={0} total={1} project={proj} hideCover />}
-                  {tc && <MvTransformerTechnical config={tc} insideKiosk={true} index={0} total={1} project={proj} trCatalog={trCatalog} hideCover />}
-                  {/* The LV compartment renders as a full LV panel technical (spec + component list),
-                      the same as a standalone LV board — no separate cover page. */}
+                    lv={p.mvLvConfig} lvRatingA={p.ratingA} lvBreakerBrand={lvBrand} itemNo={itemNo} />
+                  {/* Each part shows its own cover, then its datasheet / technical. */}
+                  {rc && <MvRmuTechnical config={rc} g={previews[JSON.stringify(rc)]} index={0} total={1} project={proj} itemNo={itemNo} />}
+                  {tc && <MvTransformerTechnical config={tc} insideKiosk={true} index={0} total={1} project={proj} trCatalog={trCatalog} itemNo={itemNo} />}
+                  <KioskLvCover p={p} lvBreakerBrand={lvBrand} project={proj} itemNo={itemNo} />
                   <KioskLvTechnical s={s} p={p} qtnNo={qtnNo} />
                 </Fragment>
               );

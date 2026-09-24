@@ -241,11 +241,13 @@ function trFamily(brand: string, insulation: string): { family: string; tagline:
  * spec strip), so the two MV products read as one family. `code` is the transformer's model /
  * catalogue code; the spec strip surfaces the rating, voltage, insulation and protection (IP).
  */
-export function TransformerCover({ config, code, insideKiosk, index, total, project, asPerDataSheet }: {
+export function TransformerCover({ config, code, insideKiosk, index, total, project, asPerDataSheet, itemNo }: {
   config: TransformerConfigInput; code: string; insideKiosk: boolean; index: number; total: number; project: string;
   /** No datasheet exists for this transformer → show a small "As per Technical Data Sheet" note (orange)
    *  on the cover instead of a separate datasheet page. */
   asPerDataSheet?: boolean;
+  /** Offer item number — printed on the cover as a bookmark so all pages of one kiosk share it. */
+  itemNo?: number;
 }) {
   const fam = trFamily(config.brand, config.insulation);
   // "Without transformer": the compact substation ships with no transformer, so the cover states that
@@ -266,8 +268,15 @@ export function TransformerCover({ config, code, insideKiosk, index, total, proj
         <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
         <img src="/brand/mark-color.png" alt="" aria-hidden="true"
           className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
-        <div className="relative flex flex-1 flex-col px-16 py-14">
-          <div className="flex items-center justify-end">
+        <div className="relative flex flex-1 flex-col px-16 pt-24 pb-14">
+          <div className="flex items-center justify-between">
+            {itemNo != null ? (
+              <span className="inline-flex items-center gap-2.5 rounded-2xl bg-brand px-4 py-2 text-white shadow-sm ring-1 ring-black/5">
+                <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/85">Item</span>
+                <span className="h-5 w-px bg-white/40" />
+                <span className="font-mono text-3xl font-extrabold leading-none tracking-tight">{String(itemNo).padStart(2, "0")}</span>
+              </span>
+            ) : <span />}
             {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">Transformer {index + 1} of {total}</div>}
           </div>
           <div className="flex min-h-0 flex-1 flex-col justify-center py-10">
@@ -289,8 +298,15 @@ export function TransformerCover({ config, code, insideKiosk, index, total, proj
       <img src="/brand/mark-color.png" alt="" aria-hidden="true"
         className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
 
-      <div className="relative flex flex-1 flex-col px-16 py-14">
-        <div className="flex items-center justify-end">
+      <div className="relative flex flex-1 flex-col px-16 pt-24 pb-14">
+        <div className="flex items-center justify-between">
+          {itemNo != null ? (
+              <span className="inline-flex items-center gap-2.5 rounded-2xl bg-brand px-4 py-2 text-white shadow-sm ring-1 ring-black/5">
+                <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/85">Item</span>
+                <span className="h-5 w-px bg-white/40" />
+                <span className="font-mono text-3xl font-extrabold leading-none tracking-tight">{String(itemNo).padStart(2, "0")}</span>
+              </span>
+            ) : <span />}
           {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">Transformer {index + 1} of {total}</div>}
         </div>
 

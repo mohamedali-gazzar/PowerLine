@@ -23,6 +23,22 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**Kiosk technical now shows all three part covers, each tagged with a big Item label.**
+
+- **Covers inside the kiosk:** the compact-substation technical now prints a **cover page for each part** —
+  the RMU, the transformer, and a new **LV (MDB) cover** — before its datasheet/technical, in the same
+  branded style. (Previously the RMU and transformer covers were hidden inside a kiosk and the LV had none.)
+- **Item bookmark:** every cover page of one kiosk carries the same **ITEM n** label (a bigger tag: small
+  "ITEM" over a large two-digit number, e.g. `01`). So all of Kiosk 1's pages read ITEM 01, Kiosk 2's read
+  ITEM 02, and standalone items are numbered on too. The label sits a little lower from the top of the page.
+- The item number is the offer item's position, shared across all of that item's pages so the parts stay
+  grouped in the PDF.
+
+Look-and-feel only; no schema change. Verified live on a two-kiosk quotation (16 pages, correct order and
+badges). Frontend 181 tests green.
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **Kiosk cover redesigned, MV covers' strapline removed, and the RMU technical gained Shunt Trip / Aux rows.**
 
 - **Kiosk cover:** the enclosure finish / IP54 / certification now sit in a labelled panel in the **top-right
