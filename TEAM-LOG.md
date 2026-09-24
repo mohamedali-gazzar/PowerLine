@@ -21,6 +21,15 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-24 · Mohamed's side · Claude
+
+**Kiosk RMU feeder limited to 2+1 and 3+1.**
+
+Inside a kiosk (compact substation), the RMU feeder dropdown now offers only **2+1** and **3+1** — the
+only make-ups that fit a compact substation. A new kiosk starts at 2+1. The standalone RMU offer and the
+standalone MV RMU panel are unchanged (still the full list). A kiosk already set to something else keeps
+that value (nothing lost), but the only choices offered are 2+1 / 3+1. Look-and-feel only; no database change.
+
 ## 2026-09-23 · Mohamed's side · Claude
 
 **Kiosk (compact substation) Technical Offer.**

@@ -43,6 +43,9 @@ export function rmuShortCode(c: RmuConfigInput): string {
 export const RMU_FEEDER_OPTIONS: [number, number][] = [
   [2, 1], [3, 1], [0, 1], [1, 0], [1, 1], [2, 2], [4, 0],
 ];
+// Inside a kiosk (compact substation) the RMU only ever feeds one transformer plus its ring(s), so
+// only 2+1 and 3+1 make sense there. The standalone RMU offer keeps the full list above.
+export const KIOSK_FEEDER_OPTIONS: [number, number][] = [[2, 1], [3, 1]];
 export const rmuFeederLabel = (nal: number, nalf: number): string => `${nal}+${nalf}`;
 
 // Per-feeder accessories, priced in USD and converted like every other RMU price (aux/shunt used to
@@ -131,6 +134,7 @@ export default function RmuConfigForm({
   onChangeMany,
   code,
   panelCode,
+  feederOptions = RMU_FEEDER_OPTIONS,
 }: {
   value: RmuConfigInput;
   onChange: <K extends keyof RmuConfigInput>(key: K, v: RmuConfigInput[K]) => void;
@@ -138,6 +142,8 @@ export default function RmuConfigForm({
   onChangeMany: (patch: Partial<RmuConfigInput>) => void;
   code: string;
   panelCode: string;
+  /** The RMU-feeder dropdown choices. Defaults to the full list; a kiosk passes KIOSK_FEEDER_OPTIONS. */
+  feederOptions?: readonly [number, number][];
 }) {
   const rmu = value;
   const setR = onChange;
@@ -246,9 +252,9 @@ export default function RmuConfigForm({
                 onChange={(e) => { const [n, m] = e.target.value.split("+").map(Number); onChangeMany({ nalCount: n, nalfCount: m }); }}
                 className="input cursor-pointer"
               >
-                {(RMU_FEEDER_OPTIONS.some(([a, b]) => a === rmu.nalCount && b === rmu.nalfCount)
-                  ? RMU_FEEDER_OPTIONS
-                  : [[rmu.nalCount, rmu.nalfCount] as [number, number], ...RMU_FEEDER_OPTIONS]
+                {(feederOptions.some(([a, b]) => a === rmu.nalCount && b === rmu.nalfCount)
+                  ? feederOptions
+                  : [[rmu.nalCount, rmu.nalfCount] as [number, number], ...feederOptions]
                 ).map(([a, b]) => {
                   const lbl = rmuFeederLabel(a, b);
                   return <option key={lbl} value={lbl}>{lbl}</option>;

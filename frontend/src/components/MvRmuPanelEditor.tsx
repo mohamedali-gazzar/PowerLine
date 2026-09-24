@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import RmuConfigForm, { DEFAULT_RMU_CONFIG, rmuShortCode, rmuAuxShuntUsd } from "./RmuConfigForm";
+import RmuConfigForm, { DEFAULT_RMU_CONFIG, rmuShortCode, rmuAuxShuntUsd, KIOSK_FEEDER_OPTIONS } from "./RmuConfigForm";
 import { api } from "../api";
 import type { GeneratedOffer, RmuConfigInput } from "../types";
 import { DEFAULT_MV_COMMERCIAL, type LvPanel, type LvState } from "../lv/store";
@@ -165,7 +165,8 @@ export default function MvRmuPanelEditor({
       </div>
       )}
 
-      <RmuConfigForm value={rmu} onChange={setR} onChangeMany={setMany} code={code} panelCode={panelCode} />
+      <RmuConfigForm value={rmu} onChange={setR} onChangeMany={setMany} code={code} panelCode={panelCode}
+        feederOptions={insideKiosk ? KIOSK_FEEDER_OPTIONS : undefined} />
     </div>
   );
 }
