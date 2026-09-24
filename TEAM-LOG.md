@@ -23,6 +23,21 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**PLP cells are now 2 mm, and a kiosk's LV part is fixed to PLP at 70 cm.**
+
+Two small sizing changes:
+
+- **PLP is now 2 mm everywhere.** When you pick the PLP cell system, the sheet-metal thickness now reads
+  **2 mm** instead of 1.5 mm (PLP is only supplied in 2 mm). Existing PLP panels also show 2 mm now — the
+  thickness is a spec label only, it does not change the cell table or any price.
+- **Inside a kiosk (compact substation), the LV part is simplified.** The **Cell type** is locked to
+  **PLP** (no other choice), the **Cell depth** is locked to **70 cm**, and the two fields now sit
+  **side by side** to save space. A kiosk that was somehow on another cell type is moved to PLP / 70
+  automatically when you open it. Standalone LV quotations are unchanged — they still offer every cell
+  system and every depth. Look-and-feel only; no database change.
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **Kiosk RMU feeder limited to 2+1 and 3+1.**
 
 Inside a kiosk (compact substation), the RMU feeder dropdown now offers only **2+1** and **3+1** — the

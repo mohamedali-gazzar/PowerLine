@@ -6,7 +6,7 @@
 //   - Thickness rule: 2 mm items get a "2M" prefix
 //   - "Sides" row always present, qty 1, locked
 // IS2: Depth 60/80 only (IP54 + 1.5 mm implied, fields hidden)
-// PLP: Depth 70/90/110 only (IP54 + 1.5 mm implied, fields hidden)
+// PLP: Depth 70/90/110 only (IP54 + 2 mm implied, fields hidden)
 
 import { findCellEnclosure } from "./catalog";
 
@@ -89,9 +89,16 @@ export interface CellConfig {
   rows: CellRow[];
 }
 
+// The sheet-metal thickness implied by a cell system. PLP is supplied in 2 mm; IS2 stays 1.5 mm; Pro-E
+// is user-selected and defaults to 1.5 mm. (For IS2/PLP thickness is informational only — it names the
+// spec but does not change the cell table or price.)
+export function cellThickness(type: CellType): string {
+  return type === "PLP" ? "2" : "1.5";
+}
+
 export function defaultCellConfig(type: CellType = "Pro-E"): CellConfig {
   const depth = type === "IS2" ? 60 : 70;
-  const thickness = "1.5";
+  const thickness = cellThickness(type);
   const ip = type === "Pro-E" ? "IP65" : "IP54";
   return { type, depth, thickness, ip, rows: cellTable(type, depth, thickness, ip) };
 }

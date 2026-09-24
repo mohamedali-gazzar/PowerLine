@@ -81,7 +81,7 @@ const WD_ACC_IMG: Record<string, string> = { fld: wdFldImg, rhd: wdRhdImg, rhe: 
 import * as XLSX from "xlsx";
 import {
   PRO_E_DEPTHS, PRO_E_THICKNESS, PRO_E_IPS, IS2_DEPTHS, PLP_DEPTHS,
-  proEIp31Disabled, retable, defaultCellConfig, cellTable, type CellType,
+  proEIp31Disabled, retable, defaultCellConfig, cellTable, cellThickness, type CellType,
 } from "../lv/cells";
 import {
   COPPER_RATINGS, csaFor, copperWeight, copperTotal,
@@ -1634,13 +1634,14 @@ export default function LvConfiguratorPage() {
           const ip = rec.cellIp || (cellType === "Pro-E" ? "IP65" : "IP54");
           const normDesc = (s: string) => s.toLowerCase().replace(/\s+/g, "").replace(/\.$/, "");
           const qtyByDesc = new Map((rec.cells ?? []).map((c) => [normDesc(c.desc), c.qty]));
-          const rows = cellTable(cellType as CellType, depth, "1.5", ip).map((r) => {
+          const thickness = cellThickness(cellType as CellType); // PLP → 2 mm, others → 1.5 mm
+          const rows = cellTable(cellType as CellType, depth, thickness, ip).map((r) => {
             if (r.locked) return { ...r };
             const q = qtyByDesc.get(normDesc(r.desc));
             return q != null ? { ...r, qty: q } : r;
           });
           p.sizingMode = "cells";
-          p.cellConfig = { type: cellType as CellType, depth, thickness: "1.5", ip, rows };
+          p.cellConfig = { type: cellType as CellType, depth, thickness, ip, rows };
         } else if (fam) {
           const isDouble = rec.layout === "Double";
           p.sizingMode = "panels";
@@ -11730,6 +11731,15 @@ function SizingCard({ p, u, factors }: {
   const ps = p.panelsSizing;
   const cc = p.cellConfig;
   const upCells = (patch: Partial<typeof cc>) => u({ cellConfig: retable({ ...cc, ...patch }) });
+  // A kiosk's LV compartment is always PLP cells at 70 cm — force that whenever it's in cells mode
+  // (the cell-type / depth controls are also locked to PLP / 70 below).
+  const isKiosk = p.mvType === "kiosk";
+  useEffect(() => {
+    if (!isKiosk || p.sizingMode !== "cells") return;
+    if (cc.type !== "PLP") u({ cellConfig: defaultCellConfig("PLP") }); // wrong type → fresh PLP/70
+    else if (cc.depth !== 70) u({ cellConfig: retable({ ...cc, depth: 70 }) }); // keep quantities, fix depth
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isKiosk, p.sizingMode, cc.type, cc.depth]);
 
   const famOptions = ps.layout === "Double" ? DOUBLE_FAMILIES : SELECTABLE_SYSTEMS;
   const sizing1Pool = ENCLOSURES.filter((e) => e.fam === ps.family);
@@ -11928,22 +11938,25 @@ function SizingCard({ p, u, factors }: {
           <div className="min-w-0">
           {toggleEl}
           <div className="mb-3 max-w-md space-y-3">
-            <div>
-              <L>Cell type</L>
-              <Sel value={cc.type as any} onChange={(v) => {
-                const fresh = defaultCellConfig(v as CellType);
-                u({ cellConfig: fresh });
-              }} options={CELL_SYSTEMS as any} />
-            </div>
-            <div>
-              <L>Cell depth</L>
-              <div className="flex gap-1">
-                {(cc.type === "Pro-E" ? PRO_E_DEPTHS : cc.type === "IS2" ? IS2_DEPTHS : PLP_DEPTHS).map((d) => (
-                  <button key={d} onClick={() => upCells({ depth: d })}
-                    className={`flex-1 rounded-md border px-2 py-1 text-xs font-bold ${
-                      cc.depth === d ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted"
-                    }`}>{d} cm</button>
-                ))}
+            {/* Kiosk: cell type is locked to PLP and depth to 70, shown side by side. */}
+            <div className={isKiosk ? "grid grid-cols-2 items-start gap-3" : "space-y-3"}>
+              <div>
+                <L>Cell type</L>
+                <Sel value={cc.type as any} onChange={(v) => {
+                  const fresh = defaultCellConfig(v as CellType);
+                  u({ cellConfig: fresh });
+                }} options={(isKiosk ? ["PLP"] : CELL_SYSTEMS) as any} />
+              </div>
+              <div>
+                <L>Cell depth</L>
+                <div className="flex gap-1">
+                  {(isKiosk ? [70] : cc.type === "Pro-E" ? PRO_E_DEPTHS : cc.type === "IS2" ? IS2_DEPTHS : PLP_DEPTHS).map((d) => (
+                    <button key={d} onClick={() => upCells({ depth: d })}
+                      className={`flex-1 rounded-md border px-2 py-1 text-xs font-bold ${
+                        cc.depth === d ? "border-brand bg-brand-light text-brand-dark" : "border-line bg-white text-muted"
+                      }`}>{d} cm</button>
+                  ))}
+                </div>
               </div>
             </div>
             {cc.type === "Pro-E" && (
@@ -11982,7 +11995,7 @@ function SizingCard({ p, u, factors }: {
               </>
             )}
             {cc.type !== "Pro-E" && (
-              <div className="text-[11px] text-muted">IP54 · 1.5 mm (set automatically for {cc.type})</div>
+              <div className="text-[11px] text-muted">IP54 · {cellThickness(cc.type)} mm (set automatically for {cc.type})</div>
             )}
           </div>
 
