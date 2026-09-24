@@ -5406,21 +5406,18 @@ function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRat
         <g>
           <rect x="40" y="604" width="163" height="128" rx="6" fill="#FFFFFF" stroke="#E4E4E9" />
           <rect x="40" y="604" width="163" height="3" rx="1.5" fill={OR} />
-          <text x="54" y="624" fontSize="6.5" fontWeight="700" letterSpacing="1.8" fill={OR}>01 · RING MAIN UNIT</text>
+          <text x="54" y="624" fontSize="6.5" fontWeight="700" letterSpacing="1.8" fill={OR}>RMU</text>
           <text x="54" y="642" fontSize="14" fontWeight="700" fill={INK}>{rmuMeta?.family ?? "—"}</text>
           <line x1="54" y1="651" x2="189" y2="651" stroke="#ECECF0" />
-          <text x="54" y="667" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>VOLTAGE</text>
-          <text x="189" y="667" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{rmu ? `${rmu.voltageKv} kV` : "—"}</text>
-          <text x="54" y="689" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>CONFIG.</text>
-          <text x="189" y="689" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{rmu ? `${rmu.nalCount}R + ${rmu.nalfCount}T` : "—"}</text>
-          <text x="54" y="711" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>OEM</text>
-          <text x="189" y="711" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{rmu?.lbsBrand || "—"}</text>
+          <text x="54" y="669" fontSize="10" fontWeight="700" fill={DK}>{rmu ? `${rmu.voltageKv} kV` : "—"}</text>
+          <text x="54" y="691" fontSize="10" fontWeight="700" fill={DK}>{rmu ? `${rmu.nalCount}R + ${rmu.nalfCount}T` : "—"}</text>
+          <text x="54" y="713" fontSize="10" fontWeight="700" fill={DK}>{rmu?.lbsBrand || "—"}</text>
         </g>
         {/* Card 02 — Transformer */}
         <g>
           <rect x="216" y="604" width="163" height="128" rx="6" fill="#FFFFFF" stroke="#E4E4E9" />
           <rect x="216" y="604" width="163" height="3" rx="1.5" fill={OR} />
-          <text x="230" y="624" fontSize="6.5" fontWeight="700" letterSpacing="1.8" fill={OR}>02 · TRANSFORMER</text>
+          <text x="230" y="624" fontSize="6.5" fontWeight="700" letterSpacing="1.8" fill={OR}>TR</text>
           {without ? (
             <>
               <text x="230" y="642" fontSize="14" fontWeight="700" fill={INK}>Not included</text>
@@ -5432,28 +5429,22 @@ function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRat
             <>
               <text x="230" y="642" fontSize="14" fontWeight="700" fill={INK}>{tr?.ratingKva ? `${tr.ratingKva} kVA` : "—"}</text>
               <line x1="230" y1="651" x2="365" y2="651" stroke="#ECECF0" />
-              <text x="230" y="667" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>RATIO</text>
-              <text x="365" y="667" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{tr?.primaryKv ? `${tr.primaryKv} / 0.4 kV` : "—"}</text>
-              <text x="230" y="689" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>INSULATION</text>
-              <text x="365" y="689" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{tr?.insulation ? `${tr.insulation} type` : "—"}</text>
-              <text x="230" y="711" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>BRAND</text>
-              <text x="365" y="711" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{tr?.brand || "—"}</text>
+              <text x="230" y="669" fontSize="10" fontWeight="700" fill={DK}>{tr?.primaryKv ? `${tr.primaryKv} / 0.4 kV` : "—"}</text>
+              <text x="230" y="691" fontSize="10" fontWeight="700" fill={DK}>{tr?.insulation ? `${tr.insulation} type` : "—"}</text>
+              <text x="230" y="713" fontSize="10" fontWeight="700" fill={DK}>{tr?.brand || "—"}</text>
             </>
           )}
         </g>
         {/* Card 03 — Low Voltage */}
         <g>
           <rect x="392" y="604" width="163" height="128" rx="6" fill="#FFFFFF" stroke="#E4E4E9" />
-          <rect x="392" y="604" width="163" height="3" rx="1.5" fill={DK} />
-          <text x="406" y="624" fontSize="6.5" fontWeight="700" letterSpacing="1.8" fill={DK}>03 · LOW VOLTAGE</text>
+          <rect x="392" y="604" width="163" height="3" rx="1.5" fill={OR} />
+          <text x="406" y="624" fontSize="6.5" fontWeight="700" letterSpacing="1.8" fill={OR}>LV</text>
           <text x="406" y="642" fontSize="14" fontWeight="700" fill={INK}>MDB</text>
           <line x1="406" y1="651" x2="541" y2="651" stroke="#ECECF0" />
-          <text x="406" y="667" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>CURRENT</text>
-          <text x="541" y="667" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{lvRatingA ? `${lvRatingA} A` : "—"}</text>
-          <text x="406" y="689" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>BREAKERS</text>
-          <text x="541" y="689" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">ABB</text>
-          <text x="406" y="711" fontSize="5.6" fontWeight="700" letterSpacing="1.3" fill={GY}>CONFIG.</text>
-          <text x="541" y="711" fontSize="9.5" fontWeight="700" fill={DK} textAnchor="end">{lv?.lvConfig === "inout" ? "Incoming & Outgoing" : "Incoming only"}</text>
+          <text x="406" y="669" fontSize="10" fontWeight="700" fill={DK}>{lvRatingA ? `${lvRatingA} A` : "—"}</text>
+          <text x="406" y="691" fontSize="10" fontWeight="700" fill={DK}>ABB</text>
+          <text x="406" y="713" fontSize="10" fontWeight="700" fill={DK}>{lv?.lvConfig === "inout" ? "Incoming & Outgoing" : "Incoming only"}</text>
         </g>
 
         {/* Footer — three values (no labels): finish left, IP54 centered, OEM right. */}
@@ -5502,7 +5493,10 @@ function MvTransformerTechnical({ config: c, insideKiosk, index, total, project,
     r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation);
   const coverCode = row?.code ? trDisplayCode(row.code, insideKiosk) : (tech ? trModel(tech, insideKiosk) : "");
   const hasUploaded = !!coverCode && (trCatalog?.sheetCodes.includes(coverCode) ?? false) && !!row;
-  const desc = [c.ratingKva ? `${c.ratingKva} kVA` : null, c.primaryKv ? `${c.primaryKv} kV` : null, c.insulation ? `${c.insulation} type` : null].filter(Boolean).join(" · ");
+  // No uploaded PDF and no built-in Powerline datasheet → the transformer is supplied to its own
+  // technical datasheet. Rather than a separate page, the cover shows a small "As per Technical Data
+  // Sheet" note (in orange) and no datasheet page follows.
+  const asPerDataSheet = trCatalog != null && !hasUploaded && !tech;
   // "Without transformer": there is no physical transformer to publish a datasheet for. The cover states
   // "Without … Transformer …"; inside a kiosk the cover is dropped, and the kiosk's own cover already
   // carries that line, so nothing is rendered here.
@@ -5511,27 +5505,14 @@ function MvTransformerTechnical({ config: c, insideKiosk, index, total, project,
   }
   return (
     <>
-      {!hideCover && <TransformerCover config={c} code={coverCode} insideKiosk={insideKiosk} index={index} total={total} project={project} />}
+      {!hideCover && <TransformerCover config={c} code={coverCode} insideKiosk={insideKiosk} index={index} total={total} project={project} asPerDataSheet={asPerDataSheet} />}
       {trCatalog == null ? (
         <div className="a4-sheet p-6"><div className="skeleton h-[260mm] w-full rounded-lg" /></div>
       ) : hasUploaded ? (
         <UploadedTransformerSheet code={coverCode} />
       ) : tech ? (
         <TransformerTechnicalSheet t={tech} insideKiosk={insideKiosk} />
-      ) : (
-        // No uploaded PDF and no built-in Powerline datasheet for this transformer → the offer states the
-        // transformer is supplied to its own technical datasheet (provided separately).
-        <section className="a4-sheet relative flex flex-col overflow-hidden bg-white" style={{ breakAfter: "page" }}>
-          <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
-          <img src="/brand/mark-color.png" alt="" aria-hidden="true"
-            className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
-          <div className="relative flex flex-1 flex-col items-center justify-center px-16 py-14 text-center">
-            <div className="text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Medium Voltage · Distribution Transformer</div>
-            <div className="mt-6 text-5xl font-extrabold leading-tight text-ink">As per Technical Data Sheet</div>
-            {desc && <div className="mt-4 text-xl font-semibold text-muted">{desc}</div>}
-          </div>
-        </section>
-      )}
+      ) : null /* "As per Technical Data Sheet" is shown on the cover instead of a separate page */}
     </>
   );
 }

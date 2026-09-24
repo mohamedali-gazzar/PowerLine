@@ -23,6 +23,21 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-24 · Mohamed's side · Claude
 
+**Kiosk cover cards cleaned up, dropdown blended in, transformer note moved, and P.F.C fan/filter fixed.**
+
+- **Kiosk cover cards:** the three cards now show short headers **RMU / TR / LV**, the values are
+  left-aligned with their labels removed, and the Low-Voltage card's top line is orange like the others.
+- **Fire-extinguisher qty dropdown** now looks like the other quantity cells (no box, right-aligned, muted).
+- **"As per Technical Data Sheet"** (for a transformer with no datasheet) is no longer a separate page —
+  it's a small orange note on the transformer's own cover.
+- **Standard-EDMS P.F.C fix:** the P.F.C combination used the old names "Fan 25*25" / "Filter  25*25",
+  which no longer exist in the price book, so they came out at 0. Now it uses **"Fan" (560)** and
+  **"Filter" (185)** — the current priced items. Synced components.json to the DB names too.
+
+Look-and-feel + one catalogue-name fix; no schema change.
+
+## 2026-09-24 · Mohamed's side · Claude
+
 **Kiosk cover footer simplified.**
 
 Dropped the small labels (ENCLOSURE FINISH / KIOSK PROTECTION / OEM PARTNER) from the cover footer and

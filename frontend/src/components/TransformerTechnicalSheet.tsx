@@ -241,8 +241,11 @@ function trFamily(brand: string, insulation: string): { family: string; tagline:
  * spec strip), so the two MV products read as one family. `code` is the transformer's model /
  * catalogue code; the spec strip surfaces the rating, voltage, insulation and protection (IP).
  */
-export function TransformerCover({ config, code, insideKiosk, index, total, project }: {
+export function TransformerCover({ config, code, insideKiosk, index, total, project, asPerDataSheet }: {
   config: TransformerConfigInput; code: string; insideKiosk: boolean; index: number; total: number; project: string;
+  /** No datasheet exists for this transformer → show a small "As per Technical Data Sheet" note (orange)
+   *  on the cover instead of a separate datasheet page. */
+  asPerDataSheet?: boolean;
 }) {
   const fam = trFamily(config.brand, config.insulation);
   // "Without transformer": the compact substation ships with no transformer, so the cover states that
@@ -299,6 +302,9 @@ export function TransformerCover({ config, code, insideKiosk, index, total, proj
           <div className="mt-10">
             <div className="mb-2 text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Type code</div>
             <div className="font-mono text-2xl font-bold tracking-wide text-ink">{code || "…"}</div>
+            {asPerDataSheet && (
+              <div className="mt-4 text-sm font-bold uppercase tracking-[0.22em]" style={{ color: TRED }}>As per Technical Data Sheet</div>
+            )}
           </div>
         </div>
 

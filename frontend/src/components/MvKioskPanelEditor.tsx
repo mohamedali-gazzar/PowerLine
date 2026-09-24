@@ -291,9 +291,10 @@ function KioskAccessoriesEditor({ rows, checks, onCheck, onQty }: {
           <span className="min-w-0 truncate text-sm font-semibold text-ink">{r.name}</span>
           {r.qtyOptions ? (
             <span className="flex justify-end">
+              {/* Styled to blend with the plain qty cells — no box, right-aligned muted — but still a dropdown. */}
               <select value={r.qty} aria-label={`${r.name} quantity`}
                 onChange={(e) => onQty(r.key, Number(e.target.value))}
-                className="cursor-pointer rounded-md border border-line bg-white px-1.5 py-0.5 text-right text-sm tabular-nums focus:border-brand focus:outline-none">
+                className="cursor-pointer border-0 bg-transparent p-0 text-right text-sm tabular-nums text-muted focus:outline-none focus:ring-0">
                 {r.qtyOptions.map((q) => <option key={q} value={q}>{q}</option>)}
               </select>
             </span>

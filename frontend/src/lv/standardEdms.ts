@@ -63,8 +63,8 @@ const PFC_CAPACITOR = "Capacitor 25 kVAR @ 525V - 14.5kVAR @400V";
 const PFC_BANK = (breaker: string, caps: number): StdPart[] => [
   { qty: 1, desc: breaker },
   { qty: caps, desc: PFC_CAPACITOR },
-  { qty: 1, desc: "Filter  25*25" },
-  { qty: 1, desc: "Fan 25*25" },
+  { qty: 1, desc: "Filter" },
+  { qty: 1, desc: "Fan" },
   { qty: 1, desc: "Thermostat" },
 ];
 /** Switch-fuse outgoings: each way is one switch fuse plus three HRC fuses.
