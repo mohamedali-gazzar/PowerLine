@@ -5,9 +5,9 @@ import type { KioskLvConfigInput } from "../types";
 import MvRmuPanelEditor from "./MvRmuPanelEditor";
 import MvTransformerPanelEditor from "./MvTransformerPanelEditor";
 import { DEFAULT_RMU_CONFIG } from "./RmuConfigForm";
-import { rmuKioskLimitation } from "../pcss/kioskRmu";
+import { rmuKioskLimitation, kioskSizeOptions } from "../pcss/kioskRmu";
 import {
-  KIOSK_SIZE_CODES, MV_CABLE_METERS, lvCopperKg,
+  MV_CABLE_METERS, lvCopperKg,
   KIOSK_EXTRAS, DEFAULT_KIOSK_ACCESSORIES,
 } from "../lv/kioskParts";
 import {
@@ -329,6 +329,11 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor, defaultNam
   const mvCableRate = s.mvCableEgpPerM ?? DEFAULT_MV_CABLE_EGP_PER_M;
   // Kiosk Size code drives the enclosure-steel cost (inside kioskCostsEgp); kept for the dropdown.
   const sizeCode = priceMap.size?.code || "";
+  // The enclosures this kiosk may be built in, straight from the P-CSS Selector's rules, so the two
+  // tools can never disagree about what exists. A size saved before the RMU or transformer changed
+  // is kept and flagged rather than dropped — dropping it would silently reprice the kiosk.
+  const sizeOptions = kioskSizeOptions(p.mvRmuConfig ?? DEFAULT_RMU_CONFIG, p.mvTransformerConfig?.ratingKva);
+  const sizeStale = !!sizeCode && sizeOptions.length > 0 && !sizeOptions.includes(sizeCode);
   // Accessories tick-box state — Capacitor Box / Stone Paint (moved here from the old Extra section).
   const accChecks = p.mvKioskAccChecks ?? {};
   const setAccCheck = (key: string, on: boolean) => upPanel(p.id, { mvKioskAccChecks: { ...accChecks, [key]: on } });
@@ -475,11 +480,18 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor, defaultNam
                     <td className="py-1.5 pr-2 font-semibold text-ink">{row.label}</td>
                     <td className="py-1.5 pr-2">
                       {row.key === "size" ? (
-                        <select value={sizeCode} onChange={(e) => setPrice("size", { code: e.target.value })}
-                          className="-ml-1 cursor-pointer border-0 bg-transparent px-1 text-sm font-semibold text-ink focus:outline-none focus:ring-0 dark:bg-transparent">
-                          <option value="">—</option>
-                          {KIOSK_SIZE_CODES.map((c) => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                        <span className="inline-flex items-center gap-1">
+                          <select value={sizeCode} onChange={(e) => setPrice("size", { code: e.target.value })}
+                            title={sizeOptions.length ? `Only the enclosures the P-CSS Selector allows for this RMU and transformer: ${sizeOptions.join(", ")}` : undefined}
+                            className={`-ml-1 cursor-pointer border-0 bg-transparent px-1 text-sm font-semibold focus:outline-none focus:ring-0 dark:bg-transparent ${sizeStale ? "text-amber-600" : "text-ink"}`}>
+                            <option value="">—</option>
+                            {sizeOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                            {/* A size saved before the configuration changed stays selectable, so a
+                                kiosk never silently repriced itself into a different enclosure. */}
+                            {sizeStale && <option value={sizeCode}>{sizeCode} — no longer available</option>}
+                          </select>
+                          {sizeStale && <span className="text-amber-600" title={`${sizeCode} does not fit this RMU / transformer. Available: ${sizeOptions.join(", ") || "none"}.`}>⚠</span>}
+                        </span>
                       ) : (
                         <span className="text-sm font-semibold text-ink">{row.autoCode || "—"}</span>
                       )}

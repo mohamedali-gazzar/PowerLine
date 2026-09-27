@@ -23,6 +23,44 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-27 · Mohamed's side · Claude
 
+**The kiosk Size list now follows the P-CSS Selector's rules, and nothing unpriced is offered anywhere.**
+
+⚠️ HEADS-UP — **some existing kiosks are saved as an enclosure that cannot exist, and are priced too
+cheaply because of it.** The kiosk Size dropdown used to offer all seven enclosures whatever the
+kiosk was. It now asks the P-CSS Selector's own rules, and on the test quotation three of four kiosks
+turned out to be saved as **P-CSS 5ST-A** — an Air-unit enclosure — while being PSEC units with
+metering, which the Selector says must be **P-CSS 16ST-V**.
+
+That matters because a kiosk's steel cost is its enclosure weight × the sheet-metal rate:
+P-CSS 5ST-A is 1,520 kg (≈174,800 EGP) against P-CSS 16ST-V at 2,040 kg (≈234,600 EGP) — about
+**59,800 EGP short per kiosk**. **Nothing was changed automatically.** A size that no longer fits
+stays selected, marked "no longer available" with a ⚠, so no quotation repriced itself behind anyone's
+back. Worth checking open MV quotations for that warning.
+
+The rules come from the Selector itself, not a copy, so the two tools cannot drift apart. Two of them
+do the work: the transformer rating sets a MINIMUM frame (5ST to 500 kVA, 10ST to 1000, 16ST above),
+and each enclosure knows which RMUs and switching configurations it exists for — so a PRAL (Air)
+24 kV kiosk is only ever 16ST-V, and 5ST-A / 10ST-I / 16ST-U are Air-only.
+
+❓ QUESTION FOR MOHAMED: **P-CSS 16ST-W can no longer be chosen.** Our kiosk table lists it (the SF6
+1600 kVA enclosure, 2,080 kg) but the P-CSS Selector's database has no such design, so an SF6
+1600 kVA job now lands on 16ST-V (2,040 kg) instead. If 16ST-W is a real product it needs adding to
+the Selector — say so and it will be.
+
+**Unpriced choices are no longer offered.** An option that cannot be priced produced a panel with no
+price, so it is now left out of the list rather than shown greyed out:
+
+- **RMU** — the LBS brand list drops "SCHNEIDER — no data"; the client specification list drops
+  "KAHRABA — no technical offer".
+- **Transformer** — the price list has 64 transformers and **13 of them have no cost typed in**,
+  including every **Powerline** row. The brand list is now EgyTravo / Hitachi / Sewedy, and 2000 kVA
+  and 2500 kVA have dropped out of the ratings. Type a cost on /pricing and they come straight back.
+
+In every case, a value a panel is ALREADY saved as stays in its list (flagged), so opening an older
+quotation never silently changes what it was quoted as.
+
+## 2026-09-27 · Mohamed's side · Claude
+
 **MV quotations: proper Terms & Conditions, and the ERP CSV now works.**
 
 ⚠️ HEADS-UP — **a kiosk used to be exported to the ERP twice.** The ERP CSV listed every kiosk as the

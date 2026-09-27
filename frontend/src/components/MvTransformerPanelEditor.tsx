@@ -116,20 +116,31 @@ export default function MvTransformerPanelEditor({
   // Cascading options — the price database IS the reference. Each dropdown lists only what the DB
   // actually has for the OTHER current selections, so Powerline shows only its 6 ratings and only
   // Dry; add an oil transformer or a new rating to the database and it appears here automatically.
-  const brands = useMemo(() => uniqStrs((rows ?? []).map((r) => r.brand)), [rows]);
+  //
+  // It also lists only what the database can PRICE. A row still waiting for a cost would offer a
+  // transformer that produces no price, so it is left out of every list. The one exception is the
+  // transformer this panel is already built as: it stays listed, so opening an older quotation
+  // never silently changes what was quoted.
+  const pricedRows = useMemo(() => {
+    const isCurrent = (r: TransformerRow) =>
+      r.ratingKva === cfg.ratingKva && r.primaryKv === cfg.primaryKv
+      && r.brand === cfg.brand && r.insulation === cfg.insulation;
+    return (rows ?? []).filter((r) => r.costEgp > 0 || isCurrent(r));
+  }, [rows, cfg.ratingKva, cfg.primaryKv, cfg.brand, cfg.insulation]);
+  const brands = useMemo(() => uniqStrs(pricedRows.map((r) => r.brand)), [pricedRows]);
   const ratings = useMemo(
-    () => uniqNums((rows ?? []).filter((r) =>
+    () => uniqNums(pricedRows.filter((r) =>
       (!cfg.brand || r.brand === cfg.brand) &&
       (cfg.primaryKv == null || r.primaryKv === cfg.primaryKv) &&
       (!cfg.insulation || r.insulation === cfg.insulation)).map((r) => r.ratingKva)),
-    [rows, cfg.brand, cfg.primaryKv, cfg.insulation],
+    [pricedRows, cfg.brand, cfg.primaryKv, cfg.insulation],
   );
   const voltages = useMemo(
-    () => uniqNums((rows ?? []).filter((r) =>
+    () => uniqNums(pricedRows.filter((r) =>
       (!cfg.brand || r.brand === cfg.brand) &&
       (cfg.ratingKva == null || r.ratingKva === cfg.ratingKva) &&
       (!cfg.insulation || r.insulation === cfg.insulation)).map((r) => r.primaryKv)),
-    [rows, cfg.brand, cfg.ratingKva, cfg.insulation],
+    [pricedRows, cfg.brand, cfg.ratingKva, cfg.insulation],
   );
   // Inside a kiosk the transformer's MV primary must match the RMU's voltage class, so drive it from
   // the RMU (12 kV RMU → 11 kV transformer, 24 kV → 22 kV — the nearest voltage the price list carries)
@@ -145,13 +156,13 @@ export default function MvTransformerPanelEditor({
 
   // Every insulation in the DB (so we can still SHOW Oil, but LOCKED, when the brand has no oil),
   // and the set the current brand/rating/voltage actually offers.
-  const allInsulations = useMemo(() => uniqStrs((rows ?? []).map((r) => r.insulation)), [rows]);
+  const allInsulations = useMemo(() => uniqStrs(pricedRows.map((r) => r.insulation)), [pricedRows]);
   const availInsulations = useMemo(
-    () => new Set((rows ?? []).filter((r) =>
+    () => new Set(pricedRows.filter((r) =>
       (!cfg.brand || r.brand === cfg.brand) &&
       (cfg.primaryKv == null || r.primaryKv === cfg.primaryKv) &&
       (cfg.ratingKva == null || r.ratingKva === cfg.ratingKva)).map((r) => r.insulation)),
-    [rows, cfg.brand, cfg.primaryKv, cfg.ratingKva],
+    [pricedRows, cfg.brand, cfg.primaryKv, cfg.ratingKva],
   );
 
   // Choosing a brand clears any rating / voltage / insulation the new brand doesn't offer, so a

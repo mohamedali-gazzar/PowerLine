@@ -212,8 +212,10 @@ export default function RmuConfigForm({
 
         <div className="space-y-4">
           {/* What it is — family, LBS brand and client specification, as three dropdowns on one row.
-              Options with no data are listed but disabled, so the reason shows in the list itself
-              instead of a separate hint line under each field. */}
+              An option with no data behind it is left out of the list entirely: it cannot be priced,
+              so offering it only invites a choice that produces no offer. The one exception is a
+              value already saved on this panel, which stays listed and flagged so an older
+              quotation never silently changes what it was built as. */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className={isLucy ? "sm:col-span-3" : undefined}>
               <Field label="Product type">
@@ -238,10 +240,12 @@ export default function RmuConfigForm({
                     value={(rmu.lbsBrand ?? "ABB") as LbsBrand}
                     onChange={(e) => setR("lbsBrand", e.target.value as LbsBrand)}
                   >
-                    {(BRANDS_BY_FAMILY[rmu.productType] as readonly LbsBrand[]).map((b) => {
-                      const ok = AVAILABLE_BRANDS_BY_FAMILY[rmu.productType].includes(b);
-                      return <option key={b} value={b} disabled={!ok}>{ok ? b : `${b} — no data`}</option>;
-                    })}
+                    {(BRANDS_BY_FAMILY[rmu.productType] as readonly LbsBrand[])
+                      .filter((b) => AVAILABLE_BRANDS_BY_FAMILY[rmu.productType].includes(b) || b === (rmu.lbsBrand ?? "ABB"))
+                      .map((b) => {
+                        const ok = AVAILABLE_BRANDS_BY_FAMILY[rmu.productType].includes(b);
+                        return <option key={b} value={b}>{ok ? b : `${b} — no data`}</option>;
+                      })}
                   </select>
                 </Field>
 
@@ -251,10 +255,12 @@ export default function RmuConfigForm({
                     value={rmu.clientSpec ?? "EECH"}
                     onChange={(e) => setR("clientSpec", e.target.value as "EECH" | "KAHRABA")}
                   >
-                    {CLIENT_SPECS.map((c) => {
-                      const ok = AVAILABLE_CLIENT_SPECS.includes(c);
-                      return <option key={c} value={c} disabled={!ok}>{ok ? c : `${c} — no technical offer`}</option>;
-                    })}
+                    {CLIENT_SPECS
+                      .filter((c) => AVAILABLE_CLIENT_SPECS.includes(c) || c === (rmu.clientSpec ?? "EECH"))
+                      .map((c) => {
+                        const ok = AVAILABLE_CLIENT_SPECS.includes(c);
+                        return <option key={c} value={c}>{ok ? c : `${c} — no technical offer`}</option>;
+                      })}
                   </select>
                 </Field>
               </>
