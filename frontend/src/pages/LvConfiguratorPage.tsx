@@ -52,7 +52,7 @@ import {
 import { rankSearchOptions } from "../lv/search";
 import { kioskCostsEgp, kioskPartSellingEgp, kioskFactorOf, kioskTotalCostEgp, kioskTotalSellingEgp, KIOSK_PART_KEYS, type KioskPartKey } from "../lv/kioskPricing";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
-import { buildErpItemsCsv, erpItemCount } from "../lv/erpCsv";
+import { buildErpItemsCsv, erpItemCount, type MvErpItem } from "../lv/erpCsv";
 import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalogSource";
 import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
@@ -745,6 +745,77 @@ export default function LvConfiguratorPage() {
     }
     return lines;
   };
+  /**
+   * The MV items for the ERP CSV — one per RMU / Transformer / Compact Substation, each with the
+   * ERP item code the owner asked for and its selling price in EGP:
+   *   · an RMU takes its own configuration code, sold at its price-list price (+ any Aux / Shunt)
+   *   · a transformer takes its own catalogue code, sold at cost ÷ factor + transportation
+   *   · a kiosk is "P-CSS 12" or "P-CSS 24" — its RMU's voltage class — sold at the blended Total
+   *     of its live price table
+   * Reads the very same price lists the commercial offer does, so the CSV and the paper agree.
+   * Returns [] for a plain (non-MV) quotation.
+   */
+  const mvErpItems = async (): Promise<MvErpItem[]> => {
+    const mvPanels = s.panels.filter((p) => !!p.mvType);
+    if (!mvPanels.length) return [];
+    const usdRate = s.factors?.usd || 1;
+    const curr = (s.mvRmu ?? DEFAULT_MV_COMMERCIAL).currency;
+    const rate = curr === "EGP" ? usdRate : 1;           // RMU list prices are USD
+    const toEgp = (offer: number) => (curr === "EGP" ? offer : Math.round(offer * usdRate));
+    let trRows: TransformerRow[] = [];
+    let trFactor = 0.95;
+    try { const r = await api.pricing.transformerList({ activeOnly: true, take: 1000 }); trRows = r.rows; trFactor = r.factor || 0.95; } catch { /* keep defaults */ }
+    /** The catalogue row for a transformer config — the IP00 twin inside a kiosk, IP23 standalone. */
+    const trRowOf = (c: TransformerConfigInput | undefined, insideKiosk: boolean) => {
+      if (!c || c.ratingKva == null) return undefined;
+      const base = trRows.find((r) => r.ratingKva === c.ratingKva && r.primaryKv === c.primaryKv && r.brand === c.brand && r.insulation === c.insulation);
+      return base ? (trRows.find((r) => r.code === trDisplayCode(base.code, insideKiosk)) ?? base) : undefined;
+    };
+    const items: MvErpItem[] = [];
+    for (const p of mvPanels) {
+      const name = mvDefaultName(p, s.panels);
+      const qty = p.qty || 1;
+      if (p.mvType === "rmu") {
+        const cfg = p.mvRmuConfig ?? DEFAULT_RMU_CONFIG;
+        try {
+          const g = await api.previewConfig(cfg);
+          const lp = g?.listPricing;
+          if (!lp?.found || lp.basePrice == null) continue;      // not in the price list → no row
+          const sellOffer = (lp.basePrice + (lp.addOns ?? []).reduce((sum, a) => sum + a.price, 0)) * rate;
+          const sellEgp = toEgp(Math.round(sellOffer)) + Math.round(rmuAuxShuntUsd(cfg) * usdRate);
+          items.push({ code: g.panelCode || g.configCode || rmuShortCode(cfg), name, qty, sellEgp });
+        } catch { /* price lookup failed → leave this RMU out rather than price it at zero */ }
+      } else if (p.mvType === "transformer") {
+        const c = p.mvTransformerConfig;
+        if (c?.withoutTransformer) continue;                      // supplied by others → nothing to sell
+        const row = trRowOf(c, false);
+        if (!row || !(row.costEgp > 0)) continue;
+        const f = p.mvTransformerFactor ?? trFactor;
+        const sellEgp = Math.round((f > 0 ? row.costEgp / f : row.costEgp) * usdRate)
+          + Math.round((c?.transportation ?? 300) * usdRate);
+        items.push({ code: row.code, name, qty, sellEgp });
+      } else if (p.mvType === "kiosk") {
+        const cfg = p.mvRmuConfig ?? DEFAULT_RMU_CONFIG;
+        let rmuCostEgp: number | null = null;
+        try {
+          const g = await api.previewConfig(cfg);
+          const lp = g?.listPricing;
+          if (lp?.found && lp.basePrice != null) {
+            const sellOffer = (lp.basePrice + (lp.addOns ?? []).reduce((sum, a) => sum + a.price, 0)) * rate;
+            rmuCostEgp = toEgp(Math.round(sellOffer * (g.rmuFactor ?? 0.85)))
+              + Math.round(rmuAuxShuntUsd(cfg) * (g.rmuFactor ?? 0.85) * usdRate);
+          }
+        } catch { /* leave the RMU part unpriced; the rest of the kiosk still totals */ }
+        const trRow = trRowOf(p.mvTransformerConfig, true);
+        const trCostEgp = trRow && trRow.costEgp > 0 ? Math.round(trRow.costEgp * usdRate) : null;
+        const costs = kioskCostsEgp(p, s, rmuCostEgp, trCostEgp);
+        const sellEgp = kioskTotalSellingEgp(costs, p, usdRate);
+        if (!(sellEgp > 0)) continue;
+        items.push({ code: `P-CSS ${cfg.voltageKv}`, name, qty, sellEgp });
+      }
+    }
+    return items;
+  };
   const salesMailBody = (factorLines: string[]) => [
     `Dear ${s.project.salesPerson.trim() || "Sales"},`,
     // MV → one line per part with its own factor; otherwise the single achieved project factor.
@@ -1012,7 +1083,8 @@ export default function LvConfiguratorPage() {
     });
     if (name === null) return; // cancelled
     const trimmed = name.trim() || def;
-    const blob = new Blob([buildErpItemsCsv(s)], { type: "text/csv;charset=utf-8;" });
+    // MV items need their price lists fetched, so they are gathered before the file is built.
+    const blob = new Blob([buildErpItemsCsv(s, await mvErpItems())], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -2412,7 +2484,7 @@ export default function LvConfiguratorPage() {
             addLabel="+ Add cell" emptyLabel="No spare cells yet." emptyAddLabel="+ Add your first cell" />
         )}
         {activeTab === "technical" && (isMvQtn ? <MvTechnicalTab s={s} qtnNo={qtnNum} /> : (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} onScratch={upScratch} readOnly={sharedReadOnly} />))}
-        {activeTab === "commercial" && (isMvQtn ? <MvCommercialTab s={s} qtnNo={qtnNum} /> : (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} readOnly={readOnly} />))}
+        {activeTab === "commercial" && (isMvQtn ? <MvCommercialTab s={s} qtnNo={qtnNum} up={up} /> : (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} readOnly={readOnly} />))}
         {activeTab === "kioskAnalysis" && <KioskAnalysisTab s={s} qtnNo={qtnNum} />}
         {activeTab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
         {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} qtnNo={qtnNum} onOpenPanel={openPanelInPanels} />}
@@ -4400,11 +4472,24 @@ function AutoTextarea({ value, onChange, rtl, placeholder, disabled }: {
   value: string; onChange: (v: string) => void; rtl?: boolean; placeholder?: string; disabled?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => { const el = ref.current; if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }, [value]);
+  const fit = () => { const el = ref.current; if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } };
+  useLayoutEffect(fit, [value]);
+  // Re-fit when the box changes width: the text re-wraps to a different number of lines, and a
+  // height measured at the old width would leave the last lines cut off. Covers the column
+  // resizing, the window resizing, and a web font arriving after the first measure.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   return (
     <textarea ref={ref} value={value} onChange={(e) => onChange(e.target.value)} rows={1} dir={rtl ? "rtl" : undefined}
       placeholder={placeholder} disabled={disabled}
-      className={`w-full resize-none whitespace-pre-wrap border-0 bg-transparent p-0 text-[12px] leading-relaxed text-ink outline-none placeholder:text-muted/60 ${rtl ? "text-right" : ""}`} />
+      // overflow-hidden, not just resize-none: without it the browser keeps a scrollbar on a box
+      // that is exactly as tall as its text, and the terms end up with a scroll track each.
+      className={`w-full resize-none overflow-hidden whitespace-pre-wrap border-0 bg-transparent p-0 text-[12px] leading-relaxed text-ink outline-none placeholder:text-muted/60 ${rtl ? "text-right" : ""}`} />
   );
 }
 
@@ -5133,22 +5218,6 @@ function kioskDesc(p: LvPanel): string {
   ].filter(Boolean).join("\n");
 }
 
-// One terms section (Validity / Delivery / Payment / Warranty) on the MV commercial Terms page —
-// one per MV part (RMU / Transformer), each reading its own Commercial settings block.
-function MvTermsBlock({ title, cm }: { title: string; cm: MvCommercial }) {
-  return (
-    <div className="mb-8">
-      <h3 className="mb-3 text-xl font-extrabold" style={{ color: TRED }}>{title}</h3>
-      <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-        <div className="flex gap-2"><span className="w-20 font-bold text-muted">Validity:</span><span>{cm.validityDays} days</span></div>
-        <div className="flex gap-2"><span className="w-20 font-bold text-muted">Delivery:</span><span>{cm.deliveryWeeks ? `${cm.deliveryWeeks} weeks` : "To be confirmed"}</span></div>
-        <div className="flex gap-2"><span className="w-20 font-bold text-muted">Payment:</span><span>{cm.paymentTerms || "To be agreed"}</span></div>
-        <div className="flex gap-2"><span className="w-20 font-bold text-muted">Warranty:</span><span>{cm.warrantyMonths ? `${cm.warrantyMonths} months` : "Standard"}</span></div>
-      </div>
-    </div>
-  );
-}
-
 /** Fetch backend previews for a set of RMU configs, cached by config signature. Identical
  *  configs fetch once; adding an RMU never re-fetches the unchanged ones. */
 function useRmuPreviews(configs: RmuConfigInput[]): Record<string, GeneratedOffer> {
@@ -5495,7 +5564,9 @@ function KioskCover({ rmu, tr, kva, stonePaint, index, project, lv, lvRatingA, l
           <text x="406" y="699" fontSize="6.5" fontWeight="700" letterSpacing="1.2" fill={GY}>BREAKERS</text>
           <text x="541" y="699" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{lvBreakerBrand || "ABB"}</text>
           <text x="406" y="721" fontSize="6.5" fontWeight="700" letterSpacing="1.2" fill={GY}>CONFIG.</text>
-          <text x="541" y="721" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{lv?.lvConfig === "inout" ? "In & Out" : "Incoming only"}</text>
+          {/* Whether the LV panel carries a power-factor-correction bank — the thing a customer
+              looks for on an MDB, rather than its incoming/outgoing arrangement. */}
+          <text x="541" y="721" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{lv?.includePf ? "With P.F.C" : "Without P.F.C"}</text>
         </g>
         </g>
 
@@ -5875,7 +5946,8 @@ function highlightTerms(text: string, terms: string[]): React.ReactNode {
   );
 }
 
-function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
+function MvCommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (patch: Partial<LvState>) => void }) {
+  const { confirm, dialogs } = useDialogs();
   const panels = mvRmuPanels(s);
   const trPanels = mvTransformerPanels(s);
   const kioskPanels = mvKioskPanels(s);
@@ -5977,6 +6049,7 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
 
   return (
     <div className="animate-fade-up">
+      {dialogs}
       {panels.length > 0 || trPanels.length > 0 || kioskPanels.length > 0 ? (
         <PrintBar
           label="Priced MV commercial offer → A4 PDF."
@@ -6045,12 +6118,57 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
           </div>
 
         </div>
-        {/* Terms & Conditions — its own A4 page, with a section per MV part present. */}
-        <section className="a4-sheet px-12 py-10 text-ink" style={{ breakAfter: "page" }}>
-          <h2 className="mb-6 text-3xl font-extrabold" style={{ color: TRED }}>Terms &amp; Conditions</h2>
-          {panels.length > 0 && <MvTermsBlock title="Ring Main Unit (RMU)" cm={cm} />}
-          {trPanels.length > 0 && <MvTermsBlock title="Transformer" cm={s.mvTransformer ?? DEFAULT_MV_COMMERCIAL} />}
-          {kioskPanels.length > 0 && <MvTermsBlock title="Compact Substation (Kiosk)" cm={cm} />}
+        {/* General Terms & Conditions — the same editable English + Arabic pages the LV offer
+            carries, reading and writing the same quotation fields, so a quotation has one set of
+            terms whichever offer it prints. */}
+        <section className="a4-sheet px-10 pb-10 pt-12" style={{ breakAfter: "page" }}>
+          <table className="w-full">
+            <thead>
+              <tr><td className="pb-3">
+                <div className="flex items-center pb-2">
+                  <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-14" />
+                </div>
+              </td></tr>
+            </thead>
+            <tbody>
+              <tr><td>
+                <div className="mb-3 flex items-center justify-between gap-4">
+                  <h2 className="font-display text-xl font-bold" style={{ color: TRED }}>General Terms &amp; Conditions</h2>
+                  <button type="button" title="Reset to the default terms"
+                    onClick={async () => { if (await confirm({ title: "Reset the Terms & Conditions", message: "They go back to the standard wording, and your edits are lost.", confirmLabel: "Reset them", tone: "danger" })) up({ commercialTerms: DEFAULT_COMMERCIAL_TERMS.map((t) => ({ ...t })) }); }}
+                    className="no-print shrink-0 rounded-lg border border-line px-3 py-1 text-xs font-semibold text-muted transition-colors hover:border-brand/40 hover:bg-brand-tint hover:text-brand">
+                    ↺ Reset to default
+                  </button>
+                </div>
+                <TermsEditor key={qtnNo} value={Array.isArray(s.commercialTerms) ? s.commercialTerms : DEFAULT_COMMERCIAL_TERMS} onSave={(v) => up({ commercialTerms: v })} />
+              </td></tr>
+            </tbody>
+          </table>
+        </section>
+        {/* Arabic Terms & Conditions — starts on a new page. */}
+        <section className="a4-sheet px-10 pb-10 pt-12">
+          <table className="w-full">
+            <thead>
+              <tr><td className="pb-3">
+                <div className="flex items-center pb-2">
+                  <img src="/brand/logo-horizontal.png" alt="PowerLine" className="h-14" />
+                </div>
+              </td></tr>
+            </thead>
+            <tbody>
+              <tr><td>
+                <div className="mb-3 flex items-center justify-between gap-4" dir="rtl">
+                  <h2 className="font-display text-xl font-bold" style={{ color: TRED }}>الشروط والأحكام العامة</h2>
+                  <button type="button" title="إعادة التعيين إلى الافتراضي"
+                    onClick={async () => { if (await confirm({ title: "إعادة تعيين الشروط والأحكام", message: "ستعود إلى الصيغة الافتراضية وستفقد تعديلاتك.", confirmLabel: "إعادة التعيين", cancelLabel: "إلغاء", tone: "danger" })) up({ commercialTermsAr: DEFAULT_COMMERCIAL_TERMS_AR.map((t) => ({ ...t })) }); }}
+                    className="no-print shrink-0 rounded-lg border border-line px-3 py-1 text-xs font-semibold text-muted transition-colors hover:border-brand/40 hover:bg-brand-tint hover:text-brand">
+                    ↺ إعادة التعيين
+                  </button>
+                </div>
+                <TermsEditor key={`${qtnNo}-ar`} rtl value={Array.isArray(s.commercialTermsAr) ? s.commercialTermsAr : DEFAULT_COMMERCIAL_TERMS_AR} onSave={(v) => up({ commercialTermsAr: v })} />
+              </td></tr>
+            </tbody>
+          </table>
         </section>
         </div>
       )}
@@ -6273,7 +6391,11 @@ function PricingTab({ s, up, hideProjectFactor, hidePanelPricing }: { s: LvState
           Exchange rates, material costs, operations and margins — drives the EGP selling price live.
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
-          {num("factor", "Panels factor", { hint: "cost ÷ factor = panel selling price" })}
+          {/* LV quotations only. On an MV quotation every part carries its own factor (the RMU's, the
+              transformer's, and one per row of the kiosk cost table), and this one feeds nothing — a
+              kiosk prices its LV compartment from the build-up cost, not the panel selling price. The
+              stored value is left alone, so an LV quotation is unaffected. */}
+          {s.kind !== "mv" && num("factor", "Panels factor", { hint: "cost ÷ factor = panel selling price" })}
           {!hideProjectFactor && (
           <div key="projectFactor">
             <L>Project factor</L>

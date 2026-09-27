@@ -26,6 +26,12 @@ const ERP_FAM: Record<string, ErpFam> = {
 // item group are "LV Spare Parts". Everything else on the row is filled exactly like an enclosure
 // line (priced at the cell's LV selling price); the cost-center follows the Local/automation stem.
 const SPARE_FAM: ErpFam = { item: "LV Spare Parts", cc: "5101 - Automation Item Groups - PL", codeSuffix: "LV-Spare-Parts", group: "LV Spare Parts" };
+
+// MV items (RMU / Transformer / Compact Substation) carry their OWN item code — the RMU's or
+// transformer's catalogue code, or "P-CSS 12" / "P-CSS 24" for a kiosk — so only the cost centre,
+// item group and code stem are fixed here. These borrow the automation stem until the ERP's real
+// medium-voltage cost centre and item group are confirmed.
+const MV_FAM = { cc: "5101 - Automation Item Groups - PL", codeSuffix: "MV", group: "PLP-CORE" };
 const isSpareCell = (p: LvPanel) => !!p.spare && p.spareKind === "spare";
 
 const CODE_STEM = "EG-374674477"; // fixed item-code stem, per the customer's ERP
@@ -57,8 +63,14 @@ const csvCell = (v: string | number): string => {
 const csvRow = (cells: (string | number)[]): string => cells.map(csvCell).join(",");
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-/** Build the full ERP "Bulk Edit Items" CSV text for a QTN (one row per panel). */
-export function buildErpItemsCsv(s: LvState): string {
+/** One MV item ready to write: the ERP item code, a name, a quantity and the selling price in EGP.
+ *  Worked out by the caller because an RMU's and a transformer's price and code come from their
+ *  price lists (fetched), not from anything on the panel. */
+export interface MvErpItem { code: string; name: string; qty: number; sellEgp: number }
+
+/** Build the full ERP "Bulk Edit Items" CSV text for a QTN — one row per LV panel, then one per
+ *  MV item. */
+export function buildErpItemsCsv(s: LvState, mv: MvErpItem[] = []): string {
   const blank = () => new Array(N).fill("");
 
   const rows: (string | number)[][] = [
@@ -72,6 +84,10 @@ export function buildErpItemsCsv(s: LvState): string {
   ];
 
   for (const p of s.panels) {
+    // An MV panel is exported below, as one MV item. A kiosk is also a real LV panel underneath
+    // (its LV compartment, usually a PLP), so without this it would be sold twice: once as the
+    // compact substation and again as the panel inside it.
+    if (p.mvType) continue;
     // Spare-parts cell → a single "LV Spare Parts" line; any other panel → its enclosure family.
     const fam = isSpareCell(p) ? SPARE_FAM : ERP_FAM[panelFamily(p)];
     if (!fam) continue;                                       // family with no ERP mapping → skip
@@ -116,10 +132,45 @@ export function buildErpItemsCsv(s: LvState): string {
     rows.push(r);
   }
 
+  // MV items (RMU / Transformer / Compact Substation). They have no enclosure family, so the caller
+  // works out each one's ERP item code and selling price — they come from the RMU and transformer
+  // price lists, which are fetched, not calculated here — and passes them in ready to write.
+  for (const it of mv) {
+    const egpUnit = round2(it.sellEgp);
+    const usdRate = s.factors.usd || 0;
+    const inUsd = (s.offerCurrency ?? "USD") === "USD" && usdRate > 0;
+    const unit = inUsd ? round2(egpUnit / usdRate) : egpUnit;
+    const qty = it.qty || 1;
+
+    const r = blank();
+    r[IX.item_code] = it.code;
+    r[IX.cost_center] = MV_FAM.cc;
+    r[IX.code] = `${CODE_STEM}-${MV_FAM.codeSuffix}`;
+    r[IX.item_type] = "EGS";
+    r[IX.item_name] = it.name || it.code;
+    r[IX.description] = it.name || it.code;
+    r[IX.item_group] = MV_FAM.group;
+    r[IX.qty] = qty;
+    r[IX.stock_uom] = "Nos";
+    r[IX.uom] = "Nos";
+    r[IX.conversion_factor] = 1;
+    r[IX.stock_qty] = qty;
+    r[IX.price_list_rate] = unit;
+    r[IX.base_price_list_rate] = egpUnit;
+    r[IX.rate] = unit;
+    r[IX.base_rate] = egpUnit;
+    r[IX.amount] = round2(unit * qty);
+    r[IX.base_amount] = round2(egpUnit * qty);
+    r[IX.item_tax_template] = TAX_TEMPLATE;
+    r[IX.item_tax_rate] = TAX_RATE_JSON;
+    r[IX.warehouse] = WAREHOUSE;
+    rows.push(r);
+  }
+
   return rows.map(csvRow).join("\r\n") + "\r\n";
 }
 
-/** How many panels will become rows (for enabling/labelling the download button). */
+/** How many rows a QTN will produce — LV panels with an ERP family, plus every MV item. */
 export function erpItemCount(s: LvState): number {
-  return s.panels.filter((p) => isSpareCell(p) || !!ERP_FAM[panelFamily(p)]).length;
+  return s.panels.filter((p) => p.mvType || isSpareCell(p) || !!ERP_FAM[panelFamily(p)]).length;
 }

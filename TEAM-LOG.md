@@ -23,6 +23,45 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-27 · Mohamed's side · Claude
 
+**MV quotations: proper Terms & Conditions, and the ERP CSV now works.**
+
+⚠️ HEADS-UP — **a kiosk used to be exported to the ERP twice.** The ERP CSV listed every kiosk as the
+compact substation AND again as the LV panel sitting inside it, so the ERP was billed for the panel on
+top of the unit that already contains it. A kiosk is now one line. If anyone has uploaded an MV CSV
+into the ERP already, check it for doubled-up panel lines.
+
+**The ERP CSV now covers MV quotations.** It used to be hidden on them, because only LV enclosure
+families had an ERP mapping. Each MV item is now one line:
+
+- a **kiosk** exports as **"P-CSS 12"** or **"P-CSS 24"**, taken from its RMU's voltage
+- a **transformer** exports under its own catalogue code (e.g. TRD 1000-22-EgyTravo)
+- an **RMU** exports under its own configuration code (e.g. PSEC10AB24R2T1M)
+
+Prices come from the same price lists the commercial offer reads, so the CSV and the customer's paper
+cannot disagree. A part with no price yet is left out rather than exported at zero.
+
+❓ QUESTION FOR MOHAMED: every MV line currently uses cost centre **"5101 - Automation Item Groups -
+PL"** and item group **"PLP-CORE"** — the ones the Local / Pillar / Coffree panels use — because the
+app has no medium-voltage cost centre. If the ERP has proper MV ones, send them and it is a one-line
+change.
+
+**The MV commercial offer now ends with the same Terms & Conditions as the LV offer** — the English
+and Arabic pages, both editable with a Reset button. They are the same terms the LV offer uses (the
+same fields on the quotation), so a quotation has one set of terms whichever offer it prints. The old
+per-part Validity / Delivery / Payment / Warranty page has been removed.
+
+Smaller things:
+
+- The terms no longer each have their own **scrollbar** — every section shows its full text. They also
+  re-measure when the column changes width, so nothing gets cut off.
+- The kiosk cover's **CONFIG.** line now reads **"With P.F.C" / "Without P.F.C"** instead of
+  "Incoming only" / "In & Out".
+- **Panels factor** is hidden on an MV quotation. It fed nothing there — every MV part carries its own
+  factor, and a kiosk prices its LV compartment from the build-up cost, not the panel selling price.
+  The stored value is untouched, so LV quotations are unaffected.
+
+## 2026-09-27 · Mohamed's side · Claude
+
 **Target price on a kiosk — type the price you want, get the factor.**
 
 The Selling column of the "Kiosk price (live)" table now has a small crosshair button. It opens one
