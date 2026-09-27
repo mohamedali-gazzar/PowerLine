@@ -5528,10 +5528,6 @@ function KioskLvCover({ p, lvBreakerBrand, project, itemNo }: {
         <div className="flex min-h-0 flex-1 flex-col justify-center py-10">
           <div className="text-7xl font-extrabold leading-none text-ink">MDB</div>
           <div className="mt-4 text-2xl font-semibold text-muted">Low Voltage · Main Distribution Board</div>
-          <div className="mt-10">
-            <div className="mb-2 text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Board</div>
-            <div className="font-mono text-2xl font-bold tracking-wide text-ink">{p.name || "Main Distribution Board"}</div>
-          </div>
         </div>
         <div className="border-t-2 pt-6" style={{ borderColor: TRED }}>
           <div className="grid grid-cols-4 gap-4">

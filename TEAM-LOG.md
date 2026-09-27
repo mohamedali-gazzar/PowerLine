@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-27 · Mohamed's side · Claude
 
+**LV cover: removed the "Board / Main Distribution Board" line.**
+
+The kiosk's LV cover page no longer shows the "BOARD" label with the board name under it — it now goes
+straight from the "MDB" title and "Low Voltage · Main Distribution Board" tagline to the spec strip
+(Rated current / Breakers / Configuration / Protection). Look-and-feel only; no schema change.
+
+## 2026-09-27 · Mohamed's side · Claude
+
 **Cover pages: the Item marker is now a hanging ribbon, plus kiosk-cover tidy-ups.**
 
 - **Item label → hanging ribbon.** The old "ITEM | 01" pill is replaced by a small orange ribbon that
