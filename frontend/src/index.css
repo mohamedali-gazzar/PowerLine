@@ -231,6 +231,26 @@
     .tp-card, .tp-card.is-closing { animation: none !important; transform: none !important; }
     .tp-backdrop.is-closing, .tp-card.is-closing { opacity: 0; }
   }
+
+  /* ── "Test" badge on a New-QTN card ────────────────────────────────────────────
+     A slow breath with a halo that spreads and fades, so the badge keeps catching
+     the eye without jittering next to text people are trying to read. */
+  @keyframes test-badge-breathe {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.07); }
+  }
+  @keyframes test-badge-halo {
+    0%   { box-shadow: 0 0 0 0 rgba(241, 103, 34, 0.55); }
+    70%  { box-shadow: 0 0 0 9px rgba(241, 103, 34, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(241, 103, 34, 0); }
+  }
+  .test-badge {
+    animation: test-badge-breathe 2.2s ease-in-out infinite,
+               test-badge-halo 2.2s ease-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .test-badge { animation: none !important; transform: none !important; }
+  }
   /* Scroll with no visible scrollbar (wheel/trackpad still scroll). Used on the
      Panels tab's independently-scrolling columns. */
   .no-scrollbar {

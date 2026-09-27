@@ -50,7 +50,9 @@ export type DeskScope = "lv" | "mv" | "all";
 type Flow = "lv-panels" | "lv-edms" | "rmu" | "pcss" | "custom" | "mv";
 // `adminOnly` locks the card for everyone but ADMIN-tier users while a feature is still
 // being built — regular users see it disabled with a 🔒 until it is opened to everyone.
-type QtnType = { key: string; label: string; icon: ReactNode; hint: string; desk: "lv" | "mv"; flow: Flow; adminOnly?: boolean };
+// `test` marks a card that IS open to everyone but is still being proven on real work, so the
+// quotations it makes are real and the badge is the only thing saying "treat this with care".
+type QtnType = { key: string; label: string; icon: ReactNode; hint: string; desk: "lv" | "mv"; flow: Flow; adminOnly?: boolean; test?: boolean };
 
 const TYPES: QtnType[] = [
   { key: "lv", label: "LV Panels", icon: "📊", hint: "Low-voltage panels & switchboards", desk: "lv", flow: "lv-panels" },
@@ -60,9 +62,9 @@ const TYPES: QtnType[] = [
   { key: "custom", label: "Custom Commercial Offer", icon: "✍️", hint: "Type your own items and prices", desk: "lv", flow: "custom" },
   { key: "rmu", label: "RMU", icon: "⚡", hint: "Ring Main Unit offer (MV)", desk: "mv", flow: "rmu" },
   { key: "pcss", label: "P-CSS Selector", icon: "🏗️", hint: "Compact secondary substation selector", desk: "mv", flow: "pcss" },
-  // The combined MV package (RMU + transformer + kiosk). Still under construction — locked
-  // to admins until it is finished, then flip adminOnly off to open it to everyone.
-  { key: "mv", label: "MV", icon: <KioskIcon />, hint: "RMU - TR - KIOSK", desk: "mv", flow: "mv", adminOnly: true },
+  // The combined MV package (RMU + transformer + kiosk). Open to everyone now, and the quotations
+  // it makes are real ones — the "Test" badge says it is still being proven on live work.
+  { key: "mv", label: "MV", icon: <KioskIcon />, hint: "RMU - TR - KIOSK", desk: "mv", flow: "mv", test: true },
 ];
 const LETTERS: Record<"lv" | "mv", string> = { lv: "LV", mv: "MV" };
 
@@ -189,6 +191,12 @@ export default function NewQtnPicker({ desk, onClose }: { desk: DeskScope; onClo
                   >
                     {locked && (
                       <span className="absolute right-2 top-2 rounded-full bg-line/60 px-1.5 py-0.5 text-[10px] font-bold leading-none text-muted">🔒</span>
+                    )}
+                    {!locked && it.test && (
+                      <span title="Open for real quotations, but still being proven — double-check what it produces."
+                        className="test-badge absolute right-2 top-2 rounded-full bg-brand px-3 py-1 text-[13px] font-extrabold uppercase leading-none tracking-wider text-white shadow-soft">
+                        Test
+                      </span>
                     )}
                     <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-tint">
                       {typeof it.icon === "string" ? <span className="text-2xl leading-none">{it.icon}</span> : it.icon}

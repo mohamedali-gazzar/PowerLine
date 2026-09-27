@@ -23,6 +23,29 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-27 · Mohamed's side · Claude
 
+**The MV quotation type is now open to everyone, marked "Test".**
+
+On **+ New QTN** the **MV** card (RMU · TR · KIOSK) is no longer locked to admins — anyone can start
+one. It carries an orange, gently pulsing **Test** badge, because the feature is still being proven
+on live work. Hovering it says: *open for real quotations, but still being proven — double-check what
+it produces*.
+
+**The quotations it makes are real.** Same numbering, same workspace, same approval flow as LV — the
+badge is the only thing marking them. So treat an MV quotation as you would any other, and sanity-
+check its prices before it goes to a customer.
+
+⚠️ HEADS-UP for anyone starting MV work — two things from earlier today that you will meet:
+
+1. **A kiosk's Size may show a ⚠ and say "no longer available".** The Size list now follows the P-CSS
+   Selector's rules, and some kiosks were saved as an enclosure that cannot exist for their RMU
+   (typically P-CSS 5ST-A on a PSEC unit with metering, which must be 16ST-V). Nothing was changed
+   automatically, so the kiosk is still priced on the old enclosure — about 59,800 EGP light on
+   steel. Pick the right size before quoting.
+2. **P-CSS 16ST-W cannot be chosen any more** — the Selector's database has no such design. Still
+   open with Mohamed whether it should be added.
+
+## 2026-09-27 · Mohamed's side · Claude
+
 **The kiosk Size list now follows the P-CSS Selector's rules, and nothing unpriced is offered anywhere.**
 
 ⚠️ HEADS-UP — **some existing kiosks are saved as an enclosure that cannot exist, and are priced too
