@@ -8536,6 +8536,7 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
             <MvKioskPanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} defaultName={mvDefaultName(sel, s.panels)}
               lvEditor={
                 <div className="space-y-4">
+                  <LvDetailsAndCost s={s} p={sel} u={(patch) => upPanel(sel.id, patch)} kiosk />
                   <ComponentsCard s={s} p={sel} u={(patch) => upPanel(sel.id, patch)}
                     replaceComponent={kioskReplaceComponent} comboKind={kioskComboKind} setComboKind={setKioskComboKind}
                     kioskStandard={(sel.mvLvConfig?.lvSource ?? "standard") === "standard"}
@@ -8725,7 +8726,6 @@ function PanelEditor({ s, p, up, upPanel }: {
   up: (patch: Partial<LvState>) => void;
   upPanel: (id: string, patch: Partial<LvPanel>) => void;
 }) {
-  const { confirm, dialogs } = useDialogs();
   const u = (patch: Partial<LvPanel>) => upPanel(p.id, patch);
   // Replace every catalogue instance (matched by reference + name) with `nc`, across the
   // given panels — keeps each instance's qty / adjustments / group / section and swaps only
@@ -8738,6 +8738,57 @@ function PanelEditor({ s, p, up, upPanel }: {
         : x;
     up({ panels: s.panels.map((pp) => (panelIds.has(pp.id) ? { ...pp, components: pp.components.map(swap) } : pp)) });
   };
+  // The open combination builder — most combos render in CombosCard; P.F.C renders inline
+  // in ComponentsCard, so the two share this one piece of state.
+  const [comboKind, setComboKind] = useState<ComboKind | null>(null);
+
+  return (
+    <div className="space-y-4">
+      <LvDetailsAndCost s={s} p={p} u={u} />
+
+      {/* Components (section pills + circuit-combination sub-row live inside this card) */}
+      <ComponentsCard s={s} p={p} u={u} replaceComponent={replaceComponent} comboKind={comboKind} setComboKind={setComboKind} />
+
+      {/* Panel type — placed after Components (enclosure sizings as component-like items) */}
+      <SizingCard p={p} u={u} factors={s.factors} />
+
+      {/* No. of poles — its own standalone section (sizing summary, not part of Panel type) */}
+      <div className="card p-5"><PolesSummary p={p} /></div>
+
+      {/* Per-panel Draft — notes & calculations, never included in outputs. Standard EDMS only. */}
+      {s.kind === "edms" && (
+        <div className="card p-5">
+          <h2 className="sec-head">Draft <span className="text-[11px] font-normal text-muted">· notes &amp; calculations for this panel (not included in any offer)</span></h2>
+          <textarea className="input min-h-[120px] w-full font-mono text-xs"
+            placeholder="Scratchpad for this panel — calculations, reminders, notes…"
+            value={p.draft ?? ""} onChange={(e) => u({ draft: e.target.value })} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The LV panel's "Panel details" + "Panel cost (live)" pair — the row that opens every LV panel.
+ *  Lifted out of PanelEditor so the LV compartment inside a kiosk can show the same two cards.
+ *  The two collapse together from the single toggle on Panel details. */
+function LvDetailsAndCost({ s, p, u, kiosk = false }: {
+  s: LvState; p: LvPanel; u: (patch: Partial<LvPanel>) => void;
+  /** Rendered for the LV compartment INSIDE a kiosk. The kiosk owns the name and the quantity on
+   *  its own price card, so those fields are dropped here; and the bottom row becomes the same
+   *  Cost / Factor / Selling the RMU and the Transformer show — reading the LV row of the kiosk
+   *  price table, so the two always agree. */
+  kiosk?: boolean;
+}) {
+  // The LV compartment's figures as the kiosk price table computes them: the panel's build-up cost
+  // (no operations/safety markup — the kiosk adds those on the whole unit) ÷ the kiosk's LV factor.
+  const kioskCost = Math.round(calcPanelCached(p, s.factors, s.abbItemDiscounts).unitCost);
+  const kioskFactor = kioskFactorOf(p, "lv") ?? 0.7;
+  const kioskSelling = kioskFactor > 0 ? Math.round(kioskCost / kioskFactor) : 0;
+  const setKioskFactor = (v: string) => {
+    const priceMap = p.mvKioskCost ?? {};
+    u({ mvKioskCost: { ...priceMap, lv: { ...priceMap.lv, factor: v === "" ? undefined : Number(v) } } });
+  };
+  const { confirm, dialogs } = useDialogs();
   // The "common" fields (ambient temp, form, neutral, earth, copper,
   // incoming/outgoing cables) are set for the whole job on the Specs tab, which
   // writes them onto every panel. Here they stay editable per panel — this is
@@ -8771,13 +8822,10 @@ function PanelEditor({ s, p, up, upPanel }: {
   // Panel details and Panel cost collapse together — one toggle (on Panel details) drives both.
   const [detailsOpen, setDetailsOpen] = useState(() => { try { return localStorage.getItem("lv-detailscard-open") !== "0"; } catch { return true; } });
   const toggleDetails = () => setDetailsOpen((o) => { try { localStorage.setItem("lv-detailscard-open", o ? "0" : "1"); } catch { /* ignore */ } return !o; });
-  // The open combination builder is owned here and shared between the cards — most
-  // combos render in CombosCard; P.F.C renders inline in ComponentsCard.
-  const [comboKind, setComboKind] = useState<ComboKind | null>(null);
   const [copperOpen, setCopperOpen] = useState<null | "busbar" | "cu">(null); // separate "how is this calculated?" windows
 
   return (
-    <div className="space-y-4">
+    <>
       {dialogs}
       {/* Panel details (left) + live cost (right) — one compact row.
           Details is a touch wider, cost a touch narrower, and both stretch to
@@ -8788,7 +8836,7 @@ function PanelEditor({ s, p, up, upPanel }: {
         {/* No own toggle — it collapses/expands together with Panel details (detailsOpen). */}
         <div className="flex w-full items-center justify-between gap-3">
           <h2 className="sec-head mb-0">Panel cost (live)</h2>
-          <span className="whitespace-nowrap text-sm font-bold text-brand-dark">{fmtEgp(calc.sellUnit)} EGP</span>
+          <span className="whitespace-nowrap text-sm font-bold text-brand-dark">{fmtEgp(kiosk ? kioskSelling : calc.sellUnit)} EGP</span>
         </div>
         {detailsOpen && (
         <div className="mt-3 grid flex-1 auto-rows-fr grid-cols-2 gap-2 text-sm [&_b]:text-base sm:grid-cols-3">
@@ -8832,17 +8880,35 @@ function PanelEditor({ s, p, up, upPanel }: {
             <span className="absolute right-1.5 top-1.5 text-[10px] text-muted opacity-50 group-hover:opacity-100">ⓘ</span>
           </button>
           <div className="rounded-lg bg-surface p-2.5">Total Copper (KG)<br /><b>{fmtNum(calc.cuWeight + calc.busbarKg)} KG</b></div>
-          {/* Total Cost (base + operations + safety) → (÷ factor) → Unit Selling. The markups
-              fold into the Total Cost so cost ÷ factor = selling reconciles exactly. */}
-          <div className="rounded-lg bg-surface p-2.5">
-            Total Cost<br /><b>{fmtEgp(calc.unitCostOps * (1 + (s.factors.safetyFactor || 0)))} EGP</b>
-            <div className="mt-0.5 text-[10px] font-normal text-muted">+ operations {Math.round((s.factors.operations || 0) * 1000) / 10}% + safety {Math.round((s.factors.safetyFactor || 0) * 1000) / 10}%</div>
-          </div>
-          <div className="flex flex-col rounded-lg bg-brand-light p-2.5 text-brand-dark">
-            <div>Unit Selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
-            <div className="mt-auto pt-1.5 text-sm font-semibold text-brand-dark/80">÷ factor {p.sellFactor > 0 ? p.sellFactor : s.factors.factor}</div>
-          </div>
-          <div className="rounded-lg bg-brand p-2.5 text-white">Unit Selling (USD)<br /><b>{fmtEgp(s.factors.usd > 0 ? calc.sellUnit / s.factors.usd : 0)} USD</b></div>
+          {/* The closing row. Standalone: Total Cost (base + operations + safety) → (÷ factor) →
+              Unit Selling in EGP and USD; the markups fold into the Total Cost so cost ÷ factor =
+              selling reconciles exactly. Inside a kiosk it is the kiosk's own Cost / Factor /
+              Selling instead, matching the LV row of the kiosk price table below. */}
+          {kiosk ? (
+            <>
+              <div className="rounded-lg bg-surface p-2.5">Total Cost<br /><b>{fmtEgp(kioskCost)} EGP</b></div>
+              <div className="rounded-lg bg-surface p-2.5">
+                Factor<br />
+                <input type="number" step="0.01" min={0} value={p.mvKioskCost?.lv?.factor ?? kioskFactor}
+                  onChange={(e) => setKioskFactor(e.target.value)}
+                  title="The LV factor for this kiosk — the same one in the kiosk price table"
+                  className="mt-1 w-20 rounded-md border border-line bg-white px-2 py-1 text-right text-base font-bold tabular-nums text-ink focus:border-brand focus:outline-none dark:bg-neutral-900" />
+              </div>
+              <div className="rounded-lg bg-brand p-2.5 text-white">Selling<br /><b>{fmtEgp(kioskSelling)} EGP</b></div>
+            </>
+          ) : (
+            <>
+              <div className="rounded-lg bg-surface p-2.5">
+                Total Cost<br /><b>{fmtEgp(calc.unitCostOps * (1 + (s.factors.safetyFactor || 0)))} EGP</b>
+                <div className="mt-0.5 text-[10px] font-normal text-muted">+ operations {Math.round((s.factors.operations || 0) * 1000) / 10}% + safety {Math.round((s.factors.safetyFactor || 0) * 1000) / 10}%</div>
+              </div>
+              <div className="flex flex-col rounded-lg bg-brand-light p-2.5 text-brand-dark">
+                <div>Unit Selling (EGP)<br /><b>{fmtEgp(calc.sellUnit)} EGP</b></div>
+                <div className="mt-auto pt-1.5 text-sm font-semibold text-brand-dark/80">÷ factor {p.sellFactor > 0 ? p.sellFactor : s.factors.factor}</div>
+              </div>
+              <div className="rounded-lg bg-brand p-2.5 text-white">Unit Selling (USD)<br /><b>{fmtEgp(s.factors.usd > 0 ? calc.sellUnit / s.factors.usd : 0)} USD</b></div>
+            </>
+          )}
         </div>
         )}
       </div>
@@ -8858,13 +8924,19 @@ function PanelEditor({ s, p, up, upPanel }: {
         </button>
         {detailsOpen && (
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <div><L>Panel name <span className="text-brand">*</span></L>
-            <input className={`input ${!p.name.trim() || nameClashOf(s, p) ? "border-red-400 bg-red-50/40" : ""}`} value={p.name}
-              placeholder="required" onChange={(e) => u({ name: e.target.value })} />
-            <PanelNameClash s={s} p={p} /></div>
-          <div><L>Fed from</L><input className="input" value={p.fedFrom} onChange={(e) => u({ fedFrom: e.target.value })} /></div>
-          <div><L>Quantity</L><input className="input" inputMode="numeric" value={p.qty}
-            onChange={(e) => u({ qty: Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1) })} /></div>
+          {/* Inside a kiosk the name and the quantity belong to the kiosk, which carries them on its
+              own price card — repeating them here would give two places to set one thing. */}
+          {!kiosk && (
+            <>
+              <div><L>Panel name <span className="text-brand">*</span></L>
+                <input className={`input ${!p.name.trim() || nameClashOf(s, p) ? "border-red-400 bg-red-50/40" : ""}`} value={p.name}
+                  placeholder="required" onChange={(e) => u({ name: e.target.value })} />
+                <PanelNameClash s={s} p={p} /></div>
+              <div><L>Fed from</L><input className="input" value={p.fedFrom} onChange={(e) => u({ fedFrom: e.target.value })} /></div>
+              <div><L>Quantity</L><input className="input" inputMode="numeric" value={p.qty}
+                onChange={(e) => u({ qty: Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1) })} /></div>
+            </>
+          )}
           <div><L>Busbar Rating <span className="text-brand">*</span></L>
             <select className={`input cursor-pointer ${!p.ratingA ? "border-red-400 bg-red-50/40 text-muted" : ""}`}
               value={p.ratingA || ""}
@@ -8983,26 +9055,7 @@ function PanelEditor({ s, p, up, upPanel }: {
       </div>{/* /details + cost row */}
 
       {copperOpen && <CopperBreakdownWindow which={copperOpen} p={p} calc={calc} f={s.factors} onClose={() => setCopperOpen(null)} />}
-
-      {/* Components (section pills + circuit-combination sub-row live inside this card) */}
-      <ComponentsCard s={s} p={p} u={u} replaceComponent={replaceComponent} comboKind={comboKind} setComboKind={setComboKind} />
-
-      {/* Panel type — placed after Components (enclosure sizings as component-like items) */}
-      <SizingCard p={p} u={u} factors={s.factors} />
-
-      {/* No. of poles — its own standalone section (sizing summary, not part of Panel type) */}
-      <div className="card p-5"><PolesSummary p={p} /></div>
-
-      {/* Per-panel Draft — notes & calculations, never included in outputs. Standard EDMS only. */}
-      {s.kind === "edms" && (
-        <div className="card p-5">
-          <h2 className="sec-head">Draft <span className="text-[11px] font-normal text-muted">· notes &amp; calculations for this panel (not included in any offer)</span></h2>
-          <textarea className="input min-h-[120px] w-full font-mono text-xs"
-            placeholder="Scratchpad for this panel — calculations, reminders, notes…"
-            value={p.draft ?? ""} onChange={(e) => u({ draft: e.target.value })} />
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 

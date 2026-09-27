@@ -23,6 +23,35 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-27 · Mohamed's side · Claude
 
+**The LV part of a kiosk now shows the same two cards as a normal LV panel.**
+
+Open a kiosk (compact substation), go to its LV section, and you now get **Panel details** and
+**Panel cost (live)** — the same pair you have always had on a standalone LV panel, so you can see
+what the LV compartment actually costs while you build it instead of only in the kiosk price table.
+
+Three differences inside a kiosk, on purpose:
+
+- **No Panel name, Fed from or Quantity.** The kiosk already carries its name and quantity on its own
+  price card; having them twice would mean two places to set one thing.
+- **Total Cost is a single box** (no "+ operations + safety" line) — the kiosk adds those markups on
+  the whole unit, not on the LV part.
+- The **"Unit Selling (EGP)" box is now the Factor box**, so the row reads Total Cost · Factor ·
+  Selling, the same shape as the RMU and the Transformer cards.
+
+That factor is the **same** LV factor as the one in the kiosk price table — not a copy. Change it in
+either place and both move together.
+
+A standalone LV panel is unchanged: name, fed-from, quantity, the operations/safety line and both the
+EGP and USD selling boxes are all still exactly as they were.
+
+For whoever reads the code: those two cards used to be ~200 lines sitting inside the LV panel editor.
+They are now one shared component (`LvDetailsAndCost`), so a future change to the LV cost card lands in
+both places at once and the kiosk cannot quietly drift away from the LV panel. No prices or formulas
+changed — the LV figures inside a kiosk are read from the same shared kiosk-pricing helpers the price
+table and the Commercial offer already use.
+
+## 2026-09-27 · Mohamed's side · Claude
+
 **MV pricing factors are now editable, and the RMU / Transformer / Kiosk sections were tidied up.**
 
 **You can now type the factor.** The RMU and the Transformer each have their own **Factor** box on their
