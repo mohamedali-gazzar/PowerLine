@@ -54,9 +54,10 @@ export function kioskCostsEgp(
 }
 
 /** The selling factor for a part: the typed override on the panel, else the house default.
- *  The RMU is the exception — its factor is owned by the RMU section (mvRmuFactor), which is where it
- *  is edited; the kiosk cost table only displays it, read-only. An older kiosk that typed a factor
- *  straight into the table keeps it until the RMU section sets one. */
+ *  The RMU is the exception — its factor is stored on the panel itself (mvRmuFactor), because two
+ *  boxes edit it: the RMU section's cost card and the RMU row of the kiosk cost table. Both write
+ *  the same field, so they always agree. An older kiosk that typed a factor straight into the table
+ *  keeps it until either box sets one. */
 export function kioskFactorOf(p: LvPanel, key: string): number | undefined {
   if (key === "rmu") return p.mvRmuFactor ?? p.mvKioskCost?.rmu?.factor ?? DEFAULT_KIOSK_FACTORS.rmu;
   return p.mvKioskCost?.[key]?.factor ?? DEFAULT_KIOSK_FACTORS[key];
@@ -75,6 +76,11 @@ export function kioskPartSellingEgp(
   costs: Record<KioskPartKey, number | null>, p: LvPanel, key: KioskPartKey, usdRate: number,
 ): number | null {
   const c = costs[key];
+  // A selling price typed in directly wins over cost ÷ factor. Only the RMU row uses this: it sells
+  // at its price-list price, so the Target-price dialog cannot reach a target by moving the factor.
+  // A part with no cost yet is still unpriced — an override never invents a price out of nothing.
+  const ov = p.mvKioskCost?.[key]?.sellOverride;
+  if (c && ov != null && ov > 0) return Math.round(ov);
   const f = kioskFactorOf(p, key);
   if (!c || !f) return null;
   let selling = Math.round(c / f);

@@ -111,7 +111,11 @@ export interface LvPanel {
    *  lv / size / accessories), each with a code, cost and factor; selling is derived (cost ÷ factor).
    *  The size code is the chosen enclosure; cost cells that are computed (size, accessories) ignore
    *  the stored cost. */
-  mvKioskCost?: Record<string, { code?: string; cost?: number; factor?: number }>;
+  /** `target` is the selling price the engineer aimed at with the Target-price dialog, kept so the
+   *  dialog reopens showing it. `sellOverride` is a selling price typed in directly, used only by the
+   *  RMU row — an RMU sells at its price-list price, so a target there cannot be reached by moving the
+   *  factor and is stored as an explicit override instead. */
+  mvKioskCost?: Record<string, { code?: string; cost?: number; factor?: number; target?: number; sellOverride?: number }>;
   /** MV Kiosk panels only: the Accessories accordion's item list (extra items supplied with the
    *  kiosk). Undefined means the default checklist is shown; the first edit materialises it. */
   mvKioskAccessories?: { id: string; name: string; code?: string; qty: number; cost: number }[];

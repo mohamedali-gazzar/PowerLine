@@ -23,6 +23,39 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-27 · Mohamed's side · Claude
 
+**Target price on a kiosk — type the price you want, get the factor.**
+
+The Selling column of the "Kiosk price (live)" table now has a small crosshair button. It opens one
+sheet listing all five parts (RMU, Transformer, LV, Kiosk Size, Accessories) with their cost, factor
+and selling price, and an empty **Target** box on each row.
+
+Type the price you want in any row and that row's factor and selling price turn orange to show what
+you would get, before anything is saved. A **Whole kiosk** line at the bottom shows what the unit
+would total. **Apply** commits every row you filled in at once; **Discard**, Esc or clicking outside
+throws it away. Emptying a row that had a target clears the target and leaves its factor alone.
+
+**You cannot set a price below cost.** The row turns red, says so, and Apply stays greyed out until
+it is fixed. A part with no price yet cannot be targeted at all.
+
+⚠️ HEADS-UP — **the RMU's factor now changes the PRICE, not the cost.** It used to be the other way
+round: typing an RMU factor quietly moved its cost and the customer paid the same price, because the
+RMU always sold at its price-list price. Now the cost is fixed (the price list's own cost) and the
+factor works out the selling price, exactly like the Transformer, LV, Kiosk Size and Accessories rows.
+
+Left alone, nothing moves: at the standard factor the RMU still sells at its price-list price, so no
+quotation already sent to a customer changes. Only a factor you deliberately type makes it differ.
+
+The RMU's factor is also editable in the kiosk price table now, not just in the RMU section — the two
+boxes are the same number, so typing in either moves the other.
+
+Smaller things in the same batch:
+
+- The kiosk's section headers (RMU / Transformer / Low / Accessories) are **white** when closed.
+- The LV cost card inside a kiosk now **lines up exactly** with the Transformer cost card above it.
+- The transformer's cost card is headed **"Transformer cost (live)"** instead of "Panel cost (live)".
+
+## 2026-09-27 · Mohamed's side · Claude
+
 **The LV part of a kiosk now shows the same two cards as a normal LV panel.**
 
 Open a kiosk (compact substation), go to its LV section, and you now get **Panel details** and

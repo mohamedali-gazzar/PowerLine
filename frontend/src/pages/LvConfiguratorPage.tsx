@@ -8829,8 +8829,10 @@ function LvDetailsAndCost({ s, p, u, kiosk = false }: {
       {dialogs}
       {/* Panel details (left) + live cost (right) — one compact row.
           Details is a touch wider, cost a touch narrower, and both stretch to
-          the same height so their bottoms line up. */}
-      <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)]">
+          the same height so their bottoms line up.
+          Inside a kiosk the split is an even 50/50 instead, so this cost card lands on exactly the
+          same left edge and width as the Transformer cost card in the section above it. */}
+      <div className={`grid items-stretch gap-4 ${kiosk ? "lg:grid-cols-2" : "lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)]"}`}>
       {/* Cost summary (live) */}
       <div className="card px-4 py-3 order-2 flex flex-col">
         {/* No own toggle — it collapses/expands together with Panel details (detailsOpen). */}

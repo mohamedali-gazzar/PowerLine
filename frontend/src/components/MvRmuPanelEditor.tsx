@@ -87,22 +87,30 @@ export default function MvRmuPanelEditor({
   const baseUnit = (lp?.basePrice ?? 0) * rate;
   const addUnit = (lp?.addOns ?? []).reduce((sum, a) => sum + a.price, 0) * rate;
   const listSelling = baseUnit + addUnit;           // base + add-ons = the RMU's list price (no Aux/Shunt)
-  const factor = p.mvRmuFactor ?? preview?.rmuFactor ?? 0.85;
-  // The card separates the RMU from its per-feeder Aux / Shunt-trip. The RMU sells at its list price
-  // (cost = list × factor). Aux/Shunt PRICES are SELLING prices; their cost is selling × factor (0.85).
-  // Totals are the two added together.
-  const rmuCost = Math.round(listSelling * factor);
-  const rmuSelling = listSelling;
-  const auxSelling = Math.round(rmuAuxShuntUsd(rmu) * rate);
-  const auxCost = Math.round(auxSelling * factor);
+  // Two different factors, and the difference is the whole point:
+  //  · `dbFactor` is the price list's own factor. It turns the list price into the COST, and the cost
+  //    does not move — it is what the RMU costs us, whatever we decide to charge.
+  //  · `factor` is the editable one. It turns that fixed cost into the SELLING price (cost ÷ factor),
+  //    exactly as the Transformer, LV, Kiosk Size and Accessories rows work.
+  // Left alone, factor === dbFactor and the selling price comes back to the list price, so nothing
+  // already quoted moves.
+  const dbFactor = preview?.rmuFactor ?? 0.85;
+  const factor = p.mvRmuFactor ?? dbFactor;
+  // Aux / Shunt-trip prices are entered as SELLING prices, so they are costed the same way as the
+  // list price. Both lines then sell at cost ÷ factor, and the totals are the two added up — so the
+  // breakdown always reconciles with the total shown underneath it.
+  const auxListSelling = Math.round(rmuAuxShuntUsd(rmu) * rate);
+  const sellOf = (c: number) => (factor > 0 ? Math.round(c / factor) : c);
+  const rmuCost = Math.round(listSelling * dbFactor);
+  const auxCost = Math.round(auxListSelling * dbFactor);
+  const rmuSelling = sellOf(rmuCost);
+  const auxSelling = sellOf(auxCost);
   const cost = rmuCost + auxCost;
   const selling = rmuSelling + auxSelling;
-  // Report the RMU cost in EGP to the kiosk price table: the LIST cost plus the Aux/Shunt COST
-  // (their selling × factor), so the kiosk RMU row's selling (cost ÷ factor) carries Aux/Shunt at
-  // their entered selling price. Zero Aux/Shunt ⇒ same number as before.
+  // The same fixed cost in EGP, reported to the kiosk price table so its RMU row divides by the very
+  // same factor and lands on the very same selling price.
   const usdRate = s.factors?.usd || 1;
-  const listCostEgp = currency === "EGP" ? Math.round(listSelling * factor) : Math.round(Math.round(listSelling * factor) * usdRate);
-  const costEgp = !priced ? null : listCostEgp + Math.round(rmuAuxShuntUsd(rmu) * factor * usdRate);
+  const costEgp = !priced ? null : (currency === "EGP" ? cost : Math.round(cost * usdRate));
   useEffect(() => { onCost?.(costEgp); }, [costEgp, onCost]);
 
   // The factor box, shared by both cost cards below — this is the ONE place the RMU's factor is

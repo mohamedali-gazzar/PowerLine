@@ -220,7 +220,7 @@ export default function MvTransformerPanelEditor({
           and cost table carry those). */}
       <div className="card px-4 py-3 lg:order-2">
         <div className="flex w-full items-center justify-between gap-3">
-          <h2 className="sec-head mb-0">Panel cost (live)</h2>
+          <h2 className="sec-head mb-0">Transformer cost (live)</h2>
           {!chosen ? (
             <span className="text-sm font-semibold text-muted">choose all four</span>
           ) : match ? (
