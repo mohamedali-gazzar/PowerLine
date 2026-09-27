@@ -97,6 +97,12 @@ export interface LvPanel {
    *  insulation) that resolve to one transformer in the price database — its code and price.
    *  Absent until a Transformer panel is added; other panel kinds never set it. */
   mvTransformerConfig?: TransformerConfigInput;
+  /** MV RMU / Transformer panels only: a per-panel override of the pricing factor shown in the live
+   *  cost card. When set it replaces the database default — for the transformer it changes the selling
+   *  (selling = cost ÷ factor, so it flows to the offer); for the RMU it changes the shown cost/margin
+   *  (the RMU's selling stays its list price). Absent → the database factor is used. */
+  mvRmuFactor?: number;
+  mvTransformerFactor?: number;
   /** MV Kiosk panels only: the "Low" (LV) accordion section. A kiosk panel holds an RMU
    *  (mvRmuConfig) + a transformer (mvTransformerConfig) + this LV config in one unit, and the
    *  kiosk editor reuses the RMU and Transformer editors for those two sections. */
@@ -118,6 +124,10 @@ export interface LvPanel {
   mvKioskExtraQty?: Record<string, number>;
   /** MV Kiosk panels only: the display currency for the "Kiosk price (live)" table (default EGP). */
   mvKioskCurrency?: "EGP" | "USD";
+  /** MV Kiosk panels only: the kiosk's OWN name, as shown in the panel list and on the offer.
+   *  A kiosk's `name` belongs to the LV panel inside it (picking the house standard writes
+   *  "MDB 2000A…" there), so the kiosk is named separately. Absent ⇒ "Kiosk-01", "Kiosk-02", … */
+  mvKioskName?: string;
   name: string;
   code: string;
   fedFrom: string;   // RPT-01: next to panel name
@@ -267,6 +277,9 @@ export function mvTypeLabel(t: MvPanelType): string {
  *  in panel order — RMU-01, RMU-02, Transformer-01, RMU-03, …. A plain LV panel returns "". */
 export function mvDefaultName(p: LvPanel, panels: LvPanel[]): string {
   if (!p.mvType) return "";
+  // A kiosk carries its own name (its `name` belongs to the LV panel inside it), so a typed one wins
+  // everywhere this is read — the panel list, the Kiosk Analysis sheet and the ERP export.
+  if (p.mvType === "kiosk" && p.mvKioskName?.trim()) return p.mvKioskName.trim();
   const nth = panels.filter((x) => x.mvType === p.mvType).findIndex((x) => x.id === p.id);
   return `${mvTypeLabel(p.mvType)}-${String(nth + 1).padStart(2, "0")}`;
 }

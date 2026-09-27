@@ -3,7 +3,6 @@ import { api, type TransformerRow } from "../api";
 import { TR_ICON_DRY, TR_ICON_OIL } from "../pcss/data";
 import { trDisplayCode } from "./transformerTechData";
 import { Toggle } from "./fields";
-import { withoutTransformerLabel } from "./TransformerTechnicalSheet";
 import type { TransformerConfigInput } from "../types";
 import type { LvPanel } from "../lv/store";
 
@@ -48,9 +47,13 @@ export default function MvTransformerPanelEditor({
   onCode,
   onCost,
   usdRate = 1,
+  defaultName,
 }: {
   p: LvPanel;
   upPanel: (id: string, patch: Partial<LvPanel>) => void;
+  /** The auto name this item shows in the panel list (e.g. "Transformer-01"), used as the Panel name
+   *  placeholder so an unnamed item reads the same here as in the list. */
+  defaultName?: string;
   /** Set when this transformer sits inside a kiosk: the kiosk is its enclosure, so it is always
    *  IP00. The Standalone/IP23 choice is then removed and IP00 is forced on the code and price. */
   insideKioskOnly?: boolean;
@@ -202,18 +205,19 @@ export default function MvTransformerPanelEditor({
   const costEgp = match && cost > 0 ? Math.round(cost * usdRate) : null;
   useEffect(() => { onCost?.(costEgp); }, [costEgp, onCost]);
   const transportation = cfg.transportation ?? 300;
-  // selling = cost ÷ factor (the price screen's factor) PLUS a flat transportation charge that the
-  // factor is deliberately NOT applied to.
-  const sellingBase = factor > 0 ? Math.round(cost / factor) : cost;
+  // selling = cost ÷ factor (the price screen's factor, or a per-panel override) PLUS a flat
+  // transportation charge that the factor is deliberately NOT applied to.
+  const effFactor = p.mvTransformerFactor ?? factor;
+  const sellingBase = effFactor > 0 ? Math.round(cost / effFactor) : cost;
   const selling = sellingBase + transportation;
   const loading = rows == null && !error;
 
   return (
-    <div className={`animate-fade-up grid items-stretch gap-4 ${insideKioskOnly ? "grid-cols-1" : "lg:grid-cols-2"}`}>
-      {/* Live price + code — the transformer mirror of the RMU "Panel cost (live)" card.
-          On desktop it sits to the RIGHT of the selections; on mobile it stays on top.
-          Hidden in the kiosk, which gets one combined cost card for the whole packaged unit. */}
-      {!insideKioskOnly && (
+    <div className="animate-fade-up grid items-stretch gap-4 lg:grid-cols-2">
+      {/* Live price + code — the transformer mirror of the RMU "Panel cost (live)" card. On desktop it
+          sits to the RIGHT of the selections; on mobile it stays on top. Inside a kiosk it also carries
+          the Without-transformer toggle, and drops the name/quantity and code (the kiosk's own header
+          and cost table carry those). */}
       <div className="card px-4 py-3 lg:order-2">
         <div className="flex w-full items-center justify-between gap-3">
           <h2 className="sec-head mb-0">Panel cost (live)</h2>
@@ -226,11 +230,23 @@ export default function MvTransformerPanelEditor({
           )}
         </div>
 
-        {/* Panel name + quantity — above the transformer code. Same field style as the LV panel details. */}
+        {/* Kiosk only: supply the compact substation WITHOUT a transformer. The compartment is then not
+            priced; the rating / voltage / insulation opposite become the (optional) description of the
+            transformer the customer will fit, shown on the offer as "Without … Transformer …". */}
+        {insideKioskOnly && (
+          <div className="mt-3 rounded-lg border border-line bg-surface p-3">
+            <Toggle checked={!!cfg.withoutTransformer} onChange={(v) => set("withoutTransformer", v)}
+              label="Without transformer (supplied by others)" />
+          </div>
+        )}
+
+        {/* Panel name + quantity — standalone only; a kiosk names the whole unit instead. */}
+        {!insideKioskOnly && (
         <div className="mt-3 grid grid-cols-2 gap-3">
           <div>
             <label className="label">Panel name</label>
-            <input className="input" value={p.name} onChange={(e) => upPanel(p.id, { name: e.target.value })} />
+            <input className="input" value={p.name} placeholder={defaultName}
+              onChange={(e) => upPanel(p.id, { name: e.target.value })} />
           </div>
           <div>
             <label className="label">Quantity</label>
@@ -238,9 +254,28 @@ export default function MvTransformerPanelEditor({
               onChange={(e) => upPanel(p.id, { qty: Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, ""), 10) || 1) })} />
           </div>
         </div>
+        )}
 
         {match ? (
           <div className="mt-3 grid auto-rows-fr grid-cols-3 gap-2 text-sm [&_b]:text-base">
+            {/* "Without transformer" is not charged, so cost / transport / selling read as nothing. */}
+            <div className="rounded-lg bg-surface p-2.5">Cost<br /><b>{cfg.withoutTransformer ? "—" : `${fmt(cost)} USD`}</b></div>
+            <div className="rounded-lg bg-surface p-2.5">Factor<br />
+              <input type="number" step="0.01" min={0} value={effFactor}
+                onChange={(e) => upPanel(p.id, { mvTransformerFactor: e.target.value === "" ? undefined : Number(e.target.value) })}
+                className="mt-1 w-20 rounded-md border border-line bg-white px-2 py-1 text-right text-sm font-bold tabular-nums text-ink focus:border-brand focus:outline-none dark:bg-neutral-900" />
+            </div>
+            <div className="rounded-lg bg-surface p-2.5">Transportation<br />
+              {/* Same box as the Factor field beside it, so the two line up. */}
+              <span className="mt-1 inline-flex items-center gap-1.5">
+                <input type="number" min={0} value={cfg.withoutTransformer ? 0 : transportation} disabled={!!cfg.withoutTransformer}
+                  onChange={(e) => set("transportation", e.target.value === "" ? 0 : Number(e.target.value))}
+                  className="w-20 rounded-md border border-line bg-white px-2 py-1 text-right text-sm font-bold tabular-nums text-ink focus:border-brand focus:outline-none disabled:text-muted dark:bg-neutral-900" />
+                <span className="text-xs font-semibold text-muted">USD</span>
+              </span>
+            </div>
+            {/* The code — standalone only; inside a kiosk the section header already shows it. */}
+            {!insideKioskOnly && (
             <div className="col-span-3 flex items-center justify-between gap-2 rounded-lg bg-brand-light p-2.5 text-brand-dark">
               <div className="min-w-0"><span className="text-sm">Transformer code</span><br /><b className="break-all text-base">{displayCode}</b></div>
               <button type="button" onClick={() => copyCode(displayCode)} title="Copy the transformer code"
@@ -248,19 +283,14 @@ export default function MvTransformerPanelEditor({
                 {copied ? "✓ Copied" : "⧉ Copy"}
               </button>
             </div>
-            <div className="rounded-lg bg-surface p-2.5">Cost<br /><b>{fmt(cost)} USD</b></div>
-            <div className="rounded-lg bg-surface p-2.5">Factor<br /><b>{factor}</b></div>
-            <div className="rounded-lg bg-surface p-2.5">Transportation<br />
-              <span className="inline-flex items-baseline gap-1">
-                <input type="number" min={0} value={transportation}
-                  onChange={(e) => set("transportation", e.target.value === "" ? 0 : Number(e.target.value))}
-                  className="w-14 border-b border-dashed border-line bg-transparent text-left text-base font-bold text-ink outline-none focus:border-brand" />
-                <span className="text-xs font-semibold text-muted">USD</span>
-              </span>
-            </div>
+            )}
             <div className="col-span-3 flex items-end justify-between gap-2 rounded-lg bg-brand p-2.5 text-white">
-              <div>Selling price<br /><b>{fmt(selling)} USD</b></div>
-              <div className="text-right text-xs font-semibold text-white/85">cost ÷ factor {factor}<br />+ transport {fmt(transportation)}</div>
+              <div>Selling price<br /><b>{cfg.withoutTransformer ? "—" : `${fmt(selling)} USD`}</b></div>
+              <div className="text-right text-xs font-semibold text-white/85">
+                {cfg.withoutTransformer
+                  ? "Supplied by others — not charged"
+                  : <>cost ÷ factor {effFactor}<br />+ transport {fmt(transportation)}</>}
+              </div>
             </div>
           </div>
         ) : chosen ? (
@@ -271,27 +301,11 @@ export default function MvTransformerPanelEditor({
           <p className="mt-3 text-xs text-muted">Pick a rating, primary voltage, brand and insulation below to see the transformer's code and price.</p>
         )}
       </div>
-      )}
 
       {/* The four selections — three dropdowns plus the Dry/Oil insulation tiles, filled
           from the price database. Left column on desktop. */}
       <div className="card flex flex-col space-y-4 px-4 py-3 lg:order-1">
         <h2 className="sec-head mb-0">Transformer Details</h2>
-        {/* Kiosk only: supply the compact substation WITHOUT a transformer. The compartment is then not
-            priced; the rating / voltage / insulation below become the (optional) description of the
-            transformer the customer will fit, shown on the offer as "Without … Transformer …". */}
-        {insideKioskOnly && (
-          <div className="rounded-lg border border-line bg-surface p-3">
-            <Toggle checked={!!cfg.withoutTransformer} onChange={(v) => set("withoutTransformer", v)}
-              label="Without transformer (supplied by others)" />
-            {cfg.withoutTransformer && (
-              <p className="mt-2 text-xs text-muted">
-                Not charged. Pick a rating, voltage and insulation below to print
-                “{withoutTransformerLabel(cfg)}”, or leave them blank for just “Without Transformer”.
-              </p>
-            )}
-          </div>
-        )}
         {error && (
           <p className="rounded-lg bg-red-50 p-2.5 text-xs font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>
         )}

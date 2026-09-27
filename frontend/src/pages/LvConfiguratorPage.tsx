@@ -732,9 +732,9 @@ export default function LvConfiguratorPage() {
       const name = mvDefaultName(p, s.panels);
       let factor: number | null = null;
       if (p.mvType === "rmu") {
-        try { factor = (await api.previewConfig(p.mvRmuConfig ?? DEFAULT_RMU_CONFIG)).rmuFactor ?? 0.85; } catch { factor = 0.85; }
+        try { factor = p.mvRmuFactor ?? (await api.previewConfig(p.mvRmuConfig ?? DEFAULT_RMU_CONFIG)).rmuFactor ?? 0.85; } catch { factor = p.mvRmuFactor ?? 0.85; }
       } else if (p.mvType === "transformer") {
-        factor = trFactor;
+        factor = p.mvTransformerFactor ?? trFactor;
       } else if (p.mvType === "kiosk") {
         const costs = kioskCostsEgp(p, s, await rmuCostEgpOf(p.mvRmuConfig ?? DEFAULT_RMU_CONFIG), trCostEgpOf(p.mvTransformerConfig));
         const tc = kioskTotalCostEgp(costs);
@@ -5936,7 +5936,8 @@ function MvCommercialTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
       // Price from the exact IP-variant row (standalone …2300 / inside-kiosk …0000) when it exists.
       const wantCode = base ? trDisplayCode(base.code, !!c.insideKiosk) : "";
       const match = base ? (trCatalog?.rows.find((r) => r.code === wantCode) ?? base) : undefined;
-      const sellUsd = match ? (trFactor > 0 ? Math.round(match.costEgp / trFactor) : match.costEgp) : null;
+      const trF = p.mvTransformerFactor ?? trFactor; // per-panel factor override, else the database default
+      const sellUsd = match ? (trF > 0 ? Math.round(match.costEgp / trF) : match.costEgp) : null;
       const unit = sellUsd == null ? 0 : sellUsd * rate;
       const qty = p.qty || 1;
       return [{ desc: transformerDesc(c), qty, unit, total: unit * qty, poa: sellUsd == null, hl: ["Transformer"] }];
@@ -8528,11 +8529,11 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
       <div ref={editorRef} className="min-w-0">
         {hideEditor ? (
           sel && sel.mvType === "rmu" ? (
-            <MvRmuPanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} />
+            <MvRmuPanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} defaultName={mvDefaultName(sel, s.panels)} />
           ) : sel && sel.mvType === "transformer" ? (
-            <MvTransformerPanelEditor key={sel.id} p={sel} upPanel={upPanel} />
+            <MvTransformerPanelEditor key={sel.id} p={sel} upPanel={upPanel} defaultName={mvDefaultName(sel, s.panels)} />
           ) : sel && sel.mvType === "kiosk" ? (
-            <MvKioskPanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel}
+            <MvKioskPanelEditor key={sel.id} s={s} p={sel} upPanel={upPanel} defaultName={mvDefaultName(sel, s.panels)}
               lvEditor={
                 <div className="space-y-4">
                   <ComponentsCard s={s} p={sel} u={(patch) => upPanel(sel.id, patch)}

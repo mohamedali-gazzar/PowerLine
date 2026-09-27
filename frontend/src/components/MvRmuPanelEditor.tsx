@@ -26,10 +26,14 @@ export default function MvRmuPanelEditor({
   insideKiosk = false,
   onPanelCode,
   onCost,
+  defaultName,
 }: {
   s: LvState;
   p: LvPanel;
   upPanel: (id: string, patch: Partial<LvPanel>) => void;
+  /** The auto name this item shows in the panel list (e.g. "RMU-01"), used as the Panel name
+   *  placeholder so an unnamed item reads the same here as in the list. */
+  defaultName?: string;
   /** Rendered inside the MV kiosk accordion: the RMU form is identical to a standalone RMU, but the
    *  per-panel "Panel cost (live)" card is dropped (a single kiosk-wide cost card replaces it). */
   insideKiosk?: boolean;
@@ -83,7 +87,7 @@ export default function MvRmuPanelEditor({
   const baseUnit = (lp?.basePrice ?? 0) * rate;
   const addUnit = (lp?.addOns ?? []).reduce((sum, a) => sum + a.price, 0) * rate;
   const listSelling = baseUnit + addUnit;           // base + add-ons = the RMU's list price (no Aux/Shunt)
-  const factor = preview?.rmuFactor ?? 0.85;
+  const factor = p.mvRmuFactor ?? preview?.rmuFactor ?? 0.85;
   // The card separates the RMU from its per-feeder Aux / Shunt-trip. The RMU sells at its list price
   // (cost = list × factor). Aux/Shunt PRICES are SELLING prices; their cost is selling × factor (0.85).
   // Totals are the two added together.
@@ -101,11 +105,34 @@ export default function MvRmuPanelEditor({
   const costEgp = !priced ? null : listCostEgp + Math.round(rmuAuxShuntUsd(rmu) * factor * usdRate);
   useEffect(() => { onCost?.(costEgp); }, [costEgp, onCost]);
 
-  return (
-    <div className="animate-fade-up space-y-4">
-      {/* Live price — Cost / Factor / Selling (mirrors the Transformer card). Hidden in the
-          kiosk, which gets one combined cost card for the whole packaged unit. */}
-      {!insideKiosk && (
+  // The factor box, shared by both cost cards below — this is the ONE place the RMU's factor is
+  // edited (inside a kiosk the combined kiosk cost table shows it read-only).
+  const factorInput = (
+    <input type="number" step="0.01" min={0} value={factor}
+      onChange={(e) => upPanel(p.id, { mvRmuFactor: e.target.value === "" ? undefined : Number(e.target.value) })}
+      className="mt-1 w-20 rounded-md border border-line bg-white px-2 py-1 text-right text-sm font-bold tabular-nums text-ink focus:border-brand focus:outline-none dark:bg-neutral-900" />
+  );
+
+  // Live price — Cost / Factor / Selling (mirrors the Transformer card). Handed to RmuConfigForm so it
+  // sits at the TOP of the right-hand column (above Metering) and the RMU Code card gets the full left
+  // column. Inside a kiosk it is the compact three-box row only: the kiosk's own combined cost table
+  // carries the name/quantity and the totals.
+  const costCard = insideKiosk ? (
+    <div className="card px-4 py-3">
+      {/* The boxes always show; Cost / Selling stay blank until a price is found, so the card keeps
+          its shape instead of collapsing into a message. */}
+      <div className="grid grid-cols-3 gap-2 text-sm [&_b]:text-base">
+        <div className="rounded-lg bg-surface p-2.5">Cost<br /><b>{priced ? `${fmt(cost)} ${currency}` : "—"}</b></div>
+        <div className="rounded-lg bg-surface p-2.5">Factor<br />{factorInput}</div>
+        <div className="rounded-lg bg-brand p-2.5 text-white">Selling<br /><b>{priced ? `${fmt(selling)} ${currency}` : "—"}</b></div>
+      </div>
+      {!priced && (
+        <p className="mt-2 text-xs font-semibold text-amber-600">
+          {preview == null ? "Calculating the RMU price…" : "Not in the RMU price list yet — price on request."}
+        </p>
+      )}
+    </div>
+  ) : (
       <div className="card px-4 py-3">
         <div className="flex w-full items-center justify-between gap-3">
           <h2 className="sec-head mb-0">Panel cost (live)</h2>
@@ -122,7 +149,8 @@ export default function MvRmuPanelEditor({
         <div className="mt-3 grid grid-cols-2 gap-3">
           <div>
             <label className="label">Panel name</label>
-            <input className="input" value={p.name} onChange={(e) => upPanel(p.id, { name: e.target.value })} />
+            <input className="input" value={p.name} placeholder={defaultName}
+              onChange={(e) => upPanel(p.id, { name: e.target.value })} />
           </div>
           <div>
             <label className="label">Quantity</label>
@@ -159,14 +187,18 @@ export default function MvRmuPanelEditor({
               <div className="grid grid-cols-[1fr_5rem_2.75rem_5rem] items-center gap-x-2 border-t border-line pt-1 font-bold text-brand-dark">
                 <span>Total</span>
                 <span className="text-right tabular-nums">{fmt(cost)} {currency}</span>
-                <span className="text-center tabular-nums">{factor}</span>
+                <span className="text-center tabular-nums">
+                  <input type="number" step="0.01" min={0} value={factor}
+                    onChange={(e) => upPanel(p.id, { mvRmuFactor: e.target.value === "" ? undefined : Number(e.target.value) })}
+                    className="w-12 rounded border border-line bg-transparent px-1 py-0.5 text-center text-sm tabular-nums outline-none focus:border-brand" />
+                </span>
                 <span className="text-right tabular-nums">{fmt(selling)} {currency}</span>
               </div>
             </div>
           ) : (
             <div className="mt-3 grid grid-cols-3 gap-2 text-sm [&_b]:text-base">
               <div className="rounded-lg bg-surface p-2.5">Cost<br /><b>{fmt(cost)} {currency}</b></div>
-              <div className="rounded-lg bg-surface p-2.5">Factor<br /><b>{factor}</b></div>
+              <div className="rounded-lg bg-surface p-2.5">Factor<br />{factorInput}</div>
               <div className="rounded-lg bg-brand p-2.5 text-white">Selling<br /><b>{fmt(selling)} {currency}</b></div>
             </div>
           )
@@ -176,10 +208,12 @@ export default function MvRmuPanelEditor({
           </p>
         )}
       </div>
-      )}
+  );
 
+  return (
+    <div className="animate-fade-up">
       <RmuConfigForm value={rmu} onChange={setR} onChangeMany={setMany} code={code} panelCode={panelCode}
-        feederOptions={insideKiosk ? KIOSK_FEEDER_OPTIONS : undefined} />
+        feederOptions={insideKiosk ? KIOSK_FEEDER_OPTIONS : undefined} costCard={costCard} hideCode={insideKiosk} />
     </div>
   );
 }

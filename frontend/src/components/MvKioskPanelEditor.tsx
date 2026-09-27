@@ -10,7 +10,7 @@ import {
   KIOSK_EXTRAS, DEFAULT_KIOSK_ACCESSORIES,
 } from "../lv/kioskParts";
 import {
-  DEFAULT_KIOSK_FACTORS, kioskCostsEgp, kioskPartSellingEgp,
+  DEFAULT_KIOSK_FACTORS, kioskCostsEgp, kioskPartSellingEgp, kioskFactorOf,
   kioskTotalCostEgp, kioskTotalSellingEgp, type KioskPartKey,
 } from "../lv/kioskPricing";
 
@@ -50,8 +50,11 @@ function Section({ n, title, subtitle, open, onToggle, warn, code, children }: {
   );
 }
 
-export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
+export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor, defaultName }: {
   s: LvState; p: LvPanel; upPanel: (id: string, patch: Partial<LvPanel>) => void;
+  /** The auto name this item shows in the panel list (e.g. "Kiosk-01"), used as the Panel name
+   *  placeholder so an unnamed item reads the same here as in the list. */
+  defaultName?: string;
   /** The LV editor (component list + sizing card) for THIS panel, supplied by the configurator
    *  page so the kiosk reuses it without a circular import. */
   lvEditor: ReactNode;
@@ -133,9 +136,14 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
   const totalSelling = kioskTotalSellingEgp(costs, p, usdRate);
   const totalFactor = totalSelling > 0 ? totalCost / totalSelling : 0;
 
+
   // Display currency for the table (EGP default). Internals stay EGP; USD divides by the rate.
   const kioskCurrency = p.mvKioskCurrency ?? "EGP";
-  const setKioskCurrency = (c: "EGP" | "USD") => upPanel(p.id, { mvKioskCurrency: c });
+  // EGP/USD is a way of reading the sheet, not a property of one kiosk — so switching it here
+  // switches every kiosk in the quotation, and the engineer doesn't have to set it item by item.
+  const setKioskCurrency = (c: "EGP" | "USD") => {
+    for (const k of s.panels) if (k.mvType === "kiosk") upPanel(k.id, { mvKioskCurrency: c });
+  };
   const disp = (egp: number | null): string => {
     if (egp == null) return "—";
     const v = kioskCurrency === "USD" ? egp / usdRate : egp;
@@ -163,8 +171,12 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
         {/* Panel name + quantity — above the code. Same field style as the LV panel details. */}
         <div className="mb-3 grid grid-cols-2 gap-3">
           <div>
-            <label className="label">Panel name</label>
-            <input className="input" value={p.name} onChange={(e) => upPanel(p.id, { name: e.target.value })} />
+            <label className="label">Kiosk name</label>
+            {/* The kiosk's OWN name — it starts as the name shown in the panel list ("Kiosk-01") and
+                editing it renames the kiosk there too. Deliberately NOT `p.name`: that belongs to the
+                LV panel inside the kiosk (the house standard writes "MDB 2000A…" into it). */}
+            <input className="input" value={p.mvKioskName || defaultName || ""} placeholder={defaultName}
+              onChange={(e) => upPanel(p.id, { mvKioskName: e.target.value })} />
           </div>
           <div>
             <label className="label">Quantity</label>
@@ -176,8 +188,8 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-line text-[11px] font-bold uppercase tracking-wide text-muted">
-                <th className="py-1.5 pr-2 text-left">Code</th>
                 <th className="py-1.5 pr-2 text-left">Kiosk</th>
+                <th className="py-1.5 pr-2 text-left">Code</th>
                 <th className="py-1.5 pr-2 text-right">Cost</th>
                 <th className="py-1.5 pr-2 text-right">Factor</th>
                 <th className="py-1.5 text-right">Selling</th>
@@ -187,8 +199,9 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
               {priceRows.map((row) => {
                 const cost = costOf(row.key);
                 const sell = sellingOf(row.key);
-                return (
+                const mainRow = (
                   <tr key={row.key} className="border-b border-line/50">
+                    <td className="py-1.5 pr-2 font-semibold text-ink">{row.label}</td>
                     <td className="py-1.5 pr-2">
                       {row.key === "size" ? (
                         <select value={sizeCode} onChange={(e) => setPrice("size", { code: e.target.value })}
@@ -200,18 +213,24 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor }: {
                         <span className="text-sm font-semibold text-ink">{row.autoCode || "—"}</span>
                       )}
                     </td>
-                    <td className="py-1.5 pr-2 font-semibold text-ink">{row.label}</td>
                     <td className="py-1.5 pr-2 text-right">
                       <span className="tabular-nums text-ink">{disp(cost)}</span>
                     </td>
                     <td className="py-1.5 pr-2 text-right">
-                      <input type="number" inputMode="decimal" value={priceMap[row.key]?.factor ?? DEFAULT_KIOSK_FACTORS[row.key] ?? ""}
-                        onChange={(e) => setPrice(row.key, { factor: e.target.value === "" ? undefined : Number(e.target.value) })}
-                        className="w-20 rounded-md border border-line px-2 py-1 text-right text-sm tabular-nums focus:border-brand focus:outline-none" />
+                      {/* The RMU's factor is edited in the RMU section above — shown here read-only. */}
+                      {row.key === "rmu" ? (
+                        <span className="inline-block w-20 px-2 py-1 text-right text-sm tabular-nums text-muted"
+                          title="Set in the RMU section above">{kioskFactorOf(p, "rmu") ?? "—"}</span>
+                      ) : (
+                        <input type="number" inputMode="decimal" value={priceMap[row.key]?.factor ?? DEFAULT_KIOSK_FACTORS[row.key] ?? ""}
+                          onChange={(e) => setPrice(row.key, { factor: e.target.value === "" ? undefined : Number(e.target.value) })}
+                          className="w-20 rounded-md border border-line px-2 py-1 text-right text-sm tabular-nums focus:border-brand focus:outline-none" />
+                      )}
                     </td>
                     <td className="py-1.5 text-right font-bold tabular-nums text-brand-dark">{disp(sell)}</td>
                   </tr>
                 );
+                return mainRow;
               })}
             </tbody>
             <tfoot>

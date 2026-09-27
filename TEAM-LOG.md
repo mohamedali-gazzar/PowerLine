@@ -23,6 +23,39 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-27 · Mohamed's side · Claude
 
+**MV pricing factors are now editable, and the RMU / Transformer / Kiosk sections were tidied up.**
+
+**You can now type the factor.** The RMU and the Transformer each have their own **Factor** box on their
+live cost card, so you can price one item differently from the house default without touching anyone
+else's quotation. Leave it alone and it behaves exactly as before.
+
+⚠️ HEADS-UP: the two factors do **different** jobs, and this trips people up. On the **Transformer** the
+factor sets the selling price (selling = cost ÷ factor), so changing it moves what the customer pays. On
+the **RMU** the selling price comes from the price list and is fixed — its factor works out the *cost*
+instead. So editing an RMU factor changes your margin, not the price on the paper.
+
+**The RMU section reads more calmly.** It is now three labelled blocks — what it is, how it is rated, then
+the per-feeder accessories — with the three dropdowns sitting on one row, and the panel cost card moved up
+above Metering so the two columns finish level.
+
+**Inside a kiosk (compact substation):**
+
+- The **kiosk now has its own name.** It starts as the name shown in the panel list on the left
+  (Kiosk-01, Kiosk-02 …) instead of showing the name of the LV panel inside it. Rename it and it renames
+  everywhere — the panel list, the Kiosk Analysis sheet and the ERP export. The LV panel inside keeps its
+  own name ("MDB 2000A…"), unchanged.
+- The **RMU code is no longer printed twice** — it was in the RMU section header *and* in the kiosk price
+  table. The header one is gone; the table keeps it.
+- **EGP / USD now switches every kiosk at once**, instead of having to be set item by item.
+- The transformer part is now two cards like the RMU, and **"Without transformer" charges nothing** —
+  cost, transportation and selling all show as empty rather than carrying a leftover price.
+- The RMU's cost / factor / selling row sits above Metering, and its factor is **read-only in the kiosk
+  price table** — edit it in the RMU section, which is the one place that owns it.
+
+No prices or formulas changed. Nothing already sent to a customer moves.
+
+## 2026-09-27 · Mohamed's side · Claude
+
 **MV items now have an editable Panel name + Quantity (price ×qty on the offer).**
 
 Each MV item (RMU, Transformer, Kiosk / compact substation) now shows a **Panel name** and **Quantity**

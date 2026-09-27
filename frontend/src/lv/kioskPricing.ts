@@ -53,8 +53,12 @@ export function kioskCostsEgp(
   return { rmu: rmuCostEgp, transformer, lv, size, accessories };
 }
 
-/** The selling factor for a part: the typed override on the panel, else the house default. */
+/** The selling factor for a part: the typed override on the panel, else the house default.
+ *  The RMU is the exception — its factor is owned by the RMU section (mvRmuFactor), which is where it
+ *  is edited; the kiosk cost table only displays it, read-only. An older kiosk that typed a factor
+ *  straight into the table keeps it until the RMU section sets one. */
 export function kioskFactorOf(p: LvPanel, key: string): number | undefined {
+  if (key === "rmu") return p.mvRmuFactor ?? p.mvKioskCost?.rmu?.factor ?? DEFAULT_KIOSK_FACTORS.rmu;
   return p.mvKioskCost?.[key]?.factor ?? DEFAULT_KIOSK_FACTORS[key];
 }
 

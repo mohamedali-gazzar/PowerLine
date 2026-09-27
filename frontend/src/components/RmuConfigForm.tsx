@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Field, NumberInput, Select, Segmented, Toggle } from "./fields";
 import {
   RTU_TYPES,
@@ -147,6 +147,8 @@ export default function RmuConfigForm({
   code,
   panelCode,
   feederOptions = RMU_FEEDER_OPTIONS,
+  costCard,
+  hideCode = false,
 }: {
   value: RmuConfigInput;
   onChange: <K extends keyof RmuConfigInput>(key: K, v: RmuConfigInput[K]) => void;
@@ -156,6 +158,12 @@ export default function RmuConfigForm({
   panelCode: string;
   /** The RMU-feeder dropdown choices. Defaults to the full list; a kiosk passes KIOSK_FEEDER_OPTIONS. */
   feederOptions?: readonly [number, number][];
+  /** The "Panel cost (live)" card, rendered at the top of the right-hand column above Metering.
+   *  Omitted inside a kiosk, which has one combined cost card for the whole unit. */
+  costCard?: ReactNode;
+  /** Hide the code chip in this card's header. Inside a kiosk the same code already sits in the
+   *  kiosk cost table's RMU row, so repeating it here is noise. */
+  hideCode?: boolean;
 }) {
   const rmu = value;
   const setR = onChange;
@@ -185,70 +193,76 @@ export default function RmuConfigForm({
     }
   }, [rmu.productType, rmu.rtuType]);
 
+  // No `items-start` — the two columns stretch to the same height so the cards finish level.
   return (
-    <div className="grid items-start gap-5 lg:grid-cols-2">
-      {/* Tighter vertical rhythm than the other cards (py-3 + 5px row gaps) so
-          this half-width column finishes level with Metering + Smart/RTU on the
-          right instead of running past them. */}
-      <section className="card px-5 py-3 min-w-0 animate-fade-up">
-        <div className="mb-2 flex items-center justify-between">
+    <div className="grid gap-5 lg:grid-cols-2">
+      {/* Grouped into three blocks — what it is, how it's rated, then the per-feeder
+          accessories — with a hairline between each so the column reads in steps
+          instead of one dense stack. */}
+      <section className="card p-5 min-w-0 animate-fade-up">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="sec-head !mb-0 !pb-0 after:hidden">RMU Code</h2>
-          <div className="text-right">
-            <span key={panelCode} className="code-chip animate-pop">{panelCode}</span>
-            <div className="mt-1 text-xs text-muted">{code}</div>
-          </div>
+          {!hideCode && (
+            <div className="text-right">
+              <span key={panelCode} className="code-chip animate-pop">{panelCode}</span>
+              <div className="mt-1 text-xs text-muted">{code}</div>
+            </div>
+          )}
         </div>
 
-        <div className="space-y-[5px]">
-          <Field label="Product type">
-            <Segmented
-              value={rmu.productType}
-              onChange={(v) => setR("productType", v)}
-              options={["PRAL", "PSEC", "LUCY"] as const}
-              renderLabel={(v) =>
-                v === "PRAL" ? "PRAL · Air" : v === "PSEC" ? "PSEC · SF6" : "LUCY · GIS"
-              }
-            />
-          </Field>
-
-          {/* Lucy has no LBS brand or client specification — hidden for it. */}
-          {!isLucy && (
-            <>
-              <Field
-                label="LBS brand / type"
-                hint={
-                  rmu.productType === "PSEC"
-                    ? "ABB · Murge available · Schneider locked (no data)"
-                    : "ABB available · Chint locked (no data)"
-                }
-              >
-                <Segmented
-                  value={(rmu.lbsBrand ?? "ABB") as LbsBrand}
-                  onChange={(v) => setR("lbsBrand", v)}
-                  options={BRANDS_BY_FAMILY[rmu.productType] as readonly LbsBrand[]}
-                  disabledOptions={
-                    BRANDS_BY_FAMILY[rmu.productType].filter(
-                      (b) => !AVAILABLE_BRANDS_BY_FAMILY[rmu.productType].includes(b)
-                    ) as readonly LbsBrand[]
-                  }
-                />
+        <div className="space-y-4">
+          {/* What it is — family, LBS brand and client specification, as three dropdowns on one row.
+              Options with no data are listed but disabled, so the reason shows in the list itself
+              instead of a separate hint line under each field. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className={isLucy ? "sm:col-span-3" : undefined}>
+              <Field label="Product type">
+                <select
+                  className="input cursor-pointer"
+                  value={rmu.productType}
+                  onChange={(e) => setR("productType", e.target.value as RmuConfigInput["productType"])}
+                >
+                  <option value="PRAL">PRAL · Air</option>
+                  <option value="PSEC">PSEC · SF6</option>
+                  <option value="LUCY">LUCY · GIS</option>
+                </select>
               </Field>
+            </div>
 
-              <Field label="Client specification" hint="EECH available · KAHRABA locked (no technical offer)">
-                <Segmented
-                  value={rmu.clientSpec ?? "EECH"}
-                  onChange={(v) => setR("clientSpec", v)}
-                  options={CLIENT_SPECS}
-                  disabledOptions={
-                    CLIENT_SPECS.filter(
-                      (s) => !AVAILABLE_CLIENT_SPECS.includes(s)
-                    ) as readonly ("EECH" | "KAHRABA")[]
-                  }
-                />
-              </Field>
-            </>
-          )}
+            {/* Lucy has no LBS brand or client specification — hidden for it. */}
+            {!isLucy && (
+              <>
+                <Field label="LBS brand / type">
+                  <select
+                    className="input cursor-pointer"
+                    value={(rmu.lbsBrand ?? "ABB") as LbsBrand}
+                    onChange={(e) => setR("lbsBrand", e.target.value as LbsBrand)}
+                  >
+                    {(BRANDS_BY_FAMILY[rmu.productType] as readonly LbsBrand[]).map((b) => {
+                      const ok = AVAILABLE_BRANDS_BY_FAMILY[rmu.productType].includes(b);
+                      return <option key={b} value={b} disabled={!ok}>{ok ? b : `${b} — no data`}</option>;
+                    })}
+                  </select>
+                </Field>
 
+                <Field label="Client specification">
+                  <select
+                    className="input cursor-pointer"
+                    value={rmu.clientSpec ?? "EECH"}
+                    onChange={(e) => setR("clientSpec", e.target.value as "EECH" | "KAHRABA")}
+                  >
+                    {CLIENT_SPECS.map((c) => {
+                      const ok = AVAILABLE_CLIENT_SPECS.includes(c);
+                      return <option key={c} value={c} disabled={!ok}>{ok ? c : `${c} — no technical offer`}</option>;
+                    })}
+                  </select>
+                </Field>
+              </>
+            )}
+          </div>
+
+          {/* How it's rated — voltage and feeder make-up, then busbar and fuse. */}
+          <div className="space-y-3 border-t border-line/60 pt-4">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Rated voltage">
               <Segmented
@@ -275,11 +289,6 @@ export default function RmuConfigForm({
             </Field>
           </div>
 
-          {/* Per-feeder Aux / Shunt-trip — one row per ring + transformer feeder. Only offered when RTU
-              is OFF (an RTU covers these functions itself) and the brand is not Murge (Murge RMUs have
-              no per-feeder Aux/Shunt). Shunt trip is offered on transformer feeders only. */}
-          {rmu.rtuType === "NONE" && rmu.lbsBrand !== "MURGE" && <FeederAccessories rmu={rmu} onChange={setR} />}
-
           <div className="grid grid-cols-2 gap-3">
             <Field label="Busbar current">
               <NumberInput value={rmu.busbarCurrentA} suffix="A" onChange={(v) => setR("busbarCurrentA", v)} />
@@ -296,15 +305,49 @@ export default function RmuConfigForm({
               </Field>
             )}
           </div>
+          </div>
+
+          {/* Smart / RTU — optional, PSEC & Lucy only (PRAL has no smart). It shares the slot with the
+              feeder accessories below: switching it on hides that table (an RTU covers those functions)
+              and the smart level takes its place. */}
+          {rmu.productType !== "PRAL" && (
+            <div className="border-t border-line/60 pt-4">
+              <Toggle
+                checked={rmu.rtuType !== "NONE"}
+                onChange={(on) => setR("rtuType", on ? "READY1" : "NONE")}
+                label="Smart / RTU (optional)"
+              />
+              {rmu.rtuType !== "NONE" && (
+                <div className="mt-3 animate-fade-up">
+                  <Field label="Smart level" hint="Priced as a separate line in the commercial offer">
+                    <Select value={rmu.rtuType} onChange={(v) => setR("rtuType", v)} options={RTU_TYPES} />
+                  </Field>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Per-feeder Aux / Shunt-trip — one row per ring + transformer feeder. Only offered when RTU
+              is OFF (an RTU covers these functions itself) and the brand is not Murge (Murge RMUs have
+              no per-feeder Aux/Shunt). Shunt trip is offered on transformer feeders only. */}
+          {rmu.rtuType === "NONE" && rmu.lbsBrand !== "MURGE" && (
+            <div className="border-t border-line/60 pt-4">
+              <div className="label">Feeder accessories</div>
+              <FeederAccessories rmu={rmu} onChange={setR} />
+            </div>
+          )}
         </div>
       </section>
 
       <div className="flex min-w-0 flex-col gap-5">
+        {costCard}
         {/* Metering — a toggle for every type; CT/VT options for PRAL/PSEC only.
             Cards keep their natural height and pack from the top, so Smart/RTU
             sits directly under Metering instead of a card being stretched into
             a tall empty white box to force the columns to match. */}
-        <section className="card p-5 animate-fade-up">
+        {/* Grows to fill the column when it has options open, so its bottom lines up with the
+            RMU Code card on the left. */}
+        <section className={`card p-5 animate-fade-up ${rmu.hasMetering ? "flex-1" : ""}`}>
           <Toggle
             checked={rmu.hasMetering}
             onChange={(v) => setR("hasMetering", v)}
@@ -333,19 +376,22 @@ export default function RmuConfigForm({
                   renderLabel={(v) => v}
                 />
               </Field>
-              <Field label="Voltage transformer" hint="Two core → with fuse · single core → without fuse">
-                <Segmented
-                  value={String(rmu.vtCores ?? 1) as "1" | "2"}
-                  onChange={(v) => {
-                    const cores = Number(v);
-                    setR("vtCores", cores);
-                    // Fuse follows the core count: two core = with fuse, single = without.
-                    setR("meteringWithFuse", cores === 2);
-                  }}
-                  options={["1", "2"] as const}
-                  renderLabel={(v) => (v === "1" ? "Single core" : "Two core")}
-                />
-              </Field>
+              {/* Full width — "Single core / Two core" wraps onto two lines in a half column. */}
+              <div className="sm:col-span-2">
+                <Field label="Voltage transformer" hint="Two core → with fuse · single core → without fuse">
+                  <Segmented
+                    value={String(rmu.vtCores ?? 1) as "1" | "2"}
+                    onChange={(v) => {
+                      const cores = Number(v);
+                      setR("vtCores", cores);
+                      // Fuse follows the core count: two core = with fuse, single = without.
+                      setR("meteringWithFuse", cores === 2);
+                    }}
+                    options={["1", "2"] as const}
+                    renderLabel={(v) => (v === "1" ? "Single core" : "Two core")}
+                  />
+                </Field>
+              </div>
               <Field label="VT burden (VA)" hint="Fixed (non-editable)">
                 <input className="input bg-surface" value="50-100" readOnly />
               </Field>
@@ -356,24 +402,6 @@ export default function RmuConfigForm({
           )}
         </section>
 
-        {/* Smart / RTU — optional, PSEC & Lucy only (PRAL has no smart). Works
-            like the metering toggle: turn it on, then pick the level. */}
-        {rmu.productType !== "PRAL" && (
-          <section className="card p-5 animate-fade-up">
-            <Toggle
-              checked={rmu.rtuType !== "NONE"}
-              onChange={(on) => setR("rtuType", on ? "READY1" : "NONE")}
-              label="Smart / RTU (optional)"
-            />
-            {rmu.rtuType !== "NONE" && (
-              <div className="mt-4 sm:max-w-md animate-fade-up">
-                <Field label="Smart level" hint="Priced as a separate line in the commercial offer">
-                  <Select value={rmu.rtuType} onChange={(v) => setR("rtuType", v)} options={RTU_TYPES} />
-                </Field>
-              </div>
-            )}
-          </section>
-        )}
       </div>
     </div>
   );
