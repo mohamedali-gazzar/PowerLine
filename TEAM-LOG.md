@@ -23,6 +23,15 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-27 · Mohamed's side · Claude
 
+**MV items now have an editable Panel name + Quantity (price ×qty on the offer).**
+
+Each MV item (RMU, Transformer, Kiosk / compact substation) now shows a **Panel name** and **Quantity**
+field at the top of its live cost card, in the same style as the LV panel details. The MV Commercial offer
+already multiplies each item's unit price by its quantity, so raising the quantity flows straight through to
+the line totals and grand total. No schema change (quantity uses the existing per-panel `qty`).
+
+## 2026-09-27 · Mohamed's side · Claude
+
 **Kiosk: the transformer voltage now follows the RMU voltage automatically.**
 
 Inside a compact substation the transformer's primary voltage is now driven by the RMU's rated voltage —

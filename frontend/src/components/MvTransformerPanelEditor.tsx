@@ -226,6 +226,19 @@ export default function MvTransformerPanelEditor({
           )}
         </div>
 
+        {/* Panel name + quantity — above the transformer code. Same field style as the LV panel details. */}
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Panel name</label>
+            <input className="input" value={p.name} onChange={(e) => upPanel(p.id, { name: e.target.value })} />
+          </div>
+          <div>
+            <label className="label">Quantity</label>
+            <input className="input" inputMode="numeric" value={p.qty}
+              onChange={(e) => upPanel(p.id, { qty: Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, ""), 10) || 1) })} />
+          </div>
+        </div>
+
         {match ? (
           <div className="mt-3 grid auto-rows-fr grid-cols-3 gap-2 text-sm [&_b]:text-base">
             <div className="col-span-3 flex items-center justify-between gap-2 rounded-lg bg-brand-light p-2.5 text-brand-dark">

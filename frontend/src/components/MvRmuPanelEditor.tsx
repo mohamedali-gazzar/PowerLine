@@ -118,6 +118,19 @@ export default function MvRmuPanelEditor({
           )}
         </div>
 
+        {/* Panel name + quantity — above the cost. Same field style as the LV panel details. */}
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Panel name</label>
+            <input className="input" value={p.name} onChange={(e) => upPanel(p.id, { name: e.target.value })} />
+          </div>
+          <div>
+            <label className="label">Quantity</label>
+            <input className="input" inputMode="numeric" value={p.qty}
+              onChange={(e) => upPanel(p.id, { qty: Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, ""), 10) || 1) })} />
+          </div>
+        </div>
+
         {preview == null ? (
           <div className="mt-3 grid grid-cols-3 gap-2">
             <div className="skeleton h-14 rounded-lg" />
