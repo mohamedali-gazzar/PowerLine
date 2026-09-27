@@ -23,6 +23,25 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-27 · Mohamed's side · Claude
 
+**Kiosk cover: the P.F.C line was always wrong, and the Item label appeared too many times.**
+
+⚠️ HEADS-UP — **the kiosk cover said "Without P.F.C" on every kiosk, even ones built with power-factor
+correction.** It was reading the wrong setting: a field that belongs to the P-CSS Selector and that
+nothing in the kiosk editor ever sets, so it was always "no". It now reads the **P.F.C** dropdown in
+the Standard Panels card — the Yes/No you actually choose. A kiosk built by hand (Private Sector),
+where there is no Standard Panels card, reads "With P.F.C" when a P.F.C section has been added with
+the **+ P.F.C** button.
+
+**If a technical offer for a kiosk WITH power-factor correction has already gone to a customer, its
+cover said "Without P.F.C".** Worth checking anything sent recently.
+
+**One Item label per item.** The orange ITEM ribbon used to print on every cover inside a kiosk — the
+kiosk cover, then the RMU, transformer and LV covers, all carrying the same number. It now prints
+only on the item's own cover, since the parts inside are that one item, not items of their own. On
+the test quotation the offer went from a ribbon on every cover to six, one per item, across 29 pages.
+
+## 2026-09-27 · Mohamed's side · Claude
+
 **The MV quotation type is now open to everyone, marked "Test".**
 
 On **+ New QTN** the **MV** card (RMU · TR · KIOSK) is no longer locked to admins — anyone can start

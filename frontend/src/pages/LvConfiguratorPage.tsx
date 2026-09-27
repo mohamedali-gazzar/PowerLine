@@ -63,7 +63,7 @@ import { TransformerCover, TransformerTechnicalSheet, withoutTransformerLabel, I
 import { findTransformerTech, trModel, trDisplayCode } from "../components/transformerTechData";
 import type { PdfPageImage } from "../lv/renderPdfPages";
 import OfferView from "../components/OfferView";
-import type { GeneratedOffer, RmuConfigInput, TransformerConfigInput, KioskLvConfigInput } from "../types";
+import type { GeneratedOffer, RmuConfigInput, TransformerConfigInput } from "../types";
 import {
   api, getToken, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
   type QtnAttachmentDto, type QtnStatus,
@@ -5400,10 +5400,27 @@ function kioskLvBreakerBrand(p: LvPanel): string {
 // LV), over a faint isometric grid, with a header (kVA hero + IP54 pill) and a three-fact footer.
 // Rendered as one full-bleed A4 SVG so it prints as crisp vector + selectable text. All values are read
 // straight off the kiosk panel. One per kiosk item.
-function KioskCover({ rmu, tr, kva, stonePaint, index, project, lv, lvRatingA, lvBreakerBrand, itemNo }: {
+/**
+ * Does this LV board carry power-factor correction?
+ *
+ * Two ways it can get one, and a kiosk may use either:
+ *   · built from the house standard — the Standard Panels "P.F.C" dropdown (stdPfc)
+ *   · built by hand (Private Sector) — a P.F.C section added with the "+ P.F.C" button, which the
+ *     builder names after the capacitor bank, so the match is on the section name
+ */
+function panelHasPfc(p: LvPanel): boolean {
+  if ((p.stdPfc ?? "").trim().toLowerCase() === "yes") return true;
+  return (p.sections ?? []).some((s) => /p\.?\s*f\.?\s*c/i.test(s));
+}
+
+function KioskCover({ rmu, tr, kva, stonePaint, index, project, lvRatingA, lvBreakerBrand, lvHasPfc, itemNo }: {
   rmu?: RmuConfigInput; tr?: TransformerConfigInput; code?: string; kva: number;
   stonePaint: boolean; index: number; total: number; project: string;
-  lv?: KioskLvConfigInput; lvRatingA?: number;
+  lvRatingA?: number;
+  /** Whether the LV board carries a power-factor-correction bank — read from the panel itself, not
+   *  from `lv`: KioskLvConfigInput.includePf belongs to the P-CSS Selector and nothing in the kiosk
+   *  editor ever sets it, so it is always false here. */
+  lvHasPfc?: boolean;
   /** Dominant breaker brand of the LV board (ABB / Himel / …), read from its actual devices. */
   lvBreakerBrand?: string;
   /** Offer item number — printed as a bookmark; every page of this kiosk carries the same one. */
@@ -5566,7 +5583,7 @@ function KioskCover({ rmu, tr, kva, stonePaint, index, project, lv, lvRatingA, l
           <text x="406" y="721" fontSize="6.5" fontWeight="700" letterSpacing="1.2" fill={GY}>CONFIG.</text>
           {/* Whether the LV panel carries a power-factor-correction bank — the thing a customer
               looks for on an MDB, rather than its incoming/outgoing arrangement. */}
-          <text x="541" y="721" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{lv?.includePf ? "With P.F.C" : "Without P.F.C"}</text>
+          <text x="541" y="721" fontSize="10" fontWeight="700" fill={INK} textAnchor="end">{lvHasPfc ? "With P.F.C" : "Without P.F.C"}</text>
         </g>
         </g>
 
@@ -5898,19 +5915,20 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
             }
             if (p.mvType === "kiosk") {
               // A compact substation: the overview cover, then a cover + technical for each of the RMU,
-              // the transformer (always inside-kiosk → IP00) and the LV board. Every page of this kiosk
-              // carries the same Item number so the parts stay grouped in the PDF.
+              // the transformer (always inside-kiosk → IP00) and the LV board. The Item ribbon belongs
+              // to the ITEM, so only the kiosk's own cover carries it — the RMU / transformer / LV
+              // pages inside are parts of that one item, not items of their own.
               const rc = p.mvRmuConfig, tc = p.mvTransformerConfig, proj = s.project?.name || "";
               const lvBrand = kioskLvBreakerBrand(p);
               return (
                 <Fragment key={p.id}>
                   <KioskCover rmu={rc} tr={tc} code={p.mvKioskCost?.size?.code || ""} kva={tc?.ratingKva || 0}
                     stonePaint={!!p.mvKioskAccChecks?.stonepaint} index={kioskPos[p.id]} total={kioskPanels.length} project={proj}
-                    lv={p.mvLvConfig} lvRatingA={p.ratingA} lvBreakerBrand={lvBrand} itemNo={itemNo} />
+                    lvRatingA={p.ratingA} lvBreakerBrand={lvBrand} lvHasPfc={panelHasPfc(p)} itemNo={itemNo} />
                   {/* Each part shows its own cover, then its datasheet / technical. */}
-                  {rc && <MvRmuTechnical config={rc} g={previews[JSON.stringify(rc)]} index={0} total={1} project={proj} itemNo={itemNo} />}
-                  {tc && <MvTransformerTechnical config={tc} insideKiosk={true} index={0} total={1} project={proj} trCatalog={trCatalog} itemNo={itemNo} />}
-                  <KioskLvCover p={p} lvBreakerBrand={lvBrand} project={proj} itemNo={itemNo} />
+                  {rc && <MvRmuTechnical config={rc} g={previews[JSON.stringify(rc)]} index={0} total={1} project={proj} />}
+                  {tc && <MvTransformerTechnical config={tc} insideKiosk={true} index={0} total={1} project={proj} trCatalog={trCatalog} />}
+                  <KioskLvCover p={p} lvBreakerBrand={lvBrand} project={proj} />
                   <KioskLvTechnical s={s} p={p} qtnNo={qtnNo} />
                 </Fragment>
               );
