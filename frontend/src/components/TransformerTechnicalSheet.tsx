@@ -241,6 +241,23 @@ function trFamily(brand: string, insulation: string): { family: string; tagline:
  * spec strip), so the two MV products read as one family. `code` is the transformer's model /
  * catalogue code; the spec strip surfaces the rating, voltage, insulation and protection (IP).
  */
+/** A hanging ribbon label for the top-left corner of a cover page — an orange banner with a
+ *  swallowtail tail, carrying "ITEM" over the two-digit item number. Absolutely positioned so it
+ *  drapes from the very top edge of the page. */
+export function ItemRibbon({ itemNo }: { itemNo: number }) {
+  const n = String(itemNo).padStart(2, "0");
+  return (
+    <svg width="56" height="94" viewBox="0 0 56 94" aria-hidden="true"
+      className="pointer-events-none absolute left-16 top-0 z-20"
+      style={{ filter: "drop-shadow(2px 3px 2px rgba(0,0,0,0.20))" }}>
+      <path d="M0 0 H56 V78 L28 64 L0 78 Z" fill={TRED} />
+      <path d="M0 0 H56 V6 H0 Z" fill="#FFFFFF" opacity="0.16" />
+      <text x="28" y="27" textAnchor="middle" fontSize="10" fontWeight="700" letterSpacing="1.5" fill="#FFFFFF" fontFamily="Poppins, Arial, sans-serif">ITEM</text>
+      <text x="28" y="53" textAnchor="middle" fontSize="24" fontWeight="800" fill="#FFFFFF" fontFamily="ui-monospace, monospace">{n}</text>
+    </svg>
+  );
+}
+
 export function TransformerCover({ config, code, insideKiosk, index, total, project, asPerDataSheet, itemNo }: {
   config: TransformerConfigInput; code: string; insideKiosk: boolean; index: number; total: number; project: string;
   /** No datasheet exists for this transformer → show a small "As per Technical Data Sheet" note (orange)
@@ -268,15 +285,9 @@ export function TransformerCover({ config, code, insideKiosk, index, total, proj
         <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
         <img src="/brand/mark-color.png" alt="" aria-hidden="true"
           className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
-        <div className="relative flex flex-1 flex-col px-16 pt-24 pb-14">
-          <div className="flex items-center justify-between">
-            {itemNo != null ? (
-              <span className="inline-flex items-center gap-2.5 rounded-2xl bg-brand px-4 py-2 text-white shadow-sm ring-1 ring-black/5">
-                <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/85">Item</span>
-                <span className="h-5 w-px bg-white/40" />
-                <span className="font-mono text-3xl font-extrabold leading-none tracking-tight">{String(itemNo).padStart(2, "0")}</span>
-              </span>
-            ) : <span />}
+        {itemNo != null && <ItemRibbon itemNo={itemNo} />}
+        <div className="relative flex flex-1 flex-col px-16 pt-10 pb-14">
+          <div className="flex items-center justify-end">
             {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">Transformer {index + 1} of {total}</div>}
           </div>
           <div className="flex min-h-0 flex-1 flex-col justify-center py-10">
@@ -297,16 +308,10 @@ export function TransformerCover({ config, code, insideKiosk, index, total, proj
       {/* Powerline "P" mark watermark, bleeding off the top-right corner, very faint. */}
       <img src="/brand/mark-color.png" alt="" aria-hidden="true"
         className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
+      {itemNo != null && <ItemRibbon itemNo={itemNo} />}
 
-      <div className="relative flex flex-1 flex-col px-16 pt-24 pb-14">
-        <div className="flex items-center justify-between">
-          {itemNo != null ? (
-              <span className="inline-flex items-center gap-2.5 rounded-2xl bg-brand px-4 py-2 text-white shadow-sm ring-1 ring-black/5">
-                <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/85">Item</span>
-                <span className="h-5 w-px bg-white/40" />
-                <span className="font-mono text-3xl font-extrabold leading-none tracking-tight">{String(itemNo).padStart(2, "0")}</span>
-              </span>
-            ) : <span />}
+      <div className="relative flex flex-1 flex-col px-16 pt-10 pb-14">
+        <div className="flex items-center justify-end">
           {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">Transformer {index + 1} of {total}</div>}
         </div>
 

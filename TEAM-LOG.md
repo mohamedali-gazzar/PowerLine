@@ -21,6 +21,20 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-27 · Mohamed's side · Claude
+
+**Cover pages: the Item marker is now a hanging ribbon, plus kiosk-cover tidy-ups.**
+
+- **Item label → hanging ribbon.** The old "ITEM | 01" pill is replaced by a small orange ribbon that
+  drapes from the top-left corner of every cover page (kiosk, RMU, transformer, LV) — a swallowtail tail,
+  "ITEM" over the two-digit number, with a soft shadow. Its left edge lines up with the page title, and the
+  kiosk-cover ribbon is sized to match the RMU/transformer ribbons exactly.
+- **Kiosk cover tidy-ups:** the orange left strip is now the same thickness (10px) as the RMU/transformer
+  covers; the "KIOSK n OF n" text is removed; the "1000 kVA" title + subtitle sit lower on the page; and a
+  stray header divider line was removed.
+
+Look-and-feel only; no schema change. Verified live on a two-kiosk quotation. Frontend 181 tests green.
+
 ## 2026-09-24 · Mohamed's side · Claude
 
 **Kiosk technical now shows all three part covers, each tagged with a big Item label.**

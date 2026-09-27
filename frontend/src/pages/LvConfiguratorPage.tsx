@@ -59,7 +59,7 @@ import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
 import MvTransformerPanelEditor, { DEFAULT_TRANSFORMER_CONFIG } from "../components/MvTransformerPanelEditor";
 import MvKioskPanelEditor from "../components/MvKioskPanelEditor";
 import { DEFAULT_RMU_CONFIG, rmuShortCode, rmuAuxShuntUsd } from "../components/RmuConfigForm";
-import { TransformerCover, TransformerTechnicalSheet, withoutTransformerLabel } from "../components/TransformerTechnicalSheet";
+import { TransformerCover, TransformerTechnicalSheet, withoutTransformerLabel, ItemRibbon } from "../components/TransformerTechnicalSheet";
 import { findTransformerTech, trModel, trDisplayCode } from "../components/transformerTechData";
 import type { PdfPageImage } from "../lv/renderPdfPages";
 import OfferView from "../components/OfferView";
@@ -5211,16 +5211,10 @@ function RmuCover({ config, code, index, total, project, itemNo }: {
       {/* Powerline "P" mark watermark, bleeding off the top-right corner, very faint. */}
       <img src="/brand/mark-color.png" alt="" aria-hidden="true"
         className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
+      {itemNo != null && <ItemRibbon itemNo={itemNo} />}
 
-      <div className="relative flex flex-1 flex-col px-16 pt-24 pb-14">
-        <div className="flex items-center justify-between">
-          {itemNo != null ? (
-            <span className="inline-flex items-center gap-2.5 rounded-2xl bg-brand px-4 py-2 text-white shadow-sm ring-1 ring-black/5">
-              <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/85">Item</span>
-              <span className="h-5 w-px bg-white/40" />
-              <span className="font-mono text-3xl font-extrabold leading-none tracking-tight">{String(itemNo).padStart(2, "0")}</span>
-            </span>
-          ) : <span />}
+      <div className="relative flex flex-1 flex-col px-16 pt-10 pb-14">
+        <div className="flex items-center justify-end">
           {total > 1 && <div className="rounded-full bg-surface px-3 py-1 text-[11px] font-bold text-muted">RMU {index + 1} of {total}</div>}
         </div>
 
@@ -5337,7 +5331,7 @@ function kioskLvBreakerBrand(p: LvPanel): string {
 // LV), over a faint isometric grid, with a header (kVA hero + IP54 pill) and a three-fact footer.
 // Rendered as one full-bleed A4 SVG so it prints as crisp vector + selectable text. All values are read
 // straight off the kiosk panel. One per kiosk item.
-function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRatingA, lvBreakerBrand, itemNo }: {
+function KioskCover({ rmu, tr, kva, stonePaint, index, project, lv, lvRatingA, lvBreakerBrand, itemNo }: {
   rmu?: RmuConfigInput; tr?: TransformerConfigInput; code?: string; kva: number;
   stonePaint: boolean; index: number; total: number; project: string;
   lv?: KioskLvConfigInput; lvRatingA?: number;
@@ -5352,7 +5346,7 @@ function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRat
   const uid = `kc${index}`; // unique gradient/pattern ids (several kiosks can be on one offer)
   const OR = "#F26B21", INK = "#1F2026", DK = "#2A2A30", GY = "#9A9BA3", MU = "#55565E";
   return (
-    <section className="a4-sheet" style={{ breakAfter: "page", background: "#fff" }}>
+    <section className="a4-sheet relative" style={{ breakAfter: "page", background: "#fff" }}>
       <svg viewBox="0 0 595 842" width="100%" style={{ display: "block" }} preserveAspectRatio="xMidYMid meet"
         fontFamily="Poppins, Arial, sans-serif">
         <defs>
@@ -5366,21 +5360,23 @@ function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRat
         <rect width="595" height="842" fill={`url(#${uid}-bg)`} />
         <rect x="0" y="190" width="595" height="400" fill={`url(#${uid}-iso)`} opacity="0.9" />
         <rect x="0" y="189" width="595" height="90" fill={`url(#${uid}-fade)`} />
-        <rect x="0" y="0" width="4" height="842" fill={OR} />
+        {/* Orange left strip is a 10px HTML overlay (matching the RMU/Transformer covers) — added after </svg>. */}
 
-        {/* Header — item bookmark (left) + kiosk position (right) */}
+        {/* Header — item bookmark (top-left), then the kVA hero level with the spec panel */}
+        {/* Item ribbon — sized in SVG units so it renders at the same ~56px as the RMU/Transformer
+            HTML ribbons (this SVG scales with the page: 1 unit ≈ 1.334px on A4). */}
         {itemNo != null ? (
           <g>
-            <rect x="40" y="60" width="82" height="30" rx="11" fill={OR} />
-            <text x="55" y="79" fontSize="9" fontWeight="700" letterSpacing="1.6" fill="#FFFFFF">ITEM</text>
-            <line x1="86" y1="67" x2="86" y2="83" stroke="#FFFFFF" strokeOpacity="0.45" strokeWidth="1" />
-            <text x="104" y="81" fontSize="19" fontWeight="800" fill="#FFFFFF" textAnchor="middle" fontFamily="'JetBrains Mono', ui-monospace, monospace">{String(itemNo).padStart(2, "0")}</text>
+            <path d="M40 2 H82 V60 L61 50 L40 60 Z" fill="#000" opacity="0.14" />
+            <path d="M38 0 H80 V58 L59 48 L38 58 Z" fill={OR} />
+            <path d="M38 0 H80 V4 H38 Z" fill="#FFFFFF" opacity="0.16" />
+            <text x="59" y="20" fontSize="7.5" fontWeight="700" letterSpacing="1.1" fill="#FFFFFF" textAnchor="middle">ITEM</text>
+            <text x="59" y="40" fontSize="18" fontWeight="800" fill="#FFFFFF" textAnchor="middle" fontFamily="'JetBrains Mono', ui-monospace, monospace">{String(itemNo).padStart(2, "0")}</text>
           </g>
         ) : null}
-        {total > 1 ? <text x="555" y="59" fontSize="7.5" fontWeight="700" letterSpacing="1.2" fill={GY} textAnchor="end">KIOSK {index + 1} OF {total}</text> : null}
-        <text x="38" y="148" fontSize="54" fontWeight="700" letterSpacing="-1.5" fill={INK}>{kva || "—"} <tspan fill={OR} fontSize="26">kVA</tspan></text>
-        <text x="40" y="172" fontSize="13" fill={MU}>Compact Secondary Substation · Powerline</text>
-        {project ? <text x="40" y="189" fontSize="8.5" fill={GY}>{project}</text> : null}
+        <text x="38" y="150" fontSize="54" fontWeight="700" letterSpacing="-1.5" fill={INK}>{kva || "—"} <tspan fill={OR} fontSize="26">kVA</tspan></text>
+        <text x="40" y="174" fontSize="13" fill={MU}>Compact Secondary Substation · Powerline</text>
+        {project ? <text x="40" y="191" fontSize="8.5" fill={GY}>{project}</text> : null}
 
         {/* Spec badge — enclosure finish / protection / certification, in a unique top-right corner panel
             with an orange rail (replaces the old three-value footer). */}
@@ -5504,6 +5500,8 @@ function KioskCover({ rmu, tr, kva, stonePaint, index, total, project, lv, lvRat
         </g>
 
       </svg>
+      {/* Orange left strip — 10px HTML overlay so it matches the RMU / Transformer cover strips exactly. */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-[10px]" style={{ background: OR }} />
     </section>
   );
 }
@@ -5525,16 +5523,8 @@ function KioskLvCover({ p, lvBreakerBrand, project, itemNo }: {
       <div className="absolute inset-y-0 left-0 w-[10px]" style={{ background: TRED }} />
       <img src="/brand/mark-color.png" alt="" aria-hidden="true"
         className="pointer-events-none absolute -right-12 -top-12 h-[24rem] w-auto" style={{ opacity: 0.06 }} />
-      <div className="relative flex flex-1 flex-col px-16 pt-24 pb-14">
-        <div className="flex items-center justify-between">
-          {itemNo != null ? (
-            <span className="inline-flex items-center gap-2.5 rounded-2xl bg-brand px-4 py-2 text-white shadow-sm ring-1 ring-black/5">
-              <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/85">Item</span>
-              <span className="h-5 w-px bg-white/40" />
-              <span className="font-mono text-3xl font-extrabold leading-none tracking-tight">{String(itemNo).padStart(2, "0")}</span>
-            </span>
-          ) : <span />}
-        </div>
+      {itemNo != null && <ItemRibbon itemNo={itemNo} />}
+      <div className="relative flex flex-1 flex-col px-16 pt-10 pb-14">
         <div className="flex min-h-0 flex-1 flex-col justify-center py-10">
           <div className="text-7xl font-extrabold leading-none text-ink">MDB</div>
           <div className="mt-4 text-2xl font-semibold text-muted">Low Voltage · Main Distribution Board</div>
