@@ -128,6 +128,18 @@ export default function MvTransformerPanelEditor({
       (!cfg.insulation || r.insulation === cfg.insulation)).map((r) => r.primaryKv)),
     [rows, cfg.brand, cfg.ratingKva, cfg.insulation],
   );
+  // Inside a kiosk the transformer's MV primary must match the RMU's voltage class, so drive it from
+  // the RMU (12 kV RMU → 11 kV transformer, 24 kV → 22 kV — the nearest voltage the price list carries)
+  // and lock the dropdown below. A standalone transformer keeps its own manual choice.
+  useEffect(() => {
+    if (!insideKioskOnly) return;
+    const rmuKv = p.mvRmuConfig?.voltageKv ?? null;
+    if (rmuKv == null || voltages.length === 0) return;
+    const target = voltages.reduce((best, v) => (Math.abs(v - rmuKv) < Math.abs(best - rmuKv) ? v : best), voltages[0]);
+    if (cfg.primaryKv !== target) set("primaryKv", target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insideKioskOnly, p.mvRmuConfig?.voltageKv, voltages, cfg.primaryKv]);
+
   // Every insulation in the DB (so we can still SHOW Oil, but LOCKED, when the brand has no oil),
   // and the set the current brand/rating/voltage actually offers.
   const allInsulations = useMemo(() => uniqStrs((rows ?? []).map((r) => r.insulation)), [rows]);
@@ -280,11 +292,12 @@ export default function MvTransformerPanelEditor({
             </select>
           </TrField>
           <TrField label="Voltage (kV)">
-            <select className="input cursor-pointer" disabled={loading} value={cfg.primaryKv ?? ""}
+            <select className="input cursor-pointer" disabled={loading || insideKioskOnly} value={cfg.primaryKv ?? ""}
               onChange={(e) => set("primaryKv", e.target.value ? Number(e.target.value) : null)}>
               <option value="">{loading ? "Loading…" : "Select voltage…"}</option>
               {voltages.map((v) => <option key={v} value={v}>{v} kV</option>)}
             </select>
+            {insideKioskOnly && <div className="mt-1 text-[11px] text-muted">Matches the RMU voltage</div>}
           </TrField>
           <TrField label="TR. brand">
             <select className="input cursor-pointer" disabled={loading} value={cfg.brand}

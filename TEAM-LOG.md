@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-27 · Mohamed's side · Claude
 
+**Kiosk: the transformer voltage now follows the RMU voltage automatically.**
+
+Inside a compact substation the transformer's primary voltage is now driven by the RMU's rated voltage —
+12 kV RMU → 11 kV transformer, 24 kV → 22 kV (the matching class in the price list). The transformer's
+"Voltage (kV)" box is shown locked with a "Matches the RMU voltage" note, so the two can't drift apart;
+change the RMU voltage and the transformer follows. A standalone transformer (not in a kiosk) still lets
+you pick the voltage by hand. No schema change.
+
+## 2026-09-27 · Mohamed's side · Claude
+
 **Cover type code now uses the normal font (not monospace).**
 
 On the RMU and transformer cover pages the "Type code" (e.g. PSEC10MG12R2T1M) was in a typewriter/monospace
