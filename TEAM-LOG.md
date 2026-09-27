@@ -23,6 +23,14 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-27 · Mohamed's side · Claude
 
+**Cover type code now uses the normal font (not monospace).**
+
+On the RMU and transformer cover pages the "Type code" (e.g. PSEC10MG12R2T1M) was in a typewriter/monospace
+font; it now uses the same Poppins font as the rest of the cover (like the "SF₆ Ring Main Unit" line).
+Look-and-feel only; no schema change.
+
+## 2026-09-27 · Mohamed's side · Claude
+
 **LV cover: removed the "Board / Main Distribution Board" line.**
 
 The kiosk's LV cover page no longer shows the "BOARD" label with the board name under it — it now goes

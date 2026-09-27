@@ -320,7 +320,7 @@ export function TransformerCover({ config, code, insideKiosk, index, total, proj
           <div className="mt-4 text-2xl font-semibold text-muted">{fam.tagline}</div>
           <div className="mt-10">
             <div className="mb-2 text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Type code</div>
-            <div className="font-mono text-2xl font-bold tracking-wide text-ink">{code || "…"}</div>
+            <div className="text-2xl font-bold tracking-wide text-ink">{code || "…"}</div>
             {asPerDataSheet && (
               <div className="mt-4 text-sm font-bold uppercase tracking-[0.22em]" style={{ color: TRED }}>As per Technical Data Sheet</div>
             )}

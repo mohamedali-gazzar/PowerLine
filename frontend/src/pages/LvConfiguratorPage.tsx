@@ -5224,7 +5224,7 @@ function RmuCover({ config, code, index, total, project, itemNo }: {
           <div className="mt-4 text-2xl font-semibold text-muted">{meta.tagline}</div>
           <div className="mt-10">
             <div className="mb-2 text-[15px] font-bold uppercase tracking-[0.25em] text-muted">Type code</div>
-            <div className="font-mono text-2xl font-bold tracking-wide text-ink">{code || "…"}</div>
+            <div className="text-2xl font-bold tracking-wide text-ink">{code || "…"}</div>
           </div>
         </div>
 
