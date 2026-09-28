@@ -23,6 +23,23 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**Material List: tick box on the right, a USD/EGP switch, and drag to select.**
+
+- **The tick box moved to the right** — it is the last column now, after Total cost, on the rows and
+  on each section header.
+- **USD / EGP switch**, beside Export to Excel. It changes what the cost columns, the section
+  subtotals and the running total read in: on the test quotation a row went from **309 EGP → 6 USD**
+  and **15,130 EGP → 303 USD**. Display only — everything stays stored in EGP. USD is greyed out with
+  an explanation if the quotation has no USD rate set, rather than showing a nonsense number.
+- **Click and drag to select.** Press on one box and drag down the column to tick a run of rows.
+  Dragging back over them clears them.
+
+The drag *paints* rather than flips: the whole run takes whatever the first box became, so dragging
+over a half-ticked set makes them all match instead of inverting each one. Letting go anywhere ends
+it, even outside the table.
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **Material List: tick items to add them up.**
 
 Every row now has a tick box, and each section header has one that ticks or clears the whole

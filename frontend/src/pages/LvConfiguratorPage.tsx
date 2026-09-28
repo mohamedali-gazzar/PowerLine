@@ -12906,12 +12906,16 @@ function matUnitCost(r: MatRow, factors: Factors, priceCtl?: PriceCtl): number {
 /** A row's identity for ticking. Reference is not unique across sections, so the section goes in. */
 const matKey = (title: string, r: MatRow) => `${title}|${r.reference || r.description}`;
 
-function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, onPick, onPickAll }: { title: string; rows: MatRow[]; withSupplier?: boolean; note?: string; priceCtl?: PriceCtl; factors: Factors; picked: Set<string>; onPick: (key: string) => void; onPickAll: (keys: string[], on: boolean) => void }) {
+function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, onPick, onPickAll, cur, usd, drag }: { title: string; rows: MatRow[]; withSupplier?: boolean; note?: string; priceCtl?: PriceCtl; factors: Factors; picked: Set<string>; onPick: (key: string) => void; onPickAll: (keys: string[], on: boolean) => void; cur: "USD" | "EGP"; usd: number; drag: React.MutableRefObject<boolean | null> }) {
   if (!rows.length) return null;
   // Ticking rows adds them up — a quick way to price part of a list without exporting it.
   const keys = rows.map((r) => matKey(title, r));
   const on = keys.filter((k) => picked.has(k)).length;
   const sum = rows.reduce((t, r) => t + (picked.has(matKey(title, r)) ? matUnitCost(r, factors, priceCtl) * r.qty : 0), 0);
+  // EGP is what everything is held in; USD divides by the quotation's rate. A missing rate would
+  // make that a divide-by-zero, so it falls back to showing EGP rather than Infinity.
+  const money = (egp: number) => (cur === "USD" && usd > 0 ? egp / usd : egp);
+  const curLabel = cur === "USD" && usd > 0 ? "USD" : "EGP";
   return (
     <div className="card overflow-hidden">
       <div className="flex items-baseline justify-between bg-brand-tint px-4 py-2">
@@ -12926,7 +12930,7 @@ function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, 
         {note && <span className="text-[11px] text-muted">{note}</span>}
         {on > 0 && (
           <span className="ml-auto mr-3 whitespace-nowrap text-xs font-bold text-brand-dark">
-            {on} selected · {fmtEgp(sum)} EGP
+            {on} selected · {fmtEgp(money(sum))} {curLabel}
           </span>
         )}
       </div>
@@ -12934,7 +12938,6 @@ function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, 
           so the headers of all Material-List tables line up with each other. */}
       <table className="w-full table-fixed text-[13px]">
         <colgroup>
-          <col style={{ width: 34 }} />
           {/* Description no longer flexes: it was taking every spare pixel and pushing
               Reference far to the right. */}
           <col style={{ width: 380 }} />
@@ -12946,19 +12949,20 @@ function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, 
           <col style={{ width: 118 }} />
           <col style={{ width: 72 }} />
           <col style={{ width: 128 }} />
+          <col style={{ width: 40 }} />
         </colgroup>
         <thead>
           <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
-            <th className="pl-3 pr-1 py-1.5" />
             <th className="px-4 py-1.5">Description</th>
             <th className="px-2 py-1.5">Reference</th>
             {priceCtl && <th className="px-2 py-1.5 text-right">Discount (%)</th>}
             {priceCtl && <th className="px-2 py-1.5 text-right">Market Price (%)</th>}
             {withSupplier && <th className="px-2 py-1.5">Supplier</th>}
             <th className="px-2 py-1.5">Stock</th>
-            <th className="px-2 py-1.5 text-right">Unit cost (EGP)</th>
+            <th className="px-2 py-1.5 text-right">Unit cost ({curLabel})</th>
             <th className="px-4 py-1.5 text-right">Qty</th>
-            <th className="px-4 py-1.5 text-right">Total cost (EGP)</th>
+            <th className="px-4 py-1.5 text-right">Total cost ({curLabel})</th>
+            <th className="pl-1 pr-3 py-1.5" />
           </tr>
         </thead>
         <tbody>
@@ -12979,11 +12983,6 @@ function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, 
             );
             return (
               <tr key={i} className="border-t border-line/70">
-                <td className="pl-3 pr-1 py-1">
-                  <input type="checkbox" checked={picked.has(matKey(title, r))} onChange={() => onPick(matKey(title, r))}
-                    aria-label={`Select ${r.description}`}
-                    className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
-                </td>
                 <td className="px-4 py-1">{r.description}</td>
                 <td className="px-2 py-1 text-[11px] text-muted">{r.reference || "—"}</td>
                 {priceCtl && (
@@ -13012,9 +13011,17 @@ function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, 
                 <td className="px-2 py-1 text-[11px] text-muted">{r.stock || "—"}</td>
                 {/* Cost per one, at this row's own discount / market price — the same figure the
                     panel is costed with, so the list reconciles with the offer. */}
-                <td className="px-2 py-1 text-right tabular-nums text-muted">{unit > 0 ? fmtEgp(unit) : "—"}</td>
+                <td className="px-2 py-1 text-right tabular-nums text-muted">{unit > 0 ? fmtEgp(money(unit)) : "—"}</td>
                 <td className="px-4 py-1 text-right font-bold">{r.qty}</td>
-                <td className="px-4 py-1 text-right font-bold tabular-nums">{unit > 0 ? fmtEgp(unit * r.qty) : "—"}</td>
+                <td className="px-4 py-1 text-right font-bold tabular-nums">{unit > 0 ? fmtEgp(money(unit * r.qty)) : "—"}</td>
+                <td className="pl-1 pr-3 py-1 text-right">
+                  <input type="checkbox" checked={picked.has(matKey(title, r))}
+                    onMouseDown={() => { drag.current = !picked.has(matKey(title, r)); onPick(matKey(title, r)); }}
+                    onMouseEnter={() => { if (drag.current !== null && picked.has(matKey(title, r)) !== drag.current) onPick(matKey(title, r)); }}
+                    onChange={() => { /* handled on mouse down, so a drag does not toggle twice */ }}
+                    aria-label={`Select ${r.description}`}
+                    className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
+                </td>
               </tr>
             );
           })}
@@ -13025,6 +13032,16 @@ function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, 
 }
 
 function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo: string; abbOnly: boolean; setAbbOnly: (v: boolean) => void; up: (patch: Partial<LvState>) => void }) {
+  // Costs are held in EGP; USD divides by the quotation's rate. Display only — nothing is stored.
+  const [matCur, setMatCur] = useState<"USD" | "EGP">("EGP");
+  // Click-and-drag across the boxes to tick a run of rows. `paint` is what the first box became,
+  // so dragging over a mixed run makes them all match it rather than flipping each one.
+  const drag = useRef<null | boolean>(null);
+  useEffect(() => {
+    const stop = () => { drag.current = null; };
+    window.addEventListener("mouseup", stop);
+    return () => window.removeEventListener("mouseup", stop);
+  }, []);
   // Ticked rows, across every section. Kept here rather than in each table so one running total
   // can cover the whole list — the point is adding up a few items from anywhere in it.
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -13135,6 +13152,20 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
             className="rounded-full border border-line bg-white px-4 py-1.5 text-xs font-bold text-muted hover:border-brand/40 disabled:opacity-40 no-print">
             ↺ Default Discount{overrideCount ? ` (${overrideCount})` : ""}
           </button>
+          {/* Which currency the cost columns read in. Display only — the figures stay in EGP. */}
+          <div className="inline-flex items-center gap-2 no-print">
+            <span className="text-xs font-semibold text-muted">Currency</span>
+            <div className="inline-flex rounded-full border border-line bg-surface p-0.5">
+              {(["USD", "EGP"] as const).map((c) => (
+                <button key={c} type="button" onClick={() => setMatCur(c)}
+                  disabled={c === "USD" && !(s.factors.usd > 0)}
+                  title={c === "USD" && !(s.factors.usd > 0) ? "Set the USD rate in Pricing Settings first" : `Show the cost columns in ${c}`}
+                  className={`rounded-full px-3 py-1 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${matCur === c ? "bg-brand text-white shadow-soft" : "text-muted hover:text-brand-dark"}`}>
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
           {!empty && (
             <button onClick={exportExcel} title="Download the current Material List as an .xlsx file"
               className="rounded-full border border-brand bg-white px-4 py-1.5 text-xs font-bold text-brand-dark hover:bg-brand-light no-print">
@@ -13159,7 +13190,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
               <div className="card sticky top-2 z-20 flex flex-wrap items-center gap-x-4 gap-y-1 border-brand/40 bg-brand-light px-4 py-2.5 no-print">
                 <span className="text-sm font-extrabold text-brand-dark">{on.length} item{on.length === 1 ? "" : "s"} selected</span>
                 <span className="text-xs font-semibold text-brand-dark/80">{qty} pieces</span>
-                <span className="ml-auto text-lg font-extrabold text-brand-dark">{fmtEgp(total)} EGP</span>
+                <span className="ml-auto text-lg font-extrabold text-brand-dark">{fmtEgp(matCur === "USD" && s.factors.usd > 0 ? total / s.factors.usd : total)} {matCur === "USD" && s.factors.usd > 0 ? "USD" : "EGP"}</span>
                 <button type="button" onClick={() => setPicked(new Set())}
                   className="rounded-full border border-brand/40 bg-white px-3 py-1 text-xs font-bold text-brand-dark hover:bg-brand-tint">Clear</button>
               </div>
@@ -13167,7 +13198,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
           })()}
           {visible.map((b, i) => b.kind === "table" ? (
             <MatTable key={b.title} title={`${i + 1} · ${b.title}`} rows={b.rows} withSupplier={b.withSupplier} note={b.note} factors={s.factors}
-              priceCtl={priceCtl} picked={picked} onPick={pick} onPickAll={pickAll} />
+              priceCtl={priceCtl} picked={picked} onPick={pick} onPickAll={pickAll} cur={matCur} usd={s.factors.usd || 0} drag={drag} />
           ) : (
             <div key={b.title} className="card flex items-center justify-between p-4">
               <h3 className="text-sm font-bold text-brand-dark">{i + 1} · {b.title}</h3>
