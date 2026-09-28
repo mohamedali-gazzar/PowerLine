@@ -59,6 +59,7 @@ import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
 import MvRmuPanelEditor from "../components/MvRmuPanelEditor";
 import MvTransformerPanelEditor, { DEFAULT_TRANSFORMER_CONFIG } from "../components/MvTransformerPanelEditor";
 import MvKioskPanelEditor from "../components/MvKioskPanelEditor";
+import { KioskLvSourceToggle } from "../components/MvKioskPanelEditor";
 import { DEFAULT_RMU_CONFIG, rmuShortCode, rmuAuxShuntUsd } from "../components/RmuConfigForm";
 import { TransformerCover, TransformerTechnicalSheet, withoutTransformerLabel, ItemRibbon } from "../components/TransformerTechnicalSheet";
 import { findTransformerTech, trModel, trDisplayCode } from "../components/transformerTechData";
@@ -8678,6 +8679,9 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
               lvEditor={
                 <div className="space-y-4">
                   <LvDetailsAndCost s={s} p={sel} u={(patch) => upPanel(sel.id, patch)} kiosk />
+                  {/* How the LV panel is built — it governs the Components list and the Standard
+                      picker directly below it, so it sits with them rather than at the top. */}
+                  <KioskLvSourceToggle p={sel} upPanel={upPanel} />
                   <ComponentsCard s={s} p={sel} u={(patch) => upPanel(sel.id, patch)}
                     replaceComponent={kioskReplaceComponent} comboKind={kioskComboKind} setComboKind={setKioskComboKind}
                     kioskStandard={(sel.mvLvConfig?.lvSource ?? "standard") === "standard"}

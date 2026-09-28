@@ -300,10 +300,6 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor, defaultNam
   // P-CSS limitation for the RMU section (e.g. PRAL/Air has no 3+1+M kiosk configuration).
   const rmuLimit = rmuKioskLimitation(p.mvRmuConfig ?? DEFAULT_RMU_CONFIG);
 
-  // LV build mode: Standard EDMS (default) vs Private Sector.
-  const lv = p.mvLvConfig ?? DEFAULT_KIOSK_LV;
-  const lvSource = lv.lvSource ?? "standard";
-  const setSource = (v: "standard" | "private") => upPanel(p.id, { mvLvConfig: { ...lv, lvSource: v } });
 
   // ── "Kiosk price (live)": one combined cost sheet for the whole unit. Five parts, each with a
   // code, a cost and a factor; selling is worked out (cost ÷ factor). The RMU + Transformer codes
@@ -552,23 +548,6 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor, defaultNam
 
       <Section n={3} title="Low" subtitle="LV panel — standard or private build" open={open.low} onToggle={() => toggle("low")}>
         <div className="space-y-3">
-          {/* How to build the LV panel: the house standard for the transformer rating, or from scratch. */}
-          <div>
-            <div className="inline-flex rounded-lg border border-line bg-surface p-0.5">
-              {([["standard", "Standard EDMS"], ["private", "Private Sector"]] as const).map(([m, label]) => (
-                <button key={m} type="button" onClick={() => setSource(m)}
-                  className={`rounded-md px-3.5 py-1.5 text-sm font-bold transition-colors ${lvSource === m ? "bg-brand text-white shadow-soft" : "text-muted hover:text-brand-dark"}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
-              {lvSource === "standard"
-                ? "Standard EDMS — pick the house-standard panel for the transformer's rating (it fills the components; you size the panel yourself below)."
-                : "Private Sector — build the panel yourself: search for components and add them, then size it below."}
-            </p>
-          </div>
-
           {/* The LV component editor + sizing card (Standard mode also shows the standard picker). */}
           {lvEditor}
         </div>
@@ -660,6 +639,37 @@ function KioskAccessoriesEditor({ rows, checks, onCheck, onQty }: {
         <span>Accessories total</span>
         <span className="tabular-nums">{total.toLocaleString()} EGP</span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * "Standard EDMS / Private Sector" — how the kiosk's LV panel gets built. Rendered by the
+ * configurator inside the LV editor, directly above Components, because that is what it governs:
+ * the Standard picker and the component search below it. Panel details and the live cost sit above
+ * it and read the same either way.
+ */
+export function KioskLvSourceToggle({ p, upPanel }: {
+  p: LvPanel; upPanel: (id: string, patch: Partial<LvPanel>) => void;
+}) {
+  const lv = p.mvLvConfig ?? DEFAULT_KIOSK_LV;
+  const lvSource = lv.lvSource ?? "standard";
+  const setSource = (v: "standard" | "private") => upPanel(p.id, { mvLvConfig: { ...lv, lvSource: v } });
+  return (
+    <div>
+      <div className="inline-flex rounded-lg border border-line bg-surface p-0.5">
+        {([["standard", "Standard EDMS"], ["private", "Private Sector"]] as const).map(([m, label]) => (
+          <button key={m} type="button" onClick={() => setSource(m)}
+            className={`rounded-md px-3.5 py-1.5 text-sm font-bold transition-colors ${lvSource === m ? "bg-brand text-white shadow-soft" : "text-muted hover:text-brand-dark"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+        {lvSource === "standard"
+          ? "Standard EDMS — pick the house-standard panel for the transformer's rating (it fills the components; you size the panel yourself below)."
+          : "Private Sector — build the panel yourself: search for components and add them, then size it below."}
+      </p>
     </div>
   );
 }

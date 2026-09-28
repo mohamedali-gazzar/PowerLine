@@ -23,6 +23,21 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**Kiosk LV: the Standard EDMS / Private Sector switch moved down, above Components.**
+
+It used to sit at the very top of the **Low** section, above Panel details and the live cost. It now
+sits directly above the **Components** list, which is what it actually governs — the Standard picker
+and the component search. Panel details and the panel cost read the same whichever build mode is
+chosen, so they stay above it.
+
+The order inside a kiosk's Low section is now: Panel details → Panel cost (live) → Standard EDMS /
+Private Sector → Components → Panel type.
+
+Nothing else changed: it is the same single switch writing the same setting, just in a different
+place on the page.
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **A Switch Disconnector now sets the Busbar Rating.**
 
 Until now only a circuit breaker filled the **Busbar Rating** field. A panel fed through a switch
