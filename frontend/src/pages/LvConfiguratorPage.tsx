@@ -12917,14 +12917,9 @@ function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, 
   const money = (egp: number) => (cur === "USD" && usd > 0 ? egp / usd : egp);
   const curLabel = cur === "USD" && usd > 0 ? "USD" : "EGP";
   return (
-    <div className="card overflow-hidden">
-      <div className="flex items-baseline justify-between bg-brand-tint px-4 py-2">
-        <h3 className="flex items-center gap-2 text-sm font-bold text-brand-dark">
-          <input type="checkbox" aria-label={`Select every item in ${title}`}
-            checked={on > 0 && on === keys.length}
-            ref={(el) => { if (el) el.indeterminate = on > 0 && on < keys.length; }}
-            onChange={() => onPickAll(keys, on !== keys.length)}
-            className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
+    <div data-mat-keep className="card overflow-hidden">
+      <div className="flex items-center justify-between gap-3 bg-brand-tint py-2 pl-4 pr-3">
+        <h3 className="text-sm font-bold text-brand-dark">
           {title}
         </h3>
         {note && <span className="text-[11px] text-muted">{note}</span>}
@@ -12933,6 +12928,11 @@ function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, 
             {on} selected · {fmtEgp(money(sum))} {curLabel}
           </span>
         )}
+        <input type="checkbox" aria-label={`Select every item in ${title}`}
+          checked={on > 0 && on === keys.length}
+          ref={(el) => { if (el) el.indeterminate = on > 0 && on < keys.length; }}
+          onChange={() => onPickAll(keys, on !== keys.length)}
+          className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
       </div>
       {/* table-fixed + a shared colgroup keep every table's columns at the same x,
           so the headers of all Material-List tables line up with each other. */}
@@ -13061,6 +13061,19 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const pick = (key: string) => setPicked((old) => { const n = new Set(old); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const pickAll = (keys: string[], on: boolean) => setPicked((old) => { const n = new Set(old); for (const k of keys) { if (on) n.add(k); else n.delete(k); } return n; });
+  // Clicking away clears the selection — the ticks are a scratch total, not a saved state, so
+  // leaving the list behind should leave it tidy. Anything marked data-mat-keep is part of the
+  // list (a table, the toolbar, the totals bar), so clicking those does not count as leaving.
+  useEffect(() => {
+    if (!picked.size) return;
+    const away = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el?.closest("[data-mat-keep]")) return;
+      setPicked(new Set());
+    };
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, [picked.size]);
   const { confirm, prompt: askFor, dialogs } = useDialogs();
   const ml = useMemo(() => buildMaterialList(s), [s]);
   const empty = !s.panels.length || (!ml.abb.length && !ml.other.length && !ml.abbEnclosures.length && !ml.proE.length && !ml.is2.length && !ml.plpCells.length);
@@ -13152,7 +13165,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   return (
     <div className="space-y-4 animate-fade-up">
       {dialogs}
-      <div className="flex flex-wrap items-center gap-2">
+      <div data-mat-keep className="flex flex-wrap items-center gap-2">
         {([["ABB M.L", true], ["Full M.L", false]] as [string, boolean][]).map(([label, v]) => (
           <button key={label} onClick={() => setAbbOnly(v)}
             className={`rounded-full border px-4 py-1.5 text-xs font-bold ${
@@ -13201,7 +13214,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
             const total = on.reduce((t, { r }) => t + matUnitCost(r, s.factors, priceCtl) * r.qty, 0);
             const qty = on.reduce((t, { r }) => t + r.qty, 0);
             return (
-              <div className="card sticky top-2 z-20 flex flex-wrap items-center gap-x-4 gap-y-1 border-brand/40 bg-brand-light px-4 py-2.5 no-print">
+              <div data-mat-keep className="card sticky top-2 z-20 flex flex-wrap items-center gap-x-4 gap-y-1 border-brand/40 bg-brand-light px-4 py-2.5 no-print">
                 <span className="text-sm font-extrabold text-brand-dark">{on.length} item{on.length === 1 ? "" : "s"} selected</span>
                 <span className="text-xs font-semibold text-brand-dark/80">{qty} pieces</span>
                 <span className="ml-auto text-lg font-extrabold text-brand-dark">{fmtEgp(matCur === "USD" && s.factors.usd > 0 ? total / s.factors.usd : total)} {matCur === "USD" && s.factors.usd > 0 ? "USD" : "EGP"}</span>

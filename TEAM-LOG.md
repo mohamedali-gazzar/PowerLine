@@ -23,6 +23,17 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**Material List: clicking away clears the selection, and the section box lines up with the rows.**
+
+- **Click anywhere outside the list and the ticks clear.** They are a scratch total, not something
+  saved, so leaving the list behind leaves it tidy. Clicking things that belong to the list does NOT
+  clear it — the tables, the totals bar, and the toolbar (Currency, Export, Default Discount) — so
+  switching USD/EGP to re-read the same total no longer throws the selection away.
+- **The section tick box moved to the right**, in line with the boxes on the rows. It used to sit on
+  the left of the section title while the row boxes were on the far right.
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **Material List: dragging back over rows now un-picks them.**
 
 The sweep used to *paint* — whatever the first box became, the whole run took — so dragging back over
