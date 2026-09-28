@@ -23,6 +23,26 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**Material List: tick items to add them up.**
+
+Every row now has a tick box, and each section header has one that ticks or clears the whole
+section (it shows a dash when only part of the section is ticked).
+
+A bar at the top adds up whatever is ticked, from anywhere in the list — it stays in view as you
+scroll and clears with one button:
+
+> **5 items selected · 242 pieces · 937,381 EGP · [Clear]**
+
+Each section header also shows its own subtotal while anything in it is ticked, e.g.
+*"2 selected · 24,456 EGP"*.
+
+Prices use each row's own discount or market price — the same figure the panel is costed at — so a
+selection totals what those items really cost, not a list price.
+
+Nothing is saved: the ticks are just for looking, and they clear when the tab is left.
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **Material List: costs per line, and the assembly kit as its own row.**
 
 The Material List showed what is in the panels but never what any of it costs. It now carries two

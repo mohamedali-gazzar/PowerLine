@@ -12896,18 +12896,45 @@ interface PriceCtl {
   onDisc: (r: MatRow, pct: number) => void;        // set a discount % (clears any market price)
   onMkt: (r: MatRow, pct: number) => void;         // set a market-price % (clears any discount)
 }
-function MatTable({ title, rows, withSupplier, note, priceCtl, factors }: { title: string; rows: MatRow[]; withSupplier?: boolean; note?: string; priceCtl?: PriceCtl; factors: Factors }) {
+/** What one of a Material-List row costs, at that row's own discount / market price. Shared by
+ *  the table and the selection total so the two can never disagree. */
+function matUnitCost(r: MatRow, factors: Factors, priceCtl?: PriceCtl): number {
+  const stored = priceCtl?.storedFor(r);
+  const pct = priceCtl ? (stored != null ? stored : priceCtl.defaultFor(r)) : undefined;
+  return componentPriceEgp({ eur: r.eur ?? 0, egp: r.egp ?? 0, brand: r.supplier }, factors, pct != null ? pct / 100 : undefined);
+}
+/** A row's identity for ticking. Reference is not unique across sections, so the section goes in. */
+const matKey = (title: string, r: MatRow) => `${title}|${r.reference || r.description}`;
+
+function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, onPick, onPickAll }: { title: string; rows: MatRow[]; withSupplier?: boolean; note?: string; priceCtl?: PriceCtl; factors: Factors; picked: Set<string>; onPick: (key: string) => void; onPickAll: (keys: string[], on: boolean) => void }) {
   if (!rows.length) return null;
+  // Ticking rows adds them up — a quick way to price part of a list without exporting it.
+  const keys = rows.map((r) => matKey(title, r));
+  const on = keys.filter((k) => picked.has(k)).length;
+  const sum = rows.reduce((t, r) => t + (picked.has(matKey(title, r)) ? matUnitCost(r, factors, priceCtl) * r.qty : 0), 0);
   return (
     <div className="card overflow-hidden">
       <div className="flex items-baseline justify-between bg-brand-tint px-4 py-2">
-        <h3 className="text-sm font-bold text-brand-dark">{title}</h3>
+        <h3 className="flex items-center gap-2 text-sm font-bold text-brand-dark">
+          <input type="checkbox" aria-label={`Select every item in ${title}`}
+            checked={on > 0 && on === keys.length}
+            ref={(el) => { if (el) el.indeterminate = on > 0 && on < keys.length; }}
+            onChange={() => onPickAll(keys, on !== keys.length)}
+            className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
+          {title}
+        </h3>
         {note && <span className="text-[11px] text-muted">{note}</span>}
+        {on > 0 && (
+          <span className="ml-auto mr-3 whitespace-nowrap text-xs font-bold text-brand-dark">
+            {on} selected · {fmtEgp(sum)} EGP
+          </span>
+        )}
       </div>
       {/* table-fixed + a shared colgroup keep every table's columns at the same x,
           so the headers of all Material-List tables line up with each other. */}
       <table className="w-full table-fixed text-[13px]">
         <colgroup>
+          <col style={{ width: 34 }} />
           {/* Description no longer flexes: it was taking every spare pixel and pushing
               Reference far to the right. */}
           <col style={{ width: 380 }} />
@@ -12922,6 +12949,7 @@ function MatTable({ title, rows, withSupplier, note, priceCtl, factors }: { titl
         </colgroup>
         <thead>
           <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
+            <th className="pl-3 pr-1 py-1.5" />
             <th className="px-4 py-1.5">Description</th>
             <th className="px-2 py-1.5">Reference</th>
             {priceCtl && <th className="px-2 py-1.5 text-right">Discount (%)</th>}
@@ -12951,6 +12979,11 @@ function MatTable({ title, rows, withSupplier, note, priceCtl, factors }: { titl
             );
             return (
               <tr key={i} className="border-t border-line/70">
+                <td className="pl-3 pr-1 py-1">
+                  <input type="checkbox" checked={picked.has(matKey(title, r))} onChange={() => onPick(matKey(title, r))}
+                    aria-label={`Select ${r.description}`}
+                    className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
+                </td>
                 <td className="px-4 py-1">{r.description}</td>
                 <td className="px-2 py-1 text-[11px] text-muted">{r.reference || "—"}</td>
                 {priceCtl && (
@@ -12992,6 +13025,11 @@ function MatTable({ title, rows, withSupplier, note, priceCtl, factors }: { titl
 }
 
 function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo: string; abbOnly: boolean; setAbbOnly: (v: boolean) => void; up: (patch: Partial<LvState>) => void }) {
+  // Ticked rows, across every section. Kept here rather than in each table so one running total
+  // can cover the whole list — the point is adding up a few items from anywhere in it.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const pick = (key: string) => setPicked((old) => { const n = new Set(old); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+  const pickAll = (keys: string[], on: boolean) => setPicked((old) => { const n = new Set(old); for (const k of keys) { if (on) n.add(k); else n.delete(k); } return n; });
   const { confirm, prompt: askFor, dialogs } = useDialogs();
   const ml = useMemo(() => buildMaterialList(s), [s]);
   const empty = !s.panels.length || (!ml.abb.length && !ml.other.length && !ml.abbEnclosures.length && !ml.proE.length && !ml.is2.length && !ml.plpCells.length);
@@ -13110,9 +13148,26 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
         <div className="card p-10 text-center text-sm text-muted">Configure panels first — the Material List updates automatically.</div>
       ) : (
         <>
+          {/* One bar for the whole list: tick anything, anywhere, and see what it comes to. */}
+          {(() => {
+            const rows = visible.flatMap((b) => b.kind === "table" ? b.rows.map((r) => ({ r, title: `${visible.indexOf(b) + 1} · ${b.title}` })) : []);
+            const on = rows.filter(({ r, title }) => picked.has(matKey(title, r)));
+            if (!on.length) return null;
+            const total = on.reduce((t, { r }) => t + matUnitCost(r, s.factors, priceCtl) * r.qty, 0);
+            const qty = on.reduce((t, { r }) => t + r.qty, 0);
+            return (
+              <div className="card sticky top-2 z-20 flex flex-wrap items-center gap-x-4 gap-y-1 border-brand/40 bg-brand-light px-4 py-2.5 no-print">
+                <span className="text-sm font-extrabold text-brand-dark">{on.length} item{on.length === 1 ? "" : "s"} selected</span>
+                <span className="text-xs font-semibold text-brand-dark/80">{qty} pieces</span>
+                <span className="ml-auto text-lg font-extrabold text-brand-dark">{fmtEgp(total)} EGP</span>
+                <button type="button" onClick={() => setPicked(new Set())}
+                  className="rounded-full border border-brand/40 bg-white px-3 py-1 text-xs font-bold text-brand-dark hover:bg-brand-tint">Clear</button>
+              </div>
+            );
+          })()}
           {visible.map((b, i) => b.kind === "table" ? (
             <MatTable key={b.title} title={`${i + 1} · ${b.title}`} rows={b.rows} withSupplier={b.withSupplier} note={b.note} factors={s.factors}
-              priceCtl={priceCtl} />
+              priceCtl={priceCtl} picked={picked} onPick={pick} onPickAll={pickAll} />
           ) : (
             <div key={b.title} className="card flex items-center justify-between p-4">
               <h3 className="text-sm font-bold text-brand-dark">{i + 1} · {b.title}</h3>
