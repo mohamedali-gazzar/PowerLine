@@ -23,6 +23,39 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**The Tmax XT switch-disconnectors now set the Busbar Rating.**
+
+⚠️ HEADS-UP — **a panel fed through one of these had no Busbar Rating at all.** The app reads a
+breaker's amperes from an ampere frame ("… 160 AF …") or a Tmax name ("T5H 400 …"). These write the
+rating differently — it follows the `XT#D` token with no "A" after it — so every pattern missed them
+and the field stayed empty. **Worth checking any panel with one of these as its incomer.**
+
+All eleven the owner listed now work:
+
+| Component | Busbar Rating |
+| --- | --- |
+| XT1D 160 3p F F | 160 A |
+| XT3D 250 3p F F | 250 A |
+| XT5D 400 / 630 3p F F | 400 / 630 A |
+| XT6D 800 3p F F | 800 A |
+| XT7D 1000 / 1250 / 1600 3p F F | 1000 / 1250 / 1600 A |
+| XT7D **M** 1000 / 1250 / 1600 3p F F | 1000 / 1250 / 1600 A |
+
+The motorised ones have an extra **M** in the middle, which is skipped over.
+
+They are matched on the **name**, not the catalogue type — these items are not in our price list at
+all (they exist only on the live one, like that motor-protection XT7), so there is no telling which
+column they sit in.
+
+It behaves like the rest: only the incoming side counts, the largest wins when several feed the same
+bar, and it never undersizes — an XT7D M 1600 beside a 250 A breaker still gives 1600 A. An ordinary
+`XT7S M … 1000 AF …` breaker is untouched and still reads its frame.
+
+Because the parts are not in this database, this was proved with tests — all eleven names plus the
+interactions — rather than by adding one in the app and watching the field fill.
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **The "cannot make an offer yet" screen now shows the warnings too, not just the blockers.**
 
 Mohamed asked why no warning pop-up appeared on an MV quotation. It was working — he could not

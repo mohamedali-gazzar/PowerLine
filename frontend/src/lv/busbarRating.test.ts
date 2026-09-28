@@ -59,3 +59,44 @@ describe("Busbar Rating from a breaker — unchanged", () => {
     expect(predictIncomerRating(panel(mcb))).toBe(100);
   });
 });
+
+// The Tmax XT switch-disconnectors. Their rating follows the XT#D token and carries no "A", so
+// none of the breaker patterns found it and the Busbar Rating stayed empty. (Owner, 28 Sep 2026.)
+describe("Busbar Rating from an XT switch disconnector", () => {
+  const xt = (name: string): PanelComponent =>
+    ({ type: "MCCB", name, section: "Main Incoming" } as PanelComponent);
+
+  it("reads the rating the owner listed, for every one of them", () => {
+    const expected: [string, number][] = [
+      ["XT1D 160 3p F F", 160],
+      ["XT3D 250 3p F F", 250],
+      ["XT5D 400 3p F F", 400],
+      ["XT5D 630 3p F F", 630],
+      ["XT6D 800 3p F F", 800],
+      ["XT7D 1000 3p F F", 1000],
+      ["XT7D 1250 3p F F", 1250],
+      ["XT7D 1600 3p F F", 1600],
+      ["XT7D M 1000 3p F F", 1000],
+      ["XT7D M 1250 3p F F", 1250],
+      ["XT7D M 1600 3p F F", 1600],
+    ];
+    for (const [name, bar] of expected) {
+      expect(predictIncomerRating(panel(xt(name)))).toBe(bar);
+    }
+  });
+
+  it("only counts one on the incoming side", () => {
+    const outgoing = { ...xt("XT5D 630 3p F F"), section: "Outgoings" } as PanelComponent;
+    expect(predictIncomerRating(panel(outgoing))).toBe(0);
+  });
+
+  it("never undersizes the bar beside a breaker or another disconnector", () => {
+    expect(predictIncomerRating(panel(mccb(250), xt("XT7D M 1600 3p F F")))).toBe(1600);
+    expect(predictIncomerRating(panel(sd(630), xt("XT1D 160 3p F F")))).toBe(630);
+  });
+
+  it("does not mistake an ordinary XT breaker for a disconnector", () => {
+    // "XT7S M 1000A-50kA 1000 AF …" has no XT#D token — the ampere-frame rule handles it.
+    expect(predictIncomerRating(panel(xt("MCCB XT7S M 1000A-50kA 1000 AF Ekip Dip LS/I 3P")))).toBe(1000);
+  });
+});

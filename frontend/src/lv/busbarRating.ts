@@ -44,12 +44,26 @@ export function predictIncomerRating(p: LvPanel): number {
   // does not break fault current, so a panel fed through one still needs a bar to match. Its own
   // ladder is coarser than a breaker's — below 160 A there is no smaller bar worth building, and
   // 200/250 share the 250 bar, 315/400 the 400.
+  //
+  // They come in two shapes, and the amperes are written differently in each:
+  //   · the LBS items — "Switch Disconnector 400A 3P - Direct Operation"
+  //   · the Tmax XT disconnectors — "XT5D 400 3p F F", or motorised "XT7D M 1600 3p F F",
+  //     where the rating follows the XT#D token and carries no "A"
+  // The XT ones are matched on the NAME, not the catalogue type: they are typed inconsistently,
+  // and an XT#D is a disconnector whatever column it sits in.
+  const XT_DISCONNECTOR = /\bXT\d+D\b\s*(?:M\s+)?(\d{2,4})\b/i;
+  const disconnectorAmps = (c: PanelComponent): number => {
+    const name = c.name || "";
+    const xt = XT_DISCONNECTOR.exec(name);
+    if (xt) return parseInt(xt[1], 10);
+    const isLbs = /^LBS$/i.test((c.type || "").trim()) && /switch\s*disconnector/i.test(name);
+    if (!isLbs) return 0;
+    const m = `${c.rating || ""} ${name}`.match(/(\d+)\s*A\b/i);
+    return m ? parseInt(m[1], 10) : 0;
+  };
   const sdAmps = p.components
-    .filter((c) => incomingSection(c) && /^LBS$/i.test((c.type || "").trim()) && /switch\s*disconnector/i.test(c.name || ""))
-    .reduce((mx, c) => {
-      const m = `${c.rating || ""} ${c.name || ""}`.match(/(\d+)\s*A\b/i);
-      return Math.max(mx, m ? parseInt(m[1], 10) : 0);
-    }, 0);
+    .filter(incomingSection)
+    .reduce((mx, c) => Math.max(mx, disconnectorAmps(c)), 0);
   const sdRating = sdAmps
     ? (SD_BUSBAR_RATINGS.find((r) => r >= sdAmps) ?? SD_BUSBAR_RATINGS[SD_BUSBAR_RATINGS.length - 1])
     : 0;
