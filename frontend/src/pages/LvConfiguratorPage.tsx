@@ -52,6 +52,7 @@ import {
 import { rankSearchOptions } from "../lv/search";
 import { kioskCostsEgp, kioskPartSellingEgp, kioskFactorOf, kioskTotalCostEgp, kioskTotalSellingEgp, KIOSK_PART_KEYS, type KioskPartKey } from "../lv/kioskPricing";
 import { INCOMER_RATINGS, predictIncomerRating } from "../lv/busbarRating";
+import { kioskSizeOptions } from "../pcss/kioskRmu";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount, type MvErpItem } from "../lv/erpCsv";
 import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalogSource";
@@ -1486,21 +1487,45 @@ export default function LvConfiguratorPage() {
     ...(blankSpares.length ? [blankSpareMessage(blankSpares, s.panels)] : []),
   ];
   // A variation still numbered 0000 has not been given its number yet — that is what makes the
-  // Project tab's Variation No. mandatory, and it blocks the offer on an MV quotation too.
+  // Project tab's Variation No. mandatory.
   const variationIssues = isVariationNumber(qtnNum) && variationOf(qtnNum) <= 0
     ? ["Variation No. is required — give this variation its number on the Project tab."]
     : [];
-  const offerIssues = [...variationIssues, ...(isMvQtn ? [] : [
+  // The cover pages need these whatever kind of quotation it is, so an MV offer is held back for a
+  // missing Customer exactly as an LV one is. On a variation the Revision No. box IS the Variation
+  // No., so it is checked above instead of here.
+  const projectIssues = [
     ...(s.project.name.trim() ? [] : ["Project name is required — fill it on the Project tab."]),
     ...(s.project.customer.trim() ? [] : ["Customer is required — fill it on the Project tab."]),
     ...(qtnNum.trim() ? [] : ["QTN number is required — set it on the Project tab."]),
-    ...((s.project.revisionNo || "").trim() ? [] : ["Revision No. is required — fill it on the Project tab."]),
+    ...(isVariationNumber(qtnNum) || (s.project.revisionNo || "").trim() ? [] : ["Revision No. is required — fill it on the Project tab."]),
     ...((s.project.optyNo || "").trim() ? [] : ["OPTY No. is required — fill it on the Project tab."]),
     ...(s.project.supportEngineer.trim() ? [] : ["Sales support engineer is required — pick one on the Project tab."]),
-    ...s.panels.flatMap((p, i) =>
-      p.spare ? [] : panelInvalid(p).map((msg) => `${panelLabel(p, i)}: ${msg}`)),
-    ...nameIssues,
-  ])];
+  ];
+  // Per item. An RMU or a Transformer has no name or busbar rating to demand, so only a kiosk is
+  // checked: it holds a real LV panel, and its enclosure has to be one the P-CSS rules allow.
+  const mvPanelIssues = s.panels.flatMap((p, i) => {
+    if (p.mvType !== "kiosk") return [];
+    const label = mvDefaultName(p, s.panels) || panelLabel(p, i);
+    const out: string[] = [];
+    if (!p.ratingA || p.ratingA <= 0) out.push(`${label}: Busbar Rating is required for the LV panel`);
+    const sizeCode = p.mvKioskCost?.size?.code || "";
+    const allowed = kioskSizeOptions(p.mvRmuConfig ?? DEFAULT_RMU_CONFIG, p.mvTransformerConfig?.ratingKva);
+    if (!sizeCode) out.push(`${label}: Kiosk Size is not chosen`);
+    else if (allowed.length && !allowed.includes(sizeCode)) {
+      out.push(`${label}: ${sizeCode} is not available for this RMU and transformer — pick ${allowed.join(" or ")}`);
+    }
+    return out;
+  });
+  const offerIssues = [
+    ...variationIssues,
+    ...projectIssues,
+    ...(isMvQtn ? mvPanelIssues : [
+      ...s.panels.flatMap((p, i) =>
+        p.spare ? [] : panelInvalid(p).map((msg) => `${panelLabel(p, i)}: ${msg}`)),
+      ...nameIssues,
+    ]),
+  ];
 
   // Once submitted the QTN is read-only. Content edits are frozen, but pure navigation
   // is still allowed so a submitted offer can be reviewed: selecting a panel (selectedId)
@@ -2489,8 +2514,18 @@ export default function LvConfiguratorPage() {
             onAdd={() => addSpareCell("spare")} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
             addLabel="+ Add cell" emptyLabel="No spare cells yet." emptyAddLabel="+ Add your first cell" />
         )}
-        {activeTab === "technical" && (isMvQtn ? <MvTechnicalTab s={s} qtnNo={qtnNum} /> : (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} onScratch={upScratch} readOnly={sharedReadOnly} />))}
-        {activeTab === "commercial" && (isMvQtn ? <MvCommercialTab s={s} qtnNo={qtnNum} up={up} /> : (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <CommercialTab s={s} qtnNo={qtnNum} up={up} readOnly={readOnly} />))}
+        {/* Required fields are checked for EVERY kind of quotation now, MV included — a cover page
+            with no Customer on it is wrong whichever offer prints it. */}
+        {activeTab === "technical" && (offerIssues.length
+          ? <OfferBlocked issues={offerIssues} />
+          : isMvQtn
+          ? <MvTechnicalTab s={s} qtnNo={qtnNum} />
+          : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} onScratch={upScratch} readOnly={sharedReadOnly} />)}
+        {activeTab === "commercial" && (offerIssues.length
+          ? <OfferBlocked issues={offerIssues} />
+          : isMvQtn
+          ? <MvCommercialTab s={s} qtnNo={qtnNum} up={up} />
+          : <CommercialTab s={s} qtnNo={qtnNum} up={up} readOnly={readOnly} />)}
         {activeTab === "kioskAnalysis" && <KioskAnalysisTab s={s} qtnNo={qtnNum} />}
         {activeTab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
         {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} qtnNo={qtnNum} onOpenPanel={openPanelInPanels} />}
@@ -5930,7 +5965,7 @@ function MvTechnicalTab({ s, qtnNo }: { s: LvState; qtnNo: string }) {
   return (
     <div className="animate-fade-up">
       {total > 0 ? (
-        <PrintBar label={label} docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} exportFn={exportPdf} />
+        <PrintBar label={label} docTitle={offerTitle("TO", qtnNo, s.project.revisionNo)} blockers={exportBlockers(s)} exportFn={exportPdf} />
       ) : (
         <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted no-print">
           <span className="h-2 w-2 rounded-full bg-green-500" /> Live technical offer · MV
@@ -6114,6 +6149,7 @@ function MvCommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (pat
         <PrintBar
           label="Priced MV commercial offer → A4 PDF."
           docTitle={offerTitle("CO", qtnNo, s.project.revisionNo)}
+          blockers={exportBlockers(s)}
           exportFn={exportPdf}
         />
       ) : (

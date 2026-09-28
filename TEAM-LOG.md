@@ -23,6 +23,34 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**MV quotations now get the same warnings as LV ones.**
+
+⚠️ HEADS-UP — **an MV offer could be produced with no Project name, no Customer and no Revision No.**
+MV quotations skipped every check: the Technical and Commercial tabs went straight to the offer
+without looking at the required fields, and their print bars were never given the price / cells /
+copper warnings at all. Cover pages were printing blank where those fields should be.
+
+**Expect existing MV quotations to start complaining.** Any that are missing project fields will now
+refuse to produce an offer until they are filled — including the MV test quotation, which is missing
+three. That is the point of the change, but it will look sudden.
+
+What an MV quotation is now checked for:
+
+- **The required fields** — Project name, Customer, QTN No., Revision No. (or Variation No.), OPTY No.
+  and Sales support engineer. Exactly the list an LV quotation has always had.
+- **Prices, cells and copper** — zero-priced items, no cells selected, missing copper, empty panels
+  and highlighted panels now appear on the MV Technical and Commercial offers as the same amber
+  "issues" chip LV shows.
+- **Two things only a kiosk can have wrong**: no Busbar Rating on its LV panel, and a **Kiosk Size
+  that the P-CSS rules do not allow** for its RMU and transformer. That second one used to be only a
+  ⚠ in the dropdown; it now holds the offer back.
+
+A kiosk is checked like the LV panel it contains — its cells, copper and prices all count. RMU and
+Transformer items are skipped: they have no components, so every one of those checks would have
+fired on them wrongly.
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **Offer History: one actions menu, "Amend" is now "Modification", and a new "Variation".**
 
 The row of small icon buttons is now a single **⋯ menu** per row, each entry showing its icon beside

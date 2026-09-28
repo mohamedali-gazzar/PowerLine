@@ -1830,6 +1830,9 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   const noFamily: string[] = []; // panels-mode panel with no enclosure family chosen yet
   const noSizing2: string[] = []; // Double-layout panel missing its 2nd enclosure (Sizing (2), mandatory)
   s.panels.forEach((p, i) => {
+    // An RMU or a Transformer item is not an LV panel — it has no components, no cells and no
+    // copper, so every check below would fire on it. A KIOSK is checked: it holds a real LV panel.
+    if (p.mvType && p.mvType !== "kiosk") return;
     const label = `Panel ${i + 1}${p.name.trim() ? ` (${p.name.trim()})` : ""}`;
     if (p.highlight) highlighted.push(label);
     // A highlighted panel carries a 🖍️ marker on any other warning it raises.
