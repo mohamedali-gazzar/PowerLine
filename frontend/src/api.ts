@@ -766,6 +766,8 @@ export const api = {
     remove: (id: string) => request<void>(`/qtns/${id}`, { method: "DELETE" }),
     /** Un-hide one. Owner only (access.manage). */
     restore: (id: string) => request<{ ok: true }>(`/qtns/${id}/restore`, { method: "POST" }),
+    /** Erase a REMOVED quotation for good (admin only). Irreversible — no undo, no backup. */
+    deletePermanently: (id: string) => request<void>(`/qtns/${id}/permanent`, { method: "DELETE" }),
     /** Un-cancel: bring a CANCELLED quotation back to Draft. Admin-only (qtn.restoreCancelled). */
     restoreCancelled: (id: string) =>
       request<{ ok: true; status: QtnStatus; statusLabel: string }>(`/qtns/${id}/restore-cancelled`, { method: "POST" }),
@@ -775,6 +777,8 @@ export const api = {
      *  it used to be duplicate-then-rename here, which could half-succeed. */
     amend: (id: string) =>
       request<QtnRecordDto>(`/qtns/${id}/amend`, { method: "POST" }),
+    variation: (id: string) =>
+      request<QtnRecordDto>(`/qtns/${id}/variation`, { method: "POST" }),
     /** Every non-draft quotation, all users — the LV Offers History list.
      *  `includeRemoved` also returns hidden ones; the server ignores it without
      *  access.manage, so it can never widen what someone is allowed to see. */

@@ -14,6 +14,8 @@ import {
   rename,
   remove,
   restore,
+  purge,
+  variation,
   restoreCancelled,
   duplicate,
   amend,
@@ -56,10 +58,14 @@ router.patch("/:id/number", rename);
 router.delete("/:id", remove); // hides it — never erases; see the controller
 // Undo that. Owner only: the person who can hide one from everybody brings it back.
 router.post("/:id/restore", requirePerm("access.manage"), restore);
+// Erase a removed quotation for good — admin only, and only after it has been removed (hidden).
+router.delete("/:id/permanent", requirePerm("access.manage"), purge);
 // Un-cancel: bring a CANCELLED quotation back to Draft. Admin-only via qtn.restoreCancelled.
 router.post("/:id/restore-cancelled", requirePerm("qtn.restoreCancelled"), restoreCancelled);
 router.post("/:id/duplicate", duplicate);
 router.post("/:id/amend", amend); // cancels this revision, opens the next one
+// A variation — a separate offer for changed scope on the same job. Does not cancel the source.
+router.post("/:id/variation", variation);
 router.post("/:id/activity", activity); // accrue active working time (owner/co-owner)
 router.put("/:id/sizing-review", putSizingReview); // reviewer's sizing calculation pad (editable while locked)
 router.post("/:id/rate-decision", rateDecision); // apply / keep the latest published default rates

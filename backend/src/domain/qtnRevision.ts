@@ -96,3 +96,22 @@ export function sequenceOf(number: string): number {
   if (groups === null || groups.length === 0) return 0;
   return parseInt(groups[groups.length - 1], 10) || 0;
 }
+/**
+ * The number a VARIATION takes: the source's base, its revision as two digits, then the
+ * variation number as four — "QTN-26-12345-01-0007".
+ *
+ * Both parts are padded on purpose. Four digits keep the tail out of reach of the legacy
+ * revision suffix (`-N`, one to three digits), so a variation is never mis-read as a revision of
+ * its parent; and a variation created before its number is typed gets 0000, which is still four
+ * digits and therefore still safe.
+ */
+export function formatVariationNumber(base: string, rev: number, variation: number): string {
+  const rr = String(Math.max(0, Math.trunc(rev))).padStart(2, "0");
+  const zzzz = String(Math.max(0, Math.trunc(variation))).padStart(4, "0");
+  return `${base}-${rr}-${zzzz}`;
+}
+
+/** True for a number written by formatVariationNumber — "…-RR-ZZZZ". */
+export function isVariationNumber(number: string): boolean {
+  return /-\d{2}-\d{4}$/.test((number ?? "").trim());
+}

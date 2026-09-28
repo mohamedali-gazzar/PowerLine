@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorkers, listQtns, supersededNumbers, normalize as normalizeQtnState, type QtnRecord } from "../lv/qtns";
+import { getQtn, saveQtn, renameQtn, transitionQtn, reassignQtn, setCoWorkers, listQtns, supersededNumbers, normalize as normalizeQtnState, isVariationNumber, variationOf, withVariation, varHead, type QtnRecord } from "../lv/qtns";
 import ReassignQtnModal from "../components/ReassignQtnModal";
 import CoWorkModal from "../components/CoWorkModal";
 import { maskQtn, isValidQtn, qtnPrefix } from "../components/QtnNumberInput";
@@ -1485,7 +1485,12 @@ export default function LvConfiguratorPage() {
     }),
     ...(blankSpares.length ? [blankSpareMessage(blankSpares, s.panels)] : []),
   ];
-  const offerIssues = isMvQtn ? [] : [
+  // A variation still numbered 0000 has not been given its number yet — that is what makes the
+  // Project tab's Variation No. mandatory, and it blocks the offer on an MV quotation too.
+  const variationIssues = isVariationNumber(qtnNum) && variationOf(qtnNum) <= 0
+    ? ["Variation No. is required — give this variation its number on the Project tab."]
+    : [];
+  const offerIssues = [...variationIssues, ...(isMvQtn ? [] : [
     ...(s.project.name.trim() ? [] : ["Project name is required — fill it on the Project tab."]),
     ...(s.project.customer.trim() ? [] : ["Customer is required — fill it on the Project tab."]),
     ...(qtnNum.trim() ? [] : ["QTN number is required — set it on the Project tab."]),
@@ -1495,7 +1500,7 @@ export default function LvConfiguratorPage() {
     ...s.panels.flatMap((p, i) =>
       p.spare ? [] : panelInvalid(p).map((msg) => `${panelLabel(p, i)}: ${msg}`)),
     ...nameIssues,
-  ];
+  ])];
 
   // Once submitted the QTN is read-only. Content edits are frozen, but pure navigation
   // is still allowed so a submitted offer can be reviewed: selecting a panel (selectedId)
@@ -5007,13 +5012,35 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
   const [newSales, setNewSales] = useState({ name: "", mobile: "", email: "" });
   const [newEng, setNewEng] = useState("");
   // QTN number — editable here; commits to the registry on blur / Enter (kept unique).
-  const [qtnDraft, setQtnDraft] = useState(qtnNum);
+  // On a VARIATION the number is three parts — "QTN-26-12345-01-0007" — and they are split across
+  // the two fields the engineer already knows: the QTN No. holds the job and its revision
+  // ("QTN-26-12345-01"), and the Revision No. box becomes the variation number ("0007"). Neither
+  // stores anything of its own; both rebuild the one number and commit it through the same rename.
+  const isVar = isVariationNumber(qtnNum);
+  const [qtnDraft, setQtnDraft] = useState(() => (isVariationNumber(qtnNum) ? varHead(qtnNum) : qtnNum));
   const [qtnErr, setQtnErr] = useState("");
-  useEffect(() => { setQtnDraft(qtnNum); }, [qtnNum]);
+  useEffect(() => { setQtnDraft(isVariationNumber(qtnNum) ? varHead(qtnNum) : qtnNum); }, [qtnNum]);
+  const [variationDraft, setVariationDraft] = useState(() => String(variationOf(qtnNum)).padStart(4, "0"));
+  useEffect(() => { setVariationDraft(String(variationOf(qtnNum)).padStart(4, "0")); }, [qtnNum]);
+  const commitVariation = async () => {
+    const n = parseInt(variationDraft, 10) || 0;
+    const next = withVariation(qtnNum, n);
+    if (next === qtnNum.trim()) { setQtnErr(""); return; }
+    const res = await onRenameQtn(next);
+    setQtnErr(res.ok ? "" : res.error || "Could not set the variation number.");
+    if (!res.ok) setVariationDraft(String(variationOf(qtnNum)).padStart(4, "0"));
+  };
   const commitQtn = async () => {
-    if (qtnDraft.trim() === qtnNum.trim()) { setQtnErr(""); return; }
-    if (!isValidQtn(qtnDraft)) { setQtnErr(`Use the format ${qtnPrefix()}00000 — a 2-digit year and a 5-digit serial.`); return; }
-    const res = await onRenameQtn(qtnDraft);
+    // A variation's box holds base + revision, so the variation number is put back before saving.
+    const next = isVar ? `${qtnDraft.trim()}-${String(variationOf(qtnNum)).padStart(4, "0")}` : qtnDraft;
+    if (next.trim() === qtnNum.trim()) { setQtnErr(""); return; }
+    if (isVar ? !/^QTN-\d{2}-\d{5}-\d{2}$/.test(qtnDraft.trim()) : !isValidQtn(qtnDraft)) {
+      setQtnErr(isVar
+        ? `Use the format ${qtnPrefix()}00000-00 — the quotation, then its revision as two digits.`
+        : `Use the format ${qtnPrefix()}00000 — a 2-digit year and a 5-digit serial.`);
+      return;
+    }
+    const res = await onRenameQtn(next);
     setQtnErr(res.ok ? "" : res.error || "Invalid QTN number.");
   };
 
@@ -5037,7 +5064,21 @@ function ProjectTab({ s, up, qtnNum, onRenameQtn }: {
                 onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setQtnDraft(qtnNum); setQtnErr(""); } }} />
               {qtnErr && <p className="mt-1 text-[11px] font-semibold text-red-600">{qtnErr}</p>}
             </div>
-            <div><L>Revision No. <span className="text-red-500">*</span></L><input className={`input ${(pr.revisionNo || "").trim() ? "" : "ring-1 ring-red-400"}`} value={pr.revisionNo} onChange={(e) => upPr({ revisionNo: e.target.value })} /></div>
+            {/* On a variation this box IS the variation number — the revision lives in the QTN No.
+                beside it, so showing a second "Revision No." here would be two names for one thing. */}
+            {isVar ? (
+              <div>
+                <L>Variation No. <span className="text-red-500">*</span></L>
+                <input className={`input font-mono ${variationOf(qtnNum) > 0 ? "" : "ring-1 ring-red-400"}`}
+                  value={variationDraft} inputMode="numeric" placeholder="0000"
+                  onChange={(e) => { setVariationDraft(e.target.value.replace(/\D/g, "").slice(0, 4)); setQtnErr(""); }}
+                  onBlur={commitVariation}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setVariationDraft(String(variationOf(qtnNum)).padStart(4, "0")); }} />
+                {variationOf(qtnNum) <= 0 && <p className="mt-1 text-[11px] font-semibold text-red-600">Required — give this variation its number.</p>}
+              </div>
+            ) : (
+              <div><L>Revision No. <span className="text-red-500">*</span></L><input className={`input ${(pr.revisionNo || "").trim() ? "" : "ring-1 ring-red-400"}`} value={pr.revisionNo} onChange={(e) => upPr({ revisionNo: e.target.value })} /></div>
+            )}
           </div>
           {/* Row 2 right: OPTY No. */}
           <div><L>OPTY No. <span className="text-red-500">*</span></L><input className={`input ${(pr.optyNo || "").trim() ? "" : "ring-1 ring-red-400"}`} value={pr.optyNo} onChange={(e) => upPr({ optyNo: e.target.value })} /></div>

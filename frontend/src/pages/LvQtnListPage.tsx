@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { listQtns, listAllQtns, deleteQtn, restoreQtn, duplicateQtn, amendQtn, supersededNumbers, parseRevision, type QtnListItem } from "../lv/qtns";
+import { listQtns, listAllQtns, deleteQtn, restoreQtn, permanentlyDeleteQtn, duplicateQtn, amendQtn, variationQtn, supersededNumbers, parseRevision, type QtnListItem } from "../lv/qtns";
 import { useDialogs } from "../components/ConfirmModal";
 import { api, QTN_STATUSES, QTN_STATUS_LABEL, QTN_STATUS_STYLE, type QtnStatus } from "../api";
 import type { Offer } from "../types";
@@ -79,32 +80,91 @@ const RestoreIcon = (
   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>
 );
 
-function Act({ title, onClick, disabled, danger, children }: {
-  title: string;
+const VariationIcon = (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h5l4 10h4" /><path d="M3 17h5" /><path d="M18 4l3 3-3 3" /><path d="M21 7h-6" /></svg>
+);
+
+/** One entry in a row's actions menu. `hidden` drops it entirely; `disabled` greys it with a reason. */
+interface RowAction {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
   onClick: (e: React.MouseEvent) => void;
+  title?: string;
   disabled?: boolean;
   danger?: boolean;
-  children: React.ReactNode;
-}) {
+  hidden?: boolean;
+}
+
+/**
+ * The per-row actions, as one menu instead of a row of icon buttons.
+ *
+ * The menu is portalled to <body> and positioned from the button: inside a scrolling table an
+ * absolutely-positioned panel is clipped by the cell, and the last rows would open off-screen.
+ */
+function RowActions({ actions }: { actions: RowAction[] }) {
+  const items = actions.filter((a) => !a.hidden);
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!at) return;
+    const close = () => setAt(null);
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setAt(null); };
+    // `true` — catch the scroll of any ancestor, not just the window, or the menu detaches.
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    window.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("keydown", esc);
+    };
+  }, [at]);
+
+  if (!items.length) return null;
+  const open = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const r = btnRef.current?.getBoundingClientRect();
+    setAt(at ? null : { x: r ? r.right : 0, y: r ? r.bottom + 4 : 0 });
+  };
+
   return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      disabled={disabled}
-      onClick={onClick}
-      className={`grid h-8 w-8 place-items-center rounded-md border transition ${
-        disabled
-          ? "cursor-not-allowed border-line text-muted/30"
-          : danger
-          ? "border-line text-muted hover:border-red-200 hover:bg-red-50 hover:text-red-500"
-          : "border-line text-muted hover:border-brand/40 hover:bg-brand-tint hover:text-brand-dark"
-      }`}
-    >
-      {children}
-    </button>
+    <>
+      <button ref={btnRef} type="button" onClick={open} title="Actions" aria-label="Actions" aria-haspopup="menu"
+        className="grid h-8 w-8 place-items-center rounded-md border border-line text-muted transition hover:border-brand/40 hover:bg-brand-tint hover:text-brand-dark">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
+          <circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" />
+        </svg>
+      </button>
+      {at && createPortal(
+        <>
+          {/* Click anywhere else to dismiss. */}
+          <div className="fixed inset-0 z-[90]" onClick={() => setAt(null)} onContextMenu={(e) => { e.preventDefault(); setAt(null); }} />
+          <div role="menu" style={{ left: at.x, top: at.y, transform: "translateX(-100%)" }}
+            className="fixed z-[91] min-w-[11rem] overflow-hidden rounded-xl border border-line bg-white py-1 shadow-lift dark:bg-neutral-900">
+            {items.map((a) => (
+              <button key={a.key} type="button" role="menuitem" disabled={a.disabled}
+                title={a.title ?? a.label}
+                onClick={(e) => { e.stopPropagation(); setAt(null); a.onClick(e); }}
+                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-semibold transition ${
+                  a.disabled
+                    ? "cursor-not-allowed text-muted/40"
+                    : a.danger
+                    ? "text-ink hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+                    : "text-ink hover:bg-brand-tint hover:text-brand-dark"
+                }`}>
+                <span className="shrink-0">{a.icon}</span>
+                {a.label}
+              </button>
+            ))}
+          </div>
+        </>, document.body)}
+    </>
   );
 }
+
+
 
 /** Offer History — every LV quotation and RMU offer in one list. Creating a new QTN
  *  lives on the Home dashboard only ("+ New QTN"); this page just lists + opens them. */
@@ -130,6 +190,8 @@ export default function LvQtnListPage() {
   /** Owner-only: also list the LV quotations that have been removed, so they can be
    *  reviewed and restored. Off by default — removed means out of the way. */
   const [showRemoved, setShowRemoved] = useState(!!saved.showRemoved);
+  // The "Removed" folder collapses independently (open by default when it's shown).
+  const [removedOpen, setRemovedOpen] = useState(true);
   const [loadErr, setLoadErr] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [q, setQ] = useState<string>(saved.q ?? "");
@@ -402,6 +464,26 @@ export default function LvQtnListPage() {
       setActionErr((e2 as Error).message || `Could not amend ${number}.`);
     }
   };
+  // A VARIATION: a separate offer for changed scope on the same job. Unlike a modification it
+  // leaves the original live — both offers stand. It opens numbered "…-RR-0000" and the Project
+  // tab then insists on the variation number, which renames it.
+  const onVariationLv = async (e: React.MouseEvent, id: string, number: string) => {
+    e.stopPropagation();
+    if (!(await confirm({
+      title: `Variation of ${number}`,
+      message: `A copy opens as a Draft, numbered after ${number} with its revision and a variation ` +
+        `number. ${number} is NOT cancelled — both offers stay live. You will be asked for the ` +
+        `variation number in the Project tab before the offer can be used.`,
+      confirmLabel: "Open a variation",
+    }))) return;
+    setActionErr("");
+    try {
+      const rec = await variationQtn(id);
+      navigate(`/lv/qtn/${rec.id}`);
+    } catch (e2) {
+      setActionErr((e2 as Error).message || `Could not take a variation of ${number}.`);
+    }
+  };
   // Un-cancel: bring a CANCELLED quotation back to Draft. Admin-only (qtn.restoreCancelled).
   const canRestoreCancelledLv = (x: UniRow) =>
     x.kind === "LV" && x.cancelled && myPerms.includes("qtn.restoreCancelled");
@@ -439,8 +521,122 @@ export default function LvQtnListPage() {
     try { await api.deleteOffer(x.id); await reload(); }
     catch (e2) { setActionErr((e2 as Error).message || `Could not delete ${x.number}.`); }
   };
+  // Erase a REMOVED quotation for good (admins). Irreversible — a deliberately scary confirm.
+  const onPurgeLv = async (e: React.MouseEvent, x: UniRow) => {
+    e.stopPropagation();
+    if (!(await confirm({
+      title: `Permanently delete ${x.number}?`,
+      message: "This ERASES the quotation, its panels and its files for good. It cannot be undone, and " +
+        "the database has no backup. It will stay removed (and restorable) unless you delete it here.",
+      confirmLabel: "Delete permanently",
+      tone: "danger",
+    }))) return;
+    setActionErr("");
+    try { await permanentlyDeleteQtn(x.id); await reload(); }
+    catch (e2) { setActionErr((e2 as Error).message || `Could not permanently delete ${x.number}.`); }
+  };
 
   const count = filtered.length === rows.length ? `${rows.length} saved` : `${filtered.length} of ${rows.length} shown`;
+  // Removed quotations live in their own collapsible "Removed" folder below the active list.
+  const activeRows = ordered.filter((x) => !x.removedAt);
+  const removedRows = ordered.filter((x) => !!x.removedAt);
+  const actionCols = scopeAll ? 11 : 10; // table columns, for the folder header's colSpan
+
+  // One History row — shared by the active list and the "Removed" folder.
+  const renderTr = (x: UniRow, i: number) => {
+    const dead = !!x.cancelled;
+    // "Live" = a draft whose autosave fired in the last minute → someone is working on it right now.
+    const live = x.statusKey === "DRAFT" && !dead && nowTick - new Date(x.updatedAt).getTime() < 60_000;
+    return (
+      <tr key={`${x.kind}-${x.id}`}
+        className={`cursor-pointer border-t border-line transition-colors hover:bg-brand-tint ${
+          justChanged.has(x.id) ? "animate-flash-new" : "animate-fade-up"
+        } ${x.removedAt ? "opacity-70" : ""}`}
+        style={justChanged.has(x.id) ? undefined : { animationDelay: `${i * 0.04}s` }}
+        onClick={() => navigate(rowHref(x))}>
+        <td className="px-4 py-3">
+          {(() => { const rt = rowType(x); return (
+          <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${rt === "RMU" ? "bg-violet-100 text-violet-700" : rt === "MV" ? "bg-emerald-100 text-emerald-700" : "bg-brand-light text-brand-dark"}`}>{rt}</span>
+          ); })()}
+        </td>
+        <td className="px-4 py-3 font-bold text-ink">
+          <span className={`rounded-md px-2 py-0.5 font-mono text-xs font-bold ${dead ? "bg-surface text-muted line-through" : "bg-brand-light text-brand-dark"}`}>{displayNumber(x)}</span>
+          {dead && (
+            <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">Cancelled</span>
+          )}
+        </td>
+        <td className="px-4 py-3">
+          <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${x.statusStyle}`}
+            title={live ? "Being worked on right now" : x.approverEmail ? `${x.statusLabel} · approver ${x.approverEmail}` : x.statusLabel}>
+            {live && (
+              <span className="relative flex h-2 w-2" aria-label="online">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+              </span>
+            )}
+            {x.statusLabel}
+          </span>
+        </td>
+        {scopeAll && (
+          <td className="px-4 py-3 text-muted" title={x.ownerEmail}>{x.ownerName || x.ownerEmail || "—"}</td>
+        )}
+        <td className="px-4 py-3">{x.projectName || <span className="text-muted">—</span>}</td>
+        <td className="px-4 py-3 text-muted">{x.customer || "—"}</td>
+        <td className="px-4 py-3 text-muted">{x.units}</td>
+        <td className="px-4 py-3 font-semibold">{x.totalUsd == null ? <span className="text-muted">—</span> : "$" + fmtEgp(x.totalUsd)}</td>
+        <td className="px-4 py-3 whitespace-nowrap font-semibold text-ink" title="Active hands-on time on this quotation">
+          {x.activeSeconds ? `⏱ ${fmtActive(x.activeSeconds)}` : <span className="text-muted">—</span>}
+        </td>
+        <td className="px-4 py-3 text-xs text-muted">{new Date(x.updatedAt).toLocaleDateString()}</td>
+        <td className="px-4 py-3">
+          <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+            {/* One menu per row. The order is the owner's: Modification, Duplicate, Delete,
+                Restore, Variation — each entry showing its icon beside the word. */}
+            {x.kind === "LV" ? (
+              <RowActions actions={[
+                { key: "modification", label: "Modification", icon: AmendIcon,
+                  title: canAmendLv(x) ? "Modification — open a new revision (cancels this one)" : "You can't take a modification of this one",
+                  disabled: !canAmendLv(x), hidden: !!x.removedAt && mayManage,
+                  onClick: (e) => onAmendLv(e, x.id, x.number) },
+                { key: "duplicate", label: "Duplicate", icon: DuplicateIcon,
+                  title: "Duplicate — an independent copy", hidden: !!x.removedAt && mayManage,
+                  onClick: (e) => onDuplicateLv(e, x.id) },
+                { key: "delete", label: "Delete", icon: TrashIcon, danger: true,
+                  title: canDeleteLv(x) ? "Delete — hidden, can be restored" : "Only the owner or an admin can delete it",
+                  disabled: !canDeleteLv(x), hidden: !!x.removedAt && mayManage,
+                  onClick: (e) => onDeleteLv(e, x) },
+                // Removed rows swap the list for the two things you can do to them.
+                { key: "restore-removed", label: "Restore", icon: RestoreIcon,
+                  title: `Restore — deleted ${x.removedAt ? new Date(x.removedAt).toLocaleDateString() : ""}${x.removedBy ? ` by ${x.removedBy}` : ""}`,
+                  hidden: !(x.removedAt && mayManage), onClick: (e) => onRestore(e, x) },
+                { key: "purge", label: "Delete for good", icon: TrashIcon, danger: true,
+                  title: "Erase this quotation and its files for good — cannot be undone",
+                  hidden: !(x.removedAt && mayManage), onClick: (e) => onPurgeLv(e, x) },
+                // A cancelled revision can be brought back to Draft.
+                { key: "restore-cancelled", label: "Restore", icon: RestoreIcon,
+                  title: "Restore — bring this cancelled quotation back to Draft",
+                  hidden: !canRestoreCancelledLv(x), onClick: (e) => onRestoreCancelledLv(e, x.id, x.number) },
+                { key: "variation", label: "Variation", icon: VariationIcon,
+                  title: "Variation — a separate offer for changed scope on this job (the original stays live)",
+                  hidden: !!x.removedAt && mayManage, onClick: (e) => onVariationLv(e, x.id, x.number) },
+              ]} />
+            ) : (
+              <RowActions actions={[
+                { key: "modification", label: "Modification", icon: AmendIcon,
+                  title: "Modification — open this offer to work on it",
+                  onClick: (e) => { e.stopPropagation(); navigate(rowHref(x)); } },
+                { key: "duplicate", label: "Duplicate", icon: DuplicateIcon,
+                  title: "Duplicate — an independent copy (prices stay frozen)",
+                  onClick: (e) => onDuplicateRmu(e, x.id) },
+                { key: "delete", label: "Delete", icon: TrashIcon, danger: true,
+                  title: "Delete — permanent", onClick: (e) => onDeleteRmu(e, x) },
+              ]} />
+            )}
+          </div>
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <div>
@@ -569,84 +765,22 @@ export default function LvQtnListPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ordered.map((x, i) => {
-                    const dead = !!x.cancelled;
-                    // "Live" = a draft whose autosave fired in the last minute → someone is
-                    // working on it right now. The list auto-refreshes every 30s, so this
-                    // turns on/off on its own as people start and stop editing.
-                    const live = x.statusKey === "DRAFT" && !dead && nowTick - new Date(x.updatedAt).getTime() < 60_000;
-                    return (
-                      <tr key={`${x.kind}-${x.id}`}
-                        className={`cursor-pointer border-t border-line transition-colors hover:bg-brand-tint ${
-                          justChanged.has(x.id) ? "animate-flash-new" : "animate-fade-up"
-                        }`}
-                        style={justChanged.has(x.id) ? undefined : { animationDelay: `${i * 0.04}s` }}
-                        onClick={() => navigate(rowHref(x))}>
-                        <td className="px-4 py-3">
-                          {(() => { const rt = rowType(x); return (
-                          <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${rt === "RMU" ? "bg-violet-100 text-violet-700" : rt === "MV" ? "bg-emerald-100 text-emerald-700" : "bg-brand-light text-brand-dark"}`}>{rt}</span>
-                          ); })()}
-                        </td>
-                        <td className="px-4 py-3 font-bold text-ink">
-                          <span className={`rounded-md px-2 py-0.5 font-mono text-xs font-bold ${dead ? "bg-surface text-muted line-through" : "bg-brand-light text-brand-dark"}`}>{displayNumber(x)}</span>
-                          {dead && (
-                            <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">Cancelled</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${x.statusStyle}`}
-                            title={live ? "Being worked on right now" : x.approverEmail ? `${x.statusLabel} · approver ${x.approverEmail}` : x.statusLabel}>
-                            {live && (
-                              <span className="relative flex h-2 w-2" aria-label="online">
-                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-75" />
-                                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
-                              </span>
-                            )}
-                            {x.statusLabel}
-                          </span>
-                        </td>
-                        {scopeAll && (
-                          <td className="px-4 py-3 text-muted" title={x.ownerEmail}>{x.ownerName || x.ownerEmail || "—"}</td>
-                        )}
-                        <td className="px-4 py-3">{x.projectName || <span className="text-muted">—</span>}</td>
-                        <td className="px-4 py-3 text-muted">{x.customer || "—"}</td>
-                        <td className="px-4 py-3 text-muted">{x.units}</td>
-                        <td className="px-4 py-3 font-semibold">{x.totalUsd == null ? <span className="text-muted">—</span> : "$" + fmtEgp(x.totalUsd)}</td>
-                        <td className="px-4 py-3 whitespace-nowrap font-semibold text-ink" title="Active hands-on time on this quotation">
-                          {x.activeSeconds ? `⏱ ${fmtActive(x.activeSeconds)}` : <span className="text-muted">—</span>}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-muted">{new Date(x.updatedAt).toLocaleDateString()}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                            {x.kind === "LV" ? (
-                              <>
-                                {canRestoreCancelledLv(x) && (
-                                  <Act title="Restore — bring this cancelled quotation back to Draft"
-                                    onClick={(e) => onRestoreCancelledLv(e, x.id, x.number)}>{RestoreIcon}</Act>
-                                )}
-                                <Act title={canAmendLv(x) ? "Amend — open a new revision (cancels this one)" : "You can't amend this one"}
-                                  disabled={!canAmendLv(x)} onClick={(e) => onAmendLv(e, x.id, x.number)}>{AmendIcon}</Act>
-                                <Act title="Duplicate — an independent copy" onClick={(e) => onDuplicateLv(e, x.id)}>{DuplicateIcon}</Act>
-                                {x.removedAt && mayManage ? (
-                                  <Act title={`Restore — removed ${new Date(x.removedAt).toLocaleDateString()}${x.removedBy ? ` by ${x.removedBy}` : ""}`}
-                                    onClick={(e) => onRestore(e, x)}>{RestoreIcon}</Act>
-                                ) : (
-                                  <Act title={canDeleteLv(x) ? "Remove — hidden, can be restored" : "Only the owner or an admin can remove it"}
-                                    danger disabled={!canDeleteLv(x)} onClick={(e) => onDeleteLv(e, x)}>{TrashIcon}</Act>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                <Act title="Amend — open this offer to work on it" onClick={(e) => { e.stopPropagation(); navigate(rowHref(x)); }}>{AmendIcon}</Act>
-                                <Act title="Duplicate — an independent copy (prices stay frozen)" onClick={(e) => onDuplicateRmu(e, x.id)}>{DuplicateIcon}</Act>
-                                <Act title="Delete — permanent" danger onClick={(e) => onDeleteRmu(e, x)}>{TrashIcon}</Act>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {activeRows.map((x, i) => renderTr(x, i))}
+                  {/* Removed quotations live in their own collapsible folder, with a permanent-delete. */}
+                  {mayManage && removedRows.length > 0 && (
+                    <tr key="__removed-folder" className="border-t-2 border-line bg-surface">
+                      <td colSpan={actionCols} className="px-4 py-2.5">
+                        <button type="button" onClick={() => setRemovedOpen((o) => !o)}
+                          className="flex items-center gap-2 text-sm font-bold text-brand-dark">
+                          <span className={`text-xs transition-transform ${removedOpen ? "rotate-90" : ""}`}>▶</span>
+                          🗑 Removed
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-600">{removedRows.length}</span>
+                          <span className="font-normal text-muted">— hidden &amp; restorable; use “Delete permanently” to erase for good</span>
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+                  {mayManage && removedOpen && removedRows.map((x, i) => renderTr(x, activeRows.length + i))}
                 </tbody>
               </table>
             </div>

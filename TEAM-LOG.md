@@ -23,6 +23,42 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**Offer History: one actions menu, "Amend" is now "Modification", and a new "Variation".**
+
+The row of small icon buttons is now a single **⋯ menu** per row, each entry showing its icon beside
+the word:
+
+**Modification · Duplicate · Delete · Variation**, plus **Restore**, which appears only when there is
+something to restore — a deleted quotation, or a cancelled revision.
+
+**"Amend" has been renamed "Modification"** everywhere it is shown. It behaves exactly as before:
+the quotation becomes Cancelled and a copy opens as a Draft with the next revision.
+
+**"Variation" is new.** It is a separate offer for changed scope on the same job. Unlike a
+modification it does **NOT** cancel the original — both offers stay live.
+
+A variation's number carries the job, its revision and the variation number, and it is split across
+the two fields on the Project tab:
+
+| Field | Holds | Example |
+| --- | --- | --- |
+| QTN No. | the job and its revision | `QTN-99-54782-00` |
+| Variation No. | the variation number (replaces Revision No.) | `0007` |
+
+Together they are the real number: `QTN-99-54782-00-0007`.
+
+**The variation number is mandatory.** A new variation opens numbered `0000`, which means "not given
+yet": the box is outlined red and the offer is blocked until it is filled — on MV quotations too.
+The box is labelled **Variation No.** rather than Revision No., because the revision is now visible in
+the QTN number right beside it.
+
+⚠️ HEADS-UP — **the "delete for good" feature is now live.** It had been sitting finished but
+unpushed for a while; it goes out with this change on Mohamed's say-so. On a quotation in the
+**Removed** folder an admin now sees **Restore** and **Delete for good** in the menu. Delete for good
+erases the quotation and its files permanently — there is no undo and no backup. Treat it with care.
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **Kiosk LV: the Standard EDMS / Private Sector switch is gone.**
 
 It has been removed from the **Low** section. Nothing is lost by it: that switch only decided whether

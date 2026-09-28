@@ -22,7 +22,7 @@ import {
   QTN_STATUSES, QTN_STATUS_LABEL, type QtnStatus,
 } from "../domain/qtnStatus";
 import {
-  revisionOf, nextRevision, revisionTaken, sequenceOf, baseOf, formatQtnNumber,
+  revisionOf, nextRevision, revisionTaken, sequenceOf, baseOf, formatQtnNumber, formatVariationNumber,
 } from "../domain/qtnRevision";
 import { notify, notifyAll, approverIds, adminIds } from "../services/notify.service";
 import { originOf } from "../services/email.service";
@@ -739,6 +739,38 @@ export async function restore(req: Request, res: Response) {
   }
 }
 
+/**
+ * DELETE /api/qtns/:id/permanent — ERASE a quotation for good. Unlike remove() (a reversible
+ * soft-hide), this deletes the row: its content, panels, files and co-work links are gone and
+ * CANNOT be recovered (the live database has no backup). Deliberately guarded:
+ *  - access.manage only (an admin), the same people who can hide/restore;
+ *  - only a quotation that is ALREADY REMOVED (soft-hidden) may be purged, so a live quotation can
+ *    never be erased in one click — you remove it first, then delete it from the Removed folder.
+ * An audit row is written first and survives (QtnEvent has no foreign key to LvQtn on purpose).
+ */
+export async function purge(req: Request, res: Response) {
+  try {
+    const q = await prisma.lvQtn.findUnique({ where: { id: req.params.id }, include: ownerSelect });
+    if (!q) return res.status(404).json({ error: "Quotation not found." });
+    if (!q.removedAt) {
+      return res.status(409).json({ error: "Remove (hide) this quotation first — only a removed quotation can be permanently deleted." });
+    }
+    // Audit BEFORE the delete (the row survives — QtnEvent is not tied to LvQtn).
+    await logEvent({
+      qtn: q, action: "PURGE", from: qtnStatus(q), to: qtnStatus(q),
+      note: `Permanently deleted (erased) by ${req.userEmail || "an admin"}`,
+      actorId: req.userId ?? undefined, actorEmail: req.userEmail ?? "",
+    });
+    // Drop any edit-access requests for this quotation (no FK cascade on that table), then the
+    // row itself — its attachments and co-work links cascade away with it.
+    await prisma.qtnEditRequest.deleteMany({ where: { qtnId: q.id } });
+    await prisma.lvQtn.delete({ where: { id: q.id } });
+    res.status(204).end();
+  } catch (e) {
+    fail(res, e);
+  }
+}
+
 // POST /api/qtns/:id/duplicate
 export async function duplicate(req: Request, res: Response) {
   try {
@@ -793,6 +825,65 @@ function stateAtRevision(state: string, rev: number): string {
   // A revision is a fresh document — date it the day the amendment was created, not the original's date.
   (project as Record<string, unknown>).date = new Date().toISOString().slice(0, 10);
   return JSON.stringify(parsed);
+}
+
+
+// POST /api/qtns/:id/variation
+/**
+ * A VARIATION of a quotation — a separate offer for changed scope on the same job, numbered
+ * "<base>-<revision, 2 digits>-<variation, 4 digits>".
+ *
+ * Unlike an amendment it does NOT cancel the source: the original offer stands and the variation
+ * sits beside it. Unlike a duplicate it keeps the job's identity in its number instead of taking
+ * the next free serial.
+ *
+ * It is created as …-0000 because the variation number is typed by the engineer once the
+ * quotation is open (the Project tab makes it mandatory), which renames it through PATCH
+ * /:id/number. 0000 is still four digits, so an un-numbered variation is never mistaken for a
+ * revision of its parent.
+ */
+export async function variation(req: Request, res: Response) {
+  try {
+    const ownerId = req.userId as string;
+    const src = await prisma.lvQtn.findFirst({ where: { id: req.params.id, ownerId } });
+    if (!src) return res.status(404).json({ error: "Quotation not found." });
+
+    const { base, rev } = revisionOf(src);
+    // Number it past any variation this job already has, so two variations never collide and the
+    // engineer's typed number only has to be unique among the ones they care about.
+    const siblings = await prisma.lvQtn.findMany({
+      where: { ownerId, number: { startsWith: `${base}-` } },
+      select: { number: true },
+    });
+    const used = new Set(siblings.map((s) => s.number));
+    let seq = 0;
+    while (used.has(formatVariationNumber(base, rev, seq))) seq++;
+
+    const q = await prisma.lvQtn.create({
+      data: {
+        ownerId,
+        number: formatVariationNumber(base, rev, seq),
+        state: src.state,
+        kind: src.kind,
+        projectName: src.projectName,
+        customer: src.customer,
+        panelsCount: src.panelsCount,
+        totalEgp: src.totalEgp,
+      },
+    });
+    // The client's specs still apply to a variation of the same job, so its files come too.
+    const files = await prisma.lvAttachment.findMany({ where: { qtnId: src.id } });
+    if (files.length) {
+      await prisma.lvAttachment.createMany({
+        data: files.map((f) => ({
+          qtnId: q.id, name: f.name, mime: f.mime, size: f.size, data: f.data, byEmail: f.byEmail,
+        })),
+      });
+    }
+    res.status(201).json(record(q));
+  } catch (e) {
+    fail(res, e);
+  }
 }
 
 // POST /api/qtns/:id/amend

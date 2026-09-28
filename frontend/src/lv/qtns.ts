@@ -327,6 +327,11 @@ export async function restoreQtn(id: string): Promise<void> {
   await api.qtns.restore(id);
 }
 
+/** Erase a removed quotation for good (admin only). Irreversible. */
+export async function permanentlyDeleteQtn(id: string): Promise<void> {
+  await api.qtns.deletePermanently(id);
+}
+
 /** Quotations waiting for approval — only for users who may approve. */
 export async function listApprovalQueue(): Promise<QtnListItem[]> {
   return api.qtns.queue();
@@ -498,4 +503,41 @@ export async function amendQtn(id: string): Promise<QtnRecord> {
   // permission — and swallowing them into a null turned every one of those into the
   // same useless "Could not amend".
   return toRecord(await api.qtns.amend(id));
+}
+
+/** A VARIATION of a quotation — a separate offer for changed scope on the same job.
+ *  Numbered "<base>-<revision, 2 digits>-<variation, 4 digits>"; unlike a modification it does
+ *  NOT cancel the source. Created as …-0000 until the engineer types the variation number in
+ *  the Project tab, which renames it. */
+export async function variationQtn(id: string): Promise<QtnRecord> {
+  return toRecord(await api.qtns.variation(id));
+}
+
+/** True for a number written as a variation — "…-RR-ZZZZ". */
+export function isVariationNumber(number: string): boolean {
+  return /-\d{2}-\d{4}$/.test((number ?? "").trim());
+}
+/** A variation number's three parts. The number is the record — nothing else stores them. */
+export function baseOfNumber(number: string): string {
+  const m = /^(.*)-(\d{2})-(\d{4})$/.exec((number ?? "").trim());
+  return m ? m[1] : (number ?? "").trim();
+}
+export function revisionOfNumber(number: string): number {
+  const m = /^(.*)-(\d{2})-(\d{4})$/.exec((number ?? "").trim());
+  return m ? parseInt(m[2], 10) : 0;
+}
+export function variationOf(number: string): number {
+  const m = /^(.*)-(\d{2})-(\d{4})$/.exec((number ?? "").trim());
+  return m ? parseInt(m[3], 10) : 0;
+}
+/** Rebuild a variation number with a different variation number, keeping base and revision. */
+export function withVariation(number: string, variation: number): string {
+  const rr = String(revisionOfNumber(number)).padStart(2, "0");
+  const zzzz = String(Math.max(0, Math.trunc(variation))).padStart(4, "0");
+  return `${baseOfNumber(number)}-${rr}-${zzzz}`;
+}
+
+/** The head of a variation number — job + revision, without the variation part. */
+export function varHead(number: string): string {
+  return `${baseOfNumber(number)}-${String(revisionOfNumber(number)).padStart(2, "0")}`;
 }
