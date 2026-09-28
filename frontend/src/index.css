@@ -371,6 +371,22 @@ input[type="number"] {
     border-radius: 0 !important;
     box-shadow: none !important;
   }
+  /* EVERY SHEET STARTS ITS OWN PAGE.
+     The offers are built as fixed A4 sheets — one sheet is one page — but only some of
+     them declared `break-after`, and nothing declared `break-before`. So a sheet began
+     wherever the previous one happened to end: on the MV technical offer the item ribbon
+     printed alone at the foot of one page and the cover it belongs to (family name, type
+     code, spec strip) landed on the next, which reads as a torn page rather than a cover.
+     Stating it here rather than per component means a sheet added later cannot forget it.
+     Deliberately NOT `break-inside: avoid` — a sheet holding a long table (material list,
+     components) is MEANT to flow onto following pages, and forbidding that would clip it. */
+  .print-area > .a4-sheet {
+    break-before: page;
+  }
+  /* …but never a blank leading page when the offer opens on a sheet. */
+  .print-area > .a4-sheet:first-child {
+    break-before: auto;
+  }
 }
 
 /* Print: export the offer documents (Technical / Commercial) as PDF via the
