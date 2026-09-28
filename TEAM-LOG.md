@@ -23,6 +23,29 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**The "cannot make an offer yet" screen now shows the warnings too, not just the blockers.**
+
+Mohamed asked why no warning pop-up appeared on an MV quotation. It was working — he could not
+reach it. The warnings (zero price, missing copper, no cells, empty panels) live on the offer's own
+print bar, and that offer is never drawn while the quotation is stuck on the "Complete the required
+fields" screen. So the warnings stayed invisible until every blocking problem had been cleared, and
+fixing six things then revealed another nine.
+
+The blocked screen now lists both, in two parts:
+
+- **what must be fixed** — the required fields and, on a kiosk, a missing Busbar Rating or Kiosk Size
+- **"N other things to check"** — *these do not block the offer, but they are usually mistakes*:
+  zero-priced items, missing copper, no cells selected, empty panels, highlighted panels
+
+On the MV test quotation that is 6 to fix and 9 to check, all on one screen instead of in rounds.
+
+This applies to LV quotations as well — they had exactly the same blind spot.
+
+(Picked up the other side's "every A4 sheet starts its own page" PDF fix on the way past — different
+file, no conflict.)
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **Kiosk Size is now visibly required.**
 
 A kiosk with no enclosure chosen showed a plain dash, so it was easy to miss — and without an

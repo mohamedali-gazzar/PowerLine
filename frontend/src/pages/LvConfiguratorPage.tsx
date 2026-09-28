@@ -2517,17 +2517,17 @@ export default function LvConfiguratorPage() {
         {/* Required fields are checked for EVERY kind of quotation now, MV included — a cover page
             with no Customer on it is wrong whichever offer prints it. */}
         {activeTab === "technical" && (offerIssues.length
-          ? <OfferBlocked issues={offerIssues} />
+          ? <OfferBlocked issues={offerIssues} warnings={exportBlockers(s)} />
           : isMvQtn
           ? <MvTechnicalTab s={s} qtnNo={qtnNum} />
           : <TechnicalTab s={s} qtnNo={qtnNum} up={up} onBackToPanel={openPanelInPanels} onScratch={upScratch} readOnly={sharedReadOnly} />)}
         {activeTab === "commercial" && (offerIssues.length
-          ? <OfferBlocked issues={offerIssues} />
+          ? <OfferBlocked issues={offerIssues} warnings={exportBlockers(s)} />
           : isMvQtn
           ? <MvCommercialTab s={s} qtnNo={qtnNum} up={up} />
           : <CommercialTab s={s} qtnNo={qtnNum} up={up} readOnly={readOnly} />)}
         {activeTab === "kioskAnalysis" && <KioskAnalysisTab s={s} qtnNo={qtnNum} />}
-        {activeTab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
+        {activeTab === "material" && (offerIssues.length ? <OfferBlocked issues={offerIssues} warnings={exportBlockers(s)} /> : <MaterialTab s={s} qtnNo={qtnNum} abbOnly={matAbbOnly} setAbbOnly={setMatAbbOnly} up={up} />)}
         {activeTab === "selectivity" && <SelectivityTab s={s} upPanel={upPanel} qtnNo={qtnNum} onOpenPanel={openPanelInPanels} />}
         {activeTab === "sizing" && <SizingReviewTab key={rec?.id ?? "none"} s={s} qtnId={rec?.id ?? ""} />}
         {activeTab === "summary" && <SummaryTab s={s} up={up} />}
@@ -2630,13 +2630,40 @@ function SaveLamp({
   );
 }
 
-function OfferBlocked({ issues }: { issues: string[] }) {
+/**
+ * The screen that stands in for an offer that cannot be produced yet.
+ *
+ * It lists BOTH kinds of problem at once, deliberately. The things that must be fixed come first;
+ * under them come the warnings that would otherwise stay hidden — they live on the offer's own
+ * print bar, which is not drawn while this screen is up, so fixing the required fields used to
+ * reveal a second round of problems nobody had been shown.
+ */
+function OfferBlocked({ issues, warnings = [] }: { issues: string[]; warnings?: ExportCheck[] }) {
+  const warnCount = warnings.reduce((n, c) => n + c.items.length, 0);
   return (
-    <div className="card border-amber-300 bg-amber-50 p-6 animate-fade-up">
-      <p className="font-bold text-amber-800">⚠ Complete the required fields before generating any offer.</p>
-      <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-amber-700">
-        {issues.map((m, i) => <li key={i}>{m}</li>)}
-      </ul>
+    <div className="animate-fade-up space-y-3">
+      <div className="card border-amber-300 bg-amber-50 p-6">
+        <p className="font-bold text-amber-800">⚠ Complete the required fields before generating any offer.</p>
+        <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-amber-700">
+          {issues.map((m, i) => <li key={i}>{m}</li>)}
+        </ul>
+      </div>
+      {warnCount > 0 && (
+        <div className="card border-line p-6">
+          <p className="font-bold text-ink">
+            {warnCount} other {warnCount === 1 ? "thing" : "things"} to check
+            <span className="ml-2 text-xs font-normal text-muted">— these do not block the offer, but they are usually mistakes</span>
+          </p>
+          {warnings.map((c) => (
+            <div key={c.title} className="mt-3">
+              <p className="text-sm font-bold text-brand-dark">{c.title}</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-muted">
+                {c.items.map((m, i) => <li key={i}>{m}</li>)}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
