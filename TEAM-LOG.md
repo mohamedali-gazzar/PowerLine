@@ -21,6 +21,43 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-28 · Mohamed's side · Claude
+
+**ATS was offering circuit breakers that physically cannot be used.**
+
+⚠️ HEADS-UP — **an ATS built on an XT7 may have been quoted with the wrong breaker.** The breaker
+list for an ATS offered every XT7 in the catalogue, all 47 of them, including the 24 that are not
+motorised. An XT7 is not like an XT1…XT6: those are motorised by bolting a MOD / MOE motor operator
+onto a plain breaker, so any of them will do, but ABB only sells the XT7's operator built into the
+breaker. A plain XT7 cannot be switched by an ATS at all, so any offer that picked one is wrong —
+the panel would not work as drawn. **Worth checking any ATS quotation with an XT7 incomer.**
+
+The list now shows only the motorised ones — 23 instead of 47, all reading `MCCB XT7S M …` or
+`XT7H M …`.
+
+**The trip unit matters too, and this is the subtle one.** A correct breaker reads:
+
+> MCCB XT7S **M** 1000A-50kA 1000 AF Ekip Dip **LS/I** 3P
+
+There is another kind that looks almost identical:
+
+> MCCB XT7S **M** 1000 Ekip **M Dip I** In=1000A 3p F F
+
+It still says "XT7S M", so checking only for the M lets it through — but `Ekip M Dip` is a
+**motor-protection** trip unit, not a distribution one. It protects a motor, not an incomer. The rule
+now requires both: motorised AND an `Ekip Dip LS/I` or `LSIG` trip unit.
+
+Note that second description is **not in our catalogue file or the local database** — every XT7 here
+is on LS/I or LSIG — so it exists only on the live price list. The app now refuses it either way.
+
+❓ QUESTION FOR MOHAMED: should that motor-protection XT7 be removed from the live price list as
+well, or is it there on purpose for motor feeders?
+
+The same rule now covers all three places that switch a breaker — **ATS**, **Synchronization** and
+**Motorized C.B** — from one piece of code, so they cannot drift apart. Motorized C.B already
+checked for the M but not the trip unit, so it had the same hole. The **WD kit** builder deliberately
+still offers every XT7: a withdrawable chassis is not a motor operator, so a plain one is fine there.
+
 ## 2026-09-27 · Mohamed's side · Claude
 
 **Kiosk cover: the P.F.C line was always wrong, and the Item label appeared too many times.**

@@ -39,6 +39,29 @@ export function frameOf(c: DbComponent): string | null {
 export function atsBreakerPool(): DbComponent[] {
   return COMPONENTS.filter((c) => (c.t === "MCCB" || c.t === "ACB") && frameOf(c));
 }
+/**
+ * Is this XT7 the one a panel may OPERATE — an ATS incomer, or the Motorized C.B combination?
+ *
+ * Two things have to hold, and each rules out a breaker that is otherwise in the catalogue:
+ *
+ *  1. It must be the factory-motorised `XT7 M`. XT1…XT6 are motorised by bolting a MOD / MOE
+ *     operator onto a plain breaker, so any of them will do; ABB sells the XT7's operator only as
+ *     part of the breaker, so a plain XT7 can never be switched.
+ *  2. Its trip unit must be a DISTRIBUTION one — Ekip Dip LS/I or LSIG. The catalogue also carries
+ *     XT7 M breakers on an `Ekip M Dip` MOTOR-protection unit; the name still reads "XT7S M", so
+ *     the motorised test alone lets it through, but it protects a motor, not an incomer.
+ */
+export function isOperableXt7(c: DbComponent): boolean {
+  const n = ` ${c.n || ""} `;
+  return /\bXT7\S*\s+M\b/i.test(n) && /\bEkip\s+Dip\s+(LS\/I|LSIG)\b/i.test(n);
+}
+
+/** Breakers eligible as a SWITCHED incomer — ATS and the Motorized C.B combination. The ATS pool
+ *  with XT7 narrowed to the motorised distribution variants (see isOperableXt7). */
+export function operableBreakerPool(): DbComponent[] {
+  return atsBreakerPool().filter((c) => frameOf(c) !== "XT7" || isOperableXt7(c));
+}
+
 
 // ATS accessory aliases — the Combinations file names accessories verbosely while
 // the Phase-01 component DB uses terser names, so findByName can't match them.

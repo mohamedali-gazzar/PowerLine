@@ -39,7 +39,7 @@ import {
 // (MvPanel type is referenced only through LvState.mvPanels; MvPanelType is used directly.)
 import { writeBackup, readBackup, clearBackup, unsavedWork, type Backup } from "../lv/offlineBackup";
 import {
-  ATS_TYPES, atsBreakerPool, frameOf, buildAts,
+  ATS_TYPES, atsBreakerPool, operableBreakerPool, frameOf, buildAts,
   buildSync, type SyncUnit,
   breakerPool, breakerAmps, buildPhotocell,
   MCC_KINDS, mccKws, mccTypes, buildMcc,
@@ -11610,7 +11610,9 @@ function BreakerSelect({ label, value, onPick, pool, placeholder = "Search break
 }
 
 function AtsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
-  const pool = useMemo(() => atsBreakerPool(), []);
+  // An ATS switches its incomers, so an XT7 here has to be the factory-motorised XT7 M on a
+  // distribution trip unit — see operableBreakerPool.
+  const pool = useMemo(() => operableBreakerPool(), []);
   const [type, setType] = useState<AtsTypeId>("1oo2");
   const [breakers, setBreakers] = useState<(DbComponent | null)[]>([null, null]);
   const meta = ATS_TYPES.find((t) => t.id === type)!;
@@ -11667,7 +11669,9 @@ function AtsBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
 // gets a synchronising module + control accessories (relay, lamps, start/stop); the first
 // source also gets a 3-position selector. Each bus coupler gets a generator bus-tie module.
 function SyncBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
-  const pool = useMemo(() => atsBreakerPool(), []);
+  // Synchronising sources means switching their breakers, so the same rule as the ATS applies:
+  // an XT7 has to be the factory-motorised XT7 M on a distribution trip unit.
+  const pool = useMemo(() => operableBreakerPool(), []);
   const [units, setUnits] = useState<SyncUnit[]>([{ kind: "source", breaker: null }, { kind: "source", breaker: null }]);
 
   // Picking the first breaker auto-fills any empty units with the same breaker (each stays editable).
@@ -11989,7 +11993,9 @@ function WdBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => 
 function MotorizedBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) => void }) {
   // Only MCCB / ACB breakers (no MCBs / junk); on the XT7 frame only the motorizable
   // XT7M variant qualifies, so plain XT7 (XT7S / XT7H without "M") is filtered out.
-  const pool = useMemo(() => atsBreakerPool().filter((c) => frameOf(c) !== "XT7" || /\bXT7[SH]?\s*M\b/i.test(c.n)), []);
+  // Same rule as the ATS incomers — this one was missing the trip-unit half, so an XT7 M on a
+  // motor-protection unit could be picked to be motorised.
+  const pool = useMemo(() => operableBreakerPool(), []);
   const [cb, setCb] = useState<DbComponent | null>(null);
   const [manualFrame, setManualFrame] = useState(""); // manual frame override
   const frame = manualFrame || (cb ? motorizedFrameKey(frameOf(cb)) : "") || MOTORIZED_FRAMES[0];
