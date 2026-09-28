@@ -21,7 +21,7 @@ import {
   AMB_TEMPS, NEUTRAL_EARTH, COPPER_TYPES, INCOMING_CABLES, OUTGOING_CABLES, FORMS,
   formFamilyConflict, formKitFactor,
   PANEL_SYSTEMS, SELECTABLE_SYSTEMS, CELL_SYSTEMS, PANELS_MAX_INCOMER_A, DOUBLE_FAMILIES,
-  COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp,
+  COMPONENTS, ENCLOSURES, componentPriceEgp, enclosurePriceEgp, fmtEgp, type Factors,
   findByName, externalNeutralCT, copperTypeFactor, DEFAULT_FACTORS,
   type DbComponent, type DbEnclosure,
 } from "../lv/catalog";
@@ -12896,7 +12896,7 @@ interface PriceCtl {
   onDisc: (r: MatRow, pct: number) => void;        // set a discount % (clears any market price)
   onMkt: (r: MatRow, pct: number) => void;         // set a market-price % (clears any discount)
 }
-function MatTable({ title, rows, withSupplier, note, priceCtl }: { title: string; rows: MatRow[]; withSupplier?: boolean; note?: string; priceCtl?: PriceCtl }) {
+function MatTable({ title, rows, withSupplier, note, priceCtl, factors }: { title: string; rows: MatRow[]; withSupplier?: boolean; note?: string; priceCtl?: PriceCtl; factors: Factors }) {
   if (!rows.length) return null;
   return (
     <div className="card overflow-hidden">
@@ -12908,13 +12908,17 @@ function MatTable({ title, rows, withSupplier, note, priceCtl }: { title: string
           so the headers of all Material-List tables line up with each other. */}
       <table className="w-full table-fixed text-[13px]">
         <colgroup>
-          <col />
+          {/* Description no longer flexes: it was taking every spare pixel and pushing
+              Reference far to the right. */}
+          <col style={{ width: 380 }} />
           <col style={{ width: 210 }} />
           {priceCtl && <col style={{ width: 100 }} />}
           {priceCtl && <col style={{ width: 118 }} />}
           {withSupplier && <col style={{ width: 150 }} />}
           <col style={{ width: 96 }} />
+          <col style={{ width: 118 }} />
           <col style={{ width: 72 }} />
+          <col style={{ width: 128 }} />
         </colgroup>
         <thead>
           <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
@@ -12924,7 +12928,9 @@ function MatTable({ title, rows, withSupplier, note, priceCtl }: { title: string
             {priceCtl && <th className="px-2 py-1.5 text-right">Market Price (%)</th>}
             {withSupplier && <th className="px-2 py-1.5">Supplier</th>}
             <th className="px-2 py-1.5">Stock</th>
+            <th className="px-2 py-1.5 text-right">Unit cost (EGP)</th>
             <th className="px-4 py-1.5 text-right">Qty</th>
+            <th className="px-4 py-1.5 text-right">Total cost (EGP)</th>
           </tr>
         </thead>
         <tbody>
@@ -12935,6 +12941,14 @@ function MatTable({ title, rows, withSupplier, note, priceCtl }: { title: string
             const isDisc = stored != null && stored >= 0 && stored !== def; // a per-item discount override is set
             const discVal = isMkt ? "" : (stored != null ? stored : def);
             const mktVal = isMkt ? -stored : "";
+            // The effective per-item percentage this row is priced at: its own override when it
+            // has one, otherwise the default. Negative means a market price, which raises the cost.
+            const pct = stored != null ? stored : def;
+            const unit = componentPriceEgp(
+              { eur: r.eur ?? 0, egp: r.egp ?? 0, brand: r.supplier },
+              factors,
+              priceCtl ? pct / 100 : undefined,
+            );
             return (
               <tr key={i} className="border-t border-line/70">
                 <td className="px-4 py-1">{r.description}</td>
@@ -12963,7 +12977,11 @@ function MatTable({ title, rows, withSupplier, note, priceCtl }: { title: string
                 )}
                 {withSupplier && <td className="px-2 py-1 text-muted">{r.supplier}</td>}
                 <td className="px-2 py-1 text-[11px] text-muted">{r.stock || "—"}</td>
+                {/* Cost per one, at this row's own discount / market price — the same figure the
+                    panel is costed with, so the list reconciles with the offer. */}
+                <td className="px-2 py-1 text-right tabular-nums text-muted">{unit > 0 ? fmtEgp(unit) : "—"}</td>
                 <td className="px-4 py-1 text-right font-bold">{r.qty}</td>
+                <td className="px-4 py-1 text-right font-bold tabular-nums">{unit > 0 ? fmtEgp(unit * r.qty) : "—"}</td>
               </tr>
             );
           })}
@@ -13093,7 +13111,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
       ) : (
         <>
           {visible.map((b, i) => b.kind === "table" ? (
-            <MatTable key={b.title} title={`${i + 1} · ${b.title}`} rows={b.rows} withSupplier={b.withSupplier} note={b.note}
+            <MatTable key={b.title} title={`${i + 1} · ${b.title}`} rows={b.rows} withSupplier={b.withSupplier} note={b.note} factors={s.factors}
               priceCtl={priceCtl} />
           ) : (
             <div key={b.title} className="card flex items-center justify-between p-4">

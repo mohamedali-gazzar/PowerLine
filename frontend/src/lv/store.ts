@@ -1729,6 +1729,10 @@ export interface MatRow {
   stock: string;
   qty: number;
   eur?: number; // ABB EUR list price (>0 ⇒ supplied from ABB ⇒ eligible for the ABB discount)
+  /** Raw EGP price from the catalogue. With `eur` and `supplier` it is everything
+   *  componentPriceEgp needs, so the Material List can cost a line without going back
+   *  to the component it came from. */
+  egp?: number;
 }
 export interface MaterialList {
   abb: MatRow[];
@@ -1761,6 +1765,7 @@ export function buildMaterialList(s: LvState): MaterialList {
         stock: c.stock,
         qty: c.qty * mult,
         eur: c.eur,
+        egp: c.egp,
       });
       copperKg += cuKg(c) * c.qty * mult * buswayCopperMult(c.note); // busway rows carry extra copper
     }
@@ -1773,6 +1778,24 @@ export function buildMaterialList(s: LvState): MaterialList {
         stock: "",
         qty: it.qty * mult,
         eur: it.eur,
+        egp: it.egp,
+      });
+    }
+    // The assembly kit is charged as a percentage of this panel's enclosure (see kitRate), so
+    // it is a real cost with no catalogue line of its own. It is listed separately rather than
+    // buried in the enclosure's price, and keyed by its rate so panels on different rates do
+    // not merge into one row.
+    const kitCalc = calcPanel(p, s.factors, s.abbItemDiscounts);
+    if (kitCalc.kits > 0) {
+      const fam = p.sizingMode === "cells" ? (p.cellConfig?.type ?? "") : (p.panelsSizing?.family ?? "");
+      add(`k|${fam}|${Math.round(kitCalc.kits)}`, {
+        // Same bucket as the enclosures it is charged against, so it reads directly under them.
+        supplier: ["Pro-E", "IS2", "PLP"].includes(fam) ? fam : "ABB Enclosure",
+        description: `${fam || "Enclosure"} — assembly kit${kitCalc.kitsForm > 0 ? ` (incl. Form ${p.form.toUpperCase()})` : ""}`,
+        reference: "",
+        stock: "",
+        qty: mult,
+        egp: kitCalc.kits,
       });
     }
     copperKg += (mainBusbarAuto(p) ?? (p.mainBusbarKg || 0)) * copperTypeFactor(p.copperType) * mult;

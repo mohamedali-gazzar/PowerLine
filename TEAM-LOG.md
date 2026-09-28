@@ -23,6 +23,36 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**Material List: costs per line, and the assembly kit as its own row.**
+
+The Material List showed what is in the panels but never what any of it costs. It now carries two
+money columns:
+
+- **Unit cost (EGP)** — what one costs, at that row's own discount or market price, so the list
+  agrees with what the panel is actually costed at
+- **Total cost (EGP)** — sitting straight after Qty
+
+The total is worked out from the exact unit price rather than the rounded one on screen, so the
+column never drifts by a few pounds against the offer.
+
+**The assembly kit now has its own line.** It had never appeared in the Material List at all — it is
+charged as a percentage of the enclosure, so there is no catalogue line for it, and it was simply
+missing. It now sits directly under the enclosures it belongs to:
+
+```
+SR-Basic — 1000x600x250    7,703 × 48 =  369,730
+SR-Basic — 1000x800x250    9,588 × 48 =  460,202
+SR-Basic — assembly kit    1,729 × 48 =   82,993
+```
+
+…and it reconciles exactly: SR-Basic's kit is 10 %, and 10 % of 829,932 is 82,993. Where a
+Form-of-separation surcharge applies, the line says so.
+
+**Reference moved left.** The Description column had no width, so it took every spare pixel and
+pushed Reference far to the right with a wide gap. It now starts 380 px in.
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **The Tmax XT switch-disconnectors now set the Busbar Rating.**
 
 ⚠️ HEADS-UP — **a panel fed through one of these had no Busbar Rating at all.** The app reads a
