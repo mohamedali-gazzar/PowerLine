@@ -23,6 +23,37 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**New MCC starter: VSD (variable speed drive).**
+
+"VSD" now sits in the Starter dropdown beside DOL-3Ph, DOL-1Ph and Star Delta. Picking it changes the
+fields to **Starter · Motor (kW) · C.B · Accessories**:
+
+- **Motor (kW)** — all 17 ratings: 1.5, 2.2, 3, 4, 11, 22, 30, 37, 45, 55, 75, 90, 110, 132, 160,
+  200, 450 kW. The **drive is chosen automatically** from the rating.
+- **C.B** — an open search over the breakers, because the breaker in front of a drive depends on the
+  installation, not the motor alone. Leave it empty and the circuit still generates without it.
+- **Accessories** — a tick box for: Selector 3 Position, CP1-10G-10 and CP1-10R-01 Pushbuttons, and
+  the Red / Green / Yellow Pilot Lights.
+- Type and "+ control acc." disappear, since neither applies to a drive.
+
+Underneath the fields it shows: **Rated Voltage 400 V · Rated S.C 65 KA · Coordination IEC Type 1 ·
+Protection device MCCB · Overload protection Embedded**.
+
+**All of it lives in the Combinations database, not in code** — the 17 drives, the accessory list and
+even those five spec lines. Adding a drive row on the Combinations screen makes it appear in the
+Motor (kW) list with no release needed.
+
+⚠️ HEADS-UP — **two drives have no component yet.** The Combinations screen's own check flagged them:
+**Variable speed drive 11 kW** and **Variable speed drive 450 kW** are not in the price list. The
+other 15 are there and priced. Pick either of those two and the drive line comes out unpriced, so
+they need adding on /pricing with their cost.
+
+❗ **This needs publishing on the live site.** The combinations were saved here through the owner
+Combinations screen, which is what makes them visible to users. The same has to be done in production
+before anyone sees VSD in the dropdown.
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **Material List: clicking away clears the selection, and the section box lines up with the rows.**
 
 - **Click anywhere outside the list and the ticks clear.** They are a scratch total, not something

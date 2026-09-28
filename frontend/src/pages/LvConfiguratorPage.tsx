@@ -42,7 +42,7 @@ import {
   ATS_TYPES, atsBreakerPool, operableBreakerPool, frameOf, buildAts,
   buildSync, type SyncUnit,
   breakerPool, breakerAmps, buildPhotocell,
-  MCC_KINDS, mccKws, mccTypes, buildMcc,
+  MCC_KINDS, mccKws, mccTypes, buildMcc, buildVsd, VSD_KIND, vsdSpec,
   PFC_DEFAULT, pfcTotalKvar, pfcHeader, buildPfc,
   WD_OPTIONS, buildWd, wdKeyFor, WD_ACCESSORIES, wdAccessoryName,
   MOTORIZED_FRAMES, buildMotorized, motorizedFrameKey,
@@ -11821,6 +11821,12 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
   const [type, setType] = useState(2);
   useEffect(() => setType(types.includes(2) ? 2 : (types[0] ?? 1)), [types]); // default Type 2 when available
   const [withCtl, setWithCtl] = useState(true);
+  // A VSD picks its own drive from the motor rating, but the breaker in front of it is the
+  // engineer's choice, so it comes from the component search rather than the recipe.
+  const isVsd = kind === VSD_KIND;
+  const [vsdCb, setVsdCb] = useState<DbComponent | null>(null);
+  const [withAcc, setWithAcc] = useState(true);
+  const cbPool = useMemo(() => COMPONENTS.filter((c) => c.t === "MCCB" || c.t === "ACB" || /^MDRC/i.test(c.t || "")), []);
   const [qty, setQty] = useState(1); // RPT-1: quantity for this combination
   // KVA → kW helper: kW = KVA × P.F, rounded UP to the nearest standard motor kW
   // in the current list, then auto-selected in the Motor (kW) dropdown.
@@ -11844,14 +11850,24 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
       <div className="flex flex-wrap items-end gap-3">
         <div><L>Starter</L><Sel value={kind as any} onChange={(v) => setKind(v)} options={MCC_KINDS as any} className="w-36" /></div>
         <div><L>Motor (kW)</L><Sel value={kw as any} onChange={(v) => setKw(v)} options={kws as any} className="w-32" /></div>
-        <div><L>Type</L><Sel value={String(type) as any} onChange={(v) => setType(+v)} options={types.map(String) as any} className="w-24" /></div>
+        {!isVsd && <div><L>Type</L><Sel value={String(type) as any} onChange={(v) => setType(+v)} options={types.map(String) as any} className="w-24" /></div>}
+        {isVsd && (
+          <div className="min-w-[22rem] flex-1">
+            <BreakerSelect label="C.B" value={vsdCb} onPick={setVsdCb} pool={cbPool} placeholder="Search the breaker for this drive…" />
+          </div>
+        )}
         <div><L>Qty</L><input className="input w-20" inputMode="numeric" value={qty}
           onChange={(e) => setQty(Math.max(1, parseInt(e.target.value.replace(/[^\d]/g, "")) || 1))} /></div>
-        <label className="flex cursor-pointer select-none items-center gap-1.5 pb-2 text-xs font-semibold text-ink">
+        <label className={`flex cursor-pointer select-none items-center gap-1.5 pb-2 text-xs font-semibold text-ink ${isVsd ? "hidden" : ""}`}>
           <input type="checkbox" className="cursor-pointer accent-brand" checked={withCtl} onChange={(e) => setWithCtl(e.target.checked)} /> + control acc.
         </label>
+        {isVsd && (
+          <label className="flex cursor-pointer select-none items-center gap-1.5 pb-2 text-xs font-semibold text-ink">
+            <input type="checkbox" className="cursor-pointer accent-brand" checked={withAcc} onChange={(e) => setWithAcc(e.target.checked)} /> Accessories
+          </label>
+        )}
         <button className="btn-ghost"
-          onClick={() => onPreview(buildMcc(kind, kw, type, withCtl, qty), `MCC ${kind} ${kw}`)}>
+          onClick={() => onPreview(isVsd ? buildVsd(kw, vsdCb, withAcc, qty) : buildMcc(kind, kw, type, withCtl, qty), `MCC ${kind} ${kw}`)}>
           Generate combination
         </button>
         {/* KVA → kW converter — fills the Motor (kW) above from KVA × P.F (rounded up). */}
@@ -11869,6 +11885,13 @@ function MccBuilder({ onPreview }: { onPreview: (l: ComboLine[], tag: string) =>
           </div>
         </div>
       </div>
+        {/* The facts an engineer needs to sanity-check a drive circuit. They come from the
+            combinations file, so they can be corrected without a release. */}
+      {isVsd && vsdSpec().length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 rounded-md border border-brand/30 bg-brand-light/40 px-3 py-2 text-[11px] font-semibold text-brand-dark">
+          {vsdSpec().map((line) => <span key={line}>{line}</span>)}
+        </div>
+      )}
     </div>
   );
 }

@@ -273,6 +273,42 @@ export function mccAlias(desc: string): string {
   return d;
 }
 
+
+/** The VSD starter's kind, as it appears in the Starter dropdown. */
+export const VSD_KIND = "VSD";
+/** The fixed facts shown beside the VSD builder — data, so they can be corrected without a release. */
+export const vsdSpec = (): string[] => ((COMBOS.mcc as any).vsdSpec as string[] | undefined) ?? [];
+
+/**
+ * A variable-speed-drive starter.
+ *
+ * Unlike DOL and Star-Delta, only the DRIVE follows the motor rating — the breaker in front of it is
+ * chosen by the engineer, because the selection depends on the installation rather than the motor
+ * alone. So `cb` is whatever they picked from the component search; leave it out and the circuit is
+ * still generated, with the drive and the accessories.
+ *
+ * The accessories are the tick-box block from the combinations file (vsdAccessories), NOT the
+ * DOL/Star-Delta `control` block, which carries relays, terminals and an MCB a drive does not use.
+ */
+export function buildVsd(kw: string, cb: DbComponent | null, withAcc: boolean, qty = 1): ComboLine[] {
+  const row = COMBOS.mcc.combos.find((m) => m.kind === VSD_KIND && m.kw === kw);
+  if (!row) return [];
+  const n = Math.max(1, qty);
+  const label = `${VSD_KIND} ${kw}`;
+  const out: ComboLine[] = [];
+  if (cb) out.push({ qty: n, baseQty: 1, desc: cb.n, comp: cb, groupLabel: label, scalable: true });
+  for (const p of row.parts) {
+    out.push({ qty: n, baseQty: 1, desc: p, comp: findByName(p), groupLabel: label, scalable: true });
+  }
+  if (withAcc) {
+    const acc = ((COMBOS.mcc as any).vsdAccessories as { qty: number; desc: string }[] | undefined) ?? [];
+    for (const a of acc) {
+      out.push({ qty: n * a.qty, baseQty: a.qty, desc: a.desc, comp: findByName(a.desc), groupLabel: label, scalable: true });
+    }
+  }
+  return out;
+}
+
 export function buildMcc(kind: string, kw: string, type: number, withControl: boolean, qty = 1): ComboLine[] {
   const row = COMBOS.mcc.combos.find((m) => m.kind === kind && m.kw === kw && m.type === type);
   if (!row) return [];
