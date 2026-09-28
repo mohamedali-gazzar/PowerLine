@@ -12906,7 +12906,7 @@ function matUnitCost(r: MatRow, factors: Factors, priceCtl?: PriceCtl): number {
 /** A row's identity for ticking. Reference is not unique across sections, so the section goes in. */
 const matKey = (title: string, r: MatRow) => `${title}|${r.reference || r.description}`;
 
-function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, onPick, onPickAll, cur, usd, drag }: { title: string; rows: MatRow[]; withSupplier?: boolean; note?: string; priceCtl?: PriceCtl; factors: Factors; picked: Set<string>; onPick: (key: string) => void; onPickAll: (keys: string[], on: boolean) => void; cur: "USD" | "EGP"; usd: number; drag: React.MutableRefObject<boolean | null> }) {
+function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, onPick, onPickAll, cur, usd, onDragStart, onDragOver }: { title: string; rows: MatRow[]; withSupplier?: boolean; note?: string; priceCtl?: PriceCtl; factors: Factors; picked: Set<string>; onPick: (key: string) => void; onPickAll: (keys: string[], on: boolean) => void; cur: "USD" | "EGP"; usd: number; onDragStart: (title: string, keys: string[], i: number) => void; onDragOver: (title: string, i: number) => void }) {
   if (!rows.length) return null;
   // Ticking rows adds them up — a quick way to price part of a list without exporting it.
   const keys = rows.map((r) => matKey(title, r));
@@ -13016,9 +13016,9 @@ function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, 
                 <td className="px-4 py-1 text-right font-bold tabular-nums">{unit > 0 ? fmtEgp(money(unit * r.qty)) : "—"}</td>
                 <td className="pl-1 pr-3 py-1 text-right">
                   <input type="checkbox" checked={picked.has(matKey(title, r))}
-                    onMouseDown={() => { drag.current = !picked.has(matKey(title, r)); onPick(matKey(title, r)); }}
-                    onMouseEnter={() => { if (drag.current !== null && picked.has(matKey(title, r)) !== drag.current) onPick(matKey(title, r)); }}
-                    onChange={() => { /* handled on mouse down, so a drag does not toggle twice */ }}
+                    onMouseDown={() => onDragStart(title, keys, i)}
+                    onMouseEnter={() => onDragOver(title, i)}
+                    onChange={() => onPick(matKey(title, r))}
                     aria-label={`Select ${r.description}`}
                     className="h-4 w-4 cursor-pointer rounded border-line text-brand focus:ring-brand" />
                 </td>
@@ -13034,9 +13034,23 @@ function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, 
 function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo: string; abbOnly: boolean; setAbbOnly: (v: boolean) => void; up: (patch: Partial<LvState>) => void }) {
   // Costs are held in EGP; USD divides by the quotation's rate. Display only — nothing is stored.
   const [matCur, setMatCur] = useState<"USD" | "EGP">("EGP");
-  // Click-and-drag across the boxes to tick a run of rows. `paint` is what the first box became,
-  // so dragging over a mixed run makes them all match it rather than flipping each one.
-  const drag = useRef<null | boolean>(null);
+  // Click and drag across the boxes to sweep a run of rows, the same gesture the panel list uses:
+  // the selection is the range from where the press started to wherever the pointer is now, so
+  // dragging back over rows un-picks them again. `base` is the selection as it was when the drag
+  // began, which keeps ticks in OTHER sections while this one is being swept.
+  const drag = useRef<null | { title: string; keys: string[]; anchor: number; on: boolean; base: Set<string> }>(null);
+  const applyRange = (j: number) => {
+    const d = drag.current;
+    if (!d) return;
+    const [lo, hi] = d.anchor < j ? [d.anchor, j] : [j, d.anchor];
+    const next = new Set(d.base);
+    for (let k = lo; k <= hi; k++) { if (d.on) next.add(d.keys[k]); else next.delete(d.keys[k]); }
+    setPicked(next);
+  };
+  const dragStart = (title: string, keys: string[], i: number) => {
+    drag.current = { title, keys, anchor: i, on: !picked.has(keys[i]), base: new Set(picked) };
+  };
+  const dragOver = (title: string, i: number) => { if (drag.current?.title === title) applyRange(i); };
   useEffect(() => {
     const stop = () => { drag.current = null; };
     window.addEventListener("mouseup", stop);
@@ -13198,7 +13212,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
           })()}
           {visible.map((b, i) => b.kind === "table" ? (
             <MatTable key={b.title} title={`${i + 1} · ${b.title}`} rows={b.rows} withSupplier={b.withSupplier} note={b.note} factors={s.factors}
-              priceCtl={priceCtl} picked={picked} onPick={pick} onPickAll={pickAll} cur={matCur} usd={s.factors.usd || 0} drag={drag} />
+              priceCtl={priceCtl} picked={picked} onPick={pick} onPickAll={pickAll} cur={matCur} usd={s.factors.usd || 0} onDragStart={dragStart} onDragOver={dragOver} />
           ) : (
             <div key={b.title} className="card flex items-center justify-between p-4">
               <h3 className="text-sm font-bold text-brand-dark">{i + 1} · {b.title}</h3>

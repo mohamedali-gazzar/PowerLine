@@ -23,6 +23,24 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**Material List: dragging back over rows now un-picks them.**
+
+The sweep used to *paint* — whatever the first box became, the whole run took — so dragging back over
+rows you had just picked left them picked. It now works like the checklist on the panels list: the
+selection is the range from where you pressed to wherever the pointer is, so reversing the drag
+shrinks it and drops those rows again.
+
+Two things that still hold:
+
+- **Ticks in other sections survive a sweep.** One row picked in *Other Suppliers*, then a sweep
+  across *ABB Products*, gives all three — not just the swept pair. A sweep only replaces the rows in
+  the section being dragged through.
+- **A plain click and the keyboard still work.** The drag only extends the range; the box's own
+  change event does the single toggle, so clicking one box or pressing space on it behaves normally
+  and nothing toggles twice.
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **Material List: tick box on the right, a USD/EGP switch, and drag to select.**
 
 - **The tick box moved to the right** — it is the last column now, after Total cost, on the rows and
