@@ -69,7 +69,12 @@ export default function PricingAdminPage() {
     try {
       const s = await api.pricing.status();
       setStatus(s);
-      if (s.canEdit && s.seedState === "READY") {
+      // READING prices needs canView; canEdit is for CHANGING them. Gating the fetch on
+      // canEdit left anyone granted "view prices" with a permanently empty RMU tab — and
+      // because the LV tab fetches its own rows separately, only RMU looked broken, so it
+      // read as "RMU does not load" rather than as the permission bug it was.
+      // Both endpoints below are requirePriceViewer on the server, so a viewer may call them.
+      if (s.canView && s.seedState === "READY") {
         const [l, p] = await Promise.all([api.pricing.list(), api.pricing.pending()]);
         setRows(l.rows);
         setRmuFactor(l.factor ?? 0.85);
@@ -77,7 +82,9 @@ export default function PricingAdminPage() {
         setPending(p.changes);
         // The LV catalogue is small and copying it changes no prices, so import
         // it automatically rather than making the owner press a button for it.
-        if (s.counts.lvComponents === 0 && !autoImported.current) {
+        // Seeding the catalogue WRITES prices, so it stays an editor's action — a viewer
+        // reaching this must never trigger it.
+        if (s.canEdit && s.counts.lvComponents === 0 && !autoImported.current) {
           autoImported.current = true;
           importLvCatalogue()
             .then((seeded) => {
@@ -262,7 +269,10 @@ export default function PricingAdminPage() {
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">Price list</h1>
           <p className="text-sm text-muted">
-            Change a price here, then press <b>Update price list &amp; database</b> to make it live.
+            {/* A viewer can do neither of these, and telling them to try reads as a fault. */}
+            {status.canEdit
+              ? <>Change a price here, then press <b>Update price list &amp; database</b> to make it live.</>
+              : <>You can see every price here. Changing them needs the price-editing permission.</>}
           </p>
         </div>
         <StatusChip status={status} />
@@ -322,13 +332,17 @@ export default function PricingAdminPage() {
                     : "Every price change goes live as you make it. This button is only needed if one didn’t."}
                 </p>
               </div>
-              <button
-                className="btn-primary"
-                disabled={!needsPublish || busy === "publish"}
-                onClick={() => setConfirming(true)}
-              >
-                {busy === "publish" ? "Publishing…" : "Update price list & database"}
-              </button>
+              {/* Publishing sends prices to every customer-facing quotation — the single
+                  most consequential button here, and never a viewer's to press. */}
+              {status.canEdit && (
+                <button
+                  className="btn-primary"
+                  disabled={!needsPublish || busy === "publish"}
+                  onClick={() => setConfirming(true)}
+                >
+                  {busy === "publish" ? "Publishing…" : "Update price list & database"}
+                </button>
+              )}
             </div>
           );
         })()}
@@ -401,7 +415,7 @@ export default function PricingAdminPage() {
               <p className="text-xs text-muted">{progress || "Copying your current prices — they do not change."}</p>
             </div>
           )}
-          {section === "LV" && status.counts.lvComponents > 0 && <LvPrices />}
+          {section === "LV" && status.counts.lvComponents > 0 && <LvPrices canEdit={status.canEdit} />}
 
           {section === "TRANSFORMER" && <TransformerPrices canEdit={status.canEdit} onChanged={loadAll} />}
 
@@ -467,15 +481,20 @@ export default function PricingAdminPage() {
                           <td className="px-5 py-2 text-right tabular-nums text-muted">{Math.round(r.costUsd).toLocaleString()}</td>
                           <td className="px-5 py-2 text-right font-semibold tabular-nums text-ink">{rmuSelling(r.costUsd).toLocaleString()}</td>
                           <td className="px-5 py-2 text-right">
-                            <button
-                              type="button"
-                              title={r.active ? "Stop offering this product" : "Offer this product again"}
-                              onClick={() => toggleRetire(r)}
-                              disabled={busy === r.id}
-                              className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-muted transition hover:bg-surface hover:text-ink"
-                            >
-                              {r.active ? "Retire" : "Restore"}
-                            </button>
+                            {/* Retiring a product is a WRITE (requirePriceAdmin on the server).
+                                Someone granted "view prices" must not be offered it — before
+                                this, the button was shown to everyone and simply 403'd. */}
+                            {status.canEdit && (
+                              <button
+                                type="button"
+                                title={r.active ? "Stop offering this product" : "Offer this product again"}
+                                onClick={() => toggleRetire(r)}
+                                disabled={busy === r.id}
+                                className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-muted transition hover:bg-surface hover:text-ink"
+                              >
+                                {r.active ? "Retire" : "Restore"}
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -588,10 +607,12 @@ function PolesCell({
   row,
   onSaved,
   onError,
+  canEdit,
 }: {
   row: LvRow;
   onSaved: (row: LvRow) => void;
   onError: (msg: string) => void;
+  canEdit: boolean;
 }) {
   const [text, setText] = useState(row.poles ? String(row.poles) : "");
   const [busy, setBusy] = useState(false);
@@ -621,6 +642,9 @@ function PolesCell({
     }
   };
 
+  // A viewer sees the number, never an input that would save on blur.
+  if (!canEdit) return <span className="tabular-nums">{current || "—"}</span>;
+
   return (
     <input
       type="number"
@@ -649,7 +673,7 @@ function PolesCell({
   );
 }
 
-function LvPrices() {
+function LvPrices({ canEdit }: { canEdit: boolean }) {
   const { confirm, dialogs } = useDialogs();
   const [kind, setKind] = useState<"components" | "enclosures" | "combos">("components");
   // Combinations are owner-only (access.manage) — a stricter gate than the rest of
@@ -772,8 +796,9 @@ function LvPrices() {
           unique in the database, so the case cannot arise there. */}
       {kind === "components" && <DuplicateNames reloadKey={reloadKey} />}
 
-      {/* Bulk update from a spreadsheet — for a whole new supplier price list,
-          where editing rows one at a time is not realistic. */}
+      {/* Bulk update from a spreadsheet — for a whole new supplier price list, where
+          editing rows one at a time is not realistic. A write, so editors only. */}
+      {canEdit && (
       <div className="card mb-3 p-3">
         <LvExcelImport
           onApplied={() => {
@@ -790,6 +815,7 @@ function LvPrices() {
           }}
         />
       </div>
+      )}
 
       {/* Excel-style filter bar */}
       <div className="card mb-3 flex flex-wrap items-end gap-2 p-3">
@@ -910,6 +936,7 @@ function LvPrices() {
                       <td className="px-4 py-2 text-right font-medium text-ink">{r.egp ? r.egp.toLocaleString() : "—"}</td>
                       <td className="px-4 py-2 text-right text-xs text-ink">
                         <PolesCell
+                          canEdit={canEdit}
                           row={r}
                           onSaved={(u) => setRows((rs) => (rs ? rs.map((x) => (x.id === u.id ? u : x)) : rs))}
                           onError={setErr}
@@ -925,17 +952,20 @@ function LvPrices() {
                       <td className="px-4 py-2 text-right font-medium text-ink">{r.egp ? r.egp.toLocaleString() : "—"}</td>
                     </>
                   )}
-                  {/* Remove / Restore stays in the UI (prices are still Excel-only). */}
+                  {/* Remove / Restore stays in the UI (prices are still Excel-only), but it
+                      is a WRITE — hidden from anyone who may only view prices. */}
                   <td className="px-4 py-2 text-right">
-                    <button
-                      type="button"
-                      disabled={busy === r.id}
-                      title={r.active === false ? "Offer this item again" : "Stop offering this item"}
-                      onClick={() => toggleRetire(r)}
-                      className="rounded-md px-2 py-1 text-xs font-semibold text-muted transition hover:bg-surface hover:text-ink"
-                    >
-                      {r.active === false ? "Restore" : "Remove"}
-                    </button>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        disabled={busy === r.id}
+                        title={r.active === false ? "Offer this item again" : "Stop offering this item"}
+                        onClick={() => toggleRetire(r)}
+                        className="rounded-md px-2 py-1 text-xs font-semibold text-muted transition hover:bg-surface hover:text-ink"
+                      >
+                        {r.active === false ? "Restore" : "Remove"}
+                      </button>
+                    )}
                   </td>
                 </tr>
                 );
