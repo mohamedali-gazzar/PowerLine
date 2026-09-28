@@ -23,6 +23,38 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**A Switch Disconnector now sets the Busbar Rating.**
+
+Until now only a circuit breaker filled the **Busbar Rating** field. A panel fed through a switch
+disconnector left it empty, so the bar had to be picked by hand — and if it was missed, the panel was
+costed on whatever rating happened to be stored. A switch disconnector carries the full incoming
+current even though it does not break fault current, so the bar has to match it.
+
+The ladder, as the owner gave it:
+
+| Switch disconnector | Busbar Rating |
+| --- | --- |
+| anything up to 160 A (16, 25, 40, 63, 80, 100, 125, 160) | **160 A** |
+| 200, 250 | **250 A** |
+| 315, 400 | **400 A** |
+| 630, 800, 1000, 1250, 1600, 2000, 2500, 3200 | **each to itself** |
+
+That covers every switch disconnector in the catalogue, and each one is pinned by a test.
+
+Three things worth knowing:
+
+- It only counts on the **incoming** side. One in Outgoings does not touch the bar.
+- **The bar is never undersized.** With both a breaker and a disconnector feeding it — say a 250 A
+  breaker and a 630 A disconnector — the larger wins, 630 A.
+- Breakers behave exactly as before: the ampere frame still drives it, and an MCB-only incomer still
+  defaults to a 100 A bar. The disconnector's ladder is deliberately coarser (no 80 / 100 / 125).
+
+For whoever reads the code: this calculation moved out of LvConfiguratorPage into its own file
+(`lv/busbarRating.ts`) so it could be tested on its own — it is a plain calculation now, needing no
+browser and no database.
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **ATS was offering circuit breakers that physically cannot be used.**
 
 ⚠️ HEADS-UP — **an ATS built on an XT7 may have been quoted with the wrong breaker.** The breaker

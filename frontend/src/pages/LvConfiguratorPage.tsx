@@ -51,6 +51,7 @@ import {
 } from "../lv/combos";
 import { rankSearchOptions } from "../lv/search";
 import { kioskCostsEgp, kioskPartSellingEgp, kioskFactorOf, kioskTotalCostEgp, kioskTotalSellingEgp, KIOSK_PART_KEYS, type KioskPartKey } from "../lv/kioskPricing";
+import { INCOMER_RATINGS, predictIncomerRating } from "../lv/busbarRating";
 import { materialAoa, type MatBlock } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount, type MvErpItem } from "../lv/erpCsv";
 import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalogSource";
@@ -8713,48 +8714,6 @@ function PanelsTab({ s, sel, up, upPanel, reorderPanels, canReorder = true, onAd
   );
 }
 
-// Standard incoming C.B ratings (A) — the panel rating snaps to one of these.
-const INCOMER_RATINGS = [80, 100, 125, 160, 250, 400, 630, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000, 5000, 6300];
-
-// Predict the Busbar Rating from the incoming C.B: take the largest breaker
-// (ACB / MCCB / MCB) in the "Main Incoming" section, read its ampere frame, and snap
-// UP to the nearest standard rating. Returns 0 (field stays empty) until an incoming
-// C.B is added.
-function predictIncomerRating(p: LvPanel): number {
-  // A breaker's catalogue type is "ACB", "MCCB", or — for a miniature C.B — "MDRC"
-  // (also "MDRC-Himel" / "MDRCs"), NEVER the literal "MCB". Matching only "MCB" here
-  // silently missed every MCB incomer, so its busbar rating never filled.
-  const isBreaker = (c: PanelComponent) =>
-    /\b(ACB|MCCB|MCB)\b/i.test(c.type || "") || /^MDRC/i.test((c.type || "").trim());
-  // Busbar rating follows the C.B's ampere FRAME ("… 160 AF …"), e.g.
-  //   MCCB XT2N 63A-36kA 160 AF …  → 160   (frame, not the 63 A rated current)
-  //   MCCB XT4N 200A-36kA 250 AF … → 250
-  //   ACB  E2.2B 1600A-42kA 1600 AF → 1600
-  // Fall back to the rated current only if a breaker has no frame in its name.
-  const frameAmps = (c: PanelComponent) => {
-    const hay = `${c.rating || ""} ${c.name || ""}`;
-    const af = hay.match(/(\d+)\s*AF\b/i); // ABB "… 160 AF …" ampere frame
-    if (af) return parseInt(af[1], 10);
-    const t = hay.match(/\bT\d[A-Z]?\s+(\d{2,4})\b/i); // Tmax "T5H 400 …" — frame after the type
-    if (t) return parseInt(t[1], 10);
-    const inA = hay.match(/In\s*=?\s*(\d+)/i) || hay.match(/(\d+)\s*A\b/i); // last resort: rated current
-    return inA ? parseInt(inA[1], 10) : 0;
-  };
-  // Predict only from the incoming C.B (breakers in the "Main Incoming" section), so
-  // the field stays empty by default and only fills once an incomer has been added.
-  const incoming = p.components.filter((c) => !isSpacer(c) && isBreaker(c) && /incom/i.test(c.section || ""));
-  if (!incoming.length) return 0;
-  // An MCB (MDRC) incomer defaults the Busbar Rating to 100 A: MCBs are small breakers
-  // and a 100 A bar is the standard minimum, so use it regardless of the MCB's rated
-  // current. In the catalogue an MCB's type is "MDRC" (also "MDRC-Himel" / "MDRCs"),
-  // not "MCB". Applies only when EVERY incoming breaker is an MDRC — if an MCCB/ACB is
-  // also present, the frame rule below wins so the bar isn't undersized.
-  const isMcb = (c: PanelComponent) => /^MDRC/i.test((c.type || "").trim()) || /\bMCB\b/i.test(c.type || "");
-  if (incoming.every(isMcb)) return 100;
-  const a = incoming.reduce((mx, c) => Math.max(mx, frameAmps(c)), 0);
-  if (!a) return 0;
-  return INCOMER_RATINGS.find((r) => r >= a) ?? INCOMER_RATINGS[INCOMER_RATINGS.length - 1];
-}
 
 // Shortest exact form: drop trailing zeros and the decimal point for whole numbers,
 // keep thousands separators (27.000→27, 1.500→1.5, 0.560→0.56, 166.500→166.5). The
