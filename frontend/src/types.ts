@@ -78,6 +78,9 @@ export interface KioskLvConfigInput {
   includeSwitchFuse: boolean;
   /** Kiosk LV build mode: "standard" = house-standard EDMS panel picker (default),
    *  "private" = build from the component search. */
+  /** No longer used. The kiosk once had a Standard-EDMS / Private-Sector switch; the Standard
+   *  Panels picker and the component search are both always available now, so the mode meant
+   *  nothing. Kept so kiosks saved with it still load. */
   lvSource?: "standard" | "private";
   /** Sizing-mode outgoing-breaker quantities, keyed by P-CSS breaker id (xt1…xt7). */
   qtys?: Record<string, number>;

@@ -23,6 +23,24 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**Kiosk LV: the Standard EDMS / Private Sector switch is gone.**
+
+It has been removed from the **Low** section. Nothing is lost by it: that switch only decided whether
+the **Standard Panels** picker was shown — it fed no price, no code and nothing on the offer.
+
+The picker is now always there, and the component search has always been available underneath it, so
+both ways of building the panel are open at the same time: pick the house-standard panel for the
+transformer's rating, or ignore it and search for components yourself.
+
+The Low section now reads: Panel details → Panel cost (live) → Standard Panels → Components → Panel
+type. Its subtitle changed from "standard or private build" to "details, components and sizing" to
+match.
+
+Kiosks already saved with the old setting still open exactly as before — the setting is simply no
+longer read, and new kiosks stop writing it.
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **Kiosk LV: the Standard EDMS / Private Sector switch moved down, above Components.**
 
 It used to sit at the very top of the **Low** section, above Panel details and the live cost. It now

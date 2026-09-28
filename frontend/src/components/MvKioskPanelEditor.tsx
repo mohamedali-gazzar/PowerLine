@@ -23,7 +23,7 @@ import {
 // so the engineer sizes it) and Private Sector (build from the component search). Both share the
 // ordinary LV component editor + sizing card, passed in as `lvEditor` (avoids a circular import).
 export const DEFAULT_KIOSK_LV: KioskLvConfigInput = {
-  iec: "eehc", lvConfig: "inout", lvMode: "sizing", includePf: false, pfBrand: "ABB", includeSwitchFuse: false, lvSource: "standard",
+  iec: "eehc", lvConfig: "inout", lvMode: "sizing", includePf: false, pfBrand: "ABB", includeSwitchFuse: false,
 };
 
 /** A collapsible accordion section, numbered chip + brand header. `warn` flags a section whose
@@ -546,9 +546,10 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor, defaultNam
         <MvTransformerPanelEditor p={p} upPanel={upPanel} insideKioskOnly onCode={setTrCode} onCost={setTrCostEgp} usdRate={usdRate} />
       </Section>
 
-      <Section n={3} title="Low" subtitle="LV panel — standard or private build" open={open.low} onToggle={() => toggle("low")}>
+      <Section n={3} title="Low" subtitle="LV panel — details, components and sizing" open={open.low} onToggle={() => toggle("low")}>
         <div className="space-y-3">
-          {/* The LV component editor + sizing card (Standard mode also shows the standard picker). */}
+          {/* Panel details + live cost, the Standard Panels picker, the component editor and the
+              sizing card — supplied by the configurator so this file needs no circular import. */}
           {lvEditor}
         </div>
       </Section>
@@ -639,37 +640,6 @@ function KioskAccessoriesEditor({ rows, checks, onCheck, onQty }: {
         <span>Accessories total</span>
         <span className="tabular-nums">{total.toLocaleString()} EGP</span>
       </div>
-    </div>
-  );
-}
-
-/**
- * "Standard EDMS / Private Sector" — how the kiosk's LV panel gets built. Rendered by the
- * configurator inside the LV editor, directly above Components, because that is what it governs:
- * the Standard picker and the component search below it. Panel details and the live cost sit above
- * it and read the same either way.
- */
-export function KioskLvSourceToggle({ p, upPanel }: {
-  p: LvPanel; upPanel: (id: string, patch: Partial<LvPanel>) => void;
-}) {
-  const lv = p.mvLvConfig ?? DEFAULT_KIOSK_LV;
-  const lvSource = lv.lvSource ?? "standard";
-  const setSource = (v: "standard" | "private") => upPanel(p.id, { mvLvConfig: { ...lv, lvSource: v } });
-  return (
-    <div>
-      <div className="inline-flex rounded-lg border border-line bg-surface p-0.5">
-        {([["standard", "Standard EDMS"], ["private", "Private Sector"]] as const).map(([m, label]) => (
-          <button key={m} type="button" onClick={() => setSource(m)}
-            className={`rounded-md px-3.5 py-1.5 text-sm font-bold transition-colors ${lvSource === m ? "bg-brand text-white shadow-soft" : "text-muted hover:text-brand-dark"}`}>
-            {label}
-          </button>
-        ))}
-      </div>
-      <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
-        {lvSource === "standard"
-          ? "Standard EDMS — pick the house-standard panel for the transformer's rating (it fills the components; you size the panel yourself below)."
-          : "Private Sector — build the panel yourself: search for components and add them, then size it below."}
-      </p>
     </div>
   );
 }
