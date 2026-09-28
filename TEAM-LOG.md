@@ -23,6 +23,24 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-28 · Mohamed's side · Claude
 
+**Kiosk Size is now visibly required.**
+
+A kiosk with no enclosure chosen showed a plain dash, so it was easy to miss — and without an
+enclosure there is no steel weight, which means no cost for it. The row now reads **Kiosk Size \***
+with a red asterisk, the dropdown sits in red with a red outline, and its empty option says
+**"— required —"** instead of "—".
+
+It already held the offer back from yesterday's change; this just makes it obvious on the screen
+before you get that far, using the same red-asterisk marker the Project tab uses.
+
+The two states do not collide: **red** means nothing is picked, **amber** means one is picked but the
+P-CSS rules do not allow it for that RMU and transformer.
+
+(Picked up the other side's "view prices now shows the RMU prices" fix on the way past — different
+file, no conflict.)
+
+## 2026-09-28 · Mohamed's side · Claude
+
 **MV quotations now get the same warnings as LV ones.**
 
 ⚠️ HEADS-UP — **an MV offer could be produced with no Project name, no Customer and no Revision No.**

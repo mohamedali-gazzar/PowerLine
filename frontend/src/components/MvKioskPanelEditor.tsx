@@ -473,14 +473,22 @@ export default function MvKioskPanelEditor({ s, p, upPanel, lvEditor, defaultNam
                 const sell = sellingOf(row.key);
                 const mainRow = (
                   <tr key={row.key} className="border-b border-line/50">
-                    <td className="py-1.5 pr-2 font-semibold text-ink">{row.label}</td>
+                    <td className="py-1.5 pr-2 font-semibold text-ink">
+                      {row.label}
+                      {/* Every kiosk needs an enclosure — without one there is no steel to cost,
+                          so the offer is held back until it is picked. */}
+                      {row.key === "size" && !sizeCode && <span className="text-red-500"> *</span>}
+                    </td>
                     <td className="py-1.5 pr-2">
                       {row.key === "size" ? (
                         <span className="inline-flex items-center gap-1">
                           <select value={sizeCode} onChange={(e) => setPrice("size", { code: e.target.value })}
                             title={sizeOptions.length ? `Only the enclosures the P-CSS Selector allows for this RMU and transformer: ${sizeOptions.join(", ")}` : undefined}
-                            className={`-ml-1 cursor-pointer border-0 bg-transparent px-1 text-sm font-semibold focus:outline-none focus:ring-0 dark:bg-transparent ${sizeStale ? "text-amber-600" : "text-ink"}`}>
-                            <option value="">—</option>
+                            className={`-ml-1 cursor-pointer rounded-md border-0 px-1 text-sm font-semibold focus:outline-none focus:ring-0 ${
+                              !sizeCode ? "bg-red-50/60 text-red-600 ring-1 ring-red-400 dark:bg-red-500/10"
+                              : sizeStale ? "bg-transparent text-amber-600 dark:bg-transparent"
+                              : "bg-transparent text-ink dark:bg-transparent"}`}>
+                            <option value="">— required —</option>
                             {sizeOptions.map((c) => <option key={c} value={c}>{c}</option>)}
                             {/* A size saved before the configuration changed stays selectable, so a
                                 kiosk never silently repriced itself into a different enclosure. */}
