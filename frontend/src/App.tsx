@@ -57,6 +57,14 @@ const megaphoneIcon = (
   </svg>
 );
 // A barcode — the product coding guide.
+const pdfIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6" />
+    <path d="M8 13h8" />
+    <path d="M8 17h5" />
+  </svg>
+);
 const codingIcon = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 5v14" />
@@ -199,6 +207,10 @@ export default function App() {
             <NavLink to="/coding" title="Coding guide" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>
               <span className="shrink-0">{codingIcon}</span>
               <span className={lbl}>Coding guide</span>
+            </NavLink>
+            <NavLink to="/pdf" title="Write on a PDF" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>
+              <span className="shrink-0">{pdfIcon}</span>
+              <span className={lbl}>PDF notes</span>
             </NavLink>
             {can("announcements.manage") && (
               <NavLink to="/announcements" title="Announcements" className={({ isActive }) => `nav-item ${rowJustify} ${isActive ? "nav-item-active" : ""}`}>

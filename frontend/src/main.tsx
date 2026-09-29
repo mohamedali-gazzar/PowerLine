@@ -27,6 +27,9 @@ const AnnouncementsAdminPage = React.lazy(() => import("./pages/AnnouncementsAdm
 // Coding guide — reference material carrying the whole approved code range, read now and
 // then rather than every day, so it stays out of the first load.
 const CodingGuidePage = React.lazy(() => import("./pages/CodingGuidePage"));
+// Write on a PDF  opened now and then, and it carries the PDF reader AND writer, so it is
+// only downloaded when someone actually goes there.
+const PdfTextPage = React.lazy(() => import("./pages/PdfTextPage"));
 // Brand fonts — self-hosted via @fontsource so local dev stays offline-capable.
 import "@fontsource/poppins/300.css";
 import "@fontsource/poppins/400.css";
@@ -138,6 +141,14 @@ function Gate() {
           }
         />
         <Route path="mv" element={<MvWorkspace />} />
+        <Route
+          path="pdf"
+          element={
+            <React.Suspense fallback={<div className="skeleton h-64" />}>
+              <PdfTextPage />
+            </React.Suspense>
+          }
+        />
         <Route path="mv/:id" element={<MvWorkspace />} />
         <Route path="lv" element={<LvQtnListPage />} />
         <Route path="lv/qtn/:id" element={<LvConfiguratorPage />} />

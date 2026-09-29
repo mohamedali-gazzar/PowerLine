@@ -23,6 +23,36 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-29 · Mohamed's side · Claude
 
+**New tool: write on a PDF.** "PDF notes" in the left sidebar, open to everyone. Open a PDF, click
+anywhere to type, drag a note to move it, download it again. Size, colour, bold, zoom, any number of
+pages.
+
+**The download is a real PDF, not a picture of one** — the original keeps its own text and vectors and
+only the typed words are added on top. Rasterising it (which is what the offer exporter does, for its
+own reasons) would make a client's spec unsearchable and several times bigger, so `pdf/pdfText.ts`
+writes into the document with pdf-lib instead. New dependency: `pdf-lib` in the frontend, and the
+page is lazy-loaded so neither it nor the PDF machinery weighs on the everyday app.
+
+Two parts are worth knowing about, because both are easy to get quietly wrong:
+
+- **Page rotation.** pdf.js reports a page the way it is DISPLAYED, so a click on a landscape scan is
+  in turned coordinates while pdf-lib draws in the page's own untouched space. `viewToUser` maps
+  between them and is tested against a real PDF reader for all four rotations.
+- **Arabic.** The standard PDF fonts are WinAnsi and cannot write it at all. Anything they cannot
+  encode is drawn by the BROWSER onto a canvas (which shapes and joins the letters properly) and
+  stamped on as a transparent picture; everything else stays real, selectable text.
+
+Nothing is uploaded and nothing is saved — it is not attached to a quotation. Mohamed has been asked
+whether he would rather have it inside a QTN.
+
+**The Specs tab is now just the Project specifications card**, at Mohamed's request. The written Specs
+list, Comments of Client and Attachments are gone from it. None of the three appeared on any offer
+document, so no quotation or printed offer changed — but 126 quotations still hold text in the Specs
+list, which is saved and simply no longer shown, and **uploaded attachments are now unreachable in the
+app** although the files are untouched on the server. Say so before anyone goes looking for them.
+
+## 2026-09-29 · Mohamed's side · Claude
+
 **The VSD Accessories tick box was adding nothing on the live site. Fixed.**
 
 Mohamed reported it after publishing. The drives were fine; ticking Accessories did nothing at all,
