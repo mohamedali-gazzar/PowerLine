@@ -31,6 +31,9 @@ let uidCtr = 0;
 export const uid = () => `u${++uidCtr}_${Math.random().toString(36).slice(2, 7)}`;
 
 // ── Types ────────────────────────────────────────────────────────────────────
+// Type only  erased at build, so the state module still pulls in nothing from the PDF side.
+import type { TextMark as PdfTextMark } from "../pdf/pdfText";
+
 export interface PanelComponent {
   id: string;
   section: string;
@@ -369,6 +372,10 @@ export interface LvState {
   selectivityRequired?: string; // "Yes" | "No"
   specs?: SpecNote[];          // project specification entries
   clientComments?: SpecNote[]; // the client's comments/requirements
+  // Text typed onto an attached PDF (Documents tab), keyed by the attachment's id. The stored
+  // file is never changed  these are laid over it when a marked-up copy is downloaded. Optional
+  // and read through `?? []`, so every quotation saved before it existed opens as it always did.
+  pdfNotes?: Record<string, PdfTextMark[]>;
 }
 export const YES_NO = ["No", "Yes"] as const;
 // ── "Standard Panels" option lists (Components card → Standard Panels) ───────

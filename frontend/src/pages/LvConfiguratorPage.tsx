@@ -74,6 +74,7 @@ import {
 import ReturnForRevisionModal, { type ReturnComment } from "../components/ReturnForRevisionModal";
 import EdmsStandardWarningModal from "../components/EdmsStandardWarningModal";
 import { useDialogs, type ConfirmOptions } from "../components/ConfirmModal";
+import QtnDocuments from "../components/QtnDocuments";
 import { useAuth } from "../auth/AuthContext";
 import wdFldImg from "../assets/wd-fld.png";
 import wdRhdImg from "../assets/wd-rhd.png";
@@ -92,8 +93,8 @@ import { panelPoles, POLE_CM, POLE_KINDS, GROUP_LABEL, KIND_LABEL, type PoleGrou
 import { stdPanel, applyStdPanel, STD_EDMS_KVA } from "../lv/standardEdms";
 import { stdAts, applyStdAts, stdAtsRatings, atsBreakersFor, type StdAtsVariant } from "../lv/standardAtsEdms";
 
-type Tab = "project" | "pricing" | "specs" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "sizing" | "summary" | "mv" | "kioskAnalysis";
-const TABS: Tab[] = ["project", "pricing", "specs", "panels", "technical", "commercial", "material", "spare", "selectivity"];
+type Tab = "project" | "pricing" | "specs" | "documents" | "panels" | "technical" | "commercial" | "material" | "spare" | "selectivity" | "sizing" | "summary" | "mv" | "kioskAnalysis";
+const TABS: Tab[] = ["project", "pricing", "specs", "documents", "panels", "technical", "commercial", "material", "spare", "selectivity"];
 
 // How many edits Undo/Redo can step through. Text fields record one step PER KEYSTROKE, so the
 // old 60 was used up after a few words and undo felt short-lived; 1000 reaches far further back.
@@ -1455,7 +1456,7 @@ export default function LvConfiguratorPage() {
     ? [["project", "Project"], ["commercial", "Commercial Offer"]]
     : isSpareQtn
     ? [["project", "Project"], ["pricing", "Pricing Settings"], ["spare", "Spare Parts"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"], ["summary", "Summary"]]
-    : [["project", "Project"], ["pricing", "Pricing Settings"], ["specs", "Specs"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"],
+    : [["project", "Project"], ["pricing", "Pricing Settings"], ["specs", "Specs"], ["documents", "Documents"], ["panels", "Panels"], ["technical", "Technical Offer"], ["commercial", "Commercial Offer"], ["material", "Material List"],
        ...(isEdmsQtn ? [] : [["selectivity", "Selectivity"] as [Tab, string]]),
        ["summary", "Summary"]];
   // The remembered tab can be one this QTN doesn't have (a QTN opened on
@@ -2495,6 +2496,12 @@ export default function LvConfiguratorPage() {
         {activeTab === "project" && <ProjectTab s={s} up={up} qtnNum={qtnNum} onRenameQtn={renameQtnNumber} />}
         {activeTab === "pricing" && (isMvQtn ? <MvPricingSettings s={s} up={up} /> : <PricingTab s={s} up={up} />)}
         {activeTab === "specs" && (isMvQtn ? <MvEmptyTab label="Specs" /> : <SpecsTab s={s} up={up} readOnly={sharedReadOnly} />)}
+        {/* A quotation's own files, and typing on the PDFs among them. Its own component: the
+            PDF machinery is heavy and has nothing to do with configuring panels. */}
+        {activeTab === "documents" && (isMvQtn ? <MvEmptyTab label="Documents" /> : (
+          <QtnDocuments qtnId={rec?.id ?? ""} readOnly={sharedReadOnly}
+            notes={s.pdfNotes ?? {}} onNotes={(next) => up({ pdfNotes: next })} />
+        ))}
         {activeTab === "panels" && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} reorderPanels={reorderPanels} canReorder={!sharedReadOnly} panelBadge={panelBadge} freshIds={freshPanels}
             onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}

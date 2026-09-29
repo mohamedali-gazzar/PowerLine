@@ -23,6 +23,38 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-29 · Mohamed's side · Claude
 
+**Writing on a PDF now lives inside a quotation too — new "Documents" tab**, between Specs and
+Panels, on LV quotations. Upload the client's files there; any PDF gets a "Write on it" button, and
+what is typed on it is **saved with the QTN**, so it comes back for whoever opens it next and is
+shared and revised like everything else on the quotation.
+
+This also puts attachments back, in a better place than the Specs tab they were removed from earlier
+today.
+
+How it is put together, because the split matters:
+
+- The FILES stay where they were — their own table on the server (`LvAttachment`), untouched, so
+  nothing was migrated and the endpoints are the ones that were always there.
+- The NOTES go in the QTN state under `pdfNotes`, keyed by the file's id. Optional and always read
+  through `?? {}`, so every quotation saved before today opens exactly as it did.
+- The stored PDF is never rewritten. The notes are laid over it only when a marked-up copy is
+  downloaded, so the original a client sent is always still the original.
+
+The writing surface itself moved to `pdf/PdfEditor`, shared by the Documents tab and the standalone
+tool in the sidebar, so the fiddly part exists once. It keeps its notes internally and reports them
+on a delay — a drag fires a position on every mouse move, and reporting each one would save the
+quotation dozens of times for one drag.
+
+**The sidebar tool stays.** A file kept with a quotation goes through the server, which caps a
+request at 3 MB; the standalone tool takes a PDF up to 40 MB because it keeps nothing. Worth knowing
+before anyone assumes the two are the same thing.
+
+Checked end to end on a real quotation: uploaded, opened the stored file, saved notes, reopened the
+quotation and they were still there, then removed the file and watched its notes go with it. The
+test quotation was put back as it was.
+
+## 2026-09-29 · Mohamed's side · Claude
+
 **New tool: write on a PDF.** "PDF notes" in the left sidebar, open to everyone. Open a PDF, click
 anywhere to type, drag a note to move it, download it again. Size, colour, bold, zoom, any number of
 pages.
