@@ -23,6 +23,39 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-29 · Mohamed's side · Claude
 
+**The VSD Accessories tick box was adding nothing on the live site. Fixed.**
+
+Mohamed reported it after publishing. The drives were fine; ticking Accessories did nothing at all,
+and said nothing either.
+
+**Cause: the MCC Excel file cannot carry them.** "Combinations Database - MCC.xlsx" has columns for
+the starters and for the control block — and nowhere to put the VSD accessories or the spec lines,
+which live in the same `mcc` section. Loading that file back in stored exactly what the file says the
+section contains, so the drive rows survived (they ARE in the file) and the other two were deleted.
+Yesterday's top-up could not repair it either: it judged "already there" on the drive rows alone, saw
+them, and returned without looking at the accessories.
+
+Three changes, deliberately overlapping so no single one has to be right:
+
+1. **Saving the MCC section keeps them** (`keepMccExtras`) — a re-upload of that file no longer
+   deletes anything it has no column for. An upload that DOES bring its own list still wins.
+2. **The top-up checks the three pieces separately**, so it repairs a section that already lost them
+   instead of stopping at the drive rows.
+3. **The app falls back to the copy shipped in the build** when the published catalogue carries no
+   accessories or spec. This is the one that fixes it for Mohamed with no action on his side — no
+   re-publish, no re-upload.
+
+Verified against the real thing, not a theory: rebuilt a published catalogue in the exact broken shape
+(17 drive rows, no accessories, no spec), pointed the app at it, and the builder produced all 7 items
+and the spec strip. The server-side repair was confirmed on the same broken row. Local database put
+back to where it was afterwards; no quotation touched.
+
+**Watch for this shape of bug elsewhere.** Any section whose Excel file is narrower than what the
+section stores has the same trap — the upload silently deletes the difference. `MCC_EXTRA_KEYS` in
+`pricing-lv-combos.controller.ts` is where to add the next one.
+
+## 2026-09-29 · Mohamed's side · Claude
+
 **VSD: getting it onto the live site without retyping seventeen rows.**
 
 Adding VSD to the bundled combinations was not enough to make it appear for anyone. The bundled file

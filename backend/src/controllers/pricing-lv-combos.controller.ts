@@ -322,6 +322,32 @@ export async function combosForPayload(): Promise<Record<string, unknown> | null
 }
 
 
+const nonEmptyArray = (v: unknown): boolean => Array.isArray(v) && v.length > 0;
+
+/**
+ * The parts of the mcc section the engineers' MCC workbook cannot carry.
+ *
+ * That workbook is the reference for the starters and the control block, and the screen loads it
+ * directly — so what comes back from a download → edit → upload is exactly those two lists. Stored
+ * as-is, the upload DELETES everything else the section holds, which is how a published catalogue
+ * ended up with a VSD starter and no accessories: the drive rows are in the file, the tick-box list
+ * and the spec strip are not.
+ *
+ * So a save carries them forward from what is already stored. An upload that DOES bring its own
+ * (a full combos.json, say) still wins — only a missing or empty list is filled in.
+ */
+export const MCC_EXTRA_KEYS = ["vsdAccessories", "vsdSpec"] as const;
+
+export function keepMccExtras(incoming: unknown, existing: unknown): void {
+  const isPlain = (v: unknown): v is Record<string, unknown> =>
+    !!v && typeof v === "object" && !Array.isArray(v);
+  if (!isPlain(incoming) || !isPlain(existing)) return;
+  for (const k of MCC_EXTRA_KEYS) {
+    if (nonEmptyArray(incoming[k])) continue;      // the upload brought its own
+    if (nonEmptyArray(existing[k])) incoming[k] = existing[k];
+  }
+}
+
 /**
  * Add the VSD starter to an mcc section that predates it. Additive and idempotent.
  *
@@ -333,6 +359,11 @@ export async function combosForPayload(): Promise<Record<string, unknown> | null
  * Nothing existing is edited or removed, and a second run does nothing. It does NOT publish — the
  * owner's Save on the Combinations screen does that, so a half-finished price edit is never
  * published as a side effect of opening a screen.
+ *
+ * The three pieces are checked SEPARATELY, and that matters: the engineers' MCC workbook holds the
+ * starters and the control block and has no room for the accessories or the spec, so downloading it
+ * and loading it back keeps every drive row and silently drops the other two. Judging "already
+ * there" on the rows alone would leave that section with a VSD starter whose tick box adds nothing.
  */
 export async function backfillVsdStarter(by = "VSD starter backfill"): Promise<boolean> {
   const row = await prisma.lvCombo.findUnique({ where: { section: "mcc" } });
@@ -348,11 +379,22 @@ export async function backfillVsdStarter(by = "VSD starter backfill"): Promise<b
     return false;                                           // a corrupt row is left well alone
   }
   if (!Array.isArray(value?.combos)) return false;
-  if (value.combos.some((m: any) => m?.kind === "VSD")) return false; // already there
 
-  value.combos.push(...vsdRows);
-  if (!value.vsdAccessories) value.vsdAccessories = bundled.vsdAccessories;
-  if (!value.vsdSpec) value.vsdSpec = bundled.vsdSpec;
+  let changed = false;
+  if (!value.combos.some((m: any) => m?.kind === "VSD")) {
+    value.combos.push(...vsdRows);
+    changed = true;
+  }
+  if (!nonEmptyArray(value.vsdAccessories)) {
+    value.vsdAccessories = bundled.vsdAccessories;
+    changed = true;
+  }
+  if (!nonEmptyArray(value.vsdSpec)) {
+    value.vsdSpec = bundled.vsdSpec;
+    changed = true;
+  }
+  if (!changed) return false;
+
   await prisma.lvCombo.update({
     where: { section: "mcc" },
     data: { payload: JSON.stringify(value), updatedBy: by },
@@ -426,6 +468,15 @@ export async function putCombo(req: Request, res: Response) {
     const by = req.userEmail ?? "";
     const existing = await prisma.lvCombo.findUnique({ where: { section } });
     const before = existing ? summariseAny(section, JSON.parse(existing.payload)) : "(none)";
+    // An MCC workbook cannot carry the VSD accessories or the spec, so keep the stored
+    // ones rather than letting a routine re-upload of that file delete them.
+    if (section === "mcc" && existing) {
+      try {
+        keepMccExtras(value, JSON.parse(existing.payload));
+      } catch {
+        /* an unreadable stored row has nothing to keep */
+      }
+    }
     // Store the ORIGINAL, not zod's output — see SECTION_SCHEMA.
     const payload = JSON.stringify(value);
     const after = summariseAny(section, value);

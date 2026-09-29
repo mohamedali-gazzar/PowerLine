@@ -1,7 +1,10 @@
 // Circuit-combination generators (RPT-03). Each returns editable line items —
 // "All auto-selected components are default recommendations only."
 
-import { COMBOS, COMPONENTS, findByName, type DbComponent, type PfcParts } from "./catalog";
+import {
+  COMBOS, COMPONENTS, findByName, bundledVsdAccessories, bundledVsdSpec,
+  type DbComponent, type PfcParts,
+} from "./catalog";
 
 export interface ComboLine {
   qty: number;
@@ -276,8 +279,22 @@ export function mccAlias(desc: string): string {
 
 /** The VSD starter's kind, as it appears in the Starter dropdown. */
 export const VSD_KIND = "VSD";
-/** The fixed facts shown beside the VSD builder — data, so they can be corrected without a release. */
-export const vsdSpec = (): string[] => ((COMBOS.mcc as any).vsdSpec as string[] | undefined) ?? [];
+/**
+ * The tick-box accessories for a drive circuit, and the fixed facts shown beside the builder.
+ *
+ * Both are data so they can be corrected without a release — but the MCC workbook on the
+ * Combinations screen has no room for either, so a catalogue published from an uploaded
+ * workbook carries the drive rows and NOT these. They fall back to the copy shipped in this
+ * build, which is the difference between the tick box working and it adding nothing.
+ */
+export const vsdAccessories = (): { qty: number; desc: string }[] => {
+  const a = COMBOS.mcc.vsdAccessories;
+  return Array.isArray(a) && a.length ? a : bundledVsdAccessories();
+};
+export const vsdSpec = (): string[] => {
+  const s = COMBOS.mcc.vsdSpec;
+  return Array.isArray(s) && s.length ? s : bundledVsdSpec();
+};
 
 /**
  * A variable-speed-drive starter.
@@ -301,8 +318,7 @@ export function buildVsd(kw: string, cb: DbComponent | null, withAcc: boolean, q
     out.push({ qty: n, baseQty: 1, desc: p, comp: findByName(p), groupLabel: label, scalable: true });
   }
   if (withAcc) {
-    const acc = ((COMBOS.mcc as any).vsdAccessories as { qty: number; desc: string }[] | undefined) ?? [];
-    for (const a of acc) {
+    for (const a of vsdAccessories()) {
       out.push({ qty: n * a.qty, baseQty: a.qty, desc: a.desc, comp: findByName(a.desc), groupLabel: label, scalable: true });
     }
   }

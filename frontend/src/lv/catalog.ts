@@ -85,7 +85,17 @@ export interface PfcParts {
 export interface CombosData {
   ats: Record<"1oo2" | "2oo3", Record<string, { group: string; items: { qty: number; desc: string }[] }[]>>;
   photocell: { ratings: { a: number; contactor: string; aux: string }[]; fixed: { qty: number; desc: string }[] };
-  mcc: { combos: { kind: string; kw: string; type: number; parts: string[] }[]; control: { qty: number; desc: string }[] };
+  mcc: {
+    combos: { kind: string; kw: string; type: number; parts: string[] }[];
+    control: { qty: number; desc: string }[];
+    // The VSD starter's tick-box accessories and the spec strip shown beside it.
+    // OPTIONAL because the engineers' MCC workbook has no room for either: it carries
+    // the starters and the control block and nothing else, so a catalogue published
+    // from an uploaded workbook arrives without them. Both fall back to the copy
+    // shipped in this build — see bundledVsdAccessories / bundledVsdSpec.
+    vsdAccessories?: { qty: number; desc: string }[];
+    vsdSpec?: string[];
+  };
   wd: { frame: string; poles: string; fp: string; mp: string }[];
   motorized: Record<string, string[]>;
   // P.F.C parts map — absent until the "P.F.C" sheet is uploaded; buildPfc falls back
@@ -104,6 +114,24 @@ export interface CombosData {
 /// every `import { COMBOS }` binding keeps working. The bundled JSON below is the
 /// cold-start value and the fallback when the database has no combinations.
 export const COMBOS = combosJson as unknown as CombosData;
+
+// The VSD extras shipped in THIS build, deep-copied at module load — before anything
+// can install a published catalogue over COMBOS, and immune to it afterwards.
+//
+// They need a fallback because the round trip on the Combinations screen loses them:
+// the MCC workbook holds the starters and the control block, so downloading it and
+// loading it back keeps every drive row and takes the accessories and the spec away.
+// The catalogue published from that save then has a VSD starter whose tick box adds
+// nothing at all. The database is repaired on the server; this keeps the builder whole
+// for any browser still holding such a catalogue.
+const BUNDLED_VSD_ACCESSORIES: { qty: number; desc: string }[] =
+  JSON.parse(JSON.stringify((combosJson as { mcc?: { vsdAccessories?: unknown } }).mcc?.vsdAccessories ?? []));
+const BUNDLED_VSD_SPEC: string[] =
+  JSON.parse(JSON.stringify((combosJson as { mcc?: { vsdSpec?: unknown } }).mcc?.vsdSpec ?? []));
+/** The VSD tick-box accessories shipped in this build. */
+export const bundledVsdAccessories = (): { qty: number; desc: string }[] => BUNDLED_VSD_ACCESSORIES;
+/** The VSD spec lines shipped in this build. */
+export const bundledVsdSpec = (): string[] => BUNDLED_VSD_SPEC;
 
 /** Swap the live combination templates in place. Callers must then rebuild
  *  anything derived from them — see recomputeCombosDerived() in combos.ts. */
