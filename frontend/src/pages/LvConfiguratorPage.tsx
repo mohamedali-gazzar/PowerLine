@@ -32,9 +32,9 @@ import {
   spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanelCached, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, STONE_PAINT_USD, stonePaintUnits, mvDefaultName, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog, pickRates, ratesEqual,
   panelLayout, panelNumbers, commonNamePrefix, resortByGroup, reorderVisiblePanels, reorderVisiblePanelsMany, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
-  withProjectSpecs, YES_NO, defaultSpecs, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS, DEFAULT_MV_COMMERCIAL, DEFAULT_MV_CABLE_EGP_PER_M,
+  withProjectSpecs, YES_NO, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS, DEFAULT_MV_COMMERCIAL, DEFAULT_MV_CABLE_EGP_PER_M,
   type LvState, type LvPanel, type PanelComponent, type MatRow, type PanelCalc, type PanelTypeItem, type TermsSection, type ExportCheck, type SummaryNote, type MvCommercial, type MvPanelType,
-  type SpecNote, type SpecSubNote, type ProjectSpecKey, type SizingReviewRow, type CustomOfferItem, type ScratchPad,
+  type ProjectSpecKey, type SizingReviewRow, type CustomOfferItem, type ScratchPad,
 } from "../lv/store";
 // (MvPanel type is referenced only through LvState.mvPanels; MvPanelType is used directly.)
 import { writeBackup, readBackup, clearBackup, unsavedWork, type Backup } from "../lv/offlineBackup";
@@ -67,8 +67,8 @@ import type { PdfPageImage } from "../lv/renderPdfPages";
 import OfferView from "../components/OfferView";
 import type { GeneratedOffer, RmuConfigInput, TransformerConfigInput } from "../types";
 import {
-  api, getToken, MAX_ATTACHMENT_BYTES, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
-  type QtnAttachmentDto, type QtnStatus,
+  api, getToken, QTN_STATUS_LABEL, QTN_STATUS_STYLE,
+  type QtnStatus,
   type QtnEventDto, type TransformerRow,
 } from "../api";
 import ReturnForRevisionModal, { type ReturnComment } from "../components/ReturnForRevisionModal";
@@ -2494,7 +2494,7 @@ export default function LvConfiguratorPage() {
             blocks below never match its activeTab, so its interface grows one tab at a time. */}
         {activeTab === "project" && <ProjectTab s={s} up={up} qtnNum={qtnNum} onRenameQtn={renameQtnNumber} />}
         {activeTab === "pricing" && (isMvQtn ? <MvPricingSettings s={s} up={up} /> : <PricingTab s={s} up={up} />)}
-        {activeTab === "specs" && (isMvQtn ? <MvEmptyTab label="Specs" /> : <SpecsTab s={s} up={up} qtnId={rec?.id ?? ""} readOnly={sharedReadOnly} />)}
+        {activeTab === "specs" && (isMvQtn ? <MvEmptyTab label="Specs" /> : <SpecsTab s={s} up={up} readOnly={sharedReadOnly} />)}
         {activeTab === "panels" && (
           <PanelsTab s={s} sel={sel} up={up} upPanel={upPanel} reorderPanels={reorderPanels} canReorder={!sharedReadOnly} panelBadge={panelBadge} freshIds={freshPanels}
             onAdd={addPanel} onDel={removePanel} onClone={clonePanel} onOpenInOffer={openPanelInOffer}
@@ -2669,10 +2669,9 @@ function OfferBlocked({ issues, warnings = [] }: { issues: string[]; warnings?: 
 }
 
 // ── Specs ───────────────────────────────────────────────────────────────────
-// The project's specification, in one place: the panel fields that are normally
-// identical across a job, the written spec, the client's comments, and the
-// client's files. Everything here is saved with the QTN, so whoever opens the
-// quotation sees the same data.
+// The panel fields that are normally identical across a job, set once here and
+// pushed onto every panel. The written spec, the client's comments and the client's
+// files used to sit under them; the owner asked for this page to be that card alone.
 
 /** The panel fields the Specs tab drives project-wide, with their option lists. */
 const SPEC_FIELDS: readonly (readonly [ProjectSpecKey, string, readonly string[]])[] = [
@@ -2688,242 +2687,8 @@ const SPEC_FIELDS: readonly (readonly [ProjectSpecKey, string, readonly string[]
 // chosen here and while a QTN still has no panels.
 const SPEC_FALLBACK = newPanel();
 
-/** Human file size for the attachments list. */
-function fmtBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-/** A picked file as plain base64 — FileReader yields a data: URL, so drop its prefix. */
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
-    r.onerror = () => reject(r.error ?? new Error("Could not read the file."));
-    r.readAsDataURL(file);
-  });
-}
-
-/** A two-level add / edit / remove list: headers, each holding sub-titles.
- *  "Specs" and "Comments of Client" behave identically, so they share this.
- *  `defaults` (Specs only) offers the standard headers with one press. */
-function SpecNoteList({ heading, hint, addLabel, headerPlaceholder, notes, onChange, readOnly, defaults }: {
-  heading: string; hint: string; addLabel: string; headerPlaceholder: string;
-  notes: SpecNote[]; onChange: (next: SpecNote[]) => void; readOnly: boolean;
-  defaults?: () => SpecNote[];
-}) {
-  const add = () => onChange([...notes, { id: uid(), title: "", text: "", items: [] }]);
-  const patch = (id: string, p: Partial<SpecNote>) =>
-    onChange(notes.map((n) => (n.id === id ? { ...n, ...p } : n)));
-  const remove = (id: string) => onChange(notes.filter((n) => n.id !== id));
-  // Sub-titles live on their header, so every sub edit is a patch of that header.
-  const subs = (n: SpecNote) => n.items ?? [];
-  const addSub = (n: SpecNote) => patch(n.id, { items: [...subs(n), { id: uid(), title: "", text: "" }] });
-  const patchSub = (n: SpecNote, sid: string, p: Partial<SpecSubNote>) =>
-    patch(n.id, { items: subs(n).map((it) => (it.id === sid ? { ...it, ...p } : it)) });
-  const removeSub = (n: SpecNote, sid: string) =>
-    patch(n.id, { items: subs(n).filter((it) => it.id !== sid) });
-  // Appends only the standard headers not already in the list — never replaces
-  // what is there, so pressing it twice is harmless.
-  const addDefaults = () => {
-    if (!defaults) return;
-    const have = new Set(notes.map((n) => n.title.trim().toLowerCase()));
-    const missing = defaults().filter((d) => !have.has(d.title.trim().toLowerCase()));
-    if (missing.length) onChange([...notes, ...missing]);
-  };
-  const defaultsBtn = defaults && (
-    <button type="button" onClick={addDefaults} disabled={readOnly}
-      title={`Add the standard headers (${defaults().map((d) => d.title).join(", ")}) that aren't listed yet`}
-      className="btn-ghost shrink-0 disabled:opacity-40">+ Standard headers</button>
-  );
-  return (
-    <div className="card p-5">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="sec-head mb-0">{heading}</h2>
-          <p className="mt-1 text-xs text-muted">{hint}</p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {defaultsBtn}
-          <button type="button" onClick={add} disabled={readOnly}
-            className="btn-ghost shrink-0 disabled:opacity-40">{addLabel}</button>
-        </div>
-      </div>
-      {notes.length === 0 ? (
-        <p className="mt-3 rounded-lg bg-surface p-6 text-center text-sm text-muted">
-          Nothing yet — press <b>{addLabel}</b>{defaults ? <> or <b>+ Standard headers</b></> : null}.
-        </p>
-      ) : (
-        <ol className="mt-3 space-y-2">
-          {notes.map((n, i) => (
-            <li key={n.id} className="rounded-lg border border-line bg-surface/40 p-3">
-              {/* Header */}
-              <div className="flex items-center gap-2">
-                <span className="w-5 shrink-0 text-xs font-bold text-muted">{i + 1}.</span>
-                <input className="input flex-1 font-bold" value={n.title} disabled={readOnly}
-                  placeholder={headerPlaceholder} onChange={(e) => patch(n.id, { title: e.target.value })} />
-                <button type="button" onClick={() => addSub(n)} disabled={readOnly}
-                  title="Add a sub-title under this header"
-                  className="shrink-0 rounded px-2 py-1 text-[11px] font-bold text-brand hover:bg-white disabled:opacity-40">+ Sub-title</button>
-                <button type="button" onClick={() => remove(n.id)} disabled={readOnly}
-                  title="Remove this header and everything under it"
-                  className="shrink-0 rounded p-1 text-muted transition-colors hover:bg-white hover:text-red-600 disabled:opacity-40">✕</button>
-              </div>
-              {/* The header's own note — kept for entries written before sub-titles
-                  existed, so it only appears once it holds text. */}
-              {n.text && (
-                <div className="mt-2 pl-7">
-                  <AutoTextarea value={n.text} disabled={readOnly}
-                    onChange={(v) => patch(n.id, { text: v })} />
-                </div>
-              )}
-              {/* Sub-titles */}
-              {subs(n).length > 0 && (
-                <ol className="mt-2 space-y-1.5 pl-7">
-                  {subs(n).map((it, j) => (
-                    <li key={it.id} className="rounded-md border border-line/70 bg-white p-2">
-                      <div className="flex items-center gap-2">
-                        <span className="shrink-0 text-[11px] font-bold text-muted">{i + 1}.{j + 1}</span>
-                        <input className="input flex-1" value={it.title} disabled={readOnly}
-                          placeholder="Sub-title" onChange={(e) => patchSub(n, it.id, { title: e.target.value })} />
-                        <button type="button" onClick={() => removeSub(n, it.id)} disabled={readOnly}
-                          title="Remove this sub-title"
-                          className="shrink-0 rounded p-1 text-muted transition-colors hover:bg-surface hover:text-red-600 disabled:opacity-40">✕</button>
-                      </div>
-                      <div className="mt-1.5 pl-8">
-                        <AutoTextarea value={it.text} disabled={readOnly} placeholder="Write the specification…"
-                          onChange={(v) => patchSub(n, it.id, { text: v })} />
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
-  );
-}
-
-/** The client's files. These live in their own table on the server (not in the
- *  QTN state, which is re-saved on every keystroke), so they are fetched and
- *  uploaded separately from everything else on this tab. */
-function AttachmentsCard({ qtnId, readOnly }: { qtnId: string; readOnly: boolean }) {
-  const { confirm, dialogs } = useDialogs();
-  const [files, setFiles] = useState<QtnAttachmentDto[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const pick = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!qtnId) return;
-    let alive = true;
-    api.qtns.attachments
-      .list(qtnId)
-      .then((r) => { if (alive) setFiles(r); })
-      .catch(() => { if (alive) { setFiles([]); setError("Could not load the attachments."); } });
-    return () => { alive = false; };
-  }, [qtnId]);
-
-  const onPicked = async (picked: FileList | null) => {
-    if (!picked?.length || !qtnId) return;
-    setBusy(true);
-    setError("");
-    // One at a time: each file is its own request, and the first failure (usually
-    // "too large") should not lose the ones that already went up.
-    for (const f of Array.from(picked)) {
-      if (f.size > MAX_ATTACHMENT_BYTES) {
-        setError(`"${f.name}" is ${fmtBytes(f.size)} — the limit is ${fmtBytes(MAX_ATTACHMENT_BYTES)} per file.`);
-        continue;
-      }
-      try {
-        const data = await fileToBase64(f);
-        const row = await api.qtns.attachments.upload(qtnId, {
-          name: f.name, mime: f.type || "application/octet-stream", data,
-        });
-        setFiles((prev) => [...(prev ?? []), row]);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : `Could not upload "${f.name}".`);
-      }
-    }
-    setBusy(false);
-    if (pick.current) pick.current.value = ""; // so re-picking the same file fires onChange
-  };
-
-  const remove = async (f: QtnAttachmentDto) => {
-    if (
-      !(await confirm({
-        title: "Remove this file",
-        message: `"${f.name}" is removed from this quotation.`,
-        confirmLabel: "Remove",
-        tone: "danger",
-      }))
-    )
-      return;
-    try {
-      await api.qtns.attachments.remove(qtnId, f.id);
-      setFiles((prev) => (prev ?? []).filter((x) => x.id !== f.id));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not remove the file.");
-    }
-  };
-
-  return (
-    <div className="card p-5">
-      {dialogs}
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="sec-head mb-0">Attachments</h2>
-          <p className="mt-1 text-xs text-muted">
-            Client specifications, drawings, e-mails — saved with the QTN, so they open with it.
-            Up to {fmtBytes(MAX_ATTACHMENT_BYTES)} per file.
-          </p>
-        </div>
-        <button type="button" onClick={() => pick.current?.click()} disabled={readOnly || busy || !qtnId}
-          className="btn-ghost shrink-0 disabled:opacity-40">{busy ? "Uploading…" : "+ Upload files"}</button>
-        <input ref={pick} type="file" multiple className="hidden"
-          onChange={(e) => onPicked(e.target.files)} />
-      </div>
-      {error && (
-        <p className="mt-3 rounded-md border border-red-400/50 bg-red-500/10 px-2 py-1 text-[11px] font-semibold text-red-600">
-          {error}
-        </p>
-      )}
-      {files === null ? (
-        <p className="mt-3 text-sm text-muted">Loading…</p>
-      ) : files.length === 0 ? (
-        <p className="mt-3 rounded-lg bg-surface p-6 text-center text-sm text-muted">
-          No files attached yet.
-        </p>
-      ) : (
-        <ul className="mt-3 divide-y divide-line rounded-lg border border-line">
-          {files.map((f) => (
-            <li key={f.id} className="flex items-center gap-3 px-3 py-2">
-              <a href={api.qtns.attachments.link(qtnId, f.id)} target="_blank" rel="noreferrer"
-                className="min-w-0 flex-1 truncate text-sm font-semibold text-ink hover:text-brand-dark hover:underline"
-                title={`Open ${f.name}`}>
-                {f.name}
-              </a>
-              <span className="shrink-0 text-xs text-muted">{fmtBytes(f.size)}</span>
-              <span className="hidden shrink-0 text-xs text-muted sm:inline">
-                {f.byEmail || "—"} · {fmtDate(String(f.createdAt).slice(0, 10))}
-              </span>
-              <a href={api.qtns.attachments.link(qtnId, f.id, true)} download={f.name}
-                title="Download" className="shrink-0 rounded p-1 text-muted hover:bg-surface hover:text-brand-dark">⬇</a>
-              <button type="button" onClick={() => remove(f)} disabled={readOnly}
-                title="Remove this file"
-                className="shrink-0 rounded p-1 text-muted transition-colors hover:bg-surface hover:text-red-600 disabled:opacity-40">✕</button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function SpecsTab({ s, up, qtnId, readOnly }: {
-  s: LvState; up: (p: Partial<LvState>) => void; qtnId: string; readOnly: boolean;
+function SpecsTab({ s, up, readOnly }: {
+  s: LvState; up: (p: Partial<LvState>) => void; readOnly: boolean;
 }) {
   const targets = s.panels.filter((p) => !p.spare); // spare cells carry no specs
   // What a field reads project-wide: the explicit choice made here, else the value
@@ -3033,16 +2798,6 @@ function SpecsTab({ s, up, qtnId, readOnly }: {
           {SPEC_FIELDS.slice(4).map((f, i) => panelField(f, i === 2))}
         </div>
       </div>
-
-      <SpecNoteList heading="Specs" hint="The project's specification — a header per item, with sub-titles under it."
-        addLabel="+ Specs" headerPlaceholder="Header — e.g. MCB" defaults={defaultSpecs}
-        notes={s.specs ?? []} onChange={(next) => up({ specs: next })} readOnly={readOnly} />
-
-      <SpecNoteList heading="Comments of Client" hint="What the client asked for, in their words."
-        addLabel="+ Comments of Client" headerPlaceholder="Header"
-        notes={s.clientComments ?? []} onChange={(next) => up({ clientComments: next })} readOnly={readOnly} />
-
-      <AttachmentsCard qtnId={qtnId} readOnly={readOnly} />
     </div>
   );
 }
