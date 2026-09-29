@@ -21,6 +21,29 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-29 · Mohamed's side · Claude
+
+**VSD: getting it onto the live site without retyping seventeen rows.**
+
+Adding VSD to the bundled combinations was not enough to make it appear for anyone. The bundled file
+is only the SEED for a fresh database; a live database that already has an `mcc` section keeps its
+own copy, so the new starter would never have shown up. The two ways out were both bad: type the
+seventeen drive rows by hand on the Combinations screen, or reset the whole section to the bundle and
+lose every edit made to it since.
+
+So opening **/pricing → Combinations** now tops the section up automatically. It adds ONLY what is
+missing — the VSD rows, the accessories and the spec lines — and never edits or removes anything
+else. Running it twice does nothing. Proved it on a database with VSD stripped out and an edit of our
+own added: the starter came back, 110 rows became 127, and the edit survived untouched.
+
+**One click still needed: press Save on the MCC section afterwards.** That is what publishes it to
+everyone. The top-up deliberately does not publish by itself — opening a screen should never push out
+somebody's half-finished price edit as a side effect.
+
+**Correction to yesterday's entry:** it said *Variable speed drive 11 kW* and *450 kW* were missing
+from the price list. They are not — both exist on the live list. Our local copy of the catalogue is
+behind it, and that is all the warning was measuring. Nothing needs adding.
+
 ## 2026-09-28 · Mohamed's side · Claude
 
 **New MCC starter: VSD (variable speed drive).**

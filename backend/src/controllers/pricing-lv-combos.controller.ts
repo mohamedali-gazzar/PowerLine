@@ -321,10 +321,50 @@ export async function combosForPayload(): Promise<Record<string, unknown> | null
   return out;
 }
 
+
+/**
+ * Add the VSD starter to an mcc section that predates it. Additive and idempotent.
+ *
+ * `seedCombosIfMissing` only creates a section that is absent altogether, so a live database that
+ * already has `mcc` would never gain the new starter — the owner would have to type seventeen drive
+ * rows by hand, or reset the whole section to the bundle and lose their own edits.
+ *
+ * This merges in ONLY what is missing: the VSD rows, the tick-box accessories and the spec lines.
+ * Nothing existing is edited or removed, and a second run does nothing. It does NOT publish — the
+ * owner's Save on the Combinations screen does that, so a half-finished price edit is never
+ * published as a side effect of opening a screen.
+ */
+export async function backfillVsdStarter(by = "VSD starter backfill"): Promise<boolean> {
+  const row = await prisma.lvCombo.findUnique({ where: { section: "mcc" } });
+  if (!row) return false;                                   // no section yet — the seeder will bring it
+  const bundled = (bundledCombos as Record<string, any>).mcc;
+  const vsdRows = (bundled?.combos ?? []).filter((m: any) => m?.kind === "VSD");
+  if (!vsdRows.length) return false;                        // nothing to add
+
+  let value: any;
+  try {
+    value = JSON.parse(row.payload);
+  } catch {
+    return false;                                           // a corrupt row is left well alone
+  }
+  if (!Array.isArray(value?.combos)) return false;
+  if (value.combos.some((m: any) => m?.kind === "VSD")) return false; // already there
+
+  value.combos.push(...vsdRows);
+  if (!value.vsdAccessories) value.vsdAccessories = bundled.vsdAccessories;
+  if (!value.vsdSpec) value.vsdSpec = bundled.vsdSpec;
+  await prisma.lvCombo.update({
+    where: { section: "mcc" },
+    data: { payload: JSON.stringify(value), updatedBy: by },
+  });
+  return true;
+}
+
 /** GET /api/pricing/lv/combos — owner only. Every section, with its summary. */
 export async function listCombos(_req: Request, res: Response) {
   try {
     await seedCombosIfMissing();
+    await backfillVsdStarter();
     const rows = await prisma.lvCombo.findMany({ orderBy: { sortIndex: "asc" } });
     type Entry = { section: string; label: string; summary: string; updatedAt: string; updatedBy: string; value: unknown };
     const sections: Entry[] = rows.map((r) => {
