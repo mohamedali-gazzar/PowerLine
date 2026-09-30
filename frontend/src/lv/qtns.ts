@@ -101,7 +101,14 @@ export function normalize(state: LvState): LvState {
   // A missing key used to throw during load and the quotation opened as a blank
   // white page, which looks exactly like the work has been lost.
   const base = initialState();
-  state.project ??= base.project;
+  // MERGED, not just defaulted. `??=` only helps when `project` is missing ENTIRELY; a
+  // quotation carrying a partial one (saved before a field existed, or written by an
+  // importer) still arrived with holes — and the editor reads s.project.name.trim(),
+  // .customer.trim() and .supportEngineer.trim() during render, so one missing string threw
+  // and the quotation opened as a BLANK PAGE. That is the exact failure this block was
+  // written to end; it was fixed for the state's own keys but not inside them. Existing
+  // values always win, so nothing a quotation actually holds is overwritten.
+  state.project = { ...base.project, ...(state.project ?? {}) };
   state.factors ??= base.factors;
   if (!Array.isArray(state.panels)) state.panels = [];
 
@@ -217,6 +224,12 @@ export function normalize(state: LvState): LvState {
   if (!Array.isArray(state.commercialTermsAr))
     state.commercialTermsAr = DEFAULT_COMMERCIAL_TERMS_AR.map((x) => ({ ...x }));
   state.panels.forEach((p) => {
+    // A panel's name is read with .trim() in several places (panelLabel, the clash
+    // message, the export checks). A panel saved without one therefore threw during
+    // render and the quotation opened as a BLANK PAGE — the same failure this function
+    // was extended to stop in August, which was fixed for the state's own keys but not
+    // for the panels inside it. Repair it here, where every reader is already covered.
+    if (typeof p.name !== "string") p.name = "";
     // Freeze cell prices onto quotations saved before rows carried them, using
     // today's catalogue — exactly the value the old live lookup was producing —
     // so the quotation total stays identical while becoming immune to later edits.

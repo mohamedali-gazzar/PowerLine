@@ -1084,7 +1084,10 @@ const INVISIBLE = /[\u00AD\u200B-\u200F\u2060\uFEFF]/g;
  *  switchboard. Every uniqueness rule below compares through this key, never the
  *  raw string. */
 export const panelNameKey = (name: string): string =>
-  name.replace(INVISIBLE, "").replace(/\s+/g, " ").trim().toLowerCase();
+  // Coerced, not assumed. A panel saved before the name field existed carries undefined,
+  // and every uniqueness rule runs through here — an exception in this one expression
+  // takes the whole configurator down to a blank page.
+  String(name ?? "").replace(INVISIBLE, "").replace(/\s+/g, " ").trim().toLowerCase();
 
 /** The OTHER panel already carrying this name, or undefined when the name is free.
  *  A BLANK name is never a clash: a new panel deliberately starts blank while work is

@@ -816,7 +816,11 @@ export async function postLvImportApply(req: Request, res: Response) {
         } else {
           const cur = await prisma.lvEnclosure.findUnique({ where: { id: d.entityId } });
           if (!cur) { skipped++; continue; }
-          const data: Record<string, unknown> = { eur: d.eur, egp: d.egp, updatedBy: by };
+          // Same rule as the component branch above: undefined means a batch previewed
+          // before data columns existed, which was price-only by definition.
+          const writePrice = d.priceMoved !== false;
+          const data: Record<string, unknown> = { updatedBy: by };
+          if (writePrice) { data.eur = d.eur; data.egp = d.egp; }
           // IP / Mounting / RAL, against the enclosure's OWN whitelist — a replayed batch cannot
           // reach a component column from here, nor a component batch reach these.
           const applied: FieldChange[] = [];
@@ -847,16 +851,27 @@ export async function postLvImportApply(req: Request, res: Response) {
               (data.mount as string) ?? cur.mount,
             );
           }
+          const renamed = typeof data.name === "string";
+          // Nothing survived - no price move, no rename, no data column.
+          if (!writePrice && !renamed && !applied.length) { skipped++; continue; }
           await prisma.lvEnclosure.update({ where: { id: cur.id }, data });
           const label = `${cur.fam} · ${(data.name as string) ?? cur.name}`;
-          await prisma.priceChange.create({
-            data: {
-              domain: "LV", entity: "LvEnclosure", entityId: cur.id,
-              label, field: data.name ? "price+description" : "price",
-              oldValue: `${cur.eur} EUR / ${cur.egp} EGP`, newValue: `${d.eur} EUR / ${d.egp} EGP`,
-              actorId, actorEmail: by,
-            },
-          });
+          // LOG WHAT ACTUALLY MOVED. This used to write a "price" row for every enclosure the
+          // import touched, whether or not the price had changed - so renaming one filled the
+          // changelog with "186.11 EUR -> 186.11 EUR, 0%". A changelog of non-changes is worse
+          // than none: it trains people to close it unread, and the real rise hides among them.
+          if (writePrice || renamed) {
+            await prisma.priceChange.create({
+              data: {
+                domain: "LV", entity: "LvEnclosure", entityId: cur.id,
+                label,
+                field: writePrice ? (renamed ? "price+description" : "price") : "description",
+                oldValue: writePrice ? `${cur.eur} EUR / ${cur.egp} EGP` : cur.name,
+                newValue: writePrice ? `${d.eur} EUR / ${d.egp} EGP` : String(data.name),
+                actorId, actorEmail: by,
+              },
+            });
+          }
           // One audit row per column, the same as a component, so the price-list changelog says
           // what moved rather than only that something did.
           for (const fc of applied) {

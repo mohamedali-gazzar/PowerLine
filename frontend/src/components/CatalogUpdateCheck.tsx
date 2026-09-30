@@ -163,7 +163,22 @@ function WhatChangedModal({ changes, version, onApply, isRead, markKeys, onClose
       const a = moneyValue(parseMoney(it.oldValue)), b = moneyValue(parseMoney(it.newValue));
       return a > 0 ? ((b - a) / a) * 100 : 0;
     };
-    return items.filter((it) => it.field === "price").sort((x, y) => move(y) - move(x)); // increases first
+    return items
+      .filter((it) => it.field === "price")
+      // Drop rows whose price did not actually move. An import used to log a "price"
+      // change for every enclosure it touched, so renaming one produced entries reading
+      // "186.11 EUR → 186.11 EUR, ▲0%". The importer no longer writes those, but rows
+      // already published carry on appearing, and a list of non-changes teaches people to
+      // close this dialog unread — which is exactly when a real rise gets missed.
+      .filter((it) => {
+        const a = parseMoney(it.oldValue), b = parseMoney(it.newValue);
+        // Keep anything that cannot be compared (no old value, unparsed text) — showing a
+        // row we are unsure about is far safer than hiding a real price change.
+        if (!a || !b) return true;
+        const same = (x: number, y: number) => Math.abs(x - y) < 0.005; // below a cent
+        return !(same(a.eur, b.eur) && same(a.egp, b.egp));
+      })
+      .sort((x, y) => move(y) - move(x)); // increases first
   }, [items]);
   const settings = useMemo(() => items.filter((it) => it.entity === "PriceSetting"), [items]);
   const added = useMemo(() => items.filter((it) => it.field === "__created"), [items]);

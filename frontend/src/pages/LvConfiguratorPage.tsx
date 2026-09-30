@@ -53,7 +53,7 @@ import { rankSearchOptions } from "../lv/search";
 import { kioskCostsEgp, kioskPartSellingEgp, kioskFactorOf, kioskTotalCostEgp, kioskTotalSellingEgp, KIOSK_PART_KEYS, type KioskPartKey } from "../lv/kioskPricing";
 import { INCOMER_RATINGS, predictIncomerRating } from "../lv/busbarRating";
 import { kioskSizeOptions } from "../pcss/kioskRmu";
-import { materialAoa, type MatBlock } from "../lv/materialExcel";
+import { materialAoa, materialCostAoa, type MatBlock, type MatCostRow } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount, type MvErpItem } from "../lv/erpCsv";
 import { catalogVersion, latestRateVersion, refreshCatalog } from "../lv/catalogSource";
 import CatalogUpdateCheck from "../components/CatalogUpdateCheck";
@@ -12975,6 +12975,51 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
     const trimmed = name.trim() || def;
     XLSX.writeFile(wb, /\.xlsx$/i.test(trimmed) ? trimmed : `${trimmed}.xlsx`);
   };
+
+  /**
+   * Every material in the job, costed, on ONE sheet.
+   *
+   * The export above reproduces the printed Material List: six separate tables and no money.
+   * That is the right document for the supply chain and the wrong one for costing — finding
+   * what a product costs meant reading every table and adding it up by hand. This is the
+   * same rows, flattened, each carrying its group ("1 · ABB Products", "2 · Other
+   * Suppliers", …) so the sheet can be sorted and filtered by supplier group.
+   *
+   * Costs come from matUnitCost — the same function the table and the selection total use,
+   * so the three can never disagree — and follow the Currency toggle above.
+   */
+  const exportCostSheet = async () => {
+    const def = `${offerTitle("ML", qtnNo, s.project.revisionNo)} costs`;
+    const name = await askFor({
+      title: "Export the material costs",
+      message: "Every item in this quotation, costed, on one sheet.",
+      defaultValue: def,
+      confirmLabel: "Export",
+    });
+    if (name === null) return; // cancelled
+    const toUsd = matCur === "USD" && s.factors.usd > 0;
+    const rows: MatCostRow[] = visible.flatMap((b, i) =>
+      b.kind !== "table" ? [] : b.rows.map((r) => {
+        const egp = matUnitCost(r, s.factors, priceCtl);
+        return {
+          group: `${i + 1} · ${b.title}`,
+          description: r.description,
+          reference: r.reference,
+          supplier: r.supplier,
+          stock: r.stock,
+          qty: r.qty,
+          discPct: discPctFor(r),
+          mktPct: mktPctFor(r),
+          unitCost: toUsd ? egp / s.factors.usd : egp,
+        };
+      }),
+    );
+    const ws = XLSX.utils.aoa_to_sheet(materialCostAoa(rows, toUsd ? "USD" : "EGP"));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Material costs");
+    const trimmed = name.trim() || def;
+    XLSX.writeFile(wb, /\.xlsx$/i.test(trimmed) ? trimmed : `${trimmed}.xlsx`);
+  };
   return (
     <div className="space-y-4 animate-fade-up">
       {dialogs}
@@ -13010,6 +13055,13 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
             <button onClick={exportExcel} title="Download the current Material List as an .xlsx file"
               className="rounded-full border border-brand bg-white px-4 py-1.5 text-xs font-bold text-brand-dark hover:bg-brand-light no-print">
               ⬇ Export to Excel
+            </button>
+          )}
+          {!empty && (
+            <button onClick={exportCostSheet}
+              title="Every item in this quotation, costed, on one sheet — with the supplier group on each row"
+              className="rounded-full border border-brand bg-brand px-4 py-1.5 text-xs font-bold text-white hover:bg-brand-dark no-print">
+              ⬇ Cost breakdown
             </button>
           )}
         </div>
