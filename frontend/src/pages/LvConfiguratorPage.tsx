@@ -12044,10 +12044,23 @@ function SizingCard({ p, u, factors }: {
 }) {
   const { confirm, dialogs } = useDialogs();
   const panelsLocked = p.ratingA > PANELS_MAX_INCOMER_A;
+  // Switch to cells only when the rating CROSSES the limit on the panel being worked on — i.e. the
+  // engineer just raised it. This used to fire on mount as well, so merely OPENING a panel that was
+  // saved over the limit rewrote it and cleared its chosen enclosures: an amendment came out with two
+  // panels moved to cells and their sizing gone, with nobody having touched them. A saved panel in
+  // that state is now REPORTED (exportBlockers) instead of corrected behind the user's back.
+  //
+  // The panel id is part of the guard because this card is reused as the user moves between panels:
+  // without it, stepping from a 400 A panel onto a saved 2000 A one reads as a crossing and rewrites
+  // the second one. Same shape as the Busbar Rating effect on the details card.
+  const prevLock = useRef({ id: p.id, locked: panelsLocked });
   useEffect(() => {
-    if (panelsLocked && p.sizingMode === "panels") u({ sizingMode: "cells", panelItems: [] });
+    const samePanel = prevLock.current.id === p.id;
+    const justCrossed = samePanel && panelsLocked && !prevLock.current.locked;
+    if (justCrossed && p.sizingMode === "panels") u({ sizingMode: "cells", panelItems: [] });
+    prevLock.current = { id: p.id, locked: panelsLocked };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panelsLocked]);
+  }, [panelsLocked, p.id]);
 
   const ps = p.panelsSizing;
   const cc = p.cellConfig;

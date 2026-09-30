@@ -16,6 +16,8 @@ import {
   enclosurePriceEgp,
   copperTypeFactor,
   formKitFactor,
+  panelsOverRating,
+  PANELS_MAX_INCOMER_A,
   findByName,
   findCellEnclosure,
   type DbComponent,
@@ -1859,6 +1861,7 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   const dupNames: string[] = []; // two panels a reader cannot tell apart
   const noFamily: string[] = []; // panels-mode panel with no enclosure family chosen yet
   const noSizing2: string[] = []; // Double-layout panel missing its 2nd enclosure (Sizing (2), mandatory)
+  const overRating: string[] = []; // panels-mode panel rated above what standard enclosures can take
   s.panels.forEach((p, i) => {
     // An RMU or a Transformer item is not an LV panel — it has no components, no cells and no
     // copper, so every check below would fire on it. A KIOSK is checked: it holds a real LV panel.
@@ -1916,6 +1919,12 @@ export function exportBlockers(s: LvState): ExportCheck[] {
     }
     // Minicenter and Primo have no main busbar, so 0 kg is the right answer for
     // them — flagging it sent engineers looking for a number that does not exist.
+    // Over the limit, Panels is not a buildable choice — but saying so is the app's job, not
+    // rewriting it. Silently switching such a panel to cells is what made an amendment come out
+    // different from the revision it was made from.
+    if (panelsOverRating(p.sizingMode, p.ratingA)) {
+      overRating.push(`${tag}: ${p.ratingA} A on Panels — over ${PANELS_MAX_INCOMER_A} A it has to be Cells`);
+    }
     const family = p.sizingMode === "panels" ? p.panelsSizing?.family ?? "" : "";
     if (p.sizingMode === "panels" && !family.trim()) {
       // No enclosure family picked yet — the panel isn't configured, so "busbar weight is 0"
@@ -1942,6 +1951,7 @@ export function exportBlockers(s: LvState): ExportCheck[] {
   if (dupNames.length) out.push({ title: "Two panels with the same name", items: dupNames });
   if (noFamily.length) out.push({ title: "No enclosure family chosen", items: noFamily });
   if (noSizing2.length) out.push({ title: "Sizing (2) missing on Double panels", items: noSizing2 });
+  if (overRating.length) out.push({ title: `Panels above ${PANELS_MAX_INCOMER_A} A — must be Cells`, items: overRating });
   if (emptyPanels.length) out.push({ title: "Empty panels — nothing would print", items: emptyPanels });
   if (zeroPrice.length) out.push({ title: "Zero price", items: zeroPrice });
   if (noCells.length) out.push({ title: "No cells selected", items: noCells });

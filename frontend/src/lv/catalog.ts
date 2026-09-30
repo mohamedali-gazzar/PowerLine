@@ -208,6 +208,22 @@ export const SELECTABLE_SYSTEMS: string[] = PANEL_SYSTEMS.filter((s) => !LOCKED_
 export const CELL_SYSTEMS = ["Pro-E", "IS2", "PLP"] as const;
 export const PANELS_MAX_INCOMER_A = 800;
 
+/**
+ * A panel in PANELS mode carrying a busbar rating standard enclosures cannot take.
+ *
+ * The rule is RPT-01: above PANELS_MAX_INCOMER_A the job has to be built in cells. Raising the
+ * rating past it while the panel is open switches it over, which is right — the engineer is
+ * choosing as they go.
+ *
+ * Finding a SAVED panel already in that state is a different thing, and the app does not quietly
+ * correct it: exportBlockers reports it and leaves the decision to a person, the same way it treats
+ * a name clash. It got that wrong once — merely opening such a panel rewrote it and cleared the
+ * enclosures chosen for it, so an amendment came out different from the revision it was made from
+ * with nobody having touched a thing.
+ */
+export const panelsOverRating = (sizingMode: string, ratingA: number): boolean =>
+  sizingMode === "panels" && (ratingA || 0) > PANELS_MAX_INCOMER_A;
+
 // RPT-02: Double-panel layout restricted to these families, widths 60/80 only.
 export const DOUBLE_FAMILIES = ["SR-Basic", "Unikit", "Local (Sheet Metal)"] as const;
 export const DOUBLE_SECOND_WIDTHS = [60, 80] as const;
