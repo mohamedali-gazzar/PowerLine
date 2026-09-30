@@ -27,6 +27,31 @@ const money1 = (m: { eur: number; egp: number } | null): string => {
 };
 const moneyValue = (m: { eur: number; egp: number } | null): number => (m ? (m.eur > 0 ? m.eur : m.egp) : 0);
 
+/** Did this price row's figure actually move? Anything unparseable counts as moved — showing
+ *  a row we are unsure about is far safer than hiding a real price change. */
+const priceMoved = (it: CatalogChangeItem): boolean => {
+  const a = parseMoney(it.oldValue), b = parseMoney(it.newValue);
+  if (!a || !b) return true;
+  const same = (x: number, y: number) => Math.abs(x - y) < 0.005; // below a cent
+  return !(same(a.eur, b.eur) && same(a.egp, b.egp));
+};
+
+/**
+ * The changes worth putting in front of a person.
+ *
+ * ONE definition, used by the badge, by the decision to open the dialog, and by the dialog's
+ * own contents. When only the contents filtered, the other two still counted rows nobody
+ * would see — so the dialog opened by itself, announced unread updates, and then said
+ * "Nothing has changed". A count that does not match what is shown is worse than either.
+ *
+ * An import used to log a "price" change for every enclosure it touched, price moved or not,
+ * which is where those phantom rows come from; they are fixed at the source now, but the
+ * ones already published are permanent.
+ */
+export function shownChanges(items: CatalogChangeItem[]): CatalogChangeItem[] {
+  return items.filter((it) => it.field !== "price" || priceMoved(it));
+}
+
 // ── Read/unread store (per browser) ──────────────────────────────────────────
 // Keyed so a fresh publish (new version) shows again while already-read rows stay dismissed.
 const READ_STORE = "lvCatalogReadChanges";
@@ -79,7 +104,13 @@ export default function CatalogUpdateCheck({ onApply, autoOpen = false }: { onAp
   };
 
   const version = changes?.version ?? 0;
-  const items = useMemo(() => changes?.items ?? [], [changes]);
+  // Filtered ONCE, here, and the same object is handed to the dialog — so the badge, the
+  // auto-open and the contents cannot disagree about what counts as a change.
+  const shown = useMemo(
+    () => (changes ? { ...changes, items: shownChanges(changes.items) } : null),
+    [changes],
+  );
+  const items = useMemo(() => shown?.items ?? [], [shown]);
 
   // Every readable thing has a key — a catalogue change (changeKey).
   const allKeys = useMemo(
@@ -119,8 +150,8 @@ export default function CatalogUpdateCheck({ onApply, autoOpen = false }: { onAp
           </span>
         )}
       </div>
-      {open && changes && (
-        <WhatChangedModal changes={changes} version={version} onApply={onApply}
+      {open && shown && (
+        <WhatChangedModal changes={shown} version={version} onApply={onApply}
           isRead={isRead} markKeys={markKeys} onClose={() => setOpen(false)} />
       )}
     </div>
@@ -163,22 +194,9 @@ function WhatChangedModal({ changes, version, onApply, isRead, markKeys, onClose
       const a = moneyValue(parseMoney(it.oldValue)), b = moneyValue(parseMoney(it.newValue));
       return a > 0 ? ((b - a) / a) * 100 : 0;
     };
-    return items
-      .filter((it) => it.field === "price")
-      // Drop rows whose price did not actually move. An import used to log a "price"
-      // change for every enclosure it touched, so renaming one produced entries reading
-      // "186.11 EUR → 186.11 EUR, ▲0%". The importer no longer writes those, but rows
-      // already published carry on appearing, and a list of non-changes teaches people to
-      // close this dialog unread — which is exactly when a real rise gets missed.
-      .filter((it) => {
-        const a = parseMoney(it.oldValue), b = parseMoney(it.newValue);
-        // Keep anything that cannot be compared (no old value, unparsed text) — showing a
-        // row we are unsure about is far safer than hiding a real price change.
-        if (!a || !b) return true;
-        const same = (x: number, y: number) => Math.abs(x - y) < 0.005; // below a cent
-        return !(same(a.eur, b.eur) && same(a.egp, b.egp));
-      })
-      .sort((x, y) => move(y) - move(x)); // increases first
+    // Already filtered by shownChanges() before it reached here — one definition, shared
+    // with the badge and the auto-open.
+    return items.filter((it) => it.field === "price").sort((x, y) => move(y) - move(x)); // increases first
   }, [items]);
   const settings = useMemo(() => items.filter((it) => it.entity === "PriceSetting"), [items]);
   const added = useMemo(() => items.filter((it) => it.field === "__created"), [items]);
