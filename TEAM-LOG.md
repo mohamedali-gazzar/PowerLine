@@ -23,6 +23,16 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-30 · Mohamed's side · Claude
 
+**The milestone celebration popup can be dismissed properly.** It has an ✕ in its top-right corner,
+there from the first frame, and clicking the dark area around it closes it too. Escape already
+worked. Clicking anywhere ON the popup does nothing — including a click that starts on the card and
+drifts outside, which is the usual way a click-away closer becomes irritating.
+
+Both live in the shared shell, so all three milestones (10, 25, 50) got them at once; checked on each,
+since they have different artwork and the ✕ must not land on the banner.
+
+## 2026-09-30 · Mohamed's side · Claude
+
 **Saved combinations are now per project, and there is a new "Pinned" shelf per user.** The QTN
 Assistant has three tabs instead of two: Conversation · Saved · Pinned.
 

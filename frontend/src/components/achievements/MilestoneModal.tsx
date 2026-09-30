@@ -83,8 +83,17 @@ export default function MilestoneModal({ milestone, onClose }: { milestone: Mile
   const titleAccent = sep >= 0 ? title.slice(sep + 2) : "";
 
   return (
-    <div className={"pl-ach-backdrop" + (shown ? " show" : "")}>
+    <div
+      className={"pl-ach-backdrop" + (shown ? " show" : "")}
+      // A click on the dark area around the card closes it. Guarded on the target being the backdrop
+      // ITSELF, so a click that lands anywhere on the card — or one that starts on the card and drifts
+      // out — never counts as clicking away.
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div className={"pl-ach-card " + (scene?.scopeClass ?? "")} ref={cardRef} role="dialog" aria-modal="true" aria-labelledby="pl-ach-title">
+        {/* Always reachable, from the first frame — the celebration runs for a few seconds and nobody
+            should have to sit through it. Escape and a click outside do the same thing. */}
+        <button type="button" className="pl-ach-close" onClick={onClose} aria-label="Close" title="Close">✕</button>
         <div className="pl-ach-stage" ref={stageRef}>
           <div className="pl-ach-banner" ref={bannerRef}>{count} PANELS COMPLETED!</div>
           <div dangerouslySetInnerHTML={{ __html: scene?.html ?? "" }} />
