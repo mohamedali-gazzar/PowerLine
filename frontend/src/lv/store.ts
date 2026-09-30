@@ -1797,7 +1797,10 @@ export function buildMaterialList(s: LvState): MaterialList {
     // it is a real cost with no catalogue line of its own. It is listed separately rather than
     // buried in the enclosure's price, and keyed by its rate so panels on different rates do
     // not merge into one row.
-    const kitCalc = calcPanel(p, s.factors, s.abbItemDiscounts);
+    // Cached: this is the same full panel costing grandTotals and the Panels tab already
+    // did for this exact panel on this render, and the Material List rebuilds on every
+    // keystroke. Re-running it per panel made a big quotation's list visibly slow.
+    const kitCalc = calcPanelCached(p, s.factors, s.abbItemDiscounts);
     if (kitCalc.kits > 0) {
       const fam = p.sizingMode === "cells" ? (p.cellConfig?.type ?? "") : (p.panelsSizing?.family ?? "");
       add(`k|${fam}|${Math.round(kitCalc.kits)}`, {
@@ -1821,6 +1824,13 @@ export function buildMaterialList(s: LvState): MaterialList {
             reference: "",
             stock: "",
             qty: r.qty * mult,
+            // A cell IS the enclosure on a cells-mode panel, and it is charged for — these
+            // were listed with no price at all, so the PLP / IS2 / Pro-E tables showed
+            // quantities against nothing and the cost sheet valued them at zero. The rows
+            // have carried their own frozen eur/egp since normalize() started stamping
+            // them; they simply were not passed through.
+            eur: r.eur,
+            egp: r.egp,
           });
       }
     }

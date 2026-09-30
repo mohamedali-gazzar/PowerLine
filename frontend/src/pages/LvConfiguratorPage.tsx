@@ -12999,7 +12999,27 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
     if (name === null) return; // cancelled
     const toUsd = matCur === "USD" && s.factors.usd > 0;
     const rows: MatCostRow[] = visible.flatMap((b, i) =>
-      b.kind !== "table" ? [] : b.rows.map((r) => {
+      // Copper is a real cost — kg × the Pricing-Settings copper rate is exactly the
+      // cuConnCost + busbarCost every panel is charged — but the Material List only ever
+      // showed it as a weight, so a costing sheet built from that list silently left it
+      // out. Priced per kilo, with the weight as the quantity, so the line reads the way
+      // the workshop already thinks about it.
+      b.kind === "copper"
+        ? [{
+            group: `${i + 1} · ${b.title}`,
+            description: "Copper — busbars and connections",
+            reference: "",
+            supplier: "Copper",
+            stock: "",
+            qty: Number(b.kg.toFixed(1)),
+            listCurrency: "EGP",
+            listPrice: s.factors.copper,
+            rateToEgp: null,
+            discPct: 0,
+            mktPct: 0,
+            unitCost: toUsd ? s.factors.copper / s.factors.usd : s.factors.copper,
+          }]
+      : b.kind !== "table" ? [] : b.rows.map((r) => {
         const egp = matUnitCost(r, s.factors, priceCtl);
         // Which currency the PRICE LIST holds this item in. The same rule componentPriceEgp
         // costs by: a euro figure means it is imported and priced in EUR; anything else is
