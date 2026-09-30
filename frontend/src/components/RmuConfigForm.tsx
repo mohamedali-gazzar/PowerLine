@@ -269,17 +269,12 @@ export default function RmuConfigForm({
             )}
           </div>
 
-          {/* How it's rated — voltage and feeder make-up, then busbar and fuse. */}
+          {/* How it is made up and rated: feeder + installation, then voltage, busbar and fuse. */}
           <div className="space-y-3 border-t border-line/60 pt-4">
+          {/* What it is made of and where it goes, then the two current ratings. Two columns, not
+              three: this card is about 270px wide inside the offer editor, and a third column clipped
+              "Outdoor" and broke "24 kV" across two lines. */}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Rated voltage">
-              <Segmented
-                value={String(rmu.voltageKv) as "12" | "24"}
-                onChange={(v) => setR("voltageKv", Number(v) as 12 | 24)}
-                options={["12", "24"] as const}
-                renderLabel={(v) => `${v} kV`}
-              />
-            </Field>
             <Field label="RMU feeder" hint={isLucy ? "Feeders (R) + circuit breakers (T)" : "Ring feeders (R) + transformer feeders (T)"}>
               <select
                 value={rmuFeederLabel(rmu.nalCount, rmu.nalfCount)}
@@ -295,12 +290,39 @@ export default function RmuConfigForm({
                 })}
               </select>
             </Field>
+            {/* Where it will stand. Outdoor is not just wording: the price gains the outdoor
+                enclosure (priceList → commonAddOns), the technical sheet reads IP54 instead of the
+                standard protection index, and the assembly says it comes with an enclosure for
+                outdoor installation. All of that has always been wired — there was simply no way to
+                choose it, so every RMU quoted indoor whether it was going indoors or not. */}
+            <Field
+              label="Installation"
+              hint={rmu.installation === "OUTDOOR" ? "Adds the outdoor enclosure · IP54" : "Standard indoor switchgear"}
+            >
+              <Segmented
+                value={rmu.installation}
+                onChange={(v) => setR("installation", v)}
+                options={INSTALLATIONS}
+                renderLabel={(v) => label(v)}
+              />
+            </Field>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
+            <Field label="Rated voltage">
+              <Segmented
+                value={String(rmu.voltageKv) as "12" | "24"}
+                onChange={(v) => setR("voltageKv", Number(v) as 12 | 24)}
+                options={["12", "24"] as const}
+                renderLabel={(v) => `${v} kV`}
+              />
+            </Field>
             <Field label="Busbar current">
               <NumberInput value={rmu.busbarCurrentA} suffix="A" onChange={(v) => setR("busbarCurrentA", v)} />
             </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             {/* Lucy has no fuse (transformer feeders are circuit breakers). */}
             {!isLucy && (
               <Field label="Fuse rating" hint="Blank = catalogue max ('up to')">
@@ -314,24 +336,6 @@ export default function RmuConfigForm({
             )}
           </div>
 
-          {/* Where it will stand. Outdoor is not just wording: the price gains the outdoor enclosure
-              (priceList → commonAddOns), the technical sheet reads IP54 instead of the standard
-              protection index, and the assembly says it comes with an enclosure for outdoor
-              installation. All of that has always been wired — there was simply no way to choose it,
-              so every RMU quoted indoor whether it was going indoors or not. */}
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="Installation"
-              hint={rmu.installation === "OUTDOOR" ? "Adds the outdoor enclosure to the price · IP54" : "Standard indoor switchgear"}
-            >
-              <Segmented
-                value={rmu.installation}
-                onChange={(v) => setR("installation", v)}
-                options={INSTALLATIONS}
-                renderLabel={(v) => label(v)}
-              />
-            </Field>
-          </div>
           </div>
 
           {/* Smart / RTU — optional, PSEC & Lucy only (PRAL has no smart). It shares the slot with the
