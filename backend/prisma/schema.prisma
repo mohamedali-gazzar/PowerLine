@@ -706,17 +706,27 @@ model LvCombo {
 }
 
 /// A user's saved/favourited combination — its definition only (a JSON list of components), so it
-/// can be reused across panels. `sig` is a content signature; a user can't save the same one twice.
+/// can be reused across panels. `sig` is a content signature; a user can't save the same one twice
+/// in the same place.
 model SavedCombo {
-  id        String   @id @default(cuid())
-  userId    String
+  id     String @id @default(cuid())
+  userId String
+  /// Which quotation this belongs to — saved combinations are per project. "" means PINNED: kept by
+  /// the user and offered in every quotation.
+  ///
+  /// An empty string rather than NULL, for two reasons. Postgres treats two NULLs as different, so a
+  /// nullable column would let the unique index below store the same pin twice over. And every
+  /// combination saved before projects were scoped takes the default — landing in the pinned list,
+  /// which is exactly where a combination that used to be offered everywhere belongs, with no
+  /// migration and nothing lost.
+  qtnId     String   @default("")
   name      String
   sig       String
   data      String   // JSON: { name, comps: PanelComponent[] }
   createdAt DateTime @default(now())
 
-  @@unique([userId, sig])
-  @@index([userId])
+  @@unique([userId, qtnId, sig])
+  @@index([userId, qtnId])
 }
 
 /// Regression guard for the LV combination builders (ATS / MCC / photocell),

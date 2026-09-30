@@ -23,6 +23,34 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-30 · Mohamed's side · Claude
 
+**Saved combinations are now per project, and there is a new "Pinned" shelf per user.** The QTN
+Assistant has three tabs instead of two: Conversation · Saved · Pinned.
+
+- **Saved** belongs to the quotation it was saved in and is offered only there. A single list shared
+  across every quotation filled up with other jobs' work until it was no use.
+- **Pinned** is the user's own shelf, offered in every quotation. Each Saved row has a pin button
+  beside its ✕ that puts a **copy** there — a copy on purpose, so clearing out a finished job never
+  costs somebody the combinations they actually reuse, and tidying the shelf never touches a job.
+
+Both stay private to the user, as before; the server scopes every call to the caller.
+
+**Everything saved before today becomes Pinned, with no migration.** `SavedCombo` gained one column,
+`qtnId`, defaulting to `""` — and `""` *is* the pinned shelf. So every existing row takes the default
+and lands where a combination that used to be offered everywhere belongs. Nothing was converted and
+nothing was lost.
+
+The empty string is also why it is not nullable: Postgres counts two NULLs as different, so a
+nullable column would let the `[userId, qtnId, sig]` unique index store the same pin twice over.
+
+The tab is labelled **Pinned** rather than "Pin Combination" — three tabs share a 320px panel and the
+longer name pushed the others out. The tooltip carries the meaning.
+
+Checked in the app, not just in theory: saved in one quotation, pinned it, opened a different
+quotation and watched Saved come up empty while Pinned still held it; then removed the project copy
+and confirmed the pin survived. No test rows left behind.
+
+## 2026-09-30 · Mohamed's side · Claude
+
 **Documents moved onto the Specs tab, and the Documents tab is gone.** It sits under Project
 specifications as its own card — which is also what the Specs tab was cleared out for, so that page
 now holds the two things a job's paperwork needs and nothing else. The explainer under the heading

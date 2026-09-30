@@ -620,6 +620,8 @@ export interface AnnouncementInput {
 /** A user's saved combination — its definition (component list) only, reusable across panels. */
 export interface SavedComboDto {
   id: string;
+  /** The quotation it was saved in; "" means pinned — the user's own shelf, offered in every one. */
+  qtnId: string;
   name: string;
   sig: string;
   comps: unknown[]; // PanelComponent[] on the LV side
@@ -1091,13 +1093,17 @@ export const api = {
     release: (id: string) => request<{ ok: true }>(`/locks/${id}`, { method: "DELETE" }),
   },
 
-  // ── Saved combinations (per-user, reusable across panels) ────────────────────
+  // ── Saved combinations (per-user; saved into a project, or pinned across all of them) ────────
   savedCombos: {
-    /** The current user's saved combinations, newest first. */
-    list: () => request<{ items: SavedComboDto[] }>("/saved-combos"),
-    /** Save a combination (or refresh the one already saved under the same signature). */
-    save: (body: { name: string; sig: string; comps: unknown[] }) =>
+    /** This project's saved combinations AND the user's pinned ones, newest first, in one list —
+     *  tell them apart by `qtnId` ("" is pinned). Pass no project to get only the pinned ones. */
+    list: (qtnId?: string) =>
+      request<{ items: SavedComboDto[] }>(`/saved-combos${qtnId ? `?qtnId=${encodeURIComponent(qtnId)}` : ""}`),
+    /** Save into a project (or onto the pinned shelf with no `qtnId`); re-saving refreshes it. */
+    save: (body: { name: string; sig: string; comps: unknown[]; qtnId?: string }) =>
       request<{ item: SavedComboDto }>("/saved-combos", { method: "POST", body: JSON.stringify(body) }),
+    /** Put a COPY on the user's pinned shelf, so it is offered in every quotation. */
+    pin: (id: string) => request<{ item: SavedComboDto }>(`/saved-combos/${id}/pin`, { method: "POST" }),
     /** Remove one of the current user's saved combinations. */
     remove: (id: string) => request<{ ok: true }>(`/saved-combos/${id}`, { method: "DELETE" }),
   },

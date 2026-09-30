@@ -11,7 +11,7 @@ import { createPortal } from "react-dom";
 import type { QtnEventDto } from "../api";
 import SendForApprovalMenu from "../components/SendForApprovalMenu";
 import { assistantStore, useAssistant } from "./assistantStore";
-import { savedCombosStore, useSavedCombos } from "../lv/savedCombos";
+import { savedCombosStore, useSavedCombos, usePinnedCombos, type SavedCombo } from "../lv/savedCombos";
 
 // A reply-less re-send stores a generated "Sent to … for approval" line — routing noise, not a
 // message — so it is filtered out (same rule the old chat used).
@@ -73,8 +73,9 @@ const pinGlyph = (
 
 export default function AssistantPanel() {
   const { feed, open, pinned, width, draft, mobile, replyTo, pendingReplies } = useAssistant();
-  const [assistTab, setAssistTab] = useState<"chat" | "saved">("chat");
-  const savedCombos = useSavedCombos(); // per-user saved combinations (for the Saved tab + badge)
+  const [assistTab, setAssistTab] = useState<"chat" | "saved" | "pinned">("chat");
+  const savedCombos = useSavedCombos();   // saved in THIS quotation
+  const pinnedCombos = usePinnedCombos(); // the user's own shelf, offered in every quotation
   const listRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const sendWrapRef = useRef<HTMLDivElement>(null);
@@ -288,12 +289,14 @@ export default function AssistantPanel() {
           {feed?.scopeLine || "No quotation open"}
         </div>
 
-        {/* Two tabs: the approval conversation, and the user's saved combinations. */}
+        {/* Three tabs: the approval conversation, this quotation's combinations, and the user's own
+            shelf. The last two are named short because three of them share a 320px panel. */}
         <div className="flex shrink-0 border-b border-line text-xs font-bold">
-          {([["chat", "Conversation"], ["saved", "Saved combinations"]] as const).map(([k, label]) => (
+          {([["chat", "Conversation", 0], ["saved", "Saved", savedCombos.length], ["pinned", "Pinned", pinnedCombos.length]] as const).map(([k, label, n]) => (
             <button key={k} type="button" onClick={() => setAssistTab(k)}
+              title={k === "saved" ? "Combinations saved in this quotation" : k === "pinned" ? "Your own combinations, offered in every quotation" : undefined}
               className={`flex-1 px-3 py-2 transition-colors ${assistTab === k ? "border-b-2 border-brand text-brand-dark" : "text-muted hover:text-ink"}`}>
-              {label}{k === "saved" && savedCombos.length > 0 ? ` (${savedCombos.length})` : ""}
+              {label}{n > 0 ? ` (${n})` : ""}
             </button>
           ))}
         </div>
@@ -365,33 +368,15 @@ export default function AssistantPanel() {
           ))}
         </div>
         ) : (
-          /* Saved combinations tab — the user's saved combinations; tap one to insert a fresh copy
-             into the open panel (never moves or changes the saved definition). */
-          <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
-            <p className="mb-1 text-[11px] text-muted">
-              {feed?.canInsertCombo ? "Tap a combination to add a fresh copy into the open panel." : "Open a panel to insert a saved combination."}
-            </p>
-            {savedCombos.length === 0 ? (
-              <p className="mt-8 text-center text-sm text-muted">
-                No saved combinations yet.<br />Tap the ♥ on any combination to save it here.
-              </p>
-            ) : (
-              savedCombos.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-2 dark:bg-surface">
-                  <button type="button" disabled={!feed?.canInsertCombo}
-                    onClick={() => feed?.onInsertCombo?.({ name: c.name, comps: c.comps })}
-                    title={feed?.canInsertCombo ? `Insert “${c.name}” into the open panel` : "Open a panel first"}
-                    className="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-50">
-                    <span className="block truncate text-sm font-bold text-ink">{c.name}</span>
-                    <span className="block text-[11px] text-muted">{c.comps.length} item{c.comps.length === 1 ? "" : "s"}{feed?.canInsertCombo ? " · tap to insert" : ""}</span>
-                  </button>
-                  <button type="button" onClick={() => void savedCombosStore.remove(c.id)}
-                    title="Remove from saved" aria-label="Remove from saved"
-                    className="shrink-0 rounded-full p-1.5 text-muted transition hover:bg-surface hover:text-red-500">✕</button>
-                </div>
-              ))
-            )}
-          </div>
+          /* Combination tabs — tap one to insert a fresh copy into the open panel (which never moves
+             or changes the stored definition). Both shelves render the same way; only where they
+             come from and what the empty list says differ. */
+          <ComboShelf
+            items={assistTab === "saved" ? savedCombos : pinnedCombos}
+            shelf={assistTab === "saved" ? "saved" : "pinned"}
+            canInsert={!!feed?.canInsertCombo}
+            onInsert={(c) => feed?.onInsertCombo?.({ name: c.name, comps: c.comps })}
+          />
         )}
 
         {/* Composer — only on the Conversation tab, when the creator can reply (a returned quotation). */}
@@ -455,5 +440,74 @@ export default function AssistantPanel() {
       </aside>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * One shelf of combinations — this quotation's, or the user's own.
+ *
+ * The two look and behave the same: tap to drop a fresh copy into the open panel, ✕ to remove.
+ * Saved rows carry one extra control, the pin, which puts a COPY on the user's shelf so the same
+ * combination is offered on every job. A copy, so clearing out a finished project never costs the
+ * user the combinations they actually reuse.
+ */
+function ComboShelf({ items, shelf, canInsert, onInsert }: {
+  items: SavedCombo[];
+  shelf: "saved" | "pinned";
+  canInsert: boolean;
+  onInsert: (c: SavedCombo) => void;
+}) {
+  const pinned = usePinnedCombos();
+  const pinnedSigs = new Set(pinned.map((p) => p.sig));
+
+  return (
+    <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
+      <p className="mb-1 text-[11px] text-muted">
+        {!canInsert
+          ? "Open a panel to insert a combination."
+          : shelf === "saved"
+            ? "Saved in this quotation. Tap one to add a fresh copy into the open panel."
+            : "Yours, in every quotation. Tap one to add a fresh copy into the open panel."}
+      </p>
+      {items.length === 0 ? (
+        <p className="mt-8 text-center text-sm text-muted">
+          {shelf === "saved" ? (
+            <>Nothing saved in this quotation yet.<br />Tap the ♥ on any combination to save it here.</>
+          ) : (
+            <>Nothing pinned yet.<br />Pin a saved combination to keep it on every job.</>
+          )}
+        </p>
+      ) : (
+        items.map((c) => {
+          const alreadyPinned = pinnedSigs.has(c.sig);
+          return (
+            <div key={c.id} className="flex items-center gap-1 rounded-xl border border-line bg-white px-3 py-2 dark:bg-surface">
+              <button type="button" disabled={!canInsert}
+                onClick={() => onInsert(c)}
+                title={canInsert ? `Insert “${c.name}” into the open panel` : "Open a panel first"}
+                className="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-50">
+                <span className="block truncate text-sm font-bold text-ink">{c.name}</span>
+                <span className="block text-[11px] text-muted">{c.comps.length} item{c.comps.length === 1 ? "" : "s"}{canInsert ? " · tap to insert" : ""}</span>
+              </button>
+              {shelf === "saved" && (
+                <button type="button" disabled={alreadyPinned}
+                  onClick={() => void savedCombosStore.pin(c.id)}
+                  title={alreadyPinned ? `“${c.name}” is already pinned` : `Pin “${c.name}” — keep a copy on every job`}
+                  aria-label={alreadyPinned ? "Already pinned" : "Pin this combination"}
+                  className={`shrink-0 rounded-full p-1.5 transition ${alreadyPinned
+                    ? "cursor-default text-brand"
+                    : "text-muted hover:bg-surface hover:text-brand-dark"}`}>
+                  <span className="block scale-75">{pinGlyph}</span>
+                </button>
+              )}
+              <button type="button" onClick={() => void savedCombosStore.remove(c.id)}
+                title={shelf === "saved" ? "Remove from this quotation" : "Remove from pinned"}
+                aria-label={shelf === "saved" ? "Remove from this quotation" : "Remove from pinned"}
+                className="shrink-0 rounded-full p-1.5 text-muted transition hover:bg-surface hover:text-red-500">✕</button>
+            </div>
+          );
+        })
+      )}
+    </div>
   );
 }

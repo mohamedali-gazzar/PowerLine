@@ -1314,6 +1314,12 @@ export default function LvConfiguratorPage() {
     });
   }, [qtnNum, approvalEvents, status, submitting, tab, selNo, selName]);
   useEffect(() => () => assistantStore.setFeed(null), []);
+  // Saved combinations belong to the quotation they were saved in, so the store has to be told which
+  // one is open — and told it is gone on the way out, or the next quotation opens showing this one's.
+  useEffect(() => {
+    savedCombosStore.setQtn(rec?.id ?? "");
+    return () => savedCombosStore.setQtn("");
+  }, [rec?.id]);
   // ── Co-Work ────────────────────────────────────────────────────────────────
   // Any number of sales-support share one QTN, split BY PANEL: each edits only the
   // panels they own, and the shared tabs (Project / Pricing / Terms) belong to the
