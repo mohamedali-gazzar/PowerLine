@@ -200,11 +200,25 @@ export default function AuthPage() {
             {/* Code + password step (signup / forgot) */}
             {step === 1 && (
               <>
+                {/* A reset request deliberately answers the same way whether or not the
+                    address has an account, so the endpoint cannot be used to discover who
+                    works here. That is worth keeping — but this line used to state flatly
+                    "Code sent", so someone whose address was mistyped (or was never
+                    registered) was told mail was on its way that the server had decided not
+                    to send, and waited for it. Say what is actually true. */}
                 <div className="rounded-lg bg-surface px-3 py-2 text-xs text-muted">
-                  Code sent to <b className="text-ink">{email}</b>{" "}
+                  {mode === "forgot" ? <>If <b className="text-ink">{email}</b> has an account, a code is on its way.</>
+                    : <>Code sent to <b className="text-ink">{email}</b></>}{" "}
                   <button type="button" className="ml-1 font-semibold text-brand hover:underline"
                     onClick={() => setStep(0)}>change</button>
                 </div>
+                {mode === "forgot" && (
+                  <p className="rounded-lg border border-line px-3 py-2 text-[11px] leading-relaxed text-muted">
+                    <b className="text-ink">Nothing arrived?</b> Check the spam folder first. If it is
+                    still missing, the address is probably not the one your account was opened with —
+                    check the spelling, or ask an administrator to confirm it in the Access Center.
+                  </p>
+                )}
                 <div>
                   <label className="label" htmlFor="code">Verification code</label>
                   <input id="code" inputMode="numeric" autoFocus required className="input font-mono tracking-widest"
