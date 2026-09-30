@@ -23,6 +23,47 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-30 · Mohamed's side · Claude
 
+**RMU offers can be quoted OUTDOOR again — and until today none ever were.**
+
+The Indoor / Outdoor choice is back in the RMU configurator (shared form, so it shows in the
+standalone RMU offer AND the MV package's RMU panel). Outdoor adds the **Outdoor Enclosure** as its
+own line — USD 2,000 on the current list — puts **IP54** on the technical sheet in place of the
+standard protection index, and adds "Provided with enclosure for outdoor installation".
+
+⚠️ **Only the control was missing — every other part has always been wired.** `INSTALLATIONS` has
+been in the code since the first commit and has never been reachable from a screen, so every RMU ever
+configured here was created INDOOR and stayed that way. Any that were actually going outdoors were
+quoted USD 2,000 light. Nothing saved has been touched (frozen prices stay frozen), but it is worth
+someone looking at recent or live RMU offers.
+
+## 2026-09-30 · Mohamed's side · Claude
+
+**BUG, found from a real report: a quotation changed two panels by itself.** Mohamed amended
+2000-3 to 2000-4 and found panels 11 and 13 with a different Panel type, having edited neither.
+
+**It was not the amend.** Above 800 A a job has to be built in cells rather than standard panel
+enclosures (RPT-01, and correct). But the app applied that rule **on opening the panel**: any panel
+already saved as Panels above 800 A was switched to Cells and had its chosen enclosures cleared, the
+moment its Panel type card rendered. So the amendment — a live draft that autosaves — was rewritten
+while being looked at, and the cancelled revision it came from was not. **It changed those two
+panels' price**, because their enclosures went with it.
+
+Now: the rule only follows a rating the engineer actually RAISES past the limit on the panel they are
+working on; the guard carries the panel id, because the card is reused when stepping between panels
+and without it a 400 A panel followed by a saved 2000 A one reads as a crossing. A saved panel in
+that state is REPORTED instead — "Panels above 800 A — must be Cells" — alongside the other pre-send
+checks, which is how the app already treats a name clash. `exportBlockers` says it best: *it is not
+the app's place to rewrite a saved quotation.*
+
+The same shape of guard already existed a few thousand lines above, on the Busbar Rating auto-set,
+and was written correctly there. Worth copying rather than reinventing next time.
+
+**QUESTION for Mohamed (asked, not yet answered):** 2000-4's panels 11 and 13 are still changed —
+the fix stops it recurring, it does not undo it. Whether 2000-3 or 2000-4 is the correct one depends
+on their real busbar rating, which only he can say.
+
+## 2026-09-30 · Mohamed's side · Claude
+
 **The milestone celebration popup can be dismissed properly.** It has an ✕ in its top-right corner,
 there from the first frame, and clicking the dark area around it closes it too. Escape already
 worked. Clicking anywhere ON the popup does nothing — including a click that starts on the card and

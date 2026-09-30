@@ -6,6 +6,8 @@ import {
   AVAILABLE_BRANDS_BY_FAMILY,
   CLIENT_SPECS,
   AVAILABLE_CLIENT_SPECS,
+  INSTALLATIONS,
+  label,
 } from "../options";
 import type { RmuConfigInput, LbsBrand } from "../types";
 
@@ -310,6 +312,25 @@ export default function RmuConfigForm({
                 />
               </Field>
             )}
+          </div>
+
+          {/* Where it will stand. Outdoor is not just wording: the price gains the outdoor enclosure
+              (priceList → commonAddOns), the technical sheet reads IP54 instead of the standard
+              protection index, and the assembly says it comes with an enclosure for outdoor
+              installation. All of that has always been wired — there was simply no way to choose it,
+              so every RMU quoted indoor whether it was going indoors or not. */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label="Installation"
+              hint={rmu.installation === "OUTDOOR" ? "Adds the outdoor enclosure to the price · IP54" : "Standard indoor switchgear"}
+            >
+              <Segmented
+                value={rmu.installation}
+                onChange={(v) => setR("installation", v)}
+                options={INSTALLATIONS}
+                renderLabel={(v) => label(v)}
+              />
+            </Field>
           </div>
           </div>
 
