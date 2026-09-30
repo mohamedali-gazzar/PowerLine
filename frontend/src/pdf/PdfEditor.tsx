@@ -1,7 +1,8 @@
 // The PDF writing surface: pages to click on, a toolbar, and a download.
 //
-// Shared by the two places it is offered — the standalone tool (pages/PdfTextPage) and a quotation's
-// Documents tab — so there is one implementation of the fiddly part and the two can never drift.
+// Shared by the two places it is offered — the standalone tool (pages/PdfTextPage) and the Documents
+// card on a quotation's Specs tab — so there is one implementation of the fiddly part and the two can
+// never drift.
 //
 // The pages are SHOWN as pictures (pdf.js draws them) but the download is the real PDF with the typed
 // text added on top; pdf/pdfText.ts holds that and the coordinate maths.

@@ -21,6 +21,23 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-09-30 · Mohamed's side · Claude
+
+**Documents moved onto the Specs tab, and the Documents tab is gone.** It sits under Project
+specifications as its own card — which is also what the Specs tab was cleared out for, so that page
+now holds the two things a job's paperwork needs and nothing else. The explainer under the heading
+went with it, at the owner's request: what each row does is on its buttons, and the size limit only
+matters when a file is refused, which the error states in full.
+
+**One size limit everywhere: 3 MB.** The standalone tool in the sidebar used to take 40 MB, because
+nothing there goes through the server. It now reads `MAX_ATTACHMENT_BYTES` instead of carrying its own
+number, so the two cannot drift apart again.
+
+⚠️ **That closes the only route for a PDF over 3 MB.** The sidebar tool was the answer for a big
+client spec; it is not any more. The cap is Vercel's 4.5 MB request-body limit minus what base64
+inflation costs, so raising it for attachments is not a one-line change — but if a real client file
+gets refused, that is the conversation to have rather than keeping two different limits.
+
 ## 2026-09-29 · Mohamed's side · Claude
 
 **Writing on a PDF now lives inside a quotation too — new "Documents" tab**, between Specs and

@@ -1,4 +1,5 @@
-// A quotation's Documents tab: the client's files, and writing on the PDFs among them.
+// A quotation's Documents card, on its Specs tab: the client's files, and writing on the PDFs
+// among them.
 //
 // The files live in their own table on the server (LvAttachment), not in the QTN state, which is
 // re-saved on every keystroke. The NOTES written on a PDF do live in the QTN state, keyed by the
@@ -72,7 +73,7 @@ export default function QtnDocuments({ qtnId, notes, onNotes, readOnly }: {
     // should not lose the ones that already went up.
     for (const f of Array.from(picked)) {
       if (f.size > MAX_ATTACHMENT_BYTES) {
-        setError(`"${f.name}" is ${fmtBytes(f.size)} — the limit is ${fmtBytes(MAX_ATTACHMENT_BYTES)} per file. A bigger PDF can still be marked up with the PDF notes tool in the sidebar, which keeps nothing.`);
+        setError(`"${f.name}" is ${fmtBytes(f.size)} — the limit is ${fmtBytes(MAX_ATTACHMENT_BYTES)} per file.`);
         continue;
       }
       try {
@@ -149,16 +150,11 @@ export default function QtnDocuments({ qtnId, notes, onNotes, readOnly }: {
     <div className="space-y-4 animate-fade-up">
       {dialogs}
       <div className="card p-5">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <h2 className="sec-head mb-0">Documents</h2>
-            <p className="mt-1 max-w-2xl text-xs text-muted">
-              Client specifications, drawings, e-mails — saved with the QTN, so they open with it.
-              Up to {fmtBytes(MAX_ATTACHMENT_BYTES)} per file. A PDF can be <b>written on</b>: click
-              anywhere on it to type, and the notes are saved with this quotation. The stored file is
-              never changed — the notes go onto the copy you download.
-            </p>
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* No explainer under the heading — the owner asked for it off. What it does is in the
+              buttons on each row, and the size limit only matters when a file is refused, which the
+              error says in full. */}
+          <h2 className="sec-head mb-0">Documents</h2>
           <button type="button" onClick={() => pick.current?.click()} disabled={readOnly || busy || !qtnId}
             className="btn-ghost shrink-0 disabled:opacity-40">{busy ? "Uploading…" : "+ Upload files"}</button>
           <input ref={pick} type="file" multiple className="hidden" onChange={(e) => onPicked(e.target.files)} />

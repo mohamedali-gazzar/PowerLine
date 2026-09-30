@@ -2,16 +2,20 @@
 //
 // Open one, type on the pages, download it again. Nothing is uploaded and nothing is saved: the file
 // is opened, marked and downloaded in the browser and never leaves the machine. That is the whole
-// difference from the same thing inside a quotation (Documents tab), where the file is kept with the
-// QTN and the notes are saved with it — but where the server's 3 MB limit applies. This one takes a
-// PDF of any size, which is why it is still here.
+// difference from the same thing inside a quotation (Specs tab -> Documents), where the file is kept with the
+// QTN and the notes are saved with it.
 //
 // The writing surface itself is pdf/PdfEditor.
 
 import { useCallback, useRef, useState } from "react";
+import { MAX_ATTACHMENT_BYTES } from "../api";
 import PdfEditor from "../pdf/PdfEditor";
 
-const MAX_BYTES = 40 * 1024 * 1024;
+// The owner's decision: one size limit everywhere, so there is a single answer to "how big a PDF can
+// I use". Taken from the attachment limit rather than repeated, so the two can never drift — nothing
+// here is uploaded, so this cap is a house rule rather than something the server imposes.
+const MAX_BYTES = MAX_ATTACHMENT_BYTES;
+const MAX_MB = (MAX_BYTES / 1024 / 1024).toFixed(1);
 
 export default function PdfTextPage() {
   const [name, setName] = useState("");
@@ -27,7 +31,7 @@ export default function PdfTextPage() {
       return;
     }
     if (file.size > MAX_BYTES) {
-      setError(`"${file.name}" is ${Math.round(file.size / 1024 / 1024)} MB — the limit is 40 MB.`);
+      setError(`"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB — the limit is ${MAX_MB} MB.`);
       return;
     }
     setName(file.name);
@@ -51,7 +55,7 @@ export default function PdfTextPage() {
             Open a PDF, click anywhere on it to type, then download it again. Useful for marking up a
             client's specification, a supplier datasheet or a drawing. The file stays on this computer —
             it is not uploaded anywhere and nothing is saved. To keep a file and its notes with a
-            quotation, use that quotation's <b>Documents</b> tab instead.
+            quotation, use the <b>Documents</b> card on that quotation's <b>Specs</b> tab instead.
           </p>
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -66,7 +70,7 @@ export default function PdfTextPage() {
               <path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="m9 15 3-3 3 3" />
             </svg>
             <p className="text-sm font-bold text-ink">Drop a PDF here, or click to choose one</p>
-            <p className="text-xs text-muted">Up to 40 MB</p>
+            <p className="text-xs text-muted">Up to {MAX_MB} MB</p>
           </div>
           {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p>}
         </div>
