@@ -61,6 +61,10 @@ export interface PanelComponent {
   note: string;     // RPT-01: free text
   group?: string;   // combination tag (e.g. "ATS 1 Out of 2")
   spacer?: boolean; // blank separator row — excluded from all cost/count/exports
+  /** Typed in by hand rather than taken from the price list, so its description,
+   *  reference and price are the estimator's to edit. Costed and counted like any
+   *  other line — it is only its ORIGIN that differs. */
+  custom?: boolean;
 }
 /** True for a blank spacer row (separates component groups; never priced/counted). */
 export const isSpacer = (c: PanelComponent): boolean => c.spacer === true;
@@ -1064,6 +1068,26 @@ export function spacerComponent(section: string): PanelComponent {
     id: uid(), section, name: "", desc: "", ref: "", type: "", brand: "",
     rating: "", eur: 0, egp: 0, poles: 0, cuP: 0, cuC: 0, stock: "", qty: 0,
     adj: "", comment: "", note: "", spacer: true,
+  };
+}
+
+/**
+ * A blank line the estimator fills in themselves — for something the catalogue does not
+ * carry (a bought-in part, a one-off, a service line).
+ *
+ * `custom` is what makes its description, reference and price editable in the list. Every
+ * other row is a catalogue item and must keep the catalogue's own figures, or the price
+ * list stops being the single source of prices.
+ *
+ * Priced in EGP and branded "Custom" deliberately: the ABB discount applies to ABB-branded
+ * items priced in EUR, so a blank brand plus a euro price would have quietly handed a
+ * hand-typed line a supplier discount it was never given.
+ */
+export function customComponent(section: string): PanelComponent {
+  return {
+    id: uid(), section, name: "", desc: "", ref: "", type: "", brand: "Custom",
+    rating: "", eur: 0, egp: 0, poles: 0, cuP: 0, cuC: 0, stock: "", qty: 1,
+    adj: "", comment: "", note: "", custom: true,
   };
 }
 

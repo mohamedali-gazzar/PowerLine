@@ -6,7 +6,11 @@
 // the job.
 
 import { describe, it, expect } from "vitest";
-import { buildMaterialList, newPanel, initialState, type LvPanel, type LvState } from "./store";
+import {
+  buildMaterialList, newPanel, initialState, customComponent, calcPanel, isSpacer,
+  type LvPanel, type LvState,
+} from "./store";
+import { DEFAULT_FACTORS } from "./catalog";
 
 function state(panels: LvPanel[]): LvState {
   return { ...initialState(), panels };
@@ -60,6 +64,24 @@ describe("the Material List carries the price of everything it lists", () => {
     expect(ml.copperKg).toBeGreaterThan(0);
   });
 
+  it("lists a hand-typed custom item with the price that was typed", () => {
+    const item = { ...customComponent("Outgoing"), name: "Bought-in relay", ref: "CUSTOM-001", egp: 2500, qty: 3 };
+    const ml = buildMaterialList(state([{ ...newPanel(), name: "P1", components: [item] } as LvPanel]));
+    const row = ml.other.find((r) => r.description === "Bought-in relay");
+    expect(row?.egp).toBe(2500);
+    expect(row?.qty).toBe(3);
+  });
+
+  it("never lets a custom item drift into the ABB tables", () => {
+    // It is branded "Custom" on purpose. A blank brand defaults to ABB in the list, and an
+    // ABB-branded line with a euro price is handed the ABB supplier discount — which a
+    // hand-typed figure was never given.
+    const item = { ...customComponent("Outgoing"), name: "Bought-in relay", egp: 1000 };
+    const ml = buildMaterialList(state([{ ...newPanel(), name: "P1", components: [item] } as LvPanel]));
+    expect(ml.abb.some((r) => r.description === "Bought-in relay")).toBe(false);
+    expect(ml.abbEnclosures.some((r) => r.description === "Bought-in relay")).toBe(false);
+  });
+
   it("prices an enclosure chosen in panels mode", () => {
     const p = newPanel();
     const ml = buildMaterialList(state([
@@ -70,5 +92,33 @@ describe("the Material List carries the price of everything it lists", () => {
     ]));
     const enc = ml.abbEnclosures.find((r) => r.description.includes("1800x800x300"));
     expect(enc?.eur).toBe(300);
+  });
+});
+
+describe("a custom item is a normal priced line, it only STARTS differently", () => {
+  const F = { ...DEFAULT_FACTORS, abbDiscount: 0.2, factor: 1, operations: 0, safetyFactor: 0 };
+
+  it("is charged at the typed price, times its quantity", () => {
+    const item = { ...customComponent("Outgoing"), name: "Relay", egp: 2500, qty: 4 };
+    const c = calcPanel({ ...newPanel(), name: "P1", components: [item] } as LvPanel, F);
+    expect(c.compCost).toBe(10000);
+  });
+
+  it("gets no ABB discount, even though the discount is switched on", () => {
+    // 20% off would make this 2000. It is not an ABB import, so it is not discounted.
+    const item = { ...customComponent("Outgoing"), name: "Relay", egp: 2500, qty: 1 };
+    const c = calcPanel({ ...newPanel(), name: "P1", components: [item] } as LvPanel, F);
+    expect(c.compCost).toBe(2500);
+  });
+
+  it("is not mistaken for a spacer, which is the other blank-looking row", () => {
+    const item = customComponent("Outgoing");
+    expect(isSpacer(item)).toBe(false);
+    expect(item.qty).toBe(1); // a spacer is qty 0 and never costed; this one is real
+  });
+
+  it("costs nothing until a price is typed, rather than guessing one", () => {
+    const c = calcPanel({ ...newPanel(), name: "P1", components: [customComponent("Outgoing")] } as LvPanel, F);
+    expect(c.compCost).toBe(0);
   });
 });

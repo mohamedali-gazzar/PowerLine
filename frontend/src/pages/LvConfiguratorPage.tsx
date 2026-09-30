@@ -29,7 +29,7 @@ import {
   newPanel, newSparePanel, duplicatePanel, nextDuplicateName, uniquePanelName, panelNameOwner, panelNameClashMessage, blankSpareNames, blankSpareMessage, DEFAULT_SECTIONS, FIXED_SECTIONS, toPanelComponent, freeComponent, uid,
   lcpGroupComponents, LCP_GROUP_PARTS, KWHM_CONTENTS, kwhmAutoSize, kwhmBuilds, kwhmContentCfg, SPARE_KIND_ICONS, lcpAutoSize, lcpBuilds, LCP_MAX_ROWS, lcpBoxOf, lcpBox2Of, lcpEnclosureDbPrice, lcpEnclosureRecord, lcpSizes, lcpRealBox,
   lcpNamedBoxes, lcpEnclByRef, lcpEnclosureEgp, parseEnclDims,
-  spacerComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
+  spacerComponent, customComponent, isSpacer, DEFAULT_COMMERCIAL_TERMS, DEFAULT_COMMERCIAL_TERMS_AR,
   initialState, calcPanelCached, grandTotals, projectFactor, customItemsTotal, buildMaterialList, searchComponents, mainBusbarAuto, mainBusbarAutoRaw, busbarAreaMm2, panelHeightMm, buswayCopperMult, BUSWAY_COPPER_FACTOR, STONE_PAINT_USD, stonePaintUnits, mvDefaultName, abbKey, itemPriceEgp, exportBlockers, repriceToCatalog, pickRates, ratesEqual,
   panelLayout, panelNumbers, commonNamePrefix, resortByGroup, reorderVisiblePanels, reorderVisiblePanelsMany, createPanelGroup, movePanelsToGroup, renamePanelGroup, ungroupPanelGroup, deletePanelGroup, duplicatePanelGroup, moveGroupToIndex,
   withProjectSpecs, YES_NO, STD_TR_KVA_EDMS, STD_TR_KVA_DEFAULT, STD_OUTGOINGS, DEFAULT_MV_COMMERCIAL, DEFAULT_MV_CABLE_EGP_PER_M,
@@ -10435,6 +10435,11 @@ export function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboK
     setQ("");
     requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true }));
   };
+  /** A blank line the estimator fills in themselves, appended to the active section. */
+  const addCustomItem = () => {
+    u({ components: [...p.components, customComponent(p.activeSection)] });
+    setQ("");
+  };
 
   return (
     <div ref={cardRef} className="card relative p-5">
@@ -10559,6 +10564,14 @@ export function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboK
             + {label}
           </button>
         ))}
+        {/* Something the price list does not carry — a bought-in part, a one-off, a service
+            line. Sits with the other "+" chips because it is another way to add a row, and
+            it is the only one that does not go through the catalogue. */}
+        <button type="button" onClick={addCustomItem}
+          title={`Add a blank line to “${p.activeSection}” and type its description, reference and price yourself`}
+          className="rounded-full border border-dashed border-brand/50 bg-surface px-2.5 py-1 text-[11px] font-semibold text-brand-dark transition hover:border-brand hover:bg-brand-tint">
+          + Custom item
+        </button>
       </div>
 
       {/* search */}
@@ -10934,9 +10947,15 @@ export function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboK
                         )}
                       </td>
                       <td data-copy className="max-w-[330px] cursor-grab select-none py-1 pr-2"
-                        title="Double-click to copy"
-                        onDoubleClick={() => copyCellText(`${c.id}:name`, c.name)}>
-                        {c.name}
+                        title={c.custom ? undefined : "Double-click to copy"}
+                        onDoubleClick={() => { if (!c.custom) copyCellText(`${c.id}:name`, c.name); }}>
+                        {/* A custom line is the estimator's own: they name it. Catalogue rows
+                            stay read-only so the price list remains the one source of truth. */}
+                        {c.custom ? (
+                          <input className="input h-7 w-full px-1.5 text-xs" value={c.name}
+                            placeholder="What is this item?"
+                            onChange={(e) => setComp(c.id, { name: e.target.value, desc: e.target.value })} />
+                        ) : c.name}
                         {copiedKey === `${c.id}:name` && <span className="ml-1.5 align-middle text-[10px] font-semibold text-brand">Copied ✓</span>}
                         {editComp === c.id && (
                           <ComponentEditSelect current={c} panelCount={s.panels.length}
@@ -10950,9 +10969,12 @@ export function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboK
                         )}
                       </td>
                       <td data-copy className="cursor-grab select-none py-1 pr-2 text-[11px] text-muted"
-                        title="Double-click to copy"
-                        onDoubleClick={() => copyCellText(`${c.id}:ref`, c.ref)}>
-                        {c.ref}
+                        title={c.custom ? undefined : "Double-click to copy"}
+                        onDoubleClick={() => { if (!c.custom) copyCellText(`${c.id}:ref`, c.ref); }}>
+                        {c.custom ? (
+                          <input className="input h-7 w-full px-1.5 text-[11px]" value={c.ref} placeholder="Ref"
+                            onChange={(e) => setComp(c.id, { ref: e.target.value })} />
+                        ) : c.ref}
                         {copiedKey === `${c.id}:ref` && <span className="ml-1 align-middle text-[10px] font-semibold text-brand">✓</span>}
                       </td>
                       <td className="py-1 pr-2"><input className="input h-7 px-1.5 text-xs" value={c.adj} placeholder="—"
@@ -10963,9 +10985,15 @@ export function ComponentsCard({ s, p, u, replaceComponent, comboKind, setComboK
                         title="Double-click to copy"
                         onMouseEnter={(e) => { if (selected.has(c.id)) setHoverSum({ col: "unit", x: e.clientX, y: e.clientY }); }}
                         onMouseLeave={() => setHoverSum(null)}
-                        onDoubleClick={() => copyCellText(`${c.id}:unit`, fmtEgp(itemPriceEgp(c, s)))}>
+                        onDoubleClick={() => { if (!c.custom) copyCellText(`${c.id}:unit`, fmtEgp(itemPriceEgp(c, s))); }}>
                         {copiedKey === `${c.id}:unit` && <span className="mr-1 align-middle text-[10px] font-semibold text-brand">✓</span>}
-                        {fmtEgp(itemPriceEgp(c, s))}
+                        {/* Typed straight into EGP — the currency the quotation costs in, so the
+                            figure is the cost, with no rate standing between the two. */}
+                        {c.custom ? (
+                          <input className="input h-7 w-24 px-1.5 text-right text-xs" type="number" min={0} step="0.01"
+                            value={c.egp || 0} placeholder="0"
+                            onChange={(e) => setComp(c.id, { egp: Number(e.target.value) || 0, eur: 0 })} />
+                        ) : fmtEgp(itemPriceEgp(c, s))}
                       </td>
                       <td data-copy className="cursor-grab select-none py-1 pr-2 text-right font-semibold"
                         title="Double-click to copy"
