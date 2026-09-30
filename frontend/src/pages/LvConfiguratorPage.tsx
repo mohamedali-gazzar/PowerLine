@@ -13001,6 +13001,11 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
     const rows: MatCostRow[] = visible.flatMap((b, i) =>
       b.kind !== "table" ? [] : b.rows.map((r) => {
         const egp = matUnitCost(r, s.factors, priceCtl);
+        // Which currency the PRICE LIST holds this item in. The same rule componentPriceEgp
+        // costs by: a euro figure means it is imported and priced in EUR; anything else is
+        // priced locally in EGP. Carried through so each line shows the supplier's own
+        // number, not only what it became after conversion and discount.
+        const inEur = (r.eur ?? 0) > 0;
         return {
           group: `${i + 1} · ${b.title}`,
           description: r.description,
@@ -13008,13 +13013,19 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
           supplier: r.supplier,
           stock: r.stock,
           qty: r.qty,
+          listCurrency: inEur ? "EUR" : "EGP",
+          listPrice: inEur ? (r.eur ?? 0) : (r.egp ?? 0),
+          rateToEgp: inEur ? s.factors.euro : null,
           discPct: discPctFor(r),
           mktPct: mktPctFor(r),
           unitCost: toUsd ? egp / s.factors.usd : egp,
         };
       }),
     );
-    const ws = XLSX.utils.aoa_to_sheet(materialCostAoa(rows, toUsd ? "USD" : "EGP"));
+    const ws = XLSX.utils.aoa_to_sheet(
+      materialCostAoa(rows, toUsd ? "USD" : "EGP",
+        { eurToEgp: s.factors.euro, usdToEgp: s.factors.usd }),
+    );
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Material costs");
     const trimmed = name.trim() || def;

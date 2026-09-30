@@ -23,9 +23,24 @@ export interface MatCostRow {
   supplier: string;
   stock: string;
   qty: number;
+  /** The currency this item is PRICED IN on the price list — "EUR" or "EGP", per item. */
+  listCurrency: string;
+  /** Its price-list figure, in that currency, before any discount or market price. */
+  listPrice: number;
+  /** EGP per unit of listCurrency, or null when the item is already priced in EGP and
+   *  nothing was converted. Printed so a converted figure can always be checked by hand. */
+  rateToEgp: number | null;
   discPct: number;
   mktPct: number;
   unitCost: number;
+}
+
+/** The rates every converted figure on the sheet was worked out with. */
+export interface MatCostRates {
+  /** EGP per 1 EUR — what a EUR-listed item is multiplied by. */
+  eurToEgp: number;
+  /** EGP per 1 USD — used only when the sheet is written in USD. */
+  usdToEgp: number;
 }
 
 /**
@@ -37,10 +52,25 @@ export interface MatCostRow {
  * for costing: every item in the job on one sortable, filterable sheet, so the cost of any
  * product can be found without reading six tables and adding them up by hand.
  */
-export function materialCostAoa(rows: MatCostRow[], currency: string): (string | number)[][] {
+export function materialCostAoa(
+  rows: MatCostRow[],
+  currency: string,
+  rates: MatCostRates,
+): (string | number)[][] {
   const aoa: (string | number)[][] = [];
+  // THE RATES COME FIRST, on the sheet itself. Items are priced in different currencies —
+  // ABB imports in EUR, local supply in EGP — so every figure below is either a list price
+  // or a conversion, and a conversion nobody can check is a number nobody can defend to a
+  // customer. Stating the rate here means the sheet can be re-derived months later, when
+  // the rate in the app has moved on.
+  aoa.push(["Rates used", `1 EUR = ${rates.eurToEgp} EGP`,
+    ...(currency === "USD" ? [`1 USD = ${rates.usdToEgp} EGP`] : [])]);
+  aoa.push([]);
   aoa.push([
     "Group", "Description", "Reference", "Supplier", "Stock", "Qty",
+    // The item's own price list, untouched — the figure to check against the supplier.
+    "List currency", "List price",
+    "Rate to EGP",
     "Discount (%)", "Market Price (%)",
     `Unit cost (${currency})`, `Total cost (${currency})`,
   ]);
@@ -55,6 +85,10 @@ export function materialCostAoa(rows: MatCostRow[], currency: string): (string |
       r.supplier || "—",
       r.stock || "—",
       r.qty,
+      r.listCurrency,
+      Number(r.listPrice.toFixed(2)),
+      // An EGP-listed item was never converted; printing a rate would imply one happened.
+      r.rateToEgp == null ? "—" : r.rateToEgp,
       r.discPct,
       r.mktPct,
       // Two decimals: a unit cost rounded to whole money makes the line total look wrong
@@ -65,7 +99,7 @@ export function materialCostAoa(rows: MatCostRow[], currency: string): (string |
   }
   // Blank spacer, then the total — so a filter over the data rows never drags it along.
   aoa.push([]);
-  aoa.push(["", "", "", "", "", "", "", "TOTAL", "", Number(total.toFixed(2))]);
+  aoa.push(["", "", "", "", "", "", "", "", "", "", "TOTAL", "", Number(total.toFixed(2))]);
   return aoa;
 }
 
