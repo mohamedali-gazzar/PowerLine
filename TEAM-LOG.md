@@ -23,6 +23,35 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-09-30 · Mohamed's side · Claude
 
+**Enclosure IP / Mounting / RAL: two separate faults, both fixed.** Mohamed added IP and mounting for
+panels on the price screen and the app would not read them.
+
+**1. The spreadsheet never read them back.** The download has always WRITTEN IP, Mounting and RAL for
+every enclosure; the upload had no column for them, so you could fill them in, upload, and nothing
+happened. The same lossy round trip the "No.poles" column had in August — worth remembering that a
+column existing in the export proves nothing about the parser. Both spellings of Mounting are
+accepted. A blank cell still says nothing, so leaving a column empty never wipes what is stored, and
+re-uploading unchanged values reports nothing.
+
+**2. The offer read a FROZEN copy of the IP.** When an enclosure is chosen for a panel its IP is
+copied onto the panel, and the Technical Offer read that copy — so adding an IP to the price list
+afterwards changed nothing on any panel already quoted and it kept printing "—". Mounting was read
+live from the catalogue, so the two behaved differently for no reason. Both now read the CURRENT
+price list and fall back to the saved copy only when the enclosure cannot be found at all.
+
+The line to hold: PRICES stay frozen per quotation. IP / Mounting / RAL are the enclosure's
+specification, not its price — correcting those is meant to show on work already quoted.
+
+**Also: an enclosure edit used to write ONE changelog row labelled "price"**, even when the price had
+not moved, so an IP change was invisible in what's-updated. It now writes one row per column, the
+same as a component.
+
+Checked end to end on a real enclosure — values landed, the search index rebuilt (it reads IP and
+Mounting, so a stale one would leave them unfindable), RAL correctly left alone when unchanged. The
+enclosure was put back as it was and the test changelog rows removed.
+
+## 2026-09-30 · Mohamed's side · Claude
+
 **RMU offers can be quoted OUTDOOR again — and until today none ever were.**
 
 The Indoor / Outdoor choice is back in the RMU configurator (shared form, so it shows in the

@@ -407,6 +407,10 @@ export interface LvImportRow {
   cuP: number;   // Weight/Panel/Pole
   cuC: number;   // Weight/Cell/Pole
   stock: string;
+  // Enclosure-only columns — the sheet has always written them; now it reads them back too.
+  ip: string;
+  mount: string;
+  ral: string;
 }
 
 /** A non-price column the sheet would rewrite on an already-catalogued item. */

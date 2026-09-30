@@ -3917,11 +3917,21 @@ function TechnicalTab({ s, qtnNo, up, onBackToPanel, onScratch, readOnly }: { s:
     }
     const pItems = p.panelItems ?? [];
     const it = pItems[0];
-    const enc = it ? ENCLOSURES.find((e) => e.ref === it.ref && e.name === it.name) : undefined;
+    // Matched on the stable code first, then on family + name for a row whose code has since been
+    // corrected — an enclosure that cannot be found at all leaves the spec blank rather than wrong.
+    const enc = it
+      ? ENCLOSURES.find((e) => e.ref === it.ref && e.name === it.name)
+        ?? ENCLOSURES.find((e) => e.fam === it.fam && e.name === it.name)
+      : undefined;
     return {
       // RPT-1: panel type shows the family only — sizing (enclosure name) removed.
       panelType: it ? it.fam : "—",
-      ip: it?.ip || "—",
+      // The CATALOGUE first, the copy saved onto the panel only as a fallback. IP used to be read
+      // from the saved copy alone, which froze it at the moment the enclosure was picked: adding an
+      // IP to the price list afterwards changed nothing on any panel already quoted, and the offer
+      // kept printing "—". These are the enclosure's specification, not its price — a correction to
+      // the price list is meant to show. (Prices are a different matter and stay frozen.)
+      ip: enc?.ip || it?.ip || "—",
       mount: enc?.mount || "—",
       ral: enc?.ral || "—",
     };

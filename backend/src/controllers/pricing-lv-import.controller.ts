@@ -63,6 +63,12 @@ const rawRowSchema = z.object({
   cuP: z.number().default(0),   // copper kg/pole — panels
   cuC: z.number().default(0),   // copper kg/pole — cells
   stock: z.string().default(""),
+  // Enclosure-only columns. The download has written these since the sheet was designed, but
+  // nothing read them back, so an engineer could fill in IP and Mounting, upload, and watch
+  // nothing happen — the same lossy round trip the "No.poles" column had.
+  ip: z.string().default(""),
+  mount: z.string().default(""),
+  ral: z.string().default(""),
 });
 
 const previewSchema = z.object({ rows: z.array(rawRowSchema).min(1).max(6000) });
@@ -71,8 +77,10 @@ type RawRow = z.infer<typeof rawRowSchema>;
 
 /** One non-price column the sheet would rewrite on an already-catalogued item. */
 export interface FieldChange {
-  /** LvComponent column. Only the keys in APPLIABLE_FIELDS are ever written. */
-  field: "d" | "brand" | "t" | "f" | "r" | "poles" | "cuP" | "cuC" | "stock";
+  /** A catalogue column. Components are whitelisted by APPLIABLE_FIELDS and enclosures by
+   *  ENCL_APPLIABLE_FIELDS — two separate lists, so a component column can never be written
+   *  onto an enclosure or the other way round, whatever a replayed batch claims. */
+  field: "d" | "brand" | "t" | "f" | "r" | "poles" | "cuP" | "cuC" | "stock" | "ip" | "mount" | "ral";
   /** Human label for the preview ("Description", "Brand", …). */
   label: string;
   from: string;
@@ -86,7 +94,7 @@ export interface FieldChange {
  *  This is the component's whole data set bar two: `ref` is the key rows are
  *  matched on, and `sortIndex` is catalogue ORDER, which is load-bearing for
  *  the combination builders and must never come from a spreadsheet. */
-const APPLIABLE_FIELDS: Record<FieldChange["field"], string> = {
+const APPLIABLE_FIELDS: Partial<Record<FieldChange["field"], string>> = {
   d: "Description",
   brand: "Brand",
   t: "Type",
@@ -96,6 +104,15 @@ const APPLIABLE_FIELDS: Record<FieldChange["field"], string> = {
   cuP: "Weight/Panel/Pole",
   cuC: "Weight/Cell/Pole",
   stock: "Stock",
+};
+
+/** The same, for an ENCLOSURE. Its name is identity and rides separately (see `newName`), and its
+ *  dimensions are parsed from that name, so these three are everything a sheet may rewrite.
+ *  They matter beyond paperwork: IP and Mounting are what the enclosure search reads. */
+const ENCL_APPLIABLE_FIELDS: Partial<Record<FieldChange["field"], string>> = {
+  ip: "IP",
+  mount: "Mounting",
+  ral: "RAL",
 };
 /** Columns compared as numbers rather than trimmed text. */
 const NUMERIC_FIELDS = new Set<FieldChange["field"]>(["poles", "cuP", "cuC"]);
@@ -166,7 +183,9 @@ export async function postLvImportPreview(req: Request, res: Response) {
           active: true, sortIndex: true,
         },
       }),
-      prisma.lvEnclosure.findMany({ select: { id: true, ref: true, fam: true, name: true, eur: true, egp: true, active: true } }),
+      // ip / mount / ral are selected because the diff compares them: without them here every
+      // upload reported an IP "change" from blank, whatever was already stored.
+      prisma.lvEnclosure.findMany({ select: { id: true, ref: true, fam: true, name: true, eur: true, egp: true, active: true, ip: true, mount: true, ral: true } }),
     ]);
     const compByRef = new Map(components.filter((c) => c.ref).map((c) => [normRef(c.ref), c]));
     const enclByRef = new Map(enclosures.filter((e) => e.ref).map((e) => [normRef(e.ref), e]));
@@ -243,7 +262,7 @@ export async function postLvImportPreview(req: Request, res: Response) {
       const fields: FieldChange[] = [];
       let enclNewName: string | undefined; // enclosure description edit (ride separately — name is identity)
       if (comp) {
-        const sheet: Record<FieldChange["field"], string | number> = {
+        const sheet: Partial<Record<FieldChange["field"], string | number>> = {
           d: row.description, brand: row.brand, t: row.type, f: row.family, r: row.rating,
           poles: row.poles, cuP: row.cuP, cuC: row.cuC, stock: row.stock,
         };
@@ -253,12 +272,12 @@ export async function postLvImportPreview(req: Request, res: Response) {
           if (NUMERIC_FIELDS.has(key)) {
             const n = Number(now) || 0;
             if (n > 0 && Math.abs(n - (Number(was) || 0)) > 1e-9) {
-              fields.push({ field: key, label: APPLIABLE_FIELDS[key], from: String(was ?? 0), to: String(n) });
+              fields.push({ field: key, label: APPLIABLE_FIELDS[key] as string, from: String(was ?? 0), to: String(n) });
             }
           } else {
             const to = String(now ?? "").trim();
             if (to && to !== String(was ?? "").trim()) {
-              fields.push({ field: key, label: APPLIABLE_FIELDS[key], from: String(was ?? ""), to });
+              fields.push({ field: key, label: APPLIABLE_FIELDS[key] as string, from: String(was ?? ""), to });
             }
           }
         }
@@ -290,6 +309,18 @@ export async function postLvImportPreview(req: Request, res: Response) {
           }
         }
       } else if (encl) {
+        // IP / Mounting / RAL. Same rule as everywhere else on this screen: a blank cell says
+        // nothing, so leaving a column empty never wipes what is stored.
+        const encSheet: Partial<Record<FieldChange["field"], string>> = {
+          ip: row.ip, mount: row.mount, ral: row.ral,
+        };
+        for (const key of Object.keys(ENCL_APPLIABLE_FIELDS) as FieldChange["field"][]) {
+          const to = String(encSheet[key] ?? "").trim();
+          const was = String((encl as unknown as Record<string, unknown>)[key] ?? "").trim();
+          if (to && to !== was) {
+            fields.push({ field: key, label: ENCL_APPLIABLE_FIELDS[key] as string, from: was, to });
+          }
+        }
         const nn = row.description.trim();
         if (nn && nn !== encl.name.trim()) {
           // An enclosure's name IS its identity (dimensions / cell matching parse it). Allow a
@@ -786,6 +817,14 @@ export async function postLvImportApply(req: Request, res: Response) {
           const cur = await prisma.lvEnclosure.findUnique({ where: { id: d.entityId } });
           if (!cur) { skipped++; continue; }
           const data: Record<string, unknown> = { eur: d.eur, egp: d.egp, updatedBy: by };
+          // IP / Mounting / RAL, against the enclosure's OWN whitelist — a replayed batch cannot
+          // reach a component column from here, nor a component batch reach these.
+          const applied: FieldChange[] = [];
+          for (const fc of d.fields ?? []) {
+            if (!(fc.field in ENCL_APPLIABLE_FIELDS)) continue;
+            data[fc.field] = fc.to;
+            applied.push(fc);
+          }
           // Description (name) edit — set by diffForExisting only when the row was pinned by its
           // stable code. Guard the [family, name] identity against an existing name.
           if (d.newName && d.newName !== cur.name) {
@@ -794,18 +833,42 @@ export async function postLvImportApply(req: Request, res: Response) {
               nameClashes.push(`${cur.name}: could not rename to “${d.newName}” — that name is already used under ${cur.fam}.`);
             } else {
               data.name = d.newName;
-              data.search = searchText(cur.fam, d.newName, cur.ref, cur.abb, cur.ip, cur.mount);
             }
           }
+          // Rebuilt from what is ACTUALLY being written — the enclosure search reads IP and
+          // Mounting, so a stale one would leave the new values unfindable on the price screen.
+          if (applied.length || data.name) {
+            data.search = searchText(
+              cur.fam,
+              (data.name as string) ?? cur.name,
+              cur.ref,
+              cur.abb,
+              (data.ip as string) ?? cur.ip,
+              (data.mount as string) ?? cur.mount,
+            );
+          }
           await prisma.lvEnclosure.update({ where: { id: cur.id }, data });
+          const label = `${cur.fam} · ${(data.name as string) ?? cur.name}`;
           await prisma.priceChange.create({
             data: {
               domain: "LV", entity: "LvEnclosure", entityId: cur.id,
-              label: `${cur.fam} · ${(data.name as string) ?? cur.name}`, field: data.name ? "price+description" : "price",
+              label, field: data.name ? "price+description" : "price",
               oldValue: `${cur.eur} EUR / ${cur.egp} EGP`, newValue: `${d.eur} EUR / ${d.egp} EGP`,
               actorId, actorEmail: by,
             },
           });
+          // One audit row per column, the same as a component, so the price-list changelog says
+          // what moved rather than only that something did.
+          for (const fc of applied) {
+            await prisma.priceChange.create({
+              data: {
+                domain: "LV", entity: "LvEnclosure", entityId: cur.id,
+                label, field: fc.label.toLowerCase(),
+                oldValue: fc.from, newValue: fc.to,
+                actorId, actorEmail: by,
+              },
+            });
+          }
         }
         updated++;
         continue;

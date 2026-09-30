@@ -78,6 +78,13 @@ const HEADER_ALIASES: Record<string, string> = {
   "weight/panel/pole": "cuP",
   "weight/cell/pole": "cuC",
   "stock": "stock",
+  // ENCLOSURE columns. The download has always WRITTEN these; nothing read them back, so an
+  // engineer could fill in IP and Mounting for a panel, upload, and watch nothing happen — the
+  // same lossy round trip "No.poles" had. Both spellings of the mounting column are accepted.
+  "ip": "ip",
+  "mounting": "mount",
+  "mount": "mount",
+  "ral": "ral",
 };
 
 const toNum = (v: unknown): number => {
@@ -123,6 +130,9 @@ export function parseWorkbook(buf: ArrayBuffer): { rows: LvImportRow[]; missing:
       cuP: toNum(mapped.cuP),
       cuC: toNum(mapped.cuC),
       stock: String(mapped.stock ?? "").trim(),
+      ip: String(mapped.ip ?? "").trim(),
+      mount: String(mapped.mount ?? "").trim(),
+      ral: String(mapped.ral ?? "").trim(),
     });
   }
 
