@@ -5399,7 +5399,15 @@ function KioskCover({ rmu, tr, kva, stonePaint, index, project, lvRatingA, lvBre
         <polygon points="133.0,300.0 359.9,431.0 359.9,421.0 133.0,290.0" fill={OR} />
         <polygon points="456.9,375.0 359.9,431.0 359.9,421.0 456.9,365.0" fill="#C9530F" />
         <polygon points="230.0,234.0 456.9,365.0 359.9,421.0 133.0,290.0" fill="#F6F6F8" stroke={DK} strokeWidth="0.8" strokeLinejoin="round" />
-        <g transform="matrix(0.866,-0.5,0,1,403.2,458.0)"><text x="0" y="0" fontSize="11" fontWeight="700" letterSpacing="2" fill={DK} textAnchor="middle">POWERLINE</text><text x="0" y="14" fontSize="6.5" fontWeight="700" letterSpacing="1.5" fill={OR} textAnchor="middle">IP54</text></g>
+        {/* The real logo on the side panel, not a typed approximation of it. The matrix is the same
+            isometric skew the rest of this face uses, so the artwork lies on the panel instead of
+            floating in front of it. In this group's own coordinates the face is 100 wide and 120
+            tall, so 80 leaves a margin either side. logo-color.png is 845×200 — the ratio below
+            keeps it undistorted. */}
+        <g transform="matrix(0.866,-0.5,0,1,403.2,458.0)">
+          <image href="/brand/logo-color.png" x="-40" y="-12" width="80" height="18.9" preserveAspectRatio="xMidYMid meet" />
+          <text x="0" y="26" fontSize="6.5" fontWeight="700" letterSpacing="1.5" fill={OR} textAnchor="middle">IP54</text>
+        </g>
         <polyline points="175.9,374.8 175.9,636 121.5,636 121.5,654" fill="none" stroke={OR} strokeWidth="0.8" strokeDasharray="2 2" />
         <circle cx="121.5" cy="636" r="1.8" fill={OR} />
         <polyline points="251.7,418.5 251.7,628 297.5,628 297.5,654" fill="none" stroke={OR} strokeWidth="0.8" strokeDasharray="2 2" />

@@ -23,6 +23,27 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-10-01 · Mohamed's side · Claude
 
+**The kiosk illustration carries the real Powerline logo** on its side panel, instead of the word
+POWERLINE typed in the drawing's own font. It is the full horizontal lockup — the P mark, the Arabic
+باورلاين and POWERLINE — laid on with the same isometric skew as the rest of that face, so it sits on
+the metal rather than in front of it. IP54 stays underneath.
+
+**Checked by maths, not by eye.** A small screenshot made it look like the artwork crossed the panel
+edge; putting the logo's four corners AND the face's four corners through the same transform showed
+every corner lands on the face with ~11 units of margin each side. Worth remembering for this
+drawing: the corner where the two faces meet passes close behind the logo and reads as an overlap.
+
+⚠️ **The logo is a PNG** — there is no vector of it anywhere in the project, only `logo-color.png`
+and the other brand PNGs. Fine at the size it prints, but an SVG would be the thing to add if it ever
+needs to be sharp at any scale.
+
+**Note: none of the four local MV kiosk quotations can generate an offer** — all are missing required
+fields (project name, customer, revision, busbar rating, kiosk size), so the Technical tab shows the
+blocked screen. I made a complete scratch copy to see the drawing and deleted it afterwards; the four
+are untouched. Anyone testing kiosk output will hit the same wall.
+
+## 2026-10-01 · Mohamed's side · Claude
+
 **"EECH" now reads EEHC everywhere anyone sees it** — the Client specification dropdown, the eight
 coding-guide descriptions, and the "only EEHC is available" message. (Egyptian Electricity Holding
 Company: EEHC was always the right spelling.)
