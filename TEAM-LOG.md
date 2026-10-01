@@ -21,6 +21,26 @@ closed off.
 ---
 
 <!-- NEW ENTRIES GO HERE -->
+## 2026-10-01 · Mohamed's side · Claude
+
+**The Material List's copper block now shows its cost, not only its weight.** Mohamed asked for it
+from the screen: the block read "Copper — total project weight · 0.8 KG" and nothing else. It now
+reads the weight, the cost, and the RATE used — 259.2 KG · 199,584 EGP · at 770 EGP per KG — so the
+figure can be checked without opening Pricing Settings. It follows the page's USD/EGP toggle the same
+way the selection total does.
+
+It is `kg × factors.copper`, the same rate every panel's busbar and connection copper is costed at,
+so it agrees with the panel costs instead of being a second opinion.
+
+**Note for the other side — this sits beside your cost-sheet work, it does not duplicate it.** Your
+`c79c5b0` costed copper as a line on the new flat cost sheet; this is the on-screen block, which was
+still weight-only after it. Both work out `kg × factors.copper`, so the two agree by construction.
+
+**I deliberately left `materialAoa` alone.** I had added a cost row to the printed Material List
+export before pulling, then took it back out: your comment says that export is "blocks, titles, no
+money — for the supply chain", and the cost sheet already carries copper. Say if you would rather it
+were on both.
+
 ## 2026-09-30 · Mohamed's side · Claude
 
 **Enclosure IP / Mounting / RAL: two separate faults, both fixed.** Mohamed added IP and mounting for

@@ -12967,7 +12967,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
   // hidden/empty section — subsequent sections renumber automatically.
   type Block =
     | { kind: "table"; title: string; rows: MatRow[]; withSupplier?: boolean; note?: string }
-    | { kind: "copper"; title: string; kg: number };
+    | { kind: "copper"; title: string; kg: number; cost: number; rate: number };
   const abbNote = "Per item: Discount (%) lowers the cost, Market Price (%) raises it — one or the other, not both";
   const encNote = "Quoted at list price · per item: a Discount (%) lowers the cost or a Market Price (%) raises it";
   const candidates: (Block | false)[] = [
@@ -12976,7 +12976,17 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
     !abbOnly && { kind: "table", title: "PLP Cells", rows: ml.plpCells },
     { kind: "table", title: "ABB Enclosures", rows: ml.abbEnclosures, note: encNote },
     !abbOnly && { kind: "table", title: "IS2", rows: ml.is2 },
-    !abbOnly && { kind: "copper", title: "Copper — total project weight", kg: ml.copperKg },
+    // Copper is bought by weight, so it has no catalogue lines to cost per item — the whole project's
+    // weight at the copper rate, which is the same rate every panel's busbar and connection copper is
+    // costed at (calcPanel: kg × factors.copper). Showing the rate as well means the number can be
+    // checked without opening Pricing Settings.
+    !abbOnly && {
+      kind: "copper",
+      title: "Copper — total project weight & cost",
+      kg: ml.copperKg,
+      rate: s.factors.copper || 0,
+      cost: ml.copperKg * (s.factors.copper || 0),
+    },
     !abbOnly && { kind: "table", title: "Pro-E", rows: ml.proE },
   ];
   const visible = candidates.filter((b): b is Block =>
@@ -13151,9 +13161,22 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
             <MatTable key={b.title} title={`${i + 1} · ${b.title}`} rows={b.rows} withSupplier={b.withSupplier} note={b.note} factors={s.factors}
               priceCtl={priceCtl} picked={picked} onPick={pick} onPickAll={pickAll} cur={matCur} usd={s.factors.usd || 0} onDragStart={dragStart} onDragOver={dragOver} />
           ) : (
-            <div key={b.title} className="card flex items-center justify-between p-4">
+            <div key={b.title} className="card flex flex-wrap items-center justify-between gap-x-6 gap-y-2 p-4">
               <h3 className="text-sm font-bold text-brand-dark">{i + 1} · {b.title}</h3>
-              <span className="text-lg font-extrabold text-ink">{b.kg.toFixed(1)} KG</span>
+              <div className="ml-auto flex items-baseline gap-6">
+                <span className="text-lg font-extrabold text-ink">{b.kg.toFixed(1)} KG</span>
+                {/* Converted the same way the selection total above is, so the two never disagree
+                    about which currency the page is showing. */}
+                <span className="text-lg font-extrabold text-ink">
+                  {fmtEgp(matCur === "USD" && s.factors.usd > 0 ? b.cost / s.factors.usd : b.cost)}
+                  {" "}{matCur === "USD" && s.factors.usd > 0 ? "USD" : "EGP"}
+                </span>
+              </div>
+              {b.rate > 0 && (
+                <span className="w-full text-right text-[11px] text-muted">
+                  at {fmtEgp(b.rate)} EGP per KG
+                </span>
+              )}
             </div>
           ))}
         </>
