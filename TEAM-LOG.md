@@ -35,8 +35,12 @@ underneath is unchanged — and the printed Technical Offer and SLD never name t
 so nothing on customer paper said it either way.
 
 Checked: the dropdown reads EEHC while still holding "EECH", and an existing offer (PL-2026-0004)
-loads, prices at 4,828 and keeps its code. If the stored value should be corrected too, that is a
-migration over live offers and wants saying out loud first.
+loads, prices at 4,828 and keeps its code.
+
+**SETTLED — Mohamed confirmed it, 1 Oct 2026: the stored value stays "EECH", only the displayed name
+is EEHC, and NO migration is to be run.** So this is not an open question: please do not "fix" the
+enum, the saved offers or the product-code digit later on the grounds that they look misspelled. The
+spelling in the column is deliberate, and the comments beside it say so.
 
 ## 2026-10-01 · Mohamed's side · Claude
 
