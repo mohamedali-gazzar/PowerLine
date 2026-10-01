@@ -261,7 +261,9 @@ export default function RmuConfigForm({
                       .filter((c) => AVAILABLE_CLIENT_SPECS.includes(c) || c === (rmu.clientSpec ?? "EECH"))
                       .map((c) => {
                         const ok = AVAILABLE_CLIENT_SPECS.includes(c);
-                        return <option key={c} value={c}>{ok ? c : `${c} — no technical offer`}</option>;
+                        // Shown through label(): the stored value is "EECH" (a typo that is now in
+                        // every saved offer), the name people read is EEHC.
+                        return <option key={c} value={c}>{ok ? label(c) : `${label(c)} — no technical offer`}</option>;
                       })}
                   </select>
                 </Field>

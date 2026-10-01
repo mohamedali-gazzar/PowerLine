@@ -23,6 +23,23 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-10-01 · Mohamed's side · Claude
 
+**"EECH" now reads EEHC everywhere anyone sees it** — the Client specification dropdown, the eight
+coding-guide descriptions, and the "only EEHC is available" message. (Egyptian Electricity Holding
+Company: EEHC was always the right spelling.)
+
+⚠️ **The STORED value is still "EECH", on purpose.** It is not only a label: it sits inside every
+offer ever saved, in the server's validation enum, and it is the digit that builds the product code
+(PRAL**1**0AB12R2T1W). Renaming the value would mean rewriting offers already sent to customers to
+correct a spelling nobody can see. So the dropdown shows EEHC through the LABELS map while the value
+underneath is unchanged — and the printed Technical Offer and SLD never name the client spec at all,
+so nothing on customer paper said it either way.
+
+Checked: the dropdown reads EEHC while still holding "EECH", and an existing offer (PL-2026-0004)
+loads, prices at 4,828 and keeps its code. If the stored value should be corrected too, that is a
+migration over live offers and wants saying out loud first.
+
+## 2026-10-01 · Mohamed's side · Claude
+
 **Money now shows its decimals — up to two, dropped when they say nothing.** The owner's rule, in his
 own examples: 1950.00 → "1,950", 1950.20 → "1,950.2", 1950.25 → "1,950.25".
 

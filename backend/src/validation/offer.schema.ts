@@ -64,7 +64,8 @@ export const rmuConfigSchema = z.object({
   // Lucy has no client specification; PRAL/PSEC only have EECH data today.
   .refine((c) => c.productType === "LUCY" || c.clientSpec === "EECH", {
     // We only have EECH technical offers; KAHRABA is locked until its data exists.
-    message: "No technical offer for KAHRABA yet — locked. Only EECH is available.",
+    // EEHC is the name; "EECH" stays as the stored value (an old typo, now in every saved offer).
+    message: "No technical offer for KAHRABA yet — locked. Only EEHC is available.",
     path: ["clientSpec"],
   });
 

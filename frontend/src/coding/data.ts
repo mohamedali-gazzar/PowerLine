@@ -23,15 +23,17 @@ export const RMU_FAMILIES: Named[] = [
   }
 ];
 
-/** Spec = client digit (1 EECH, 2 KAHRABA) + type digit (0 Standard, 9 Smart). */
+/** Spec = client digit (1 EEHC, 2 KAHRABA) + type digit (0 Standard, 9 Smart).
+ *  The stored value is still spelled "EECH" - an old typo that is now in every saved offer and in
+ *  the server's validation, so only the name people read was corrected. */
 export const RMU_SPECS: (Named & { reserved?: boolean })[] = [
   {
     "code": "10",
-    "en": "Standard RMU according to Egyptian Electricity Holding Company (EECH)."
+    "en": "Standard RMU according to Egyptian Electricity Holding Company (EEHC)."
   },
   {
     "code": "19",
-    "en": "Smart RMU according to Egyptian Electricity Holding Company (EECH)."
+    "en": "Smart RMU according to Egyptian Electricity Holding Company (EEHC)."
   },
   {
     "code": "20",
@@ -80,7 +82,7 @@ export const RMU_CLASSES: RmuClass[] = [
 export const RMU_EXAMPLES: Named[] = [
   {
     "code": "PSEC10AB24R2T1M",
-    "en": "Standard RMU [2+1+M] with ABB SF6 LBS, 24KV, Two ring feeder, one transformer feeder, with measuring cell according to EECH specs."
+    "en": "Standard RMU [2+1+M] with ABB SF6 LBS, 24KV, Two ring feeder, one transformer feeder, with measuring cell according to EEHC specs."
   },
   {
     "code": "PSEC20AB24R2T1M",
@@ -88,7 +90,7 @@ export const RMU_EXAMPLES: Named[] = [
   },
   {
     "code": "PSEC19AB24R2T1W",
-    "en": "Smart RMU [2+1] with ABB SF6 LBS, 24KV, two ring feeder, one transformer feeder, without measuring cell according to EECH specs."
+    "en": "Smart RMU [2+1] with ABB SF6 LBS, 24KV, two ring feeder, one transformer feeder, without measuring cell according to EEHC specs."
   },
   {
     "code": "PSEC29AB24R2T1W",
@@ -96,19 +98,19 @@ export const RMU_EXAMPLES: Named[] = [
   },
   {
     "code": "PSEC10MG12R2T1M",
-    "en": "Standard RMU [2+1+M] with Murge SF6 LBS, 12KV, Two ring feeder, One transformer feeder, with measuring cell according to EECH specs."
+    "en": "Standard RMU [2+1+M] with Murge SF6 LBS, 12KV, Two ring feeder, One transformer feeder, with measuring cell according to EEHC specs."
   },
   {
     "code": "PSEC10SH12R3T2W",
-    "en": "Standard RMU [3+2] with Schneider SF6 LBS, 12KV, Three ring feeder, Two transformer feeder, without measuring cell according to EECH specs."
+    "en": "Standard RMU [3+2] with Schneider SF6 LBS, 12KV, Three ring feeder, Two transformer feeder, without measuring cell according to EEHC specs."
   },
   {
     "code": "PRAL10AB24R3T1W",
-    "en": "Standard RMU [3+1] with ABB Air LBS, 24KV, Three ring feeder, One transformer feeder, according to EECH specs."
+    "en": "Standard RMU [3+1] with ABB Air LBS, 24KV, Three ring feeder, One transformer feeder, according to EEHC specs."
   },
   {
     "code": "PRAL10GY12R3T2M",
-    "en": "Standard RMU [3+2+M] with JGGY Air LBS, 12KV, Three ring feeder, Two transformer feeder, with measuring cell according to EECH specs."
+    "en": "Standard RMU [3+2+M] with JGGY Air LBS, 12KV, Three ring feeder, Two transformer feeder, with measuring cell according to EEHC specs."
   },
   {
     "code": "PRAL29AB24R3T2M",

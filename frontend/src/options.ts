@@ -53,7 +53,11 @@ export const LABELS: Record<string, string> = {
   JGGY: "JGGY",
   GRL: "GRL",
   CHINT: "Chint",
-  EECH: "EECH",
+  // The company is the Egyptian Electricity Holding Company — EEHC. "EECH" is a typo that went in
+  // early and became the STORED value: it is in the saved offers, the server's validation enum and
+  // the product-code digit, so the value stays and only what people read changes. Renaming the value
+  // would mean rewriting every offer already sent to a customer, to fix a spelling.
+  EECH: "EEHC",
   KAHRABA: "KAHRABA",
 };
 
