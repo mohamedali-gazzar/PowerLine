@@ -7,6 +7,7 @@
 //   • factors.json / combos.json — pricing factors and ATS/MCC/WD templates,
 //     maintained separately via `frontend/scripts/lv-import.cjs`.
 
+import { fmtMoney } from "../money";
 import componentsJson from "./data/components.json";
 import enclosuresJson from "./data/enclosures.json";
 import factorsJson from "./data/factors.json";
@@ -314,8 +315,11 @@ export function cellPriceEgp(type: string, desc: string, f: Factors): number {
 export const cuPanelKg = (c: { cuP: number; poles: number }) => sane(c.cuP) * (c.poles || 0);
 export const cuCellKg = (c: { cuC: number; poles: number }) => sane(c.cuC) * (c.poles || 0);
 
-export const fmtEgp = (n: number) =>
-  (isFinite(n) ? n : 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
+/** Money on screen. The rule itself lives in src/money.ts — see it for why there is only one.
+ *  Kept under this name because eighty call sites read it, and it is not only EGP: the same
+ *  function writes the USD figures beside them. */
+export const fmtEgp = fmtMoney;
+/** Always two decimals, trailing zeros and all — for a column where the figures must line up. */
 export const fmt2 = (n: number) =>
   (isFinite(n) ? n : 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 

@@ -23,6 +23,29 @@ closed off.
 <!-- NEW ENTRIES GO HERE -->
 ## 2026-10-01 · Mohamed's side · Claude
 
+**Money now shows its decimals — up to two, dropped when they say nothing.** The owner's rule, in his
+own examples: 1950.00 → "1,950", 1950.20 → "1,950.2", 1950.25 → "1,950.25".
+
+**It was written out by hand in nineteen places** — the configurator, the commercial offer, the RMU
+offer, the MV cost cards, both price-list imports — each rounding to whole money on its own. That is
+why a price of 1,950.25 showed as 1,950 on the page while the exported sheets kept the quarter. There
+is now ONE formatter, `src/money.ts`, and all nineteen call it. The next change to how money reads
+happens once instead of nineteen times; `fmtEgp` keeps its name because eighty call sites read it.
+
+Two of those places also used the MACHINE's locale, which on an Arabic-set computer prints
+Arabic-Indic digits (١٬٩٥٠) on an offer otherwise in Latin figures. All of them are pinned to the same
+digits now.
+
+**The Material List's copper line has a tick box**, so it joins the running total like any other item:
+"2 items selected · 49 pieces · 259.2 KG copper · 214,713.98 EGP". Copper counts as one ITEM but no
+PIECES — it is bought by the kilo, and 259 among the piece count would read as 259 parts — so its
+weight rides alongside instead.
+
+8 new tests pin the money rule to the owner's examples; it is on every price in the app, so it is
+worth a test file of its own.
+
+## 2026-10-01 · Mohamed's side · Claude
+
 **The Material List's copper block now shows its cost, not only its weight.** Mohamed asked for it
 from the screen: the block read "Copper — total project weight · 0.8 KG" and nothing else. It now
 reads the weight, the cost, and the RATE used — 259.2 KG · 199,584 EGP · at 770 EGP per KG — so the

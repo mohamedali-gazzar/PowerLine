@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { api, type TransformerImportPreview, type TransformerImportRow, type TransformerRow } from "../api";
 import { ipOfCode } from "../components/transformerTechData";
+import { fmtMoney } from "../money";
 
 /** The download layout — the owner's own sheet columns, so a downloaded file looks like theirs.
  *  "Cost Price (USD)" is what the database stores; "Selling Price (USD)" is derived (cost / factor)
@@ -90,7 +91,7 @@ export function parseWorkbook(buf: ArrayBuffer): { rows: TransformerImportRow[];
   return { rows, missing };
 }
 
-const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+const fmt = fmtMoney; // money reads one way everywhere  see src/money.ts
 
 export default function TransformerExcelImport({ onApplied }: { onApplied: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);

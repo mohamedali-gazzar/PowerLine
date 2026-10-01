@@ -5,6 +5,7 @@ import { trDisplayCode } from "./transformerTechData";
 import { Toggle } from "./fields";
 import type { TransformerConfigInput } from "../types";
 import type { LvPanel } from "../lv/store";
+import { fmtMoney } from "../money";
 
 /** A brand-new Transformer panel: nothing chosen yet. */
 export const DEFAULT_TRANSFORMER_CONFIG: TransformerConfigInput = {
@@ -15,7 +16,7 @@ export const DEFAULT_TRANSFORMER_CONFIG: TransformerConfigInput = {
   transportation: 300,
 };
 
-const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+const fmt = fmtMoney; // money reads one way everywhere  see src/money.ts
 const uniqNums = (xs: number[]) => [...new Set(xs)].sort((a, b) => a - b);
 const uniqStrs = (xs: string[]) => [...new Set(xs.filter(Boolean))].sort((a, b) => a.localeCompare(b));
 

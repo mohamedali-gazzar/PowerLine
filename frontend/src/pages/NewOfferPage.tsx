@@ -17,6 +17,7 @@ import ActiveTimeBadge from "../components/ActiveTimeBadge";
 import { useStaff, findPerson, SALES_MANAGER } from "../staff";
 import type { GeneratedOffer, Offer, OfferInput, RmuConfigInput, StoredRmu } from "../types";
 import RmuConfigForm, { rmuAuxShuntAddOns } from "../components/RmuConfigForm";
+import { fmtMoney } from "../money";
 
 const initialRmu: RmuConfigInput = {
   productType: "PRAL",
@@ -583,7 +584,7 @@ export default function NewOfferPage() {
               <h1 className="text-xl font-extrabold tracking-tight">{team.quotationNo || offerNumber || "RMU Offer"}</h1>
               <span className="text-sm font-semibold text-muted">RMU Quotation</span>
               <span className="rounded-md bg-brand-tint px-2 py-1 text-sm font-bold text-brand-dark">
-                {totals.exVat.toLocaleString(undefined, { maximumFractionDigits: 0 })} {currency} excl. VAT
+                {fmtMoney(totals.exVat)} {currency} excl. VAT
               </span>
               <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${QTN_STATUS_STYLE[offerStatus] ?? "bg-slate-100 text-slate-600"}`}>
                 {statusLabel}
@@ -953,7 +954,7 @@ export default function NewOfferPage() {
                       </Field>
                       <Field label="Line total">
                         <div className="flex h-[38px] items-center px-1 text-sm font-extrabold text-ink">
-                          {currency} {lineTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          {currency} {fmtMoney(lineTotal)}
                         </div>
                       </Field>
                     </div>
@@ -969,21 +970,21 @@ export default function NewOfferPage() {
             <div className="mt-4 rounded-lg bg-brand-tint p-4 text-sm">
               <div className="flex justify-between text-muted">
                 <span>Subtotal · {rows.length} RMU{rows.length > 1 ? "s" : ""}</span>
-                <span>{currency} {totals.subtotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                <span>{currency} {fmtMoney(totals.subtotal)}</span>
               </div>
               {discountPct > 0 && (
                 <div className="flex justify-between text-muted">
                   <span>Discount ({discountPct}%)</span>
-                  <span>− {currency} {totals.discount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span>− {currency} {fmtMoney(totals.discount)}</span>
                 </div>
               )}
               <div className="flex justify-between text-muted">
                 <span>VAT ({vatPct}%)</span>
-                <span>{currency} {totals.vat.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                <span>{currency} {fmtMoney(totals.vat)}</span>
               </div>
               <div className="mt-1 flex justify-between text-lg font-extrabold text-brand-dark">
                 <span>Total (incl. VAT)</span>
-                <span>{currency} {totals.incVat.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                <span>{currency} {fmtMoney(totals.incVat)}</span>
               </div>
             </div>
           </section>
@@ -1042,8 +1043,8 @@ export default function NewOfferPage() {
                   <span className="text-muted">{i + 1}</span>
                   <span className="font-bold">{it.desc}</span>
                   <span className="text-center">{it.qty}</span>
-                  <span className="text-right">{it.unit > 0 ? it.unit.toLocaleString(undefined, { maximumFractionDigits: 0 }) : <span className="font-bold text-amber-600">POA</span>}</span>
-                  <span className="text-right font-bold">{it.unit > 0 ? it.total.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "POA"}</span>
+                  <span className="text-right">{it.unit > 0 ? fmtMoney(it.unit) : <span className="font-bold text-amber-600">POA</span>}</span>
+                  <span className="text-right font-bold">{it.unit > 0 ? fmtMoney(it.total) : "POA"}</span>
                 </div>
               ));
             })()}
@@ -1051,21 +1052,21 @@ export default function NewOfferPage() {
               <div className="w-72 text-sm">
                 <div className="flex justify-between py-1 text-muted">
                   <span>Subtotal (excl. VAT)</span>
-                  <span>{currency} {totals.exVat.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span>{currency} {fmtMoney(totals.exVat)}</span>
                 </div>
                 {discountPct > 0 && (
                   <div className="flex justify-between py-1 text-muted">
                     <span>Discount ({discountPct}%)</span>
-                    <span>− {currency} {totals.discount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                    <span>− {currency} {fmtMoney(totals.discount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between py-1 text-muted">
                   <span>VAT ({vatPct}%)</span>
-                  <span>{currency} {totals.vat.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span>{currency} {fmtMoney(totals.vat)}</span>
                 </div>
                 <div className="mt-1 flex justify-between border-t-2 pt-2 text-lg font-extrabold" style={{ borderColor: "#F16722" }}>
                   <span>Total ({currency})</span>
-                  <span style={{ color: "#F16722" }}>{currency} {totals.incVat.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span style={{ color: "#F16722" }}>{currency} {fmtMoney(totals.incVat)}</span>
                 </div>
               </div>
             </div>

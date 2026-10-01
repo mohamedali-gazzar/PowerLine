@@ -7,6 +7,7 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { api, type RmuImportPreview, type RmuImportRow } from "../api";
+import { fmtMoney } from "../money";
 
 /** Download layout. "Cost (USD)" is what the database stores; "Selling (USD)" = cost / factor is
  *  reference only (ignored on upload). Kind + Key are the identity — don't edit them. */
@@ -65,7 +66,7 @@ export function parseWorkbook(buf: ArrayBuffer): { rows: RmuImportRow[]; missing
   return { rows, missing };
 }
 
-const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+const fmt = fmtMoney; // money reads one way everywhere  see src/money.ts
 
 export default function RmuExcelImport({ onApplied }: { onApplied: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);

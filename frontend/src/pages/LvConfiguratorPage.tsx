@@ -52,6 +52,7 @@ import {
 import { rankSearchOptions } from "../lv/search";
 import { kioskCostsEgp, kioskPartSellingEgp, kioskFactorOf, kioskTotalCostEgp, kioskTotalSellingEgp, KIOSK_PART_KEYS, type KioskPartKey } from "../lv/kioskPricing";
 import { INCOMER_RATINGS, predictIncomerRating } from "../lv/busbarRating";
+import { fmtMoney } from "../money";
 import { kioskSizeOptions } from "../pcss/kioskRmu";
 import { materialAoa, materialCostAoa, type MatBlock, type MatCostRow } from "../lv/materialExcel";
 import { buildErpItemsCsv, erpItemCount, type MvErpItem } from "../lv/erpCsv";
@@ -5877,7 +5878,7 @@ function MvCommercialTab({ s, qtnNo, up }: { s: LvState; qtnNo: string; up: (pat
   const rate = currency === "EGP" ? s.factors?.usd || 1 : 1;
   const first = panels[0] ? previews[JSON.stringify(panels[0].mvRmuConfig)] : undefined;
   const vatPct = first?.vatPct ?? 14;
-  const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const fmt = fmtMoney; // money reads one way everywhere — see src/money.ts
 
   const trFactor = trCatalog?.factor ?? 0.95;
   // Commercial line items in the SAME order as the MV panel list (s.panels order), interleaving
@@ -12746,6 +12747,10 @@ function matUnitCost(r: MatRow, factors: Factors, priceCtl?: PriceCtl): number {
 }
 /** A row's identity for ticking. Reference is not unique across sections, so the section goes in. */
 const matKey = (title: string, r: MatRow) => `${title}|${r.reference || r.description}`;
+/** The copper block's key in the same tick set. It is not a MatRow — copper is bought by weight,
+ *  not as a catalogue line — so it needs a key of its own. The "|" keeps it clear of matKey, which
+ *  always puts a table title before one. */
+const COPPER_KEY = "|copper|";
 
 function MatTable({ title, rows, withSupplier, note, priceCtl, factors, picked, onPick, onPickAll, cur, usd, onDragStart, onDragOver }: { title: string; rows: MatRow[]; withSupplier?: boolean; note?: string; priceCtl?: PriceCtl; factors: Factors; picked: Set<string>; onPick: (key: string) => void; onPickAll: (keys: string[], on: boolean) => void; cur: "USD" | "EGP"; usd: number; onDragStart: (title: string, keys: string[], i: number) => void; onDragOver: (title: string, i: number) => void }) {
   if (!rows.length) return null;
@@ -13144,13 +13149,23 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
           {(() => {
             const rows = visible.flatMap((b) => b.kind === "table" ? b.rows.map((r) => ({ r, title: `${visible.indexOf(b) + 1} · ${b.title}` })) : []);
             const on = rows.filter(({ r, title }) => picked.has(matKey(title, r)));
-            if (!on.length) return null;
-            const total = on.reduce((t, { r }) => t + matUnitCost(r, s.factors, priceCtl) * r.qty, 0);
+            // Copper joins the same total. It is counted as one more item but NOT added to the piece
+            // count — it is bought by the kilo, and 259 kg among the pieces would read as 259 parts.
+            // Its weight rides alongside instead, so the bar says what was actually picked.
+            const copper = visible.find((b) => b.kind === "copper");
+            const copperOn = !!copper && picked.has(COPPER_KEY);
+            if (!on.length && !copperOn) return null;
+            const total = on.reduce((t, { r }) => t + matUnitCost(r, s.factors, priceCtl) * r.qty, 0)
+              + (copperOn && copper.kind === "copper" ? copper.cost : 0);
             const qty = on.reduce((t, { r }) => t + r.qty, 0);
+            const count = on.length + (copperOn ? 1 : 0);
             return (
               <div data-mat-keep className="card sticky top-2 z-20 flex flex-wrap items-center gap-x-4 gap-y-1 border-brand/40 bg-brand-light px-4 py-2.5 no-print">
-                <span className="text-sm font-extrabold text-brand-dark">{on.length} item{on.length === 1 ? "" : "s"} selected</span>
-                <span className="text-xs font-semibold text-brand-dark/80">{qty} pieces</span>
+                <span className="text-sm font-extrabold text-brand-dark">{count} item{count === 1 ? "" : "s"} selected</span>
+                <span className="text-xs font-semibold text-brand-dark/80">
+                  {qty} pieces
+                  {copperOn && copper.kind === "copper" ? ` · ${copper.kg.toFixed(1)} KG copper` : ""}
+                </span>
                 <span className="ml-auto text-lg font-extrabold text-brand-dark">{fmtEgp(matCur === "USD" && s.factors.usd > 0 ? total / s.factors.usd : total)} {matCur === "USD" && s.factors.usd > 0 ? "USD" : "EGP"}</span>
                 <button type="button" onClick={() => setPicked(new Set())}
                   className="rounded-full border border-brand/40 bg-white px-3 py-1 text-xs font-bold text-brand-dark hover:bg-brand-tint">Clear</button>
@@ -13161,7 +13176,7 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
             <MatTable key={b.title} title={`${i + 1} · ${b.title}`} rows={b.rows} withSupplier={b.withSupplier} note={b.note} factors={s.factors}
               priceCtl={priceCtl} picked={picked} onPick={pick} onPickAll={pickAll} cur={matCur} usd={s.factors.usd || 0} onDragStart={dragStart} onDragOver={dragOver} />
           ) : (
-            <div key={b.title} className="card flex flex-wrap items-center justify-between gap-x-6 gap-y-2 p-4">
+            <div key={b.title} data-mat-keep className="card flex flex-wrap items-center justify-between gap-x-6 gap-y-2 p-4">
               <h3 className="text-sm font-bold text-brand-dark">{i + 1} · {b.title}</h3>
               <div className="ml-auto flex items-baseline gap-6">
                 <span className="text-lg font-extrabold text-ink">{b.kg.toFixed(1)} KG</span>
@@ -13172,6 +13187,11 @@ function MaterialTab({ s, qtnNo, abbOnly, setAbbOnly, up }: { s: LvState; qtnNo:
                   {" "}{matCur === "USD" && s.factors.usd > 0 ? "USD" : "EGP"}
                 </span>
               </div>
+              {/* On the right, in line with the tick boxes down every table above it. */}
+              <label className="flex shrink-0 cursor-pointer items-center pl-1" title="Add the copper to the selected total">
+                <input type="checkbox" className="h-4 w-4 cursor-pointer accent-brand"
+                  checked={picked.has(COPPER_KEY)} onChange={() => pick(COPPER_KEY)} />
+              </label>
               {b.rate > 0 && (
                 <span className="w-full text-right text-[11px] text-muted">
                   at {fmtEgp(b.rate)} EGP per KG

@@ -3,8 +3,9 @@ import RmuConfigForm, { DEFAULT_RMU_CONFIG, rmuShortCode, rmuAuxShuntUsd, KIOSK_
 import { api } from "../api";
 import type { GeneratedOffer, RmuConfigInput } from "../types";
 import { DEFAULT_MV_COMMERCIAL, type LvPanel, type LvState } from "../lv/store";
+import { fmtMoney } from "../money";
 
-const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+const fmt = fmtMoney; // money reads one way everywhere  see src/money.ts
 
 /**
  * The editor shown for an MV "RMU" package panel. It reuses the EXACT RMU

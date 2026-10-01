@@ -1,4 +1,5 @@
 import type { CommercialData } from "../types";
+import { fmtMoney } from "../money";
 
 // Styled to match the commercial PDF (backend/src/services/pdf-commercial.service.ts):
 // an understated "Main Offer" table (grey labels over an orange rule), a plain totals
@@ -9,7 +10,7 @@ const INK = "#2b2421";
 const MUTED = "#767070";
 const HAIR = "#e7e7eb";
 
-const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+const fmt = fmtMoney; // money reads one way everywhere  see src/money.ts
 
 export default function CommercialView({ c }: { c: CommercialData }) {
   const money = (n: number) => `${c.currency} ${fmt(n)}`;
